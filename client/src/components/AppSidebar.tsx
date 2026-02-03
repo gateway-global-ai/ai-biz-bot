@@ -1,5 +1,5 @@
 import { useLocation, Link } from 'wouter';
-import { Server, Settings, Play, Activity, UserCircle, ShieldAlert, MessageSquare, Phone } from 'lucide-react';
+import { Server, Settings, Play, Activity, UserCircle, ShieldAlert, MessageSquare, Phone, Terminal, Building2 } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -23,6 +23,11 @@ const MENU_ITEMS = [
   { id: 'security', label: 'Security Audit', path: '/security', icon: ShieldAlert },
 ];
 
+const ACCESS_ITEMS = [
+  { id: 'developer', label: 'Developer Access', path: '/developer', icon: Terminal },
+  { id: 'business', label: 'Business Access', path: '/business', icon: Building2 },
+];
+
 export function AppSidebar() {
   const [location] = useLocation();
 
@@ -44,6 +49,27 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild isActive={isActive}>
                       <Link href={item.path} data-testid={`nav-${item.id}`}>
                         <Icon className={`w-5 h-5 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-slate-500 text-xs font-bold uppercase">Access Portals</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {ACCESS_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isActive = location === item.path;
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.path} data-testid={`nav-${item.id}`}>
+                        <Icon className={`w-5 h-5 ${isActive ? 'text-violet-400' : 'text-slate-500'}`} />
                         <span>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>

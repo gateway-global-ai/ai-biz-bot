@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid, ResponsiveContainer
+  BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid, ResponsiveContainer, LineChart, Line
 } from 'recharts';
 import { 
   UserCircle, Brain, Activity, Save, RotateCcw, 
   Fingerprint, Heart, ShieldCheck, Database, 
   FileText, Plus, PenTool, LayoutTemplate, Server,
   Cpu, Zap, Radio, MessageSquare, Terminal, Sparkles,
-  ClipboardCheck, X, FileJson, Clock
+  ClipboardCheck, X, FileJson, Clock, AlertTriangle, PhoneCall, TrendingUp
 } from 'lucide-react';
 import type { DiscScores, ArchProfile, SystemPrompt } from '@shared/schema';
 
@@ -72,15 +72,36 @@ const META_TOPICS = [
   { id: 'universe', label: 'THE UNIVERSE', color: 'text-indigo-400 border-indigo-500/50 hover:bg-indigo-500/20' },
 ];
 
-const BotAvatar = ({ scores, isThinking }: { scores: DiscScores; isThinking: boolean }) => {
+type Sentiment = 'calm' | 'engaged' | 'alert' | 'stressed' | 'hostile';
+
+const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label: string }> = {
+  calm: { primary: 'rgba(16, 185, 129, 0.8)', glow: 'rgba(16, 185, 129, 0.4)', label: 'CALM' },
+  engaged: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: 'ENGAGED' },
+  alert: { primary: 'rgba(250, 204, 21, 0.8)', glow: 'rgba(250, 204, 21, 0.4)', label: 'ALERT' },
+  stressed: { primary: 'rgba(249, 115, 22, 0.8)', glow: 'rgba(249, 115, 22, 0.4)', label: 'STRESSED' },
+  hostile: { primary: 'rgba(239, 68, 68, 0.8)', glow: 'rgba(239, 68, 68, 0.4)', label: 'HOSTILE' },
+};
+
+const BotAvatar = ({ scores, isThinking, sentiment = 'calm' }: { scores: DiscScores; isThinking: boolean; sentiment?: Sentiment }) => {
   const d = scores.dominance / 100;
   const i = scores.influence / 100;
   const s = scores.steadiness / 100;
   const c = scores.conscientiousness / 100;
+  
+  const sentimentConfig = SENTIMENT_COLORS[sentiment];
+  const auraIntensity = sentiment === 'hostile' ? 1.5 : sentiment === 'stressed' ? 1.2 : sentiment === 'alert' ? 1 : 0.7;
 
   return (
     <div className="relative w-full h-[300px] flex items-center justify-center overflow-hidden rounded-2xl bg-slate-950 border border-slate-800 shadow-2xl group">
        <div className="absolute inset-0 bg-[linear-gradient(rgba(30,41,59,0.5)_1px,transparent_1px),linear-gradient(90deg,rgba(30,41,59,0.5)_1px,transparent_1px)] bg-[size:40px_40px] opacity-30"></div>
+       
+       <div 
+         className="absolute inset-0 rounded-2xl transition-all duration-1000"
+         style={{ 
+           boxShadow: `inset 0 0 ${60 * auraIntensity}px ${sentimentConfig.glow}, 0 0 ${80 * auraIntensity}px ${sentimentConfig.glow}`,
+           opacity: isThinking ? 1 : 0.6
+         }}
+       />
        
        <div className={`relative w-64 h-64 flex items-center justify-center transition-all duration-500 ${isThinking ? 'scale-110' : 'scale-100'}`}>
            <div 
@@ -99,6 +120,16 @@ const BotAvatar = ({ scores, isThinking }: { scores: DiscScores; isThinking: boo
                 opacity: c * 0.8,
                 animationDirection: 'reverse',
                 animationDuration: isThinking ? '2s' : '15s'
+             }}
+           />
+           
+           <div 
+             className="absolute rounded-full blur-3xl transition-all duration-1000 animate-pulse"
+             style={{ 
+                width: `${150 + auraIntensity * 50}%`,
+                height: `${150 + auraIntensity * 50}%`,
+                background: `radial-gradient(circle, ${sentimentConfig.primary} 0%, ${sentimentConfig.glow} 30%, transparent 70%)`,
+                opacity: 0.3 * auraIntensity
              }}
            />
 
@@ -123,8 +154,8 @@ const BotAvatar = ({ scores, isThinking }: { scores: DiscScores; isThinking: boo
            <div 
              className="absolute w-32 h-32 rounded-xl flex items-center justify-center bg-slate-900 border-2 z-10 transition-all duration-500"
              style={{
-                borderColor: `rgba(236, 72, 153, ${Math.max(d, 0.3)})`,
-                boxShadow: `0 0 ${d * 40}px rgba(236, 72, 153, ${d * 0.8})`,
+                borderColor: sentimentConfig.primary,
+                boxShadow: `0 0 ${d * 40 * auraIntensity}px ${sentimentConfig.glow}, 0 0 ${20 * auraIntensity}px ${sentimentConfig.glow}`,
                 transform: `scale(${0.9 + d * 0.2})`
              }}
            >
@@ -138,6 +169,16 @@ const BotAvatar = ({ scores, isThinking }: { scores: DiscScores; isThinking: boo
                  </div>
               </div>
            </div>
+       </div>
+
+       <div className="absolute top-4 left-4 flex items-center gap-2">
+          <div 
+            className="w-3 h-3 rounded-full animate-pulse"
+            style={{ backgroundColor: sentimentConfig.primary, boxShadow: `0 0 10px ${sentimentConfig.glow}` }}
+          />
+          <span className="text-xs font-bold uppercase tracking-wider" style={{ color: sentimentConfig.primary }}>
+            {sentimentConfig.label}
+          </span>
        </div>
 
        <div className="absolute bottom-4 left-4 flex gap-4 text-xs font-mono opacity-70">
@@ -230,6 +271,35 @@ export default function DiscVisualizer() {
   const [selectedPromptId, setSelectedPromptId] = useState<string>(MOCK_PROMPTS[0].id);
   const [thinkingTopic, setThinkingTopic] = useState<string | null>(null);
   const [botOutput, setBotOutput] = useState<{ topic: string, text: string } | null>(null);
+  const [currentSentiment, setCurrentSentiment] = useState<Sentiment>('calm');
+  const [sentimentHistory, setSentimentHistory] = useState<{ time: string; value: number; sentiment: Sentiment }[]>([]);
+  const [isCallActive, setIsCallActive] = useState(false);
+
+  useEffect(() => {
+    if (isCallActive) {
+      const interval = setInterval(() => {
+        const sentiments: Sentiment[] = ['calm', 'engaged', 'alert', 'stressed', 'hostile'];
+        const weights = [0.4, 0.3, 0.15, 0.1, 0.05];
+        let random = Math.random();
+        let newSentiment: Sentiment = 'calm';
+        for (let i = 0; i < sentiments.length; i++) {
+          random -= weights[i];
+          if (random <= 0) {
+            newSentiment = sentiments[i];
+            break;
+          }
+        }
+        setCurrentSentiment(newSentiment);
+        const sentimentValue = { calm: 20, engaged: 40, alert: 60, stressed: 80, hostile: 100 }[newSentiment];
+        setSentimentHistory(prev => {
+          const now = new Date().toLocaleTimeString();
+          const newHistory = [...prev, { time: now, value: sentimentValue, sentiment: newSentiment }];
+          return newHistory.slice(-20);
+        });
+      }, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [isCallActive]);
 
   const activePrompt = prompts.find(p => p.id === selectedPromptId) || prompts[0];
 
@@ -422,11 +492,119 @@ export default function DiscVisualizer() {
           <div className="space-y-6">
             
             <div className="relative">
-                <BotAvatar scores={discScores} isThinking={!!thinkingTopic} />
+                <BotAvatar scores={discScores} isThinking={!!thinkingTopic} sentiment={currentSentiment} />
                 <div className="absolute top-4 right-4 flex flex-col items-end">
                     <span className="text-[10px] uppercase font-bold text-slate-500">Render ID</span>
                     <span className="text-xs font-mono text-indigo-400">CLAW-SRV-{Math.floor(Math.random()*9999)}</span>
                 </div>
+            </div>
+            
+            <div className="bg-slate-800/80 rounded-xl border border-slate-700 p-6 shadow-xl">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                            <PhoneCall className="w-5 h-5 text-amber-400" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                Call Sentiment Monitor
+                                {currentSentiment === 'hostile' && (
+                                    <span className="flex items-center gap-1 text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full animate-pulse">
+                                        <AlertTriangle className="w-3 h-3" /> ALERT
+                                    </span>
+                                )}
+                            </h3>
+                            <p className="text-xs text-slate-400">Real-time DISC behavioral assessment for security.</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => {
+                            setIsCallActive(!isCallActive);
+                            if (!isCallActive) {
+                                setSentimentHistory([]);
+                                setCurrentSentiment('calm');
+                            }
+                        }}
+                        className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${
+                            isCallActive 
+                                ? 'bg-red-600 hover:bg-red-500 text-white' 
+                                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                        }`}
+                        data-testid="button-toggle-call"
+                    >
+                        {isCallActive ? (
+                            <><X className="w-4 h-4" /> End Simulation</>
+                        ) : (
+                            <><PhoneCall className="w-4 h-4" /> Simulate Call</>
+                        )}
+                    </button>
+                </div>
+                
+                {isCallActive && sentimentHistory.length > 0 && (
+                    <div className="space-y-4">
+                        <div className="h-32">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={sentimentHistory}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                                    <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                    <YAxis domain={[0, 100]} stroke="#64748b" tick={{ fontSize: 10 }} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+                                        formatter={(value: number) => {
+                                            const labels = { 20: 'Calm', 40: 'Engaged', 60: 'Alert', 80: 'Stressed', 100: 'Hostile' };
+                                            return [labels[value as keyof typeof labels] || value, 'Sentiment'];
+                                        }}
+                                    />
+                                    <Line 
+                                        type="monotone" 
+                                        dataKey="value" 
+                                        stroke={SENTIMENT_COLORS[currentSentiment].primary}
+                                        strokeWidth={2}
+                                        dot={{ fill: SENTIMENT_COLORS[currentSentiment].primary, strokeWidth: 0, r: 3 }}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs">
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                                <span className="text-slate-400">Calm (0-20)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-blue-500" />
+                                <span className="text-slate-400">Engaged (21-40)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-yellow-500" />
+                                <span className="text-slate-400">Alert (41-60)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-orange-500" />
+                                <span className="text-slate-400">Stressed (61-80)</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full bg-red-500" />
+                                <span className="text-slate-400">Hostile (81-100)</span>
+                            </div>
+                        </div>
+                        {currentSentiment === 'hostile' && (
+                            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-3">
+                                <AlertTriangle className="w-5 h-5 text-red-400" />
+                                <div>
+                                    <p className="text-sm font-bold text-red-400">ROGUE BEHAVIOR DETECTED</p>
+                                    <p className="text-xs text-red-300/80">Agent emotional state exceeds safety threshold. Consider manual intervention.</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+                
+                {!isCallActive && (
+                    <div className="text-center py-8 text-slate-500">
+                        <TrendingUp className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm">Start a call simulation to monitor real-time sentiment</p>
+                    </div>
+                )}
             </div>
 
             <div className="bg-slate-800/80 rounded-xl border border-slate-700 p-6 shadow-xl relative overflow-hidden">

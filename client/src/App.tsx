@@ -7,6 +7,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import TelephonyPanel from "@/pages/TelephonyPanel";
 import DiscVisualizer from "@/pages/DiscVisualizer";
+import DeveloperPage from "@/pages/DeveloperPage";
+import BusinessPage from "@/pages/BusinessPage";
 import NotFound from "@/pages/not-found";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
 
@@ -223,6 +225,8 @@ function AppRouter() {
       <Route path="/tests" component={TestOrchestrator} />
       <Route path="/results" component={ResultsAnalyzer} />
       <Route path="/security" component={SecurityDashboard} />
+      <Route path="/developer" component={DeveloperPage} />
+      <Route path="/business" component={BusinessPage} />
       <Route component={NotFound} />
     </Switch>
   );
