@@ -10,6 +10,13 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (February 2026)
 
+- Added Gateway Global AI onboarding experience with A/B variants:
+  - **The Awakening** - Mystical particle animation, agent "awakens" when named
+  - **The 24-Hour Proof** - Direct challenger brand: "Every other AI talks. This one finishes."
+  - Three-step flow: Name agent → Select voice (6 options) → Live test run
+  - Live prompting: Emotion buttons (calm, engaged, focused, energized, empathetic) morph agent behavior in real-time
+  - DISC sliders update agent personality dynamically during conversation
+  - Core messaging: "Human + AI = Unstoppable" - emphasis on collaboration
 - Created DiscVisualizer component with two main tabs:
   - **Behavioral Matrix Tab**: BotAvatar visualization, DISC sliders, ARCH sliders, My Beliefs Window with 7 meta-cognition topics
   - **System Identity Tab**: Protocol list sidebar, 6-section prompt editor (Owner Identity, Loyalty, Priorities, Data Protection, Security, DISC Reinforcement)
