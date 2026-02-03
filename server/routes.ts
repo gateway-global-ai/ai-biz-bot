@@ -16,6 +16,7 @@ import {
 } from "./twilio";
 import { insertTelephonyConfigSchema, insertCallLogSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
+import { GoogleGenAI } from "@google/genai";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -570,6 +571,91 @@ export async function registerRoutes(
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
+  });
+
+  // Generate mock conversation with Gemini TTS
+  app.post("/api/conversation/generate", async (req, res) => {
+    try {
+      const { agentName, discProfile, scenario } = req.body;
+      
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
+      }
+
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+      const discDescription = discProfile ? 
+        `The agent has a DISC profile with: D=${discProfile.dominance}%, I=${discProfile.influence}%, S=${discProfile.steadiness}%, C=${discProfile.conscientiousness}%` :
+        'The agent has a balanced DISC profile';
+
+      const scenarioText = scenario || 'a friendly introduction and offering to help with questions';
+
+      const conversationPrompt = `You are ${agentName || 'NEXUS'}, an AI assistant with the following personality traits based on the DISC model:
+${discDescription}
+
+Generate a brief, natural-sounding conversation response for this scenario: ${scenarioText}
+
+Keep the response conversational, warm, and under 100 words. Speak directly as the agent.`;
+
+      const textResponse = await ai.models.generateContent({
+        model: 'gemini-2.0-flash',
+        contents: conversationPrompt,
+      });
+
+      const conversationText = textResponse.text || "Hello! I'm your AI assistant. How can I help you today?";
+
+      const ttsResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-preview-tts',
+        contents: conversationText,
+        config: {
+          responseModalities: ['audio'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: 'Kore'
+              }
+            }
+          }
+        }
+      });
+
+      let audioData = null;
+      if (ttsResponse.candidates?.[0]?.content?.parts) {
+        for (const part of ttsResponse.candidates[0].content.parts) {
+          if (part.inlineData?.mimeType?.startsWith('audio/')) {
+            audioData = {
+              data: part.inlineData.data,
+              mimeType: part.inlineData.mimeType
+            };
+            break;
+          }
+        }
+      }
+
+      res.json({
+        text: conversationText,
+        audio: audioData,
+        agentName: agentName || 'NEXUS',
+        discProfile: discProfile || { dominance: 50, influence: 50, steadiness: 50, conscientiousness: 50 }
+      });
+    } catch (error: any) {
+      console.error('Gemini TTS error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get available TTS voices
+  app.get("/api/conversation/voices", async (req, res) => {
+    res.json({
+      voices: [
+        { id: 'Kore', name: 'Kore', description: 'Warm and professional' },
+        { id: 'Puck', name: 'Puck', description: 'Friendly and upbeat' },
+        { id: 'Charon', name: 'Charon', description: 'Deep and authoritative' },
+        { id: 'Fenrir', name: 'Fenrir', description: 'Calm and reassuring' },
+        { id: 'Aoede', name: 'Aoede', description: 'Clear and articulate' },
+        { id: 'Leda', name: 'Leda', description: 'Soft and gentle' }
+      ]
+    });
   });
 
   return httpServer;

@@ -11,6 +11,7 @@ import DeveloperPage from "@/pages/DeveloperPage";
 import BusinessPage from "@/pages/BusinessPage";
 import OnboardingFlow from "@/pages/OnboardingFlow";
 import DiscAssessment from "@/pages/DiscAssessment";
+import MockConversation from "@/pages/MockConversation";
 import NotFound from "@/pages/not-found";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
 
@@ -231,6 +232,7 @@ function AppRouter() {
       <Route path="/business" component={BusinessPage} />
       <Route path="/onboard" component={OnboardingFlow} />
       <Route path="/assessment" component={DiscAssessment} />
+      <Route path="/conversation" component={MockConversation} />
       <Route component={NotFound} />
     </Switch>
   );
