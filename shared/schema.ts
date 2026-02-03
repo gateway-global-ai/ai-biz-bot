@@ -173,3 +173,61 @@ export interface CommunicationLog {
   timestamp: string;
   sid: string;
 }
+
+// DISC Assessment Types
+export interface DiscWordSet {
+  setNumber: number;
+  words: [string, string, string, string]; // [D, I, S, C]
+}
+
+export interface DiscRanking {
+  setNumber: number;
+  rankings: [number, number, number, number]; // Rankings 1-4 for each word
+}
+
+export interface DiscAssessmentResult {
+  scores: DiscScores;
+  percentages: DiscScores;
+  primaryStyle: 'D' | 'I' | 'S' | 'C';
+  secondaryStyle: 'D' | 'I' | 'S' | 'C';
+  styleDescriptions: {
+    D: string;
+    I: string;
+    S: string;
+    C: string;
+  };
+}
+
+export const DISC_WORD_SETS: DiscWordSet[] = [
+  { setNumber: 1, words: ['Competitive', 'Convincing', 'Cooperative', 'Cautious'] },
+  { setNumber: 2, words: ['Determined', 'Dramatic', 'Dependable', 'Detailed'] },
+  { setNumber: 3, words: ['Adventurous', 'Animated', 'Accommodating', 'Analytical'] },
+  { setNumber: 4, words: ['Decisive', 'Emotional', 'Patient', 'Precise'] },
+  { setNumber: 5, words: ['Bold', 'Charming', 'Loyal', 'Correct'] },
+  { setNumber: 6, words: ['Firm', 'Lively', 'Even-tempered', 'Systematic'] },
+  { setNumber: 7, words: ['Assertive', 'Inspirational', 'Good-natured', 'Orderly'] },
+  { setNumber: 8, words: ['Risk-taking', 'Talkative', 'Team player', 'Perfectionist'] },
+  { setNumber: 9, words: ['Direct', 'Sociable', 'Supportive', 'Careful'] },
+  { setNumber: 10, words: ['Forceful', 'Enthusiastic', 'Agreeable', 'Conscientious'] },
+  { setNumber: 11, words: ['Vigorous', 'Spontaneous', 'Relaxed', 'Meticulous'] },
+  { setNumber: 12, words: ['Driver', 'Expressive', 'Stable', 'Accurate'] },
+  { setNumber: 13, words: ['Strong-willed', 'Persuasive', 'Consistent', 'Thoughtful'] },
+  { setNumber: 14, words: ['Independent', 'Playful', 'Pleasant', 'Logical'] },
+  { setNumber: 15, words: ['Go-getter', 'Cheerful', 'Even-paced', 'Thorough'] },
+  { setNumber: 16, words: ['Dynamic', 'Optimistic', 'Satisfied', 'Controlled'] },
+  { setNumber: 17, words: ['Tenacious', 'Popular', 'Modest', 'Exact'] },
+  { setNumber: 18, words: ['Aggressive', 'Demonstrative', 'Calm', 'Conventional'] },
+  { setNumber: 19, words: ['Self-reliant', 'Gregarious', 'Devoted', 'Critical'] },
+  { setNumber: 20, words: ['Enterprising', 'Magnetic', 'Steady', 'Factual'] },
+  { setNumber: 21, words: ['Resolute', 'Warm', 'Peaceful', 'Procedural'] },
+  { setNumber: 22, words: ['Daredevil', 'Vivacious', 'Mild', 'Traditional'] },
+  { setNumber: 23, words: ['Authoritative', 'Friendly', 'Soft-hearted', 'Methodical'] },
+  { setNumber: 24, words: ['Challenging', 'Impulsive', 'Tolerant', 'Detail-oriented'] },
+];
+
+export const DISC_STYLE_DESCRIPTIONS = {
+  D: 'Direct, results-oriented, assertive, competitive',
+  I: 'Social, enthusiastic, persuasive, optimistic',
+  S: 'Patient, cooperative, reliable, calm',
+  C: 'Analytical, precise, systematic, careful',
+};

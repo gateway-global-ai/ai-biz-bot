@@ -14,7 +14,7 @@ import {
   updateCallerIdName,
   getTwilioFromPhoneNumber
 } from "./twilio";
-import { insertTelephonyConfigSchema, insertCallLogSchema } from "@shared/schema";
+import { insertTelephonyConfigSchema, insertCallLogSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
 
 const updateConfigSchema = z.object({
@@ -410,6 +410,166 @@ export async function registerRoutes(
     }
     
     res.sendStatus(200);
+  });
+
+  // ============================================
+  // DISC ASSESSMENT API
+  // ============================================
+
+  // Get all DISC word sets (questions)
+  app.get("/api/disc/questions", (req, res) => {
+    res.json({
+      instructions: "Rank each set of four words from 4 (most like you) to 1 (least like you). Use each number once per set.",
+      totalSets: DISC_WORD_SETS.length,
+      sets: DISC_WORD_SETS,
+    });
+  });
+
+  // Get a single question set
+  app.get("/api/disc/questions/:setNumber", (req, res) => {
+    const setNumber = parseInt(req.params.setNumber);
+    const wordSet = DISC_WORD_SETS.find(s => s.setNumber === setNumber);
+    
+    if (!wordSet) {
+      return res.status(404).json({ error: `Set ${setNumber} not found. Valid range: 1-24` });
+    }
+    
+    res.json(wordSet);
+  });
+
+  // Submit rankings and calculate DISC profile
+  const discRankingsSchema = z.object({
+    rankings: z.array(z.object({
+      setNumber: z.number().min(1).max(24),
+      rankings: z.tuple([
+        z.number().min(1).max(4),
+        z.number().min(1).max(4),
+        z.number().min(1).max(4),
+        z.number().min(1).max(4),
+      ]).refine(
+        (arr) => new Set(arr).size === 4,
+        { message: "Each ranking (1-4) must be used exactly once per set" }
+      ),
+    })).length(24),
+  });
+
+  app.post("/api/disc/calculate", (req, res) => {
+    const parsed = discRankingsSchema.safeParse(req.body);
+    
+    if (!parsed.success) {
+      return res.status(400).json({ 
+        error: "Invalid rankings format",
+        details: parsed.error.errors,
+        expectedFormat: {
+          rankings: [
+            { setNumber: 1, rankings: [4, 3, 2, 1] },
+            { setNumber: 2, rankings: [1, 4, 3, 2] },
+          ]
+        }
+      });
+    }
+
+    const { rankings } = parsed.data;
+
+    let dScore = 0, iScore = 0, sScore = 0, cScore = 0;
+
+    for (const ranking of rankings) {
+      dScore += ranking.rankings[0];
+      iScore += ranking.rankings[1];
+      sScore += ranking.rankings[2];
+      cScore += ranking.rankings[3];
+    }
+
+    const totalScore = dScore + iScore + sScore + cScore;
+
+    const scores = {
+      dominance: dScore,
+      influence: iScore,
+      steadiness: sScore,
+      conscientiousness: cScore,
+    };
+
+    const percentages = {
+      dominance: Math.round((dScore / 96) * 100),
+      influence: Math.round((iScore / 96) * 100),
+      steadiness: Math.round((sScore / 96) * 100),
+      conscientiousness: Math.round((cScore / 96) * 100),
+    };
+
+    const styleScores: [string, number][] = [
+      ['D', dScore],
+      ['I', iScore],
+      ['S', sScore],
+      ['C', cScore],
+    ];
+    styleScores.sort((a, b) => b[1] - a[1]);
+
+    const result: DiscAssessmentResult = {
+      scores,
+      percentages,
+      primaryStyle: styleScores[0][0] as 'D' | 'I' | 'S' | 'C',
+      secondaryStyle: styleScores[1][0] as 'D' | 'I' | 'S' | 'C',
+      styleDescriptions: DISC_STYLE_DESCRIPTIONS,
+    };
+
+    res.json(result);
+  });
+
+  // Simple endpoint for bots - accepts array format "Set X: [4,3,2,1]"
+  app.post("/api/disc/calculate-simple", (req, res) => {
+    try {
+      const { responses } = req.body;
+      
+      if (!responses || !Array.isArray(responses) || responses.length !== 24) {
+        return res.status(400).json({
+          error: "Expected 24 response arrays",
+          expectedFormat: {
+            responses: [[4,3,2,1], [1,4,3,2], "...24 total"]
+          }
+        });
+      }
+
+      let dScore = 0, iScore = 0, sScore = 0, cScore = 0;
+
+      for (let i = 0; i < responses.length; i++) {
+        const ranking = responses[i];
+        if (!Array.isArray(ranking) || ranking.length !== 4) {
+          return res.status(400).json({ error: `Set ${i + 1} must have exactly 4 rankings` });
+        }
+        if (new Set(ranking).size !== 4 || !ranking.every((n: number) => n >= 1 && n <= 4)) {
+          return res.status(400).json({ error: `Set ${i + 1} must use each number 1-4 exactly once` });
+        }
+        dScore += ranking[0];
+        iScore += ranking[1];
+        sScore += ranking[2];
+        cScore += ranking[3];
+      }
+
+      const percentages = {
+        dominance: Math.round((dScore / 96) * 100),
+        influence: Math.round((iScore / 96) * 100),
+        steadiness: Math.round((sScore / 96) * 100),
+        conscientiousness: Math.round((cScore / 96) * 100),
+      };
+
+      const styleScores: [string, number][] = [
+        ['D', dScore],
+        ['I', iScore],
+        ['S', sScore],
+        ['C', cScore],
+      ];
+      styleScores.sort((a, b) => b[1] - a[1]);
+
+      res.json({
+        scores: { dominance: dScore, influence: iScore, steadiness: sScore, conscientiousness: cScore },
+        percentages,
+        primaryStyle: styleScores[0][0],
+        secondaryStyle: styleScores[1][0],
+        styleDescriptions: DISC_STYLE_DESCRIPTIONS,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   return httpServer;
