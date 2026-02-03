@@ -5,13 +5,18 @@ import {
   type InsertTelephonyConfig,
   type CallLog,
   type InsertCallLog,
+  type Agent,
+  type InsertAgent,
+  type Customer,
+  type InsertCustomer,
   telephonyConfigs,
   callLogs,
-  users
+  users,
+  agents,
+  customers
 } from "@shared/schema";
-import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, ilike, or } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -24,6 +29,20 @@ export interface IStorage {
   
   getCallLogs(configId?: string, limit?: number): Promise<CallLog[]>;
   createCallLog(log: InsertCallLog): Promise<CallLog>;
+  
+  // Agent operations
+  getAgents(): Promise<Agent[]>;
+  getAgent(id: string): Promise<Agent | undefined>;
+  createAgent(agent: InsertAgent): Promise<Agent>;
+  updateAgent(id: string, updates: Partial<InsertAgent>): Promise<Agent | undefined>;
+  deleteAgent(id: string): Promise<boolean>;
+  
+  // Customer operations
+  getCustomers(search?: string): Promise<Customer[]>;
+  getCustomer(id: string): Promise<Customer | undefined>;
+  createCustomer(customer: InsertCustomer): Promise<Customer>;
+  updateCustomer(id: string, updates: Partial<InsertCustomer>): Promise<Customer | undefined>;
+  deleteCustomer(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -80,6 +99,75 @@ export class DatabaseStorage implements IStorage {
   async createCallLog(log: InsertCallLog): Promise<CallLog> {
     const [created] = await db.insert(callLogs).values(log).returning();
     return created;
+  }
+
+  // Agent operations
+  async getAgents(): Promise<Agent[]> {
+    return db.select().from(agents).orderBy(desc(agents.createdAt));
+  }
+
+  async getAgent(id: string): Promise<Agent | undefined> {
+    const [agent] = await db.select().from(agents).where(eq(agents.id, id));
+    return agent;
+  }
+
+  async createAgent(agent: InsertAgent): Promise<Agent> {
+    const [created] = await db.insert(agents).values(agent).returning();
+    return created;
+  }
+
+  async updateAgent(id: string, updates: Partial<InsertAgent>): Promise<Agent | undefined> {
+    const [updated] = await db
+      .update(agents)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(agents.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAgent(id: string): Promise<boolean> {
+    const result = await db.delete(agents).where(eq(agents.id, id));
+    return true;
+  }
+
+  // Customer operations
+  async getCustomers(search?: string): Promise<Customer[]> {
+    if (search) {
+      const searchPattern = `%${search}%`;
+      return db.select().from(customers).where(
+        or(
+          ilike(customers.name, searchPattern),
+          ilike(customers.email, searchPattern),
+          ilike(customers.company, searchPattern),
+          ilike(customers.phone, searchPattern)
+        )
+      ).orderBy(desc(customers.createdAt));
+    }
+    return db.select().from(customers).orderBy(desc(customers.createdAt));
+  }
+
+  async getCustomer(id: string): Promise<Customer | undefined> {
+    const [customer] = await db.select().from(customers).where(eq(customers.id, id));
+    return customer;
+  }
+
+  async createCustomer(customer: InsertCustomer): Promise<Customer> {
+    const [created] = await db.insert(customers).values(customer).returning();
+    return created;
+  }
+
+  async updateCustomer(id: string, updates: Partial<InsertCustomer>): Promise<Customer | undefined> {
+    const [updated] = await db
+      .update(customers)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(customers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCustomer(id: string): Promise<boolean> {
+    const result = await db.delete(customers).where(eq(customers.id, id));
+    return true;
   }
 }
 
