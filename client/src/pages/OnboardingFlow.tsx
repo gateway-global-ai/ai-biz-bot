@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Mic, Play, Pause, ArrowRight, ArrowLeft, Sparkles, Zap, Volume2, MessageSquare, Phone, CheckCircle2, Users, Bot, Heart, Brain, Shield, Target } from 'lucide-react';
+import { Mic, Play, Pause, ArrowRight, ArrowLeft, Zap, Volume2, MessageSquare, Phone, CheckCircle2, Users, Bot, Heart, Brain, Shield, Target } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
-import gatewayLogoLg from '@assets/GatewayGlobalLogo_lg_1770154272272.png';
-import gatewayLogoSm from '@assets/GatewayGlobalLogo_sm_1770154272626.png';
+import gatewayLogoDark from '@assets/gatewayglobal_logo_dk_bg(_1770158396213.png';
 
 type Variant = 'awakening' | 'proof';
 type Step = 'name' | 'voice' | 'test';
@@ -248,11 +247,10 @@ export default function OnboardingFlow() {
         <div className="text-center z-10 max-w-xl flex flex-col items-center">
           {/* Large logo at the top */}
           <div className="mb-8">
-            <img src={gatewayLogoLg} alt="Gateway Global AI" className="w-[400px] md:w-[500px] h-auto" />
+            <img src={gatewayLogoDark} alt="Gateway Global AI" className="w-[400px] md:w-[500px] h-auto" />
           </div>
           
           <div className="mb-8">
-            <Sparkles className="w-12 h-12 text-indigo-400 mx-auto mb-4 animate-pulse" />
             <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               Awaken Your Agent
             </h1>
@@ -288,7 +286,7 @@ export default function OnboardingFlow() {
           >
             {isAwakening ? (
               <>
-                <Sparkles className="w-5 h-5 animate-spin" /> Awakening...
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Awakening...
               </>
             ) : (
               <>
@@ -312,7 +310,7 @@ export default function OnboardingFlow() {
         <div className="text-center z-10 max-w-2xl flex flex-col items-center">
           {/* Large logo at the top */}
           <div className="mb-8">
-            <img src={gatewayLogoLg} alt="Gateway Global AI" className="w-[400px] md:w-[500px] h-auto" />
+            <img src={gatewayLogoDark} alt="Gateway Global AI" className="w-[400px] md:w-[500px] h-auto" />
           </div>
           
           <div className="mb-8">
