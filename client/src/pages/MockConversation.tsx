@@ -74,12 +74,46 @@ export default function MockConversation() {
       setConversationText(data.text);
 
       if (data.audio?.data) {
-        const audioBlob = new Blob(
-          [Uint8Array.from(atob(data.audio.data), c => c.charCodeAt(0))],
-          { type: data.audio.mimeType || 'audio/mp3' }
-        );
-        const audioUrl = URL.createObjectURL(audioBlob);
-        audioRef.current = new Audio(audioUrl);
+        const audioBytes = Uint8Array.from(atob(data.audio.data), c => c.charCodeAt(0));
+        const mimeType = data.audio.mimeType || '';
+        
+        if (mimeType.includes('L16') || mimeType.includes('pcm')) {
+          // Convert raw PCM to WAV for browser playback
+          const sampleRate = 24000;
+          const numChannels = 1;
+          const bitsPerSample = 16;
+          const wavHeader = new ArrayBuffer(44);
+          const view = new DataView(wavHeader);
+          
+          const writeString = (offset: number, str: string) => {
+            for (let i = 0; i < str.length; i++) {
+              view.setUint8(offset + i, str.charCodeAt(i));
+            }
+          };
+          
+          writeString(0, 'RIFF');
+          view.setUint32(4, 36 + audioBytes.length, true);
+          writeString(8, 'WAVE');
+          writeString(12, 'fmt ');
+          view.setUint32(16, 16, true);
+          view.setUint16(20, 1, true);
+          view.setUint16(22, numChannels, true);
+          view.setUint32(24, sampleRate, true);
+          view.setUint32(28, sampleRate * numChannels * bitsPerSample / 8, true);
+          view.setUint16(32, numChannels * bitsPerSample / 8, true);
+          view.setUint16(34, bitsPerSample, true);
+          writeString(36, 'data');
+          view.setUint32(40, audioBytes.length, true);
+          
+          const wavBlob = new Blob([wavHeader, audioBytes], { type: 'audio/wav' });
+          const audioUrl = URL.createObjectURL(wavBlob);
+          audioRef.current = new Audio(audioUrl);
+        } else {
+          const audioBlob = new Blob([audioBytes], { type: mimeType || 'audio/mp3' });
+          const audioUrl = URL.createObjectURL(audioBlob);
+          audioRef.current = new Audio(audioUrl);
+        }
+        
         audioRef.current.onended = () => setIsPlaying(false);
       }
     } catch (err: any) {
