@@ -10,6 +10,12 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (February 2026)
 
+- Added DISC Assessment page with dual-mode experience:
+  - **Human Mode**: Interactive 24-question visual assessment with word ranking, progress tracking, results visualization (bar/radar charts)
+  - **Agent Mode**: API documentation for Telegram/Discord bot integration
+  - API endpoints: GET /api/disc/questions, POST /api/disc/calculate, POST /api/disc/calculate-simple
+  - Simple format for bots: accepts array of 24 rankings like [[4,3,2,1], [1,4,3,2]...] for easy integration
+  - Results include primary/secondary style, percentages, and style descriptions
 - Added Gateway Global AI onboarding experience with A/B variants:
   - **The Awakening** - Mystical particle animation, agent "awakens" when named
   - **The 24-Hour Proof** - Direct challenger brand: "Every other AI talks. This one finishes."
@@ -39,6 +45,8 @@ Preferred communication style: Simple, everyday language.
 The frontend is organized under `client/src/` with:
 - `pages/` - Route components:
   - `DiscVisualizer.tsx` - **MAIN FEATURE** - DISC Profile editor with behavioral matrix and system identity
+  - `DiscAssessment.tsx` - DISC personality assessment with human (visual) and agent (API docs) modes
+  - `OnboardingFlow.tsx` - Gateway Global AI onboarding with A/B variant experiences
   - `TelephonyPanel.tsx` - Telephony management (provisioning, settings, firewall, diagnostics)
 - `components/` - Custom components:
   - `Sidebar.tsx` - Navigation sidebar with NEXUSCMD branding
