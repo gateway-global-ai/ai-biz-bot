@@ -420,133 +420,148 @@ export default function OnboardingFlow() {
 
   const renderTestStep = () => (
     <div className="z-10 w-full max-w-6xl">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1 space-y-4">
-          <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-6">
-            <div className="flex items-center justify-center mb-4">
-              <AgentCore name={agentName} emotion={currentEmotion} intensity={discSliders.influence} />
-            </div>
-            
-            <div className="text-center mb-4">
-              <h3 className="font-bold text-lg">{agentName}</h3>
-              <p className="text-xs text-slate-500">{getVoicesForName(agentName).find(v => v.id === selectedVoice)?.description}</p>
-            </div>
-            
-            <div className="h-16 mb-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={sentimentData}>
-                  <Line type="monotone" dataKey="value" stroke="#818cf8" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+      {/* Hero Visualizer Section */}
+      <div className="flex flex-col items-center mb-8">
+        <div className="relative">
+          {/* Glow effect behind visualizer */}
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-3xl rounded-full scale-150" />
           
-          <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Heart className="w-3 h-3" /> Live Emotion Control
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {(Object.keys(EMOTION_COLORS) as Emotion[]).map((emotion) => (
-                <button
-                  key={emotion}
-                  onClick={() => handleEmotionClick(emotion)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all ${
-                    currentEmotion === emotion 
-                      ? `${EMOTION_COLORS[emotion].bg} text-white shadow-lg ${EMOTION_COLORS[emotion].glow}` 
-                      : 'bg-slate-800 text-slate-400 hover:text-white'
-                  }`}
-                  data-testid={`button-emotion-${emotion}`}
-                >
-                  {emotion}
-                </button>
-              ))}
-            </div>
-          </div>
-          
-          <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-4">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Brain className="w-3 h-3" /> DISC Behavior Sliders
-            </p>
-            <div className="space-y-3">
-              {Object.entries(discSliders).map(([key, value]) => (
-                <div key={key}>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-slate-400 capitalize">{key}</span>
-                    <span className="text-indigo-400">{value}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={value}
-                    onChange={(e) => setDiscSliders(prev => ({ ...prev, [key]: parseInt(e.target.value) }))}
-                    className="w-full h-1 bg-slate-700 rounded-full appearance-none cursor-pointer accent-indigo-500"
-                    data-testid={`slider-${key}`}
-                  />
-                </div>
-              ))}
-            </div>
+          {/* Main Visualizer - Large and Centered */}
+          <div className="relative transform scale-150 mb-8">
+            <AgentCore name={agentName} emotion={currentEmotion} intensity={discSliders.influence} />
           </div>
         </div>
         
-        <div className="lg:col-span-2 bg-slate-900/80 border border-slate-700 rounded-xl p-6 flex flex-col h-[600px]">
-          <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800">
-            <div className="flex items-center gap-3">
-              <MessageSquare className="w-5 h-5 text-indigo-400" />
-              <span className="font-bold">Live Conversation</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-emerald-400">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-              Connected
-            </div>
+        {/* Agent Name & Status */}
+        <div className="text-center mt-4">
+          <h2 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+            {agentName}
+          </h2>
+          <p className="text-sm text-slate-400 mt-1">{getVoicesForName(agentName).find(v => v.id === selectedVoice)?.description}</p>
+          <div className="flex items-center justify-center gap-2 mt-2 text-xs text-emerald-400">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            Live & Connected
           </div>
-          
-          <div className="flex-1 overflow-y-auto space-y-4 mb-4">
-            {conversation.map((msg, i) => (
-              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] p-4 rounded-2xl ${
-                  msg.role === 'user' 
-                    ? 'bg-indigo-600 text-white rounded-br-sm' 
-                    : 'bg-slate-800 text-slate-200 rounded-bl-sm'
-                }`}>
-                  {msg.role === 'agent' && (
-                    <p className="text-xs text-indigo-400 mb-1 font-bold">{agentName}</p>
-                  )}
-                  <p className="text-sm leading-relaxed">{msg.text}</p>
+        </div>
+        
+        {/* Sentiment Wave */}
+        <div className="w-full max-w-md h-12 mt-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={sentimentData}>
+              <Line type="monotone" dataKey="value" stroke="#818cf8" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+      
+      {/* Controls Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-4">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Heart className="w-3 h-3" /> Live Emotion Control
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(EMOTION_COLORS) as Emotion[]).map((emotion) => (
+              <button
+                key={emotion}
+                onClick={() => handleEmotionClick(emotion)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all ${
+                  currentEmotion === emotion 
+                    ? `${EMOTION_COLORS[emotion].bg} text-white shadow-lg ${EMOTION_COLORS[emotion].glow}` 
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+                data-testid={`button-emotion-${emotion}`}
+              >
+                {emotion}
+              </button>
+            ))}
+          </div>
+        </div>
+        
+        <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-4">
+          <p className="text-xs text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Brain className="w-3 h-3" /> DISC Behavior Sliders
+          </p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            {Object.entries(discSliders).map(([key, value]) => (
+              <div key={key}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-400 capitalize">{key}</span>
+                  <span className="text-indigo-400">{value}%</span>
                 </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={value}
+                  onChange={(e) => setDiscSliders(prev => ({ ...prev, [key]: parseInt(e.target.value) }))}
+                  className="w-full h-1 bg-slate-700 rounded-full appearance-none cursor-pointer accent-indigo-500"
+                  data-testid={`slider-${key}`}
+                />
               </div>
             ))}
-            {isTyping && (
-              <div className="flex justify-start">
-                <div className="bg-slate-800 p-4 rounded-2xl rounded-bl-sm">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Conversation Panel */}
+      <div className="bg-slate-900/80 border border-slate-700 rounded-xl p-6 flex flex-col h-[400px]">
+        <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <MessageSquare className="w-5 h-5 text-indigo-400" />
+            <span className="font-bold">Live Conversation</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-emerald-400">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+            Connected
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+          {conversation.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[80%] p-4 rounded-2xl ${
+                msg.role === 'user' 
+                  ? 'bg-indigo-600 text-white rounded-br-sm' 
+                  : 'bg-slate-800 text-slate-200 rounded-bl-sm'
+              }`}>
+                {msg.role === 'agent' && (
+                  <p className="text-xs text-indigo-400 mb-1 font-bold">{agentName}</p>
+                )}
+                <p className="text-sm leading-relaxed">{msg.text}</p>
+              </div>
+            </div>
+          ))}
+          {isTyping && (
+            <div className="flex justify-start">
+              <div className="bg-slate-800 p-4 rounded-2xl rounded-bl-sm">
+                <div className="flex gap-1">
+                  <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                 </div>
               </div>
-            )}
-          </div>
-          
-          <div className="flex gap-3">
-            <input
-              type="text"
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="Type a message..."
-              className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500 transition-all"
-              data-testid="input-chat"
-            />
-            <button
-              onClick={handleSendMessage}
-              className="bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-xl font-bold transition-all"
-              data-testid="button-send"
-            >
-              Send
-            </button>
-          </div>
+            </div>
+          )}
+        </div>
+        
+        <div className="flex gap-3">
+          <input
+            type="text"
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+            placeholder="Type a message..."
+            className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500 transition-all"
+            data-testid="input-chat"
+          />
+          <button
+            onClick={handleSendMessage}
+            className="bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-xl font-bold transition-all"
+            data-testid="button-send"
+          >
+            Send
+          </button>
         </div>
       </div>
       
