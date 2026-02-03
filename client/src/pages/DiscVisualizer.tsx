@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid, ResponsiveContainer, LineChart, Line
 } from 'recharts';
@@ -7,7 +7,7 @@ import {
   Fingerprint, Heart, ShieldCheck, Database, 
   FileText, Plus, PenTool, LayoutTemplate, Server,
   Cpu, Zap, Radio, MessageSquare, Terminal, Sparkles,
-  ClipboardCheck, X, FileJson, Clock, AlertTriangle, PhoneCall, TrendingUp
+  ClipboardCheck, X, FileJson, Clock, AlertTriangle, PhoneCall, TrendingUp, Volume2, VolumeX
 } from 'lucide-react';
 import type { DiscScores, ArchProfile, SystemPrompt } from '@shared/schema';
 
@@ -274,6 +274,8 @@ export default function DiscVisualizer() {
   const [currentSentiment, setCurrentSentiment] = useState<Sentiment>('calm');
   const [sentimentHistory, setSentimentHistory] = useState<{ time: string; value: number; sentiment: Sentiment }[]>([]);
   const [isCallActive, setIsCallActive] = useState(false);
+  const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (isCallActive) {
@@ -376,15 +378,66 @@ export default function DiscVisualizer() {
     }
   };
 
-  const handleTopicClick = (topicId: string, label: string) => {
+  const handleTopicClick = async (topicId: string, label: string) => {
     setThinkingTopic(topicId);
     setBotOutput(null);
+    
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setIsPlayingVoice(false);
 
-    setTimeout(() => {
-        const response = generateResponse(topicId, discScores, activePrompt);
+    const response = generateResponse(topicId, discScores, activePrompt);
+    
+    try {
+      const ttsResponse = await fetch('/api/conversation/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentName: 'NEXUS',
+          discProfile: discScores,
+          scenario: `responding introspectively about ${label.toLowerCase()}. The agent should speak naturally as if reflecting on their own beliefs and feelings about this topic. Keep the response personal and thoughtful, like a genuine self-reflection.`,
+        }),
+      });
+
+      if (ttsResponse.ok) {
+        const data = await ttsResponse.json();
+        const naturalResponse = data.text || response;
+        setBotOutput({ topic: label, text: naturalResponse });
+        setThinkingTopic(null);
+
+        if (data.audio?.data) {
+          const audioBlob = new Blob(
+            [Uint8Array.from(atob(data.audio.data), c => c.charCodeAt(0))],
+            { type: data.audio.mimeType || 'audio/mp3' }
+          );
+          const audioUrl = URL.createObjectURL(audioBlob);
+          audioRef.current = new Audio(audioUrl);
+          audioRef.current.onended = () => setIsPlayingVoice(false);
+          audioRef.current.play();
+          setIsPlayingVoice(true);
+        }
+      } else {
         setBotOutput({ topic: label, text: response });
         setThinkingTopic(null);
-    }, 1200);
+      }
+    } catch (error) {
+      console.error('TTS error:', error);
+      setBotOutput({ topic: label, text: response });
+      setThinkingTopic(null);
+    }
+  };
+
+  const toggleVoice = () => {
+    if (!audioRef.current) return;
+    if (isPlayingVoice) {
+      audioRef.current.pause();
+      setIsPlayingVoice(false);
+    } else {
+      audioRef.current.play();
+      setIsPlayingVoice(true);
+    }
   };
 
   return (
@@ -651,9 +704,21 @@ export default function DiscVisualizer() {
 
                         {botOutput && (
                              <div>
-                                <div className="text-[10px] uppercase text-slate-500 mb-1 flex justify-between">
+                                <div className="text-[10px] uppercase text-slate-500 mb-1 flex justify-between items-center">
                                     <span>Query: {botOutput.topic}</span>
-                                    <span>Confidence: {(0.9 + Math.random() * 0.09).toFixed(4)}</span>
+                                    <div className="flex items-center gap-3">
+                                      {audioRef.current && (
+                                        <button
+                                          onClick={toggleVoice}
+                                          className={`flex items-center gap-1 px-2 py-1 rounded text-xs transition-all ${isPlayingVoice ? 'text-indigo-400 bg-indigo-500/20' : 'text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10'}`}
+                                          data-testid="button-toggle-voice"
+                                        >
+                                          {isPlayingVoice ? <Volume2 className="w-3 h-3 animate-pulse" /> : <VolumeX className="w-3 h-3" />}
+                                          <span>{isPlayingVoice ? 'Speaking...' : 'Replay'}</span>
+                                        </button>
+                                      )}
+                                      <span>Confidence: {(0.9 + Math.random() * 0.09).toFixed(4)}</span>
+                                    </div>
                                 </div>
                                 <div className="text-slate-200 leading-relaxed border-l-2 border-indigo-500 pl-3" data-testid="text-bot-output">
                                     "{botOutput.text}"
