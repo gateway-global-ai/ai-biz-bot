@@ -1,5 +1,5 @@
 import { useLocation, Link } from 'wouter';
-import { Server, Settings, Play, Activity, UserCircle, ShieldAlert, MessageSquare, Phone, Terminal, Building2 } from 'lucide-react';
+import { Server, Settings, Play, Activity, UserCircle, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -24,6 +24,7 @@ const MENU_ITEMS = [
 ];
 
 const ACCESS_ITEMS = [
+  { id: 'onboard', label: 'Create Your Agent', path: '/onboard', icon: Sparkles },
   { id: 'developer', label: 'Developer Access', path: '/developer', icon: Terminal },
   { id: 'business', label: 'Business Access', path: '/business', icon: Building2 },
 ];

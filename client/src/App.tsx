@@ -9,6 +9,7 @@ import TelephonyPanel from "@/pages/TelephonyPanel";
 import DiscVisualizer from "@/pages/DiscVisualizer";
 import DeveloperPage from "@/pages/DeveloperPage";
 import BusinessPage from "@/pages/BusinessPage";
+import OnboardingFlow from "@/pages/OnboardingFlow";
 import NotFound from "@/pages/not-found";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
 
@@ -227,6 +228,7 @@ function AppRouter() {
       <Route path="/security" component={SecurityDashboard} />
       <Route path="/developer" component={DeveloperPage} />
       <Route path="/business" component={BusinessPage} />
+      <Route path="/onboard" component={OnboardingFlow} />
       <Route component={NotFound} />
     </Switch>
   );
