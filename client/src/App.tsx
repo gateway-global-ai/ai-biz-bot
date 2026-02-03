@@ -13,6 +13,10 @@ import OnboardingFlow from "@/pages/OnboardingFlow";
 import DiscAssessment from "@/pages/DiscAssessment";
 import MockConversation from "@/pages/MockConversation";
 import AgentManager from "@/pages/AgentManager";
+import AgentDashboard from "@/pages/AgentDashboard";
+import TheVibe from "@/pages/TheVibe";
+import TheOffice from "@/pages/TheOffice";
+import TheLab from "@/pages/TheLab";
 import CustomerManager from "@/pages/CustomerManager";
 import NotFound from "@/pages/not-found";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
@@ -222,8 +226,12 @@ function TwilioHub() {
 function AppRouter() {
   return (
     <Switch>
-      <Route path="/" component={DiscVisualizer} />
-      <Route path="/agents" component={AgentManager} />
+      <Route path="/" component={AgentDashboard} />
+      <Route path="/agents" component={AgentDashboard} />
+      <Route path="/agent/:agentId/vibe" component={TheVibe} />
+      <Route path="/agent/:agentId/office" component={TheOffice} />
+      <Route path="/agent/:agentId/lab" component={TheLab} />
+      <Route path="/agent-manager" component={AgentManager} />
       <Route path="/customers" component={CustomerManager} />
       <Route path="/telephony" component={TelephonyPanel} />
       <Route path="/twilio" component={TwilioHub} />
@@ -232,6 +240,7 @@ function AppRouter() {
       <Route path="/tests" component={TestOrchestrator} />
       <Route path="/results" component={ResultsAnalyzer} />
       <Route path="/security" component={SecurityDashboard} />
+      <Route path="/disc" component={DiscVisualizer} />
       <Route path="/developer" component={DeveloperPage} />
       <Route path="/business" component={BusinessPage} />
       <Route path="/onboard" component={OnboardingFlow} />

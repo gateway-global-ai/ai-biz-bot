@@ -1,5 +1,5 @@
 import { useLocation, Link } from 'wouter';
-import { Server, Settings, Play, Activity, UserCircle, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles, ClipboardCheck, AudioLines, Bot, Users } from 'lucide-react';
+import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles, ClipboardCheck, AudioLines, Bot, Users, LayoutDashboard } from 'lucide-react';
 import gatewayLogoSm from '@assets/GatewayGlobalLogo_sm_1770154272626.png';
 import {
   Sidebar,
@@ -13,12 +13,19 @@ import {
   SidebarFooter,
 } from '@/components/ui/sidebar';
 
-const MENU_ITEMS = [
-  { id: 'disc', label: 'DISC Profile', path: '/', icon: UserCircle },
-  { id: 'agents', label: 'Agent Manager', path: '/agents', icon: Bot },
+const AGENT_ITEMS = [
+  { id: 'dashboard', label: 'Agent Dashboard', path: '/agents', icon: LayoutDashboard },
+  { id: 'assessment', label: 'DISC Assessment', path: '/assessment', icon: ClipboardCheck },
+  { id: 'conversation', label: 'Character Tool', path: '/conversation', icon: AudioLines },
+];
+
+const OPERATIONS_ITEMS = [
   { id: 'customers', label: 'Customer Manager', path: '/customers', icon: Users },
   { id: 'telephony', label: 'Telephony', path: '/telephony', icon: Phone },
   { id: 'twilio', label: 'Twilio Hub', path: '/twilio', icon: MessageSquare },
+];
+
+const SYSTEM_ITEMS = [
   { id: 'servers', label: 'Server Control', path: '/servers', icon: Server },
   { id: 'global_config', label: 'Global Config', path: '/config', icon: Settings },
   { id: 'tests', label: 'Orchestrator', path: '/tests', icon: Play },
@@ -28,8 +35,6 @@ const MENU_ITEMS = [
 
 const ACCESS_ITEMS = [
   { id: 'onboard', label: 'Create Your Agent', path: '/onboard', icon: Sparkles },
-  { id: 'assessment', label: 'DISC Assessment', path: '/assessment', icon: ClipboardCheck },
-  { id: 'conversation', label: 'Mock Conversation', path: '/conversation', icon: AudioLines },
   { id: 'developer', label: 'Developer Access', path: '/developer', icon: Terminal },
   { id: 'business', label: 'Business Access', path: '/business', icon: Building2 },
 ];
@@ -44,17 +49,59 @@ export function AppSidebar() {
       </div>
       <SidebarContent className="bg-slate-900">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-slate-500 text-xs font-bold uppercase">Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-slate-500 text-xs font-bold uppercase">Agent Dashboard</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {MENU_ITEMS.map((item) => {
+              {AGENT_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isActive = location === item.path || (item.path === '/agents' && location === '/');
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.path} data-testid={`nav-${item.id}`}>
+                        <Icon className={`w-5 h-5 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-slate-500 text-xs font-bold uppercase">Operations</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {OPERATIONS_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton asChild isActive={isActive}>
                       <Link href={item.path} data-testid={`nav-${item.id}`}>
-                        <Icon className={`w-5 h-5 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
+                        <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-slate-500 text-xs font-bold uppercase">System</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {SYSTEM_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isActive = location === item.path;
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.path} data-testid={`nav-${item.id}`}>
+                        <Icon className={`w-5 h-5 ${isActive ? 'text-purple-400' : 'text-slate-500'}`} />
                         <span>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>

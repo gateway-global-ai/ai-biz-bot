@@ -10,16 +10,39 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (February 2026)
 
-- Enhanced Agent Manager page (`/agents`) - **KEY PAGE FOR AGENT PERSONALITY CONFIGURATION**:
-  - Table view with inline editing for all agents
-  - Create new agents with avatar gallery (5 character avatars), name, voice selection (6 voices), and status
-  - **Click on any agent to open full configuration view** with:
-    - BotAvatar visualizer with animated DISC rings and sentiment states
-    - DISC Profile sliders (Dominance, Influence, Steadiness, Conscientiousness)
-    - ARCH Communication Model sliders with bar chart visualization
-    - 6-section System Identity Prompts editor (Owner Identity, Loyalty, Priorities, Data Protection, Security, DISC Reinforcement)
-    - Save Configuration button to persist personality settings
-  - Search, refresh, edit, and delete functionality
+- **NEW: Agent Dashboard with Card Gallery** (`/agents` or `/`):
+  - Beautiful card-based view of all agents (replaces table view)
+  - Each card displays avatar, name, status, voice, and DISC profile preview
+  - Three environment buttons per agent card:
+    - **The Vibe** (purple) - Reflect & Relax conversations
+    - **The Office** (blue) - Collab on Projects with multi-agent invite
+    - **The Lab** (green) - Fine Tuning personality controls
+  - Create New Agent card with avatar gallery selection
+
+- **NEW: The Vibe Environment** (`/agent/:agentId/vibe`):
+  - Relaxed conversation context with mood presets (Calm, Reflective, Supportive)
+  - Each mood auto-adjusts DISC settings for optimal relaxation
+  - Purple gradient theme for calming atmosphere
+  - Chat interface for reflective conversations
+
+- **NEW: The Office Environment** (`/agent/:agentId/office`):
+  - Collaborative project workspace with blue professional theme
+  - Team panel with multi-agent invite functionality
+  - DISC settings tuned for productivity and collaboration
+  - Future: multi-agent conversations in team chat
+
+- **NEW: The Lab Environment** (`/agent/:agentId/lab`):
+  - Full fine-tuning control panel with green technical theme
+  - DISC Profile sliders (Dominance, Influence, Steadiness, Conscientiousness)
+  - ARCH Communication Model sliders with bar chart visualization
+  - 6-section System Identity Prompts editor
+  - Save Configuration button to persist personality settings
+
+- Updated Sidebar Navigation organized into 4 sections:
+  - Agent Dashboard: Dashboard, DISC Assessment, Character Tool
+  - Operations: Customer Manager, Telephony, Twilio Hub
+  - System: Server Control, Config, Orchestrator, Results, Security
+  - Access Portals: Create Your Agent, Developer, Business
 - Added Customer Manager page (`/customers`):
   - Lead capture form with contact info (name, email, phone, company)
   - Location tracking (city, state, country)
