@@ -39,12 +39,8 @@ export function AppSidebar() {
 
   return (
     <Sidebar className="border-r border-slate-800 bg-slate-900">
-      <div className="p-4 border-b border-slate-800 flex items-center gap-3">
-        <img src={gatewayLogoSm} alt="Gateway Global AI" className="h-10 w-auto" />
-        <div className="flex flex-col">
-          <span className="text-sm font-bold text-white leading-tight">Gateway Global</span>
-          <span className="text-[10px] text-indigo-400 uppercase tracking-wider">AI Command Center</span>
-        </div>
+      <div className="p-6 pb-8 border-b border-slate-800 flex justify-center">
+        <img src={gatewayLogoSm} alt="Gateway Global AI" className="h-16 w-auto" />
       </div>
       <SidebarContent className="bg-slate-900">
         <SidebarGroup>

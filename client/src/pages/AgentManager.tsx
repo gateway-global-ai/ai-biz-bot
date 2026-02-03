@@ -8,8 +8,22 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Bot, Plus, Pencil, Trash2, RefreshCw, Search, Volume2 } from 'lucide-react';
+import { Bot, Plus, Pencil, Trash2, RefreshCw, Search, Volume2, Check, ImageIcon } from 'lucide-react';
 import type { Agent } from '@shared/schema';
+
+import avatar1 from '@assets/freepik__melissa-model-as-a-superhuman-metal-android-smooth__8_1770156432895.png';
+import avatar2 from '@assets/freepik__melissa-model-turned-into-a-futuristic-ai-robot-wi__8_1770156535941.png';
+import avatar3 from '@assets/freepik__generate-9-different-angles-of-this-image-back-vie__8_1770156725733.png';
+import avatar4 from '@assets/freepik__is-a-model-turned-into-a-futuristic-ai-robot-emily__8_1770156725735.png';
+import avatar5 from '@assets/freepik__is-a-model-turned-into-a-futuristic-ai-robot-emily__8_1770156725736.png';
+
+const AVATAR_OPTIONS = [
+  { id: 'avatar1', name: 'Nova', src: avatar1, description: 'Cyber Warrior' },
+  { id: 'avatar2', name: 'Phoenix', src: avatar2, description: 'Samurai Spirit' },
+  { id: 'avatar3', name: 'Nexus', src: avatar3, description: 'Data Navigator' },
+  { id: 'avatar4', name: 'Aurora', src: avatar4, description: 'Energy Flow' },
+  { id: 'avatar5', name: 'Zenith', src: avatar5, description: 'Shadow Tech' },
+];
 
 export default function AgentManager() {
   const { toast } = useToast();
@@ -26,6 +40,7 @@ export default function AgentManager() {
     influence: 50,
     steadiness: 50,
     conscientiousness: 50,
+    avatarId: 'avatar1',
   });
 
   const { data: agents = [], isLoading, refetch } = useQuery<Agent[]>({
@@ -37,7 +52,7 @@ export default function AgentManager() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
       setIsCreateOpen(false);
-      setNewAgent({ name: '', voiceId: 'kore', voiceName: 'Kore', status: 'active', dominance: 50, influence: 50, steadiness: 50, conscientiousness: 50 });
+      setNewAgent({ name: '', voiceId: 'kore', voiceName: 'Kore', status: 'active', dominance: 50, influence: 50, steadiness: 50, conscientiousness: 50, avatarId: 'avatar1' });
       toast({ title: 'Agent created successfully' });
     },
     onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
@@ -93,6 +108,10 @@ export default function AgentManager() {
     }
   };
 
+  const getAvatarById = (avatarId: string | null | undefined) => {
+    return AVATAR_OPTIONS.find(a => a.id === avatarId) || AVATAR_OPTIONS[0];
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 p-6">
       <div className="max-w-7xl mx-auto">
@@ -110,42 +129,78 @@ export default function AgentManager() {
                 <Plus className="w-4 h-4 mr-2" /> Add New Agent
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-slate-900 border-slate-700">
+            <DialogContent className="bg-slate-900 border-slate-700 max-w-2xl">
               <DialogHeader>
                 <DialogTitle className="text-white">Create New Agent</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <div>
-                  <label className="text-sm text-slate-400 mb-1 block">Agent Name</label>
-                  <Input 
-                    value={newAgent.name}
-                    onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
-                    placeholder="Enter agent name"
-                    className="bg-slate-800 border-slate-600"
-                    data-testid="input-agent-name"
-                  />
+                  <label className="text-sm text-slate-400 mb-2 block flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4" /> Choose Your Agent Avatar
+                  </label>
+                  <div className="grid grid-cols-5 gap-3">
+                    {AVATAR_OPTIONS.map((avatar) => (
+                      <button
+                        key={avatar.id}
+                        onClick={() => setNewAgent({ ...newAgent, avatarId: avatar.id })}
+                        className={`relative group rounded-lg overflow-hidden border-2 transition-all ${
+                          newAgent.avatarId === avatar.id 
+                            ? 'border-indigo-500 ring-2 ring-indigo-500/50' 
+                            : 'border-slate-700 hover:border-slate-500'
+                        }`}
+                        data-testid={`avatar-option-${avatar.id}`}
+                      >
+                        <img 
+                          src={avatar.src} 
+                          alt={avatar.name}
+                          className="w-full aspect-square object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-2">
+                          <span className="text-xs text-white font-medium">{avatar.name}</span>
+                        </div>
+                        {newAgent.avatarId === avatar.id && (
+                          <div className="absolute top-1 right-1 w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center">
+                            <Check className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">This avatar will appear as a backdrop in chat screens</p>
                 </div>
-                <div>
-                  <label className="text-sm text-slate-400 mb-1 block">Voice</label>
-                  <Select 
-                    value={newAgent.voiceId} 
-                    onValueChange={(value) => {
-                      const voices: Record<string, string> = { kore: 'Kore', puck: 'Puck', charon: 'Charon', fenrir: 'Fenrir', aoede: 'Aoede', leda: 'Leda' };
-                      setNewAgent({ ...newAgent, voiceId: value, voiceName: voices[value] || value });
-                    }}
-                  >
-                    <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-agent-voice">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="kore">Kore - Warm & Professional</SelectItem>
-                      <SelectItem value="puck">Puck - Friendly & Upbeat</SelectItem>
-                      <SelectItem value="charon">Charon - Deep & Authoritative</SelectItem>
-                      <SelectItem value="fenrir">Fenrir - Calm & Reassuring</SelectItem>
-                      <SelectItem value="aoede">Aoede - Clear & Articulate</SelectItem>
-                      <SelectItem value="leda">Leda - Soft & Gentle</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Agent Name</label>
+                    <Input 
+                      value={newAgent.name}
+                      onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
+                      placeholder="Enter agent name"
+                      className="bg-slate-800 border-slate-600"
+                      data-testid="input-agent-name"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-slate-400 mb-1 block">Voice</label>
+                    <Select 
+                      value={newAgent.voiceId} 
+                      onValueChange={(value) => {
+                        const voices: Record<string, string> = { kore: 'Kore', puck: 'Puck', charon: 'Charon', fenrir: 'Fenrir', aoede: 'Aoede', leda: 'Leda' };
+                        setNewAgent({ ...newAgent, voiceId: value, voiceName: voices[value] || value });
+                      }}
+                    >
+                      <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-agent-voice">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="kore">Kore - Warm & Professional</SelectItem>
+                        <SelectItem value="puck">Puck - Friendly & Upbeat</SelectItem>
+                        <SelectItem value="charon">Charon - Deep & Authoritative</SelectItem>
+                        <SelectItem value="fenrir">Fenrir - Calm & Reassuring</SelectItem>
+                        <SelectItem value="aoede">Aoede - Clear & Articulate</SelectItem>
+                        <SelectItem value="leda">Leda - Soft & Gentle</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm text-slate-400 mb-1 block">Status</label>
@@ -206,17 +261,28 @@ export default function AgentManager() {
                 <table className="w-full">
                   <thead className="bg-slate-800/50">
                     <tr>
+                      <th className="text-left p-4 text-sm font-medium text-slate-400">Avatar</th>
                       <th className="text-left p-4 text-sm font-medium text-slate-400">Agent Name</th>
                       <th className="text-left p-4 text-sm font-medium text-slate-400">Voice</th>
                       <th className="text-left p-4 text-sm font-medium text-slate-400">Status</th>
                       <th className="text-left p-4 text-sm font-medium text-slate-400">DISC Profile</th>
-                      <th className="text-left p-4 text-sm font-medium text-slate-400">Created</th>
                       <th className="text-right p-4 text-sm font-medium text-slate-400">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredAgents.map((agent) => (
+                    {filteredAgents.map((agent) => {
+                      const agentAvatar = getAvatarById(agent.avatarId);
+                      return (
                       <tr key={agent.id} className="border-t border-slate-800 hover:bg-slate-800/30" data-testid={`row-agent-${agent.id}`}>
+                        <td className="p-4">
+                          <div className="w-12 h-12 rounded-lg overflow-hidden border border-slate-700">
+                            <img 
+                              src={agentAvatar.src} 
+                              alt={agentAvatar.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        </td>
                         <td className="p-4">
                           {editingId === agent.id ? (
                             <Input 
@@ -226,7 +292,6 @@ export default function AgentManager() {
                             />
                           ) : (
                             <div className="flex items-center gap-2">
-                              <Bot className="w-4 h-4 text-indigo-400" />
                               <span className="text-white font-medium">{agent.name}</span>
                             </div>
                           )}
@@ -286,9 +351,6 @@ export default function AgentManager() {
                             <span className="text-blue-400">C:{agent.conscientiousness}</span>
                           </div>
                         </td>
-                        <td className="p-4 text-slate-400 text-sm">
-                          {agent.createdAt ? new Date(agent.createdAt).toLocaleDateString() : '-'}
-                        </td>
                         <td className="p-4">
                           <div className="flex items-center justify-end gap-2">
                             {editingId === agent.id ? (
@@ -325,7 +387,7 @@ export default function AgentManager() {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>

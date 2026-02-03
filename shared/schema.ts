@@ -243,6 +243,7 @@ export const agents = pgTable("agents", {
   influence: integer("influence").default(50),
   steadiness: integer("steadiness").default(50),
   conscientiousness: integer("conscientiousness").default(50),
+  avatarId: text("avatar_id").default("avatar1"), // character avatar for chat backdrop
   systemPrompt: text("system_prompt"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
