@@ -231,3 +231,57 @@ export const DISC_STYLE_DESCRIPTIONS = {
   S: 'Patient, cooperative, reliable, calm',
   C: 'Analytical, precise, systematic, careful',
 };
+
+// AI Agents table
+export const agents = pgTable("agents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  voiceId: text("voice_id").notNull(),
+  voiceName: text("voice_name").notNull(),
+  status: text("status").notNull().default("active"), // active, paused, inactive
+  dominance: integer("dominance").default(50),
+  influence: integer("influence").default(50),
+  steadiness: integer("steadiness").default(50),
+  conscientiousness: integer("conscientiousness").default(50),
+  systemPrompt: text("system_prompt"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAgentSchema = createInsertSchema(agents).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertAgent = z.infer<typeof insertAgentSchema>;
+export type Agent = typeof agents.$inferSelect;
+
+// Customers/Leads table
+export const customers = pgTable("customers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  company: text("company"),
+  city: text("city"),
+  state: text("state"),
+  country: text("country"),
+  source: text("source"), // where the lead came from
+  status: text("status").notNull().default("new"), // new, contacted, qualified, converted, lost
+  notes: text("notes"),
+  agentId: varchar("agent_id").references(() => agents.id),
+  lastContactAt: timestamp("last_contact_at"),
+  followUpAt: timestamp("follow_up_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCustomerSchema = createInsertSchema(customers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
+export type Customer = typeof customers.$inferSelect;
