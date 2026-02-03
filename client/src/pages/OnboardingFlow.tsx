@@ -241,26 +241,18 @@ export default function OnboardingFlow() {
   };
 
   const renderAwakeningVariant = () => (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-8 relative overflow-hidden">
-      {/* Background logo texture */}
-      <div 
-        className="absolute inset-0 flex items-center justify-center pointer-events-none"
-        style={{ opacity: 0.06 }}
-      >
-        <img src={gatewayLogoLg} alt="" className="w-[800px] h-auto" />
-      </div>
-      
-      {/* Top-right logo */}
-      <div className="absolute top-6 right-6 z-20">
-        <img src={gatewayLogoSm} alt="Gateway Global AI" className="h-12 w-auto" />
-      </div>
-      
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center p-8 pt-12 relative overflow-hidden">
       <ParticleField active={isAwakening} color="#818cf8" />
       
       {step === 'name' && (
-        <div className="text-center z-10 max-w-xl">
+        <div className="text-center z-10 max-w-xl flex flex-col items-center">
+          {/* Large logo at the top */}
           <div className="mb-8">
-            <Sparkles className="w-16 h-16 text-indigo-400 mx-auto mb-4 animate-pulse" />
+            <img src={gatewayLogoLg} alt="Gateway Global AI" className="w-[400px] md:w-[500px] h-auto" />
+          </div>
+          
+          <div className="mb-8">
+            <Sparkles className="w-12 h-12 text-indigo-400 mx-auto mb-4 animate-pulse" />
             <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               Awaken Your Agent
             </h1>
@@ -313,24 +305,16 @@ export default function OnboardingFlow() {
   );
 
   const renderProofVariant = () => (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-8 relative overflow-hidden">
+    <div className="min-h-screen bg-black text-white flex flex-col items-center p-8 pt-12 relative overflow-hidden">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
       
-      {/* Background logo texture */}
-      <div 
-        className="absolute inset-0 flex items-center justify-center pointer-events-none"
-        style={{ opacity: 0.05 }}
-      >
-        <img src={gatewayLogoLg} alt="" className="w-[900px] h-auto" />
-      </div>
-      
-      {/* Top-right logo */}
-      <div className="absolute top-6 right-6 z-20">
-        <img src={gatewayLogoSm} alt="Gateway Global AI" className="h-12 w-auto" />
-      </div>
-      
       {step === 'name' && (
-        <div className="text-center z-10 max-w-2xl">
+        <div className="text-center z-10 max-w-2xl flex flex-col items-center">
+          {/* Large logo at the top */}
+          <div className="mb-8">
+            <img src={gatewayLogoLg} alt="Gateway Global AI" className="w-[400px] md:w-[500px] h-auto" />
+          </div>
+          
           <div className="mb-8">
             <div className="flex items-center justify-center gap-4 mb-6">
               <Users className="w-10 h-10 text-amber-400" />
