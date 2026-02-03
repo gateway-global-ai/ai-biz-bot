@@ -14,7 +14,7 @@ import {
   updateCallerIdName,
   getTwilioFromPhoneNumber
 } from "./twilio";
-import { insertTelephonyConfigSchema, insertCallLogSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
+import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
 
@@ -656,6 +656,135 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
         { id: 'Leda', name: 'Leda', description: 'Soft and gentle' }
       ]
     });
+  });
+
+  // ============================================
+  // AGENT MANAGEMENT API
+  // ============================================
+
+  // Get all agents
+  app.get("/api/agents", async (req, res) => {
+    try {
+      const agentList = await storage.getAgents();
+      res.json(agentList);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get single agent
+  app.get("/api/agents/:id", async (req, res) => {
+    try {
+      const agent = await storage.getAgent(req.params.id);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      res.json(agent);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create agent
+  app.post("/api/agents", async (req, res) => {
+    try {
+      const parsed = insertAgentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+      const agent = await storage.createAgent(parsed.data);
+      res.json(agent);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update agent
+  app.patch("/api/agents/:id", async (req, res) => {
+    try {
+      const agent = await storage.updateAgent(req.params.id, req.body);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      res.json(agent);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete agent
+  app.delete("/api/agents/:id", async (req, res) => {
+    try {
+      await storage.deleteAgent(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // CUSTOMER/LEAD MANAGEMENT API
+  // ============================================
+
+  // Get all customers (with optional search)
+  app.get("/api/customers", async (req, res) => {
+    try {
+      const search = req.query.search as string | undefined;
+      const customerList = await storage.getCustomers(search);
+      res.json(customerList);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get single customer
+  app.get("/api/customers/:id", async (req, res) => {
+    try {
+      const customer = await storage.getCustomer(req.params.id);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      res.json(customer);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create customer
+  app.post("/api/customers", async (req, res) => {
+    try {
+      const parsed = insertCustomerSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+      const customer = await storage.createCustomer(parsed.data);
+      res.json(customer);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update customer
+  app.patch("/api/customers/:id", async (req, res) => {
+    try {
+      const customer = await storage.updateCustomer(req.params.id, req.body);
+      if (!customer) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      res.json(customer);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete customer
+  app.delete("/api/customers/:id", async (req, res) => {
+    try {
+      await storage.deleteCustomer(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
   });
 
   return httpServer;
