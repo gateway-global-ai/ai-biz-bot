@@ -12,6 +12,8 @@ import BusinessPage from "@/pages/BusinessPage";
 import OnboardingFlow from "@/pages/OnboardingFlow";
 import DiscAssessment from "@/pages/DiscAssessment";
 import MockConversation from "@/pages/MockConversation";
+import AgentManager from "@/pages/AgentManager";
+import CustomerManager from "@/pages/CustomerManager";
 import NotFound from "@/pages/not-found";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
 
@@ -221,6 +223,8 @@ function AppRouter() {
   return (
     <Switch>
       <Route path="/" component={DiscVisualizer} />
+      <Route path="/agents" component={AgentManager} />
+      <Route path="/customers" component={CustomerManager} />
       <Route path="/telephony" component={TelephonyPanel} />
       <Route path="/twilio" component={TwilioHub} />
       <Route path="/servers" component={ServerPanel} />

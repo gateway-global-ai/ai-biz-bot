@@ -1,5 +1,5 @@
 import { useLocation, Link } from 'wouter';
-import { Server, Settings, Play, Activity, UserCircle, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles, ClipboardCheck, AudioLines } from 'lucide-react';
+import { Server, Settings, Play, Activity, UserCircle, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles, ClipboardCheck, AudioLines, Bot, Users } from 'lucide-react';
 import gatewayLogoSm from '@assets/GatewayGlobalLogo_sm_1770154272626.png';
 import {
   Sidebar,
@@ -15,6 +15,8 @@ import {
 
 const MENU_ITEMS = [
   { id: 'disc', label: 'DISC Profile', path: '/', icon: UserCircle },
+  { id: 'agents', label: 'Agent Manager', path: '/agents', icon: Bot },
+  { id: 'customers', label: 'Customer Manager', path: '/customers', icon: Users },
   { id: 'telephony', label: 'Telephony', path: '/telephony', icon: Phone },
   { id: 'twilio', label: 'Twilio Hub', path: '/twilio', icon: MessageSquare },
   { id: 'servers', label: 'Server Control', path: '/servers', icon: Server },
