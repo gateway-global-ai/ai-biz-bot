@@ -10,6 +10,18 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (February 2026)
 
+- Added Agent Manager page (`/agents`):
+  - Table view with inline editing for all agents
+  - Create new agents with name, voice selection (6 voices), and status
+  - DISC profile display (D/I/S/C values)
+  - Status badges (Active, Paused, Inactive)
+  - Search, refresh, edit, and delete functionality
+- Added Customer Manager page (`/customers`):
+  - Lead capture form with contact info (name, email, phone, company)
+  - Location tracking (city, state, country)
+  - Lead source and status management (New, Contacted, Qualified, Converted, Lost)
+  - Notes dialog for detailed customer notes
+  - Search, inline editing, and follow-up tracking
 - Added DISC Assessment page with dual-mode experience:
   - **Human Mode**: Interactive 24-question visual assessment with word ranking, progress tracking, results visualization (bar/radar charts)
   - **Agent Mode**: API documentation for Telegram/Discord bot integration
@@ -47,6 +59,8 @@ The frontend is organized under `client/src/` with:
   - `DiscVisualizer.tsx` - **MAIN FEATURE** - DISC Profile editor with behavioral matrix and system identity
   - `DiscAssessment.tsx` - DISC personality assessment with human (visual) and agent (API docs) modes
   - `OnboardingFlow.tsx` - Gateway Global AI onboarding with A/B variant experiences
+  - `AgentManager.tsx` - Agent database management with CRUD operations
+  - `CustomerManager.tsx` - Customer/lead management with notes and follow-ups
   - `TelephonyPanel.tsx` - Telephony management (provisioning, settings, firewall, diagnostics)
 - `components/` - Custom components:
   - `Sidebar.tsx` - Navigation sidebar with NEXUSCMD branding
@@ -56,13 +70,15 @@ The frontend is organized under `client/src/` with:
 
 ### Navigation Structure (Sidebar)
 1. **DISC Profile** - Agent personality & identity configuration (main feature)
-2. **Telephony** - Phone number management
-3. **Twilio Hub** - Communication logs
-4. **Server Control** - Server monitoring
-5. **Global Config** - Environment settings
-6. **Orchestrator** - Test suite management
-7. **Results & AI** - Analysis dashboard
-8. **Security Audit** - Security alerts
+2. **Agent Manager** - Manage AI agents with DISC profiles and voice settings
+3. **Customer Manager** - Lead capture, notes, and follow-up tracking
+4. **Telephony** - Phone number management
+5. **Twilio Hub** - Communication logs
+6. **Server Control** - Server monitoring
+7. **Global Config** - Environment settings
+8. **Orchestrator** - Test suite management
+9. **Results & AI** - Analysis dashboard
+10. **Security Audit** - Security alerts
 
 ### Backend Architecture
 - **Framework**: Express 5 on Node.js with TypeScript
@@ -85,6 +101,8 @@ The server is organized under `server/` with:
 
 Key tables:
 - `users` - Basic user authentication
+- `agents` - AI agent configurations with DISC profiles and voice settings
+- `customers` - Customer/lead database with contact info, location, status, and notes
 - `telephony_configs` - Phone configuration, webhooks, firewall, owner verification (ownerPhone, ownerEmail)
 - `call_logs` - Call history and status tracking
 
