@@ -1,5 +1,6 @@
 import { useLocation, Link } from 'wouter';
 import { Server, Settings, Play, Activity, UserCircle, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles, ClipboardCheck, AudioLines } from 'lucide-react';
+import gatewayLogoSm from '@assets/GatewayGlobalLogo_sm_1770154272626.png';
 import {
   Sidebar,
   SidebarContent,
@@ -36,8 +37,12 @@ export function AppSidebar() {
 
   return (
     <Sidebar className="border-r border-slate-800 bg-slate-900">
-      <div className="p-6 border-b border-slate-800">
-        <h1 className="text-xl font-bold text-indigo-500 tracking-wider">NEXUS<span className="text-white">CMD</span></h1>
+      <div className="p-4 border-b border-slate-800 flex items-center gap-3">
+        <img src={gatewayLogoSm} alt="Gateway Global AI" className="h-10 w-auto" />
+        <div className="flex flex-col">
+          <span className="text-sm font-bold text-white leading-tight">Gateway Global</span>
+          <span className="text-[10px] text-indigo-400 uppercase tracking-wider">AI Command Center</span>
+        </div>
       </div>
       <SidebarContent className="bg-slate-900">
         <SidebarGroup>
