@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Mic, Play, Pause, ArrowRight, ArrowLeft, Sparkles, Zap, Volume2, MessageSquare, Phone, CheckCircle2, Users, Bot, Heart, Brain, Shield, Target } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
+import gatewayLogoLg from '@assets/GatewayGlobalLogo_lg_1770154272272.png';
+import gatewayLogoSm from '@assets/GatewayGlobalLogo_sm_1770154272626.png';
 
 type Variant = 'awakening' | 'proof';
 type Step = 'name' | 'voice' | 'test';
@@ -179,6 +181,19 @@ export default function OnboardingFlow() {
 
   const renderAwakeningVariant = () => (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-8 relative overflow-hidden">
+      {/* Background logo texture */}
+      <div 
+        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        style={{ opacity: 0.06 }}
+      >
+        <img src={gatewayLogoLg} alt="" className="w-[800px] h-auto" />
+      </div>
+      
+      {/* Top-right logo */}
+      <div className="absolute top-6 right-6 z-20">
+        <img src={gatewayLogoSm} alt="Gateway Global AI" className="h-12 w-auto" />
+      </div>
+      
       <ParticleField active={isAwakening} color="#818cf8" />
       
       {step === 'name' && (
@@ -239,6 +254,19 @@ export default function OnboardingFlow() {
   const renderProofVariant = () => (
     <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-8 relative overflow-hidden">
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
+      
+      {/* Background logo texture */}
+      <div 
+        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        style={{ opacity: 0.05 }}
+      >
+        <img src={gatewayLogoLg} alt="" className="w-[900px] h-auto" />
+      </div>
+      
+      {/* Top-right logo */}
+      <div className="absolute top-6 right-6 z-20">
+        <img src={gatewayLogoSm} alt="Gateway Global AI" className="h-12 w-auto" />
+      </div>
       
       {step === 'name' && (
         <div className="text-center z-10 max-w-2xl">
