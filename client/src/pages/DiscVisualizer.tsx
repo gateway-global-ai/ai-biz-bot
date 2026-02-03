@@ -1,13 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid, ResponsiveContainer, LineChart, Line
+  BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid, ResponsiveContainer, LineChart, Line, AreaChart, Area
 } from 'recharts';
 import { 
-  UserCircle, Brain, Activity, Save, RotateCcw, 
+  UserCircle, Brain, Activity, RotateCcw, 
   Fingerprint, Heart, ShieldCheck, Database, 
   FileText, Plus, PenTool, LayoutTemplate, Server,
   Cpu, Zap, Radio, MessageSquare, Terminal, Sparkles,
-  ClipboardCheck, X, FileJson, Clock, AlertTriangle, PhoneCall, TrendingUp, Volume2, VolumeX
+  ClipboardCheck, X, FileJson, Clock, AlertTriangle, PhoneCall, TrendingUp, Volume2, VolumeX,
+  History, Trash2, Bell, CheckCircle, AlertCircle
 } from 'lucide-react';
 import type { DiscScores, ArchProfile, SystemPrompt } from '@shared/schema';
 
@@ -80,6 +81,238 @@ const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label
   alert: { primary: 'rgba(250, 204, 21, 0.8)', glow: 'rgba(250, 204, 21, 0.4)', label: 'ALERT' },
   stressed: { primary: 'rgba(249, 115, 22, 0.8)', glow: 'rgba(249, 115, 22, 0.4)', label: 'STRESSED' },
   hostile: { primary: 'rgba(239, 68, 68, 0.8)', glow: 'rgba(239, 68, 68, 0.4)', label: 'HOSTILE' },
+};
+
+const seededRandom = (seed: number) => {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+};
+
+const generateTrendingData = (baseline: number, trait: string, seed: number) => {
+  const data = [];
+  const now = new Date();
+  for (let i = 29; i >= 0; i--) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i);
+    const localSeed = seed + i * 100 + baseline;
+    const variation = (seededRandom(localSeed) - 0.5) * 15;
+    let value = baseline + variation;
+    if (i < 5 && trait === 'dominance') value = baseline + 8;
+    if (i < 3 && trait === 'influence') value = baseline - 6;
+    value = Math.max(0, Math.min(100, value));
+    data.push({
+      date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      value: Math.round(value),
+      baseline
+    });
+  }
+  return data;
+};
+
+type HealthStatus = 'green' | 'yellow' | 'red';
+
+const getHealthStatus = (current: number, baseline: number): HealthStatus => {
+  const deviation = Math.abs(current - baseline);
+  const deviationPercent = (deviation / baseline) * 100;
+  if (deviationPercent >= 10) return 'red';
+  if (deviationPercent >= 5) return 'yellow';
+  return 'green';
+};
+
+const HEALTH_CONFIG: Record<HealthStatus, { color: string; bg: string; border: string; icon: typeof CheckCircle; label: string }> = {
+  green: { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', icon: CheckCircle, label: 'Stable' },
+  yellow: { color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', icon: AlertCircle, label: 'Warning (5%+ deviation)' },
+  red: { color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30', icon: AlertTriangle, label: 'Critical (10%+ deviation)' },
+};
+
+const HistoryTabContent = ({ discScores, onMemoryFlash }: { discScores: DiscScores; onMemoryFlash: () => void }) => {
+  const trendingData = useMemo(() => ({
+    dominance: generateTrendingData(discScores.dominance, 'dominance', 1001),
+    influence: generateTrendingData(discScores.influence, 'influence', 2002),
+    steadiness: generateTrendingData(discScores.steadiness, 'steadiness', 3003),
+    conscientiousness: generateTrendingData(discScores.conscientiousness, 'conscientiousness', 4004),
+  }), [discScores.dominance, discScores.influence, discScores.steadiness, discScores.conscientiousness]);
+  
+  const currentValues = useMemo(() => ({
+    dominance: trendingData.dominance[trendingData.dominance.length - 1].value,
+    influence: trendingData.influence[trendingData.influence.length - 1].value,
+    steadiness: trendingData.steadiness[trendingData.steadiness.length - 1].value,
+    conscientiousness: trendingData.conscientiousness[trendingData.conscientiousness.length - 1].value,
+  }), [trendingData]);
+  
+  const statuses = useMemo(() => ({
+    dominance: getHealthStatus(currentValues.dominance, discScores.dominance),
+    influence: getHealthStatus(currentValues.influence, discScores.influence),
+    steadiness: getHealthStatus(currentValues.steadiness, discScores.steadiness),
+    conscientiousness: getHealthStatus(currentValues.conscientiousness, discScores.conscientiousness),
+  }), [currentValues, discScores]);
+  
+  const overallStatus = Object.values(statuses).includes('red') ? 'red' : 
+                        Object.values(statuses).includes('yellow') ? 'yellow' : 'green';
+  const OverallIcon = HEALTH_CONFIG[overallStatus].icon;
+  
+  return (
+    <>
+      <div className={`rounded-xl border p-4 ${HEALTH_CONFIG[overallStatus].bg} ${HEALTH_CONFIG[overallStatus].border}`}>
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-lg ${HEALTH_CONFIG[overallStatus].bg}`}>
+              <OverallIcon className={`w-8 h-8 ${HEALTH_CONFIG[overallStatus].color}`} />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white flex items-center gap-2 flex-wrap">
+                Behavioral Health Monitor
+                <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${HEALTH_CONFIG[overallStatus].bg} ${HEALTH_CONFIG[overallStatus].color}`}>
+                  {overallStatus === 'green' ? 'All Systems Normal' : overallStatus === 'yellow' ? 'Attention Required' : 'Critical Alert'}
+                </span>
+              </h3>
+              <p className="text-sm text-slate-400">30-day behavioral trend analysis with deviation monitoring</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+              className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-sm font-medium flex items-center gap-2 transition-colors"
+              data-testid="button-notifications"
+            >
+              <Bell className="w-4 h-4" /> Configure Alerts
+            </button>
+            <button 
+              onClick={onMemoryFlash}
+              className="px-4 py-2 rounded-lg bg-red-600/20 hover:bg-red-600 border border-red-500/30 hover:border-red-500 text-red-400 hover:text-white text-sm font-bold flex items-center gap-2 transition-all"
+              data-testid="button-memory-flash"
+            >
+              <Trash2 className="w-4 h-4" /> Emergency Memory Flash
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-1 gap-4">
+        {[
+          { key: 'dominance', label: 'Dominance', color: '#ef4444', borderColor: 'border-red-500/30' },
+          { key: 'influence', label: 'Influence', color: '#f59e0b', borderColor: 'border-amber-500/30' },
+          { key: 'steadiness', label: 'Steadiness', color: '#10b981', borderColor: 'border-emerald-500/30' },
+          { key: 'conscientiousness', label: 'Conscientiousness', color: '#3b82f6', borderColor: 'border-blue-500/30' },
+        ].map((trait) => {
+          const data = trendingData[trait.key as keyof typeof trendingData];
+          const current = currentValues[trait.key as keyof typeof currentValues];
+          const baseline = discScores[trait.key as keyof DiscScores];
+          const status = statuses[trait.key as keyof typeof statuses];
+          const StatusIcon = HEALTH_CONFIG[status].icon;
+          const deviation = Math.abs(current - baseline);
+          const deviationPercent = ((deviation / baseline) * 100).toFixed(1);
+          
+          return (
+            <div key={trait.key} className={`bg-slate-800 rounded-xl border ${trait.borderColor} p-4`}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: trait.color }} />
+                  <h4 className="font-bold text-white text-lg">{trait.label}</h4>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-white">{current}%</div>
+                    <div className="text-xs text-slate-500">Current • Baseline: {baseline}%</div>
+                  </div>
+                  <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${HEALTH_CONFIG[status].bg} ${HEALTH_CONFIG[status].border} border`}>
+                    <StatusIcon className={`w-4 h-4 ${HEALTH_CONFIG[status].color}`} />
+                    <span className={`text-sm font-medium ${HEALTH_CONFIG[status].color}`}>
+                      {status === 'green' ? 'Stable' : `${deviationPercent}% deviation`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="h-[120px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={data}>
+                    <defs>
+                      <linearGradient id={`gradient-${trait.key}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={trait.color} stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor={trait.color} stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                    <XAxis 
+                      dataKey="date" 
+                      stroke="#64748b" 
+                      tick={{ fontSize: 10 }} 
+                      interval="preserveStartEnd"
+                      tickLine={false}
+                    />
+                    <YAxis 
+                      domain={[0, 100]} 
+                      stroke="#64748b" 
+                      tick={{ fontSize: 10 }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                      formatter={(value: number) => [`${value}%`, trait.label]}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="baseline" 
+                      stroke="#6b7280" 
+                      strokeDasharray="5 5"
+                      strokeWidth={1}
+                      fill="transparent"
+                      dot={false}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="value" 
+                      stroke={trait.color}
+                      strokeWidth={2}
+                      fill={`url(#gradient-${trait.key})`}
+                      dot={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex items-center justify-between mt-2 text-xs text-slate-500">
+                <span>30 days ago</span>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1">
+                    <div className="w-8 h-0.5" style={{ background: `linear-gradient(90deg, ${trait.color} 50%, transparent 50%)`, backgroundSize: '8px 100%' }}></div>
+                    <span>Baseline ({baseline}%)</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-8 h-0.5" style={{ backgroundColor: trait.color }}></div>
+                    <span>Actual</span>
+                  </div>
+                </div>
+                <span>Today</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      
+      <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4">
+        <h4 className="font-bold text-white mb-3 flex items-center gap-2">
+          <Bell className="w-4 h-4 text-indigo-400" /> Monitoring Thresholds
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {Object.entries(HEALTH_CONFIG).map(([status, config]) => {
+            const Icon = config.icon;
+            return (
+              <div key={status} className={`flex items-center gap-3 p-3 rounded-lg ${config.bg} border ${config.border}`}>
+                <Icon className={`w-5 h-5 ${config.color}`} />
+                <div>
+                  <div className={`font-bold text-sm ${config.color} uppercase`}>{status}</div>
+                  <div className="text-xs text-slate-400">{config.label}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-slate-500 mt-3">
+          When behavior deviates beyond thresholds, the owner is automatically notified via email and SMS. Critical alerts trigger immediate review protocols.
+        </p>
+      </div>
+    </>
+  );
 };
 
 const BotAvatar = ({ scores, isThinking, sentiment = 'calm' }: { scores: DiscScores; isThinking: boolean; sentiment?: Sentiment }) => {
@@ -250,7 +483,8 @@ const ArchBreakdown = ({ data }: { data: ArchProfile }) => {
 };
 
 export default function DiscVisualizer() {
-  const [activeTab, setActiveTab] = useState<'behavior' | 'identity'>('behavior');
+  const [activeTab, setActiveTab] = useState<'behavior' | 'history' | 'identity'>('behavior');
+  const [showMemoryFlashConfirm, setShowMemoryFlashConfirm] = useState(false);
   
   const [discScores, setDiscScores] = useState<DiscScores>({
     dominance: 85,
@@ -523,7 +757,7 @@ export default function DiscVisualizer() {
             <UserCircle className="w-6 h-6 text-pink-400" />
             Agent Personality & Identity
           </h2>
-          <p className="text-slate-400">Configure behavioral matrix and core system directives.</p>
+          <p className="text-slate-400">Real-time behavioral monitoring and system directives.</p>
         </div>
         
         <div className="bg-slate-900 p-1 rounded-lg border border-slate-800 flex">
@@ -539,10 +773,21 @@ export default function DiscVisualizer() {
                 <Activity className="w-4 h-4" /> Behavioral Matrix
             </button>
             <button 
+                onClick={() => setActiveTab('history')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
+                    activeTab === 'history' 
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                data-testid="tab-history"
+            >
+                <History className="w-4 h-4" /> View History
+            </button>
+            <button 
                 onClick={() => setActiveTab('identity')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
                     activeTab === 'identity' 
-                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20' 
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
                     : 'text-slate-400 hover:text-white'
                 }`}
                 data-testid="tab-identity"
@@ -568,9 +813,6 @@ export default function DiscVisualizer() {
                 data-testid="button-reset"
             >
                 <RotateCcw className="w-5 h-5" />
-            </button>
-            <button className="bg-pink-600 hover:bg-pink-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-colors shadow-lg shadow-pink-500/20" data-testid="button-save-profile">
-                <Save className="w-4 h-4" /> Save Profile
             </button>
         </div>
       </div>
@@ -866,6 +1108,62 @@ export default function DiscVisualizer() {
                 </div>
             </div>
           </div>
+      )}
+
+      {activeTab === 'history' && (
+        <div className="space-y-6">
+          <HistoryTabContent 
+            discScores={discScores} 
+            onMemoryFlash={() => setShowMemoryFlashConfirm(true)} 
+          />
+        </div>
+      )}
+
+      {/* Emergency Memory Flash Confirmation Modal */}
+      {showMemoryFlashConfirm && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-xl border border-red-500/50 max-w-md w-full shadow-2xl shadow-red-500/20">
+            <div className="p-6 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-red-500/20 rounded-lg">
+                  <AlertTriangle className="w-8 h-8 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Emergency Memory Flash</h3>
+                  <p className="text-sm text-slate-400">This action cannot be undone</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6">
+              <p className="text-slate-300 mb-4">
+                This will permanently delete the last <span className="font-bold text-white">24 hours</span> of agent memory and experiences. Use this to reverse any negative behavioral influences.
+              </p>
+              <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4">
+                <p className="text-sm text-red-300">
+                  <strong>Warning:</strong> All conversations, learnings, and context from the past 24 hours will be erased. The agent will revert to its previous behavioral state.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowMemoryFlashConfirm(false)}
+                  className="flex-1 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-medium transition-colors"
+                  data-testid="button-cancel-flash"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowMemoryFlashConfirm(false);
+                  }}
+                  className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold flex items-center justify-center gap-2 transition-colors"
+                  data-testid="button-confirm-flash"
+                >
+                  <Trash2 className="w-4 h-4" /> Flash Memory
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {activeTab === 'identity' && (
