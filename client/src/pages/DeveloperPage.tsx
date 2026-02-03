@@ -1,14 +1,120 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Terminal, Code, Users, Zap, Gift, Layout, Calendar, 
   ArrowLeft, CheckCircle2, ChevronRight, Github, Globe, 
-  Cpu, Rocket, ShieldCheck, Mail
+  Cpu, Rocket, ShieldCheck, Mail, Server, Radio
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
+
+type Sentiment = 'calm' | 'engaged' | 'alert';
+
+const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label: string }> = {
+  calm: { primary: 'rgba(16, 185, 129, 0.8)', glow: 'rgba(16, 185, 129, 0.4)', label: 'CALM' },
+  engaged: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: 'ENGAGED' },
+  alert: { primary: 'rgba(250, 204, 21, 0.8)', glow: 'rgba(250, 204, 21, 0.4)', label: 'ALERT' },
+};
+
+const BotAvatarVisualizer = () => {
+  const [sentiment, setSentiment] = useState<Sentiment>('calm');
+  const [pulse, setPulse] = useState(0);
+  
+  useEffect(() => {
+    const sentimentInterval = setInterval(() => {
+      const sentiments: Sentiment[] = ['calm', 'engaged', 'alert'];
+      setSentiment(sentiments[Math.floor(Math.random() * sentiments.length)]);
+    }, 3000);
+    
+    const pulseInterval = setInterval(() => {
+      setPulse(prev => (prev + 1) % 100);
+    }, 50);
+    
+    return () => {
+      clearInterval(sentimentInterval);
+      clearInterval(pulseInterval);
+    };
+  }, []);
+  
+  const sentimentConfig = SENTIMENT_COLORS[sentiment];
+  const waveIntensity = Math.sin(pulse / 10) * 0.3 + 0.7;
+  
+  return (
+    <div className="relative w-40 h-40 flex items-center justify-center mx-auto">
+      <div 
+        className="absolute inset-0 border border-dashed rounded-full animate-spin"
+        style={{ 
+          borderColor: `rgba(139, 92, 246, 0.4)`, 
+          animationDuration: '20s'
+        }}
+      />
+      <div 
+        className="absolute inset-3 border border-dotted rounded-full animate-spin"
+        style={{ 
+          borderColor: `rgba(168, 85, 247, 0.3)`, 
+          animationDirection: 'reverse',
+          animationDuration: '15s'
+        }}
+      />
+      
+      <div 
+        className="absolute rounded-full blur-3xl transition-all duration-500 animate-pulse"
+        style={{ 
+          width: `${120 + waveIntensity * 40}%`,
+          height: `${120 + waveIntensity * 40}%`,
+          background: `radial-gradient(circle, ${sentimentConfig.primary} 0%, ${sentimentConfig.glow} 30%, transparent 70%)`,
+          opacity: 0.4
+        }}
+      />
+      
+      <div 
+        className="absolute rounded-full blur-2xl transition-all duration-500"
+        style={{ 
+          width: `${80 + waveIntensity * 30}%`,
+          height: `${80 + waveIntensity * 30}%`,
+          background: `radial-gradient(circle, rgba(139, 92, 246, 0.5) 0%, transparent 70%)`,
+          opacity: 0.6
+        }}
+      />
+      
+      <div 
+        className="absolute w-20 h-20 rounded-xl flex items-center justify-center bg-slate-900 border-2 z-10 transition-all duration-500"
+        style={{
+          borderColor: sentimentConfig.primary,
+          boxShadow: `0 0 30px ${sentimentConfig.glow}, 0 0 15px ${sentimentConfig.glow}`,
+          transform: `scale(${0.95 + waveIntensity * 0.1})`
+        }}
+      >
+        <div className="relative z-20 flex flex-col items-center">
+          <Server className="w-10 h-10 text-slate-200" />
+          <div className="flex gap-1 mt-1">
+            <div className="w-1.5 h-1.5 rounded-full bg-violet-500 animate-pulse" />
+            <div className="w-1.5 h-1.5 rounded-full bg-fuchsia-500 animate-pulse" style={{ animationDelay: '0.2s' }} />
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" style={{ animationDelay: '0.4s' }} />
+          </div>
+        </div>
+      </div>
+
+      <div className="absolute top-1 left-1 flex items-center gap-1">
+        <div 
+          className="w-2 h-2 rounded-full animate-pulse"
+          style={{ backgroundColor: sentimentConfig.primary, boxShadow: `0 0 6px ${sentimentConfig.glow}` }}
+        />
+        <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: sentimentConfig.primary }}>
+          {sentimentConfig.label}
+        </span>
+      </div>
+
+      <div className="absolute bottom-1 left-0 right-0 flex justify-center gap-2 text-[8px] font-mono opacity-70">
+        <span className="text-violet-400 flex items-center gap-0.5"><Zap className="w-2 h-2" /> API</span>
+        <span className="text-fuchsia-400 flex items-center gap-0.5"><Radio className="w-2 h-2" /> MCP</span>
+        <span className="text-emerald-400 flex items-center gap-0.5"><Cpu className="w-2 h-2" /> DISC</span>
+      </div>
+    </div>
+  );
+};
 
 export default function DeveloperPage() {
   const [formState, setFormState] = useState({
@@ -51,20 +157,23 @@ export default function DeveloperPage() {
         </a>
       </nav>
 
-      <section className="relative pt-20 pb-16 px-6 overflow-hidden">
+      <section className="relative pt-16 pb-16 px-6 overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-violet-600/20 rounded-full blur-[100px] opacity-30 pointer-events-none" />
         <div className="max-w-4xl mx-auto text-center relative z-10 space-y-6">
+          <div className="mb-6">
+            <BotAvatarVisualizer />
+          </div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-mono text-violet-400 mb-4">
             <span className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
             v0.1.0 Alpha Access
           </div>
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight text-white mb-6">
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-6">
             Build the Future of <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 via-fuchsia-400 to-emerald-400">
               AI Agents
             </span>
           </h1>
-          <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+          <p className="text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
             Join 2,437+ developers building on the most powerful agentic infrastructure. 
             Access SDKs, MCP Specs, and direct API tools before public launch.
           </p>
