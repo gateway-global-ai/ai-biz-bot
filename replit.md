@@ -1,28 +1,53 @@
-# Telephony Management System
+# NEXUSCMD - Agent Command & Control Interface
 
 ## Overview
 
-A full-stack web application for managing Twilio telephony services. The system provides a dashboard interface for provisioning phone numbers, configuring webhooks, managing caller ID settings, implementing firewall rules for allowed numbers, and viewing call history/diagnostics. Built with React frontend and Express backend, integrated with Twilio via Replit's Twilio Connector.
+NEXUSCMD is a command and control admin interface centered on DISC Profile visualization and agent behavioral configuration. The system includes a comprehensive DISC Profile editor with behavioral matrix controls (Dominance, Influence, Steadiness, Conscientiousness), ARCH communication model (Acknowledge, Reflect, Context, Handoff), system identity prompts, and a "My Beliefs Window" for meta-cognition testing. Secondary features include telephony management with Twilio integration, server monitoring, test orchestration, and security auditing.
 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes (February 2026)
+
+- Created DiscVisualizer component with two main tabs:
+  - **Behavioral Matrix Tab**: BotAvatar visualization, DISC sliders, ARCH sliders, My Beliefs Window with 7 meta-cognition topics
+  - **System Identity Tab**: Protocol list sidebar, 6-section prompt editor (Owner Identity, Loyalty, Priorities, Data Protection, Security, DISC Reinforcement)
+- Created Sidebar navigation component with NEXUSCMD branding
+- Updated App.tsx with sidebar navigation and 8 panels
+- Added Recharts library for DISC/ARCH visualizations
+- Added owner verification fields (ownerPhone, ownerEmail) to telephony firewall section
+- Updated shared/schema.ts with DISC/ARCH types and Server/TestSuite/Security types
+
 ## System Architecture
 
 ### Frontend Architecture
 - **Framework**: React 18+ with TypeScript
-- **Routing**: Wouter (lightweight client-side routing)
-- **State Management**: TanStack React Query for server state caching and synchronization
+- **State Management**: TanStack React Query for server state, useState for local state
 - **UI Components**: shadcn/ui component library built on Radix UI primitives
-- **Styling**: Tailwind CSS with CSS custom properties for theming (supports light/dark modes)
+- **Styling**: Tailwind CSS with dark slate theme and indigo/purple accent colors
 - **Build Tool**: Vite with React plugin
+- **Charts**: Recharts for DISC/ARCH visualizations
 
 The frontend is organized under `client/src/` with:
-- `pages/` - Route components (TelephonyPanel is the main dashboard)
+- `pages/` - Route components:
+  - `DiscVisualizer.tsx` - **MAIN FEATURE** - DISC Profile editor with behavioral matrix and system identity
+  - `TelephonyPanel.tsx` - Telephony management (provisioning, settings, firewall, diagnostics)
+- `components/` - Custom components:
+  - `Sidebar.tsx` - Navigation sidebar with NEXUSCMD branding
 - `components/ui/` - Reusable shadcn/ui components
 - `hooks/` - Custom React hooks (toast notifications, mobile detection)
 - `lib/` - Utilities and query client configuration
+
+### Navigation Structure (Sidebar)
+1. **DISC Profile** - Agent personality & identity configuration (main feature)
+2. **Telephony** - Phone number management
+3. **Twilio Hub** - Communication logs
+4. **Server Control** - Server monitoring
+5. **Global Config** - Environment settings
+6. **Orchestrator** - Test suite management
+7. **Results & AI** - Analysis dashboard
+8. **Security Audit** - Security alerts
 
 ### Backend Architecture
 - **Framework**: Express 5 on Node.js with TypeScript
@@ -40,17 +65,22 @@ The server is organized under `server/` with:
 
 ### Data Storage
 - **Database**: PostgreSQL (via DATABASE_URL environment variable)
-- **Schema Location**: `shared/schema.ts` contains all table definitions
-- **Migrations**: Drizzle Kit manages schema migrations in `migrations/` directory
+- **Schema Location**: `shared/schema.ts` contains all table definitions and TypeScript interfaces
+- **Migrations**: Drizzle Kit manages schema migrations
 
 Key tables:
 - `users` - Basic user authentication
-- `telephony_configs` - Phone number configuration, webhook URLs, firewall settings
+- `telephony_configs` - Phone configuration, webhooks, firewall, owner verification (ownerPhone, ownerEmail)
 - `call_logs` - Call history and status tracking
 
+TypeScript Interfaces (shared/schema.ts):
+- `DiscScores` - DISC profile scores (dominance, influence, steadiness, conscientiousness)
+- `ArchProfile` - ARCH model scores (acknowledge, reflect, context, handoff)
+- `SystemPrompt` - System identity prompts with 6 sections
+- `Server`, `TestSuite`, `SecurityAlert`, `CommunicationLog` - Dashboard types
+
 ### Twilio Integration
-The system integrates with Twilio through Replit's Twilio Connector:
-- Credentials fetched dynamically from Replit's connector API
+- Credentials via TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN secrets
 - Supports phone number provisioning/release
 - Webhook configuration for voice and SMS
 - Call and message logging
@@ -59,8 +89,8 @@ The system integrates with Twilio through Replit's Twilio Connector:
 ## External Dependencies
 
 ### Third-Party Services
-- **Twilio**: Telephony provider accessed via Replit Twilio Connector
-  - Requires `REPLIT_CONNECTORS_HOSTNAME` and `REPL_IDENTITY` environment variables
+- **Twilio**: Telephony provider
+  - Requires TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables
   - Provides voice calls, SMS, and phone number management
 
 ### Database
@@ -69,9 +99,11 @@ The system integrates with Twilio through Replit's Twilio Connector:
   - Uses connection pooling via `pg` library
 
 ### Key NPM Packages
+- `recharts` - Data visualization for DISC/ARCH charts
 - `twilio` - Official Twilio SDK for API interactions
 - `drizzle-orm` / `drizzle-kit` - Database ORM and migration tooling
 - `@tanstack/react-query` - Server state management
 - `@radix-ui/*` - Accessible UI primitives
 - `zod` - Runtime type validation
 - `express` - HTTP server framework
+- `lucide-react` - Icon library

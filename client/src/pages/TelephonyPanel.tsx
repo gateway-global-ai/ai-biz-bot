@@ -72,6 +72,8 @@ interface TelephonyConfig {
   maxCallDuration: number;
   timeout: number;
   callerIdName: string | null;
+  ownerPhone: string | null;
+  ownerEmail: string | null;
 }
 
 interface CallLogEntry {
@@ -189,7 +191,7 @@ export default function TelephonyPanel() {
   });
 
   const updateFirewallMutation = useMutation({
-    mutationFn: async (data: { firewallEnabled?: boolean; allowedNumbers?: string[] }) => {
+    mutationFn: async (data: { firewallEnabled?: boolean; allowedNumbers?: string[]; ownerPhone?: string; ownerEmail?: string }) => {
       return apiRequest('PATCH', '/api/telephony/firewall', data);
     },
     onSuccess: () => {
@@ -717,6 +719,37 @@ export default function TelephonyPanel() {
                     onCheckedChange={(checked) => updateFirewallMutation.mutate({ firewallEnabled: checked })}
                     data-testid="switch-firewall"
                   />
+                </div>
+              </div>
+
+              {/* Owner Verification Section */}
+              <div className="p-6 rounded-xl border border-primary/30 bg-primary/5 mb-8">
+                <h4 className="text-sm font-bold text-primary uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <User className="w-4 h-4" /> Owner Verification
+                </h4>
+                <p className="text-muted-foreground text-sm mb-4">
+                  Primary contact for system alerts and ownership verification.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Owner Phone Number</label>
+                    <Input 
+                      value={config?.ownerPhone || ''}
+                      onChange={(e) => updateFirewallMutation.mutate({ ownerPhone: e.target.value })}
+                      placeholder="+1 (555) 123-4567"
+                      className="font-mono"
+                      data-testid="input-owner-phone"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm text-muted-foreground">Owner Email</label>
+                    <Input 
+                      value={config?.ownerEmail || ''}
+                      onChange={(e) => updateFirewallMutation.mutate({ ownerEmail: e.target.value })}
+                      placeholder="owner@example.com"
+                      data-testid="input-owner-email"
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -38,6 +38,8 @@ const updateConfigSchema = z.object({
 const firewallUpdateSchema = z.object({
   firewallEnabled: z.boolean().optional(),
   allowedNumbers: z.array(z.string()).optional(),
+  ownerPhone: z.string().nullable().optional(),
+  ownerEmail: z.string().email().nullable().optional().or(z.literal('')),
 });
 
 const webhooksUpdateSchema = z.object({
@@ -338,6 +340,12 @@ export async function registerRoutes(
       }
       if (Array.isArray(parsed.data.allowedNumbers)) {
         updates.allowedNumbers = parsed.data.allowedNumbers;
+      }
+      if (typeof parsed.data.ownerPhone !== 'undefined') {
+        updates.ownerPhone = parsed.data.ownerPhone || null;
+      }
+      if (typeof parsed.data.ownerEmail !== 'undefined') {
+        updates.ownerEmail = parsed.data.ownerEmail || null;
       }
       
       const updated = await storage.updateTelephonyConfig(config.id, updates);

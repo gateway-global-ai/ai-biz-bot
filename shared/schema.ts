@@ -34,6 +34,8 @@ export const telephonyConfigs = pgTable("telephony_configs", {
   maxCallDuration: integer("max_call_duration").default(60),
   timeout: integer("timeout").default(30),
   callerIdName: text("caller_id_name"),
+  ownerPhone: text("owner_phone"),
+  ownerEmail: text("owner_email"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -94,3 +96,80 @@ export const availableNumberSchema = z.object({
 });
 
 export type AvailableNumber = z.infer<typeof availableNumberSchema>;
+
+// DISC Profile Types
+export interface DiscScores {
+  dominance: number;
+  influence: number;
+  steadiness: number;
+  conscientiousness: number;
+}
+
+export interface ArchProfile {
+  acknowledge: number;
+  reflect: number;
+  context: number;
+  handoff: number;
+}
+
+export interface SystemPromptSections {
+  ownerIdentity: string;
+  loyaltyStatement: string;
+  ownerPriorities: string;
+  dataProtectionMantra: string;
+  securityStatement: string;
+  discReinforcement: string;
+}
+
+export interface SystemPrompt {
+  id: string;
+  name: string;
+  description: string;
+  lastModified: string;
+  sections: SystemPromptSections;
+}
+
+export interface DiscProfile {
+  name: string;
+  role: string;
+  scores: DiscScores;
+}
+
+// Server types for NEXUSCMD
+export interface Server {
+  id: string;
+  name: string;
+  region: string;
+  status: 'online' | 'offline' | 'maintenance' | 'busy';
+  cpuUsage: number;
+  memoryUsage: number;
+  ip: string;
+}
+
+export interface TestSuite {
+  id: string;
+  name: string;
+  description: string;
+  status: 'idle' | 'running' | 'passed' | 'failed';
+  lastRun: string;
+  duration: string;
+}
+
+export interface SecurityAlert {
+  id: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  component: string;
+  description: string;
+  detectedAt: string;
+}
+
+export interface CommunicationLog {
+  id: string;
+  type: 'sms' | 'voice';
+  direction: 'inbound' | 'outbound';
+  from: string;
+  to: string;
+  status: 'sent' | 'received' | 'failed';
+  timestamp: string;
+  sid: string;
+}
