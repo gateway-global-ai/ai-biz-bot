@@ -7,15 +7,76 @@ import gatewayLogoSm from '@assets/GatewayGlobalLogo_sm_1770154272626.png';
 type Variant = 'awakening' | 'proof';
 type Step = 'name' | 'voice' | 'test';
 type Emotion = 'calm' | 'engaged' | 'focused' | 'energized' | 'empathetic';
+type Gender = 'male' | 'female' | 'neutral';
 
-const VOICES = [
-  { id: 'alex', name: 'Alex', description: 'Warm & Professional', gender: 'neutral', accent: 'American' },
-  { id: 'morgan', name: 'Morgan', description: 'Calm & Analytical', gender: 'neutral', accent: 'British' },
-  { id: 'sam', name: 'Sam', description: 'Energetic & Friendly', gender: 'neutral', accent: 'American' },
-  { id: 'jordan', name: 'Jordan', description: 'Direct & Confident', gender: 'neutral', accent: 'Australian' },
-  { id: 'casey', name: 'Casey', description: 'Empathetic & Patient', gender: 'neutral', accent: 'Canadian' },
-  { id: 'riley', name: 'Riley', description: 'Creative & Inspiring', gender: 'neutral', accent: 'Irish' },
+const MALE_VOICES = [
+  { id: 'james', name: 'James', description: 'Warm & Professional', gender: 'male' as Gender, accent: 'American' },
+  { id: 'marcus', name: 'Marcus', description: 'Calm & Analytical', gender: 'male' as Gender, accent: 'British' },
+  { id: 'david', name: 'David', description: 'Energetic & Friendly', gender: 'male' as Gender, accent: 'American' },
+  { id: 'liam', name: 'Liam', description: 'Direct & Confident', gender: 'male' as Gender, accent: 'Australian' },
+  { id: 'ethan', name: 'Ethan', description: 'Empathetic & Patient', gender: 'male' as Gender, accent: 'Canadian' },
+  { id: 'connor', name: 'Connor', description: 'Creative & Inspiring', gender: 'male' as Gender, accent: 'Irish' },
 ];
+
+const FEMALE_VOICES = [
+  { id: 'sophia', name: 'Sophia', description: 'Warm & Professional', gender: 'female' as Gender, accent: 'American' },
+  { id: 'emma', name: 'Emma', description: 'Calm & Analytical', gender: 'female' as Gender, accent: 'British' },
+  { id: 'olivia', name: 'Olivia', description: 'Energetic & Friendly', gender: 'female' as Gender, accent: 'American' },
+  { id: 'charlotte', name: 'Charlotte', description: 'Direct & Confident', gender: 'female' as Gender, accent: 'Australian' },
+  { id: 'amelia', name: 'Amelia', description: 'Empathetic & Patient', gender: 'female' as Gender, accent: 'Canadian' },
+  { id: 'ava', name: 'Ava', description: 'Creative & Inspiring', gender: 'female' as Gender, accent: 'Irish' },
+];
+
+const NEUTRAL_VOICES = [
+  { id: 'alex', name: 'Alex', description: 'Warm & Professional', gender: 'neutral' as Gender, accent: 'American' },
+  { id: 'morgan', name: 'Morgan', description: 'Calm & Analytical', gender: 'neutral' as Gender, accent: 'British' },
+  { id: 'sam', name: 'Sam', description: 'Energetic & Friendly', gender: 'neutral' as Gender, accent: 'American' },
+  { id: 'jordan', name: 'Jordan', description: 'Direct & Confident', gender: 'neutral' as Gender, accent: 'Australian' },
+  { id: 'casey', name: 'Casey', description: 'Empathetic & Patient', gender: 'neutral' as Gender, accent: 'Canadian' },
+  { id: 'riley', name: 'Riley', description: 'Creative & Inspiring', gender: 'neutral' as Gender, accent: 'Irish' },
+];
+
+// Common name lists for gender detection
+const MALE_NAMES = new Set([
+  'james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles',
+  'christopher', 'daniel', 'matthew', 'anthony', 'mark', 'donald', 'steven', 'paul', 'andrew', 'joshua',
+  'kenneth', 'kevin', 'brian', 'george', 'timothy', 'ronald', 'edward', 'jason', 'jeffrey', 'ryan',
+  'jacob', 'gary', 'nicholas', 'eric', 'jonathan', 'stephen', 'larry', 'justin', 'scott', 'brandon',
+  'benjamin', 'samuel', 'raymond', 'gregory', 'frank', 'alexander', 'patrick', 'jack', 'dennis', 'jerry',
+  'tyler', 'aaron', 'jose', 'adam', 'nathan', 'henry', 'douglas', 'zachary', 'peter', 'kyle',
+  'noah', 'ethan', 'liam', 'mason', 'logan', 'lucas', 'aiden', 'jackson', 'sebastian', 'mateo',
+  'max', 'marcus', 'connor', 'owen', 'luke', 'isaac', 'dylan', 'caleb', 'hunter', 'christian',
+  'mike', 'bob', 'bill', 'jim', 'joe', 'tom', 'steve', 'dave', 'dan', 'matt', 'chris', 'nick', 'jake', 'ben', 'alex',
+]);
+
+const FEMALE_NAMES = new Set([
+  'mary', 'patricia', 'jennifer', 'linda', 'barbara', 'elizabeth', 'susan', 'jessica', 'sarah', 'karen',
+  'lisa', 'nancy', 'betty', 'margaret', 'sandra', 'ashley', 'kimberly', 'emily', 'donna', 'michelle',
+  'dorothy', 'carol', 'amanda', 'melissa', 'deborah', 'stephanie', 'rebecca', 'sharon', 'laura', 'cynthia',
+  'kathleen', 'amy', 'angela', 'shirley', 'anna', 'brenda', 'pamela', 'emma', 'nicole', 'helen',
+  'samantha', 'katherine', 'christine', 'debra', 'rachel', 'carolyn', 'janet', 'catherine', 'maria', 'heather',
+  'diane', 'ruth', 'julie', 'olivia', 'joyce', 'virginia', 'victoria', 'kelly', 'lauren', 'christina',
+  'joan', 'evelyn', 'judith', 'megan', 'andrea', 'cheryl', 'hannah', 'jacqueline', 'martha', 'gloria',
+  'sophia', 'ava', 'isabella', 'mia', 'charlotte', 'amelia', 'harper', 'evelyn', 'abigail', 'ella',
+  'grace', 'chloe', 'sofia', 'riley', 'aria', 'lily', 'aurora', 'zoey', 'nora', 'camila',
+  'jen', 'jess', 'sam', 'kate', 'kim', 'meg', 'beth', 'sue', 'ann', 'liz', 'sara', 'jane',
+]);
+
+const detectGender = (name: string): Gender => {
+  const normalizedName = name.toLowerCase().trim();
+  if (MALE_NAMES.has(normalizedName)) return 'male';
+  if (FEMALE_NAMES.has(normalizedName)) return 'female';
+  return 'neutral';
+};
+
+const getVoicesForName = (name: string) => {
+  const gender = detectGender(name);
+  switch (gender) {
+    case 'male': return MALE_VOICES;
+    case 'female': return FEMALE_VOICES;
+    default: return NEUTRAL_VOICES;
+  }
+};
 
 const EMOTION_COLORS: Record<Emotion, { bg: string; glow: string; label: string }> = {
   calm: { bg: 'bg-emerald-500', glow: 'shadow-emerald-500/50', label: 'Calm' },
@@ -329,7 +390,7 @@ export default function OnboardingFlow() {
       </div>
       
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-        {VOICES.map((voice) => (
+        {getVoicesForName(agentName).map((voice) => (
           <button
             key={voice.id}
             onClick={() => handleVoiceSelect(voice.id)}
@@ -384,7 +445,7 @@ export default function OnboardingFlow() {
             
             <div className="text-center mb-4">
               <h3 className="font-bold text-lg">{agentName}</h3>
-              <p className="text-xs text-slate-500">{VOICES.find(v => v.id === selectedVoice)?.description}</p>
+              <p className="text-xs text-slate-500">{getVoicesForName(agentName).find(v => v.id === selectedVoice)?.description}</p>
             </div>
             
             <div className="h-16 mb-4">
