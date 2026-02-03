@@ -1,15 +1,102 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Phone, Building2, Users, Globe, ShieldCheck, 
   ArrowLeft, CheckCircle2, MessageSquare, 
   Briefcase, Zap, PhoneCall, CreditCard, ChevronRight,
-  Headphones, Calendar, TrendingUp, Store, ShoppingCart
+  Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+type Sentiment = 'calm' | 'engaged' | 'helpful';
+
+const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label: string }> = {
+  calm: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: 'READY' },
+  engaged: { primary: 'rgba(16, 185, 129, 0.8)', glow: 'rgba(16, 185, 129, 0.4)', label: 'LISTENING' },
+  helpful: { primary: 'rgba(139, 92, 246, 0.8)', glow: 'rgba(139, 92, 246, 0.4)', label: 'SPEAKING' },
+};
+
+const VoiceVisualizer = () => {
+  const [sentiment, setSentiment] = useState<Sentiment>('calm');
+  const [pulse, setPulse] = useState(0);
+  
+  useEffect(() => {
+    const sentimentInterval = setInterval(() => {
+      const sentiments: Sentiment[] = ['calm', 'engaged', 'helpful'];
+      setSentiment(sentiments[Math.floor(Math.random() * sentiments.length)]);
+    }, 2500);
+    
+    const pulseInterval = setInterval(() => {
+      setPulse(prev => (prev + 1) % 100);
+    }, 50);
+    
+    return () => {
+      clearInterval(sentimentInterval);
+      clearInterval(pulseInterval);
+    };
+  }, []);
+  
+  const sentimentConfig = SENTIMENT_COLORS[sentiment];
+  const waveIntensity = Math.sin(pulse / 10) * 0.3 + 0.7;
+  
+  return (
+    <div className="relative w-32 h-32 flex items-center justify-center mx-auto">
+      <div 
+        className="absolute inset-0 border border-dashed rounded-full animate-spin"
+        style={{ 
+          borderColor: `rgba(59, 130, 246, 0.3)`, 
+          animationDuration: '20s'
+        }}
+      />
+      <div 
+        className="absolute inset-2 border border-dotted rounded-full animate-spin"
+        style={{ 
+          borderColor: `rgba(99, 102, 241, 0.25)`, 
+          animationDirection: 'reverse',
+          animationDuration: '15s'
+        }}
+      />
+      
+      <div 
+        className="absolute rounded-full blur-3xl transition-all duration-500 animate-pulse"
+        style={{ 
+          width: `${120 + waveIntensity * 40}%`,
+          height: `${120 + waveIntensity * 40}%`,
+          background: `radial-gradient(circle, ${sentimentConfig.primary} 0%, ${sentimentConfig.glow} 30%, transparent 70%)`,
+          opacity: 0.5
+        }}
+      />
+      
+      <div 
+        className="absolute w-16 h-16 rounded-xl flex items-center justify-center bg-slate-900 border-2 z-10 transition-all duration-500"
+        style={{
+          borderColor: sentimentConfig.primary,
+          boxShadow: `0 0 25px ${sentimentConfig.glow}, 0 0 12px ${sentimentConfig.glow}`,
+          transform: `scale(${0.95 + waveIntensity * 0.1})`
+        }}
+      >
+        <div className="relative z-20 flex flex-col items-center">
+          <Phone className="w-8 h-8 text-slate-200" />
+          <div className="flex gap-0.5 mt-1">
+            <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
+            <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse" style={{ animationDelay: '0.2s' }} />
+            <div className="w-1 h-1 rounded-full bg-violet-500 animate-pulse" style={{ animationDelay: '0.4s' }} />
+          </div>
+        </div>
+      </div>
+
+      <div className="absolute -bottom-1 left-0 right-0 flex justify-center">
+        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" 
+          style={{ color: sentimentConfig.primary, backgroundColor: `${sentimentConfig.glow}` }}>
+          {sentimentConfig.label}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 export default function BusinessPage() {
   const [formState, setFormState] = useState({
@@ -45,20 +132,23 @@ export default function BusinessPage() {
         </div>
       </nav>
 
-      <section className="relative pt-20 pb-16 px-6 overflow-hidden">
+      <section className="relative pt-16 pb-16 px-6 overflow-hidden">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="max-w-5xl mx-auto text-center relative z-10 space-y-6">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-mono text-blue-400 mb-4">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            Now Available: SIP Trunking
+          <div className="mb-4">
+            <VoiceVisualizer />
           </div>
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight text-white mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-medium text-emerald-400 mb-4">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            Never Miss Another Call
+          </div>
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-6">
             Give Your AI Agent a <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400">
               Real Phone Number
             </span>
           </h1>
-          <p className="text-2xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
+          <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
             Your Customers Can Now Call Your AI Assistant. <br/>
             <span className="text-white font-medium">24/7 AI Receptionist starting at $99/mo.</span>
           </p>
