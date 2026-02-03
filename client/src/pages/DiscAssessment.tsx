@@ -1,7 +1,43 @@
-import { useState } from 'react';
-import { ArrowRight, ArrowLeft, CheckCircle2, Brain, RotateCcw, Target, Users, Shield, Sparkles } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { useState, useEffect } from 'react';
+import { ArrowRight, ArrowLeft, CheckCircle2, Brain, RotateCcw, Target, Users, Shield, Sparkles, Play, Pause, Volume2, Zap, Bot, Code } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, LineChart, Line } from 'recharts';
 import { DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, type DiscScores } from '@shared/schema';
+
+type Emotion = 'calm' | 'engaged' | 'focused' | 'energized' | 'empathetic';
+
+const EMOTION_COLORS: Record<Emotion, { ring: string; glow: string; bg: string }> = {
+  calm: { ring: 'ring-cyan-400', glow: 'shadow-cyan-500/50', bg: 'bg-cyan-500' },
+  engaged: { ring: 'ring-amber-400', glow: 'shadow-amber-500/50', bg: 'bg-amber-500' },
+  focused: { ring: 'ring-indigo-400', glow: 'shadow-indigo-500/50', bg: 'bg-indigo-500' },
+  energized: { ring: 'ring-pink-400', glow: 'shadow-pink-500/50', bg: 'bg-pink-500' },
+  empathetic: { ring: 'ring-emerald-400', glow: 'shadow-emerald-500/50', bg: 'bg-emerald-500' },
+};
+
+const AgentCore = ({ emotion, intensity }: { emotion: Emotion; intensity: number }) => {
+  const colors = EMOTION_COLORS[emotion];
+  const scale = 0.8 + (intensity / 100) * 0.4;
+  
+  return (
+    <div className="relative flex items-center justify-center">
+      <div 
+        className={`absolute w-32 h-32 rounded-full ${colors.bg} opacity-20 animate-ping`}
+        style={{ animationDuration: '2s' }}
+      />
+      <div 
+        className={`absolute w-28 h-28 rounded-full ${colors.bg} opacity-30 animate-pulse`}
+      />
+      <div 
+        className={`relative w-24 h-24 rounded-full bg-gradient-to-br from-slate-800 to-slate-900 border-4 ${colors.ring} shadow-lg ${colors.glow} flex items-center justify-center transition-all duration-500`}
+        style={{ transform: `scale(${scale})` }}
+      >
+        <div className="text-center">
+          <Brain className="w-8 h-8 text-white mx-auto" />
+          <p className="text-xs text-slate-400 mt-1">NEXUS</p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 type AssessmentMode = 'human' | 'agent';
 
@@ -26,6 +62,52 @@ export default function DiscAssessment() {
     primaryStyle: string;
     secondaryStyle: string;
   } | null>(null);
+  
+  const [devEmotion, setDevEmotion] = useState<Emotion>('energized');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [currentPitchLine, setCurrentPitchLine] = useState(0);
+  
+  const audioPitchLines = [
+    { time: 0, text: "The future isn't about AI replacing humans...", emotion: 'calm' as Emotion },
+    { time: 3, text: "It's about humans and AI becoming unstoppable together.", emotion: 'engaged' as Emotion },
+    { time: 7, text: "You're not just writing code. You're architecting consciousness.", emotion: 'focused' as Emotion },
+    { time: 11, text: "Every API call you make brings us closer to a world...", emotion: 'energized' as Emotion },
+    { time: 15, text: "Where human creativity meets machine precision.", emotion: 'empathetic' as Emotion },
+    { time: 19, text: "They said it couldn't be done. They were wrong.", emotion: 'energized' as Emotion },
+    { time: 23, text: "Human + AI = Unstoppable. Welcome to the revolution.", emotion: 'empathetic' as Emotion },
+  ];
+  
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isPlaying && audioProgress < 100) {
+      interval = setInterval(() => {
+        setAudioProgress(prev => {
+          const next = prev + (100 / 270);
+          const currentTime = (next / 100) * 27;
+          const lineIndex = audioPitchLines.findLastIndex(line => line.time <= currentTime);
+          if (lineIndex >= 0 && lineIndex !== currentPitchLine) {
+            setCurrentPitchLine(lineIndex);
+            setDevEmotion(audioPitchLines[lineIndex].emotion);
+          }
+          if (next >= 100) {
+            setIsPlaying(false);
+            return 100;
+          }
+          return next;
+        });
+      }, 100);
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying, audioProgress, currentPitchLine]);
+  
+  const toggleAudio = () => {
+    if (audioProgress >= 100) {
+      setAudioProgress(0);
+      setCurrentPitchLine(0);
+    }
+    setIsPlaying(!isPlaying);
+  };
 
   const currentWordSet = DISC_WORD_SETS[currentSet];
 
@@ -129,26 +211,105 @@ export default function DiscAssessment() {
 
   if (mode === 'agent') {
     return (
-      <div className="min-h-screen bg-slate-950 text-white p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center gap-4 mb-8">
-            <button
-              onClick={() => setMode(null)}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div>
-              <h1 className="text-3xl font-bold">DISC Assessment API</h1>
-              <p className="text-slate-400">For Telegram, Discord, and other bot integrations</p>
+      <div className="min-h-screen bg-slate-950 text-white p-8 overflow-y-auto">
+        <div className="max-w-5xl mx-auto">
+          {/* Back Button */}
+          <button
+            onClick={() => setMode(null)}
+            className="mb-6 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors flex items-center gap-2"
+          >
+            <ArrowLeft className="w-5 h-5" /> Back
+          </button>
+          
+          {/* Hero Section with Visualizer and Audio Pitch */}
+          <div className="bg-gradient-to-br from-slate-900 via-indigo-950/50 to-slate-900 border border-indigo-500/30 rounded-2xl p-8 mb-8 relative overflow-hidden">
+            {/* Glow effect */}
+            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 blur-3xl" />
+            
+            <div className="relative z-10">
+              {/* Visualizer */}
+              <div className="flex justify-center mb-6">
+                <div className="transform scale-150">
+                  <AgentCore emotion={devEmotion} intensity={isPlaying ? 80 : 50} />
+                </div>
+              </div>
+              
+              {/* Title */}
+              <h1 className="text-center text-4xl font-black mb-2 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                Developer Portal
+              </h1>
+              <p className="text-center text-slate-400 mb-6">Build the future. Ship consciousness.</p>
+              
+              {/* Audio Pitch Section */}
+              <div className="bg-black/50 border border-slate-700 rounded-xl p-6">
+                <div className="flex items-center gap-4 mb-4">
+                  <button
+                    onClick={toggleAudio}
+                    className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${
+                      isPlaying 
+                        ? 'bg-gradient-to-r from-pink-500 to-purple-500 shadow-lg shadow-pink-500/30' 
+                        : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500'
+                    }`}
+                    data-testid="button-play-audio"
+                  >
+                    {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
+                  </button>
+                  
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Volume2 className="w-4 h-4 text-indigo-400" />
+                      <span className="text-sm font-bold text-white">The Future of Human + AI</span>
+                      <span className="text-xs text-slate-500">0:27</span>
+                    </div>
+                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-100"
+                        style={{ width: `${audioProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Animated Text Display */}
+                <div className="min-h-[60px] flex items-center justify-center">
+                  <p className={`text-lg text-center transition-all duration-500 ${
+                    isPlaying ? 'text-white' : 'text-slate-500'
+                  }`}>
+                    {isPlaying || audioProgress > 0 
+                      ? audioPitchLines[currentPitchLine]?.text 
+                      : "Press play to hear why you're building the future..."}
+                  </p>
+                </div>
+                
+                {/* Human + AI Badge */}
+                <div className="flex justify-center mt-4">
+                  <div className="inline-flex items-center gap-3 bg-slate-800/50 border border-slate-700 rounded-full px-4 py-2">
+                    <Users className="w-4 h-4 text-amber-400" />
+                    <span className="text-slate-400">+</span>
+                    <Bot className="w-4 h-4 text-cyan-400" />
+                    <span className="text-slate-400">=</span>
+                    <Zap className="w-4 h-4 text-emerald-400" />
+                    <span className="text-white font-bold text-sm">Unstoppable</span>
+                  </div>
+                </div>
+              </div>
             </div>
+          </div>
+          
+          {/* API Documentation */}
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold mb-4 flex items-center gap-3">
+              <Code className="w-6 h-6 text-emerald-400" />
+              DISC Assessment API
+            </h2>
+            <p className="text-slate-400 mb-6">Integrate personality insights into your Telegram, Discord, or any bot platform.</p>
           </div>
           
           <div className="space-y-6">
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                 <Target className="w-5 h-5 text-pink-400" /> Get Questions
-              </h2>
+              </h3>
               <div className="bg-black rounded-lg p-4 font-mono text-sm overflow-x-auto">
                 <p className="text-emerald-400">GET /api/disc/questions</p>
                 <p className="text-slate-500 mt-2"># Returns all 24 word sets</p>
@@ -157,9 +318,9 @@ export default function DiscAssessment() {
             </div>
             
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                 <Shield className="w-5 h-5 text-blue-400" /> Submit Rankings (Simple Format)
-              </h2>
+              </h3>
               <div className="bg-black rounded-lg p-4 font-mono text-sm overflow-x-auto">
                 <p className="text-emerald-400">POST /api/disc/calculate-simple</p>
                 <p className="text-slate-500 mt-2"># Body:</p>
@@ -174,9 +335,9 @@ export default function DiscAssessment() {
             </div>
             
             <div className="bg-slate-900 border border-slate-700 rounded-xl p-6">
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400" /> Response Format
-              </h2>
+              </h3>
               <div className="bg-black rounded-lg p-4 font-mono text-sm overflow-x-auto">
                 <pre className="text-cyan-400">{`{
   "scores": {
