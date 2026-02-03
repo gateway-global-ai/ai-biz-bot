@@ -10,11 +10,15 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (February 2026)
 
-- Added Agent Manager page (`/agents`):
+- Enhanced Agent Manager page (`/agents`) - **KEY PAGE FOR AGENT PERSONALITY CONFIGURATION**:
   - Table view with inline editing for all agents
-  - Create new agents with name, voice selection (6 voices), and status
-  - DISC profile display (D/I/S/C values)
-  - Status badges (Active, Paused, Inactive)
+  - Create new agents with avatar gallery (5 character avatars), name, voice selection (6 voices), and status
+  - **Click on any agent to open full configuration view** with:
+    - BotAvatar visualizer with animated DISC rings and sentiment states
+    - DISC Profile sliders (Dominance, Influence, Steadiness, Conscientiousness)
+    - ARCH Communication Model sliders with bar chart visualization
+    - 6-section System Identity Prompts editor (Owner Identity, Loyalty, Priorities, Data Protection, Security, DISC Reinforcement)
+    - Save Configuration button to persist personality settings
   - Search, refresh, edit, and delete functionality
 - Added Customer Manager page (`/customers`):
   - Lead capture form with contact info (name, email, phone, company)
@@ -56,6 +60,7 @@ Preferred communication style: Simple, everyday language.
   - BotAvatarVisualizer component in hero section
   - Animated sentiment states with pulsing visual effects
   - Real-time glowing borders and indicator dots
+- Added VoiceVisualizer to Business page with phone icon animation; replaced technical "SIP Trunking" banner with business-friendly "Never Miss Another Call"
 
 ## System Architecture
 
