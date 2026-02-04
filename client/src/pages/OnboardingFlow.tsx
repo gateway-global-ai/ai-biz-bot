@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Mic, Play, Pause, ArrowRight, ArrowLeft, Zap, Volume2, MessageSquare, Phone, CheckCircle2, Users, Bot, Heart, Brain, Shield, Target } from 'lucide-react';
+import { Mic, Play, Pause, ArrowRight, ArrowLeft, Zap, Volume2, MessageSquare, Phone, CheckCircle2, Users, Bot, Heart, Brain, Shield, Target, Menu, X, Home, LayoutDashboard, Sparkles } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
-import gatewayLogoDark from '@assets/gatewayglobal_logo_dk_bg(_1770158396213.png';
+import { Link } from 'wouter';
 
 type Variant = 'awakening' | 'proof';
 type Step = 'name' | 'voice' | 'test';
@@ -130,6 +130,90 @@ const StarField = () => {
   );
 };
 
+const HeroVisualizer = () => {
+  const [pulse, setPulse] = useState(0);
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setPulse(prev => (prev + 1) % 100);
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+  
+  const waveIntensity = Math.sin(pulse / 10) * 0.3 + 0.7;
+  
+  return (
+    <div className="relative w-44 h-44 md:w-56 md:h-56 flex items-center justify-center mx-auto mb-6">
+      <div 
+        className="absolute inset-0 border border-dashed rounded-full animate-spin"
+        style={{ 
+          borderColor: 'rgba(139, 92, 246, 0.5)', 
+          animationDuration: '20s'
+        }}
+      />
+      <div 
+        className="absolute inset-4 border border-dotted rounded-full animate-spin"
+        style={{ 
+          borderColor: 'rgba(168, 85, 247, 0.4)', 
+          animationDirection: 'reverse',
+          animationDuration: '15s'
+        }}
+      />
+      <div 
+        className="absolute inset-8 border border-dashed rounded-full animate-spin"
+        style={{ 
+          borderColor: 'rgba(99, 102, 241, 0.3)', 
+          animationDuration: '25s'
+        }}
+      />
+      
+      <div 
+        className="absolute rounded-full blur-3xl transition-all duration-500 animate-pulse"
+        style={{ 
+          width: `${100 + waveIntensity * 40}%`,
+          height: `${100 + waveIntensity * 40}%`,
+          background: 'radial-gradient(circle, rgba(139, 92, 246, 0.6) 0%, rgba(99, 102, 241, 0.3) 40%, transparent 70%)',
+          opacity: 0.5
+        }}
+      />
+      
+      <div 
+        className="absolute rounded-full blur-2xl transition-all duration-500"
+        style={{ 
+          width: `${70 + waveIntensity * 30}%`,
+          height: `${70 + waveIntensity * 30}%`,
+          background: 'radial-gradient(circle, rgba(168, 85, 247, 0.5) 0%, transparent 70%)',
+          opacity: 0.6
+        }}
+      />
+      
+      <div 
+        className="absolute w-20 h-20 md:w-24 md:h-24 rounded-2xl flex items-center justify-center bg-slate-900/90 border-2 z-10 transition-all duration-500"
+        style={{
+          borderColor: 'rgba(139, 92, 246, 0.8)',
+          boxShadow: '0 0 40px rgba(139, 92, 246, 0.5), 0 0 20px rgba(168, 85, 247, 0.4)',
+          transform: `scale(${0.95 + waveIntensity * 0.1})`
+        }}
+      >
+        <div className="relative z-20 flex flex-col items-center">
+          <Bot className="w-10 h-10 md:w-12 md:h-12 text-violet-300" />
+          <div className="flex gap-1.5 mt-2">
+            <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+            <div className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" style={{ animationDelay: '0.2s' }} />
+            <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" style={{ animationDelay: '0.4s' }} />
+          </div>
+        </div>
+      </div>
+      
+      <div className="absolute -bottom-2 left-0 right-0 flex justify-center gap-3 text-[10px] font-mono">
+        <span className="text-violet-400 flex items-center gap-1"><Sparkles className="w-3 h-3" /> AI</span>
+        <span className="text-purple-400 flex items-center gap-1"><Brain className="w-3 h-3" /> DISC</span>
+        <span className="text-indigo-400 flex items-center gap-1"><Zap className="w-3 h-3" /> LIVE</span>
+      </div>
+    </div>
+  );
+};
+
 const ParticleField = ({ active, color }: { active: boolean; color: string }) => {
   const particles = Array.from({ length: 50 }, (_, i) => ({
     id: i,
@@ -211,6 +295,7 @@ export default function OnboardingFlow() {
   const [userInput, setUserInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [sentimentData, setSentimentData] = useState<{ value: number }[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     if (step === 'test') {
@@ -284,21 +369,50 @@ export default function OnboardingFlow() {
     }
   };
 
+  const FloatingMenu = () => (
+    <>
+      <button
+        onClick={() => setMenuOpen(!menuOpen)}
+        className="fixed top-4 right-4 z-50 p-3 rounded-xl bg-slate-900/80 border border-slate-700 backdrop-blur-sm hover:bg-slate-800 transition-all shadow-lg"
+        data-testid="button-menu-toggle"
+      >
+        {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+      </button>
+      
+      {menuOpen && (
+        <div className="fixed top-16 right-4 z-50 bg-slate-900/95 border border-slate-700 rounded-xl backdrop-blur-sm shadow-2xl overflow-hidden min-w-[200px]">
+          <Link href="/agents" onClick={() => setMenuOpen(false)}>
+            <div className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 transition-colors cursor-pointer" data-testid="menu-dashboard">
+              <LayoutDashboard className="w-4 h-4 text-violet-400" />
+              <span className="text-sm">Agent Dashboard</span>
+            </div>
+          </Link>
+          <Link href="/developer" onClick={() => setMenuOpen(false)}>
+            <div className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 transition-colors cursor-pointer" data-testid="menu-developer">
+              <Zap className="w-4 h-4 text-purple-400" />
+              <span className="text-sm">Developer Portal</span>
+            </div>
+          </Link>
+          <Link href="/business" onClick={() => setMenuOpen(false)}>
+            <div className="flex items-center gap-3 px-4 py-3 hover:bg-slate-800 transition-colors cursor-pointer" data-testid="menu-business">
+              <Users className="w-4 h-4 text-indigo-400" />
+              <span className="text-sm">Business Portal</span>
+            </div>
+          </Link>
+        </div>
+      )}
+    </>
+  );
+
   const renderAwakeningVariant = () => (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center p-8 pt-12 relative overflow-hidden">
       <StarField />
+      <FloatingMenu />
       <ParticleField active={isAwakening} color="#818cf8" />
       
       {step === 'name' && (
         <div className="text-center z-10 max-w-xl flex flex-col items-center relative">
-          {/* Logo */}
-          <div className="mb-0 md:mb-2 relative z-10">
-            <img 
-              src={gatewayLogoDark} 
-              alt="Gateway Global AI" 
-              className="w-[120px] md:w-[220px] lg:w-[300px] h-auto" 
-            />
-          </div>
+          <HeroVisualizer />
           
           <div className="mb-4 md:mb-6 relative z-20">
             <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-4 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
@@ -317,14 +431,14 @@ export default function OnboardingFlow() {
               value={agentName}
               onChange={(e) => setAgentName(e.target.value)}
               placeholder="Name Your Bot"
-              className="flex-1 bg-slate-900/80 border-2 border-emerald-500/30 rounded-xl px-6 py-4 text-xl text-center focus:outline-none focus:border-emerald-500 transition-all placeholder:text-slate-500"
+              className="flex-1 bg-slate-900/80 border-2 border-violet-500/30 rounded-xl px-6 py-4 text-xl text-center focus:outline-none focus:border-violet-500 transition-all placeholder:text-slate-500"
               data-testid="input-agent-name"
               onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
             />
             <button
               onClick={handleNameSubmit}
               disabled={!agentName.trim() || isAwakening}
-              className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 disabled:opacity-30 disabled:cursor-not-allowed p-4 rounded-xl transition-all shadow-lg shadow-emerald-500/30"
+              className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 disabled:opacity-30 disabled:cursor-not-allowed p-4 rounded-xl transition-all shadow-lg shadow-violet-500/30"
               data-testid="button-awaken"
             >
               {isAwakening ? (
@@ -335,7 +449,7 @@ export default function OnboardingFlow() {
             </button>
           </div>
           {agentName && (
-            <p className="text-sm text-emerald-400 relative z-20">
+            <p className="text-sm text-violet-400 relative z-20">
               "{agentName}" is awakening...
             </p>
           )}
@@ -350,24 +464,18 @@ export default function OnboardingFlow() {
   const renderProofVariant = () => (
     <div className="min-h-screen bg-black text-white flex flex-col items-center p-8 pt-12 relative overflow-hidden">
       <StarField />
+      <FloatingMenu />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
       
       {step === 'name' && (
         <div className="text-center z-10 max-w-2xl flex flex-col items-center relative">
-          {/* Logo */}
-          <div className="mb-0 md:mb-2 relative z-10">
-            <img 
-              src={gatewayLogoDark} 
-              alt="Gateway Global AI" 
-              className="w-[120px] md:w-[220px] lg:w-[300px] h-auto" 
-            />
-          </div>
+          <HeroVisualizer />
           
           <div className="mb-4 md:mb-6 relative z-20">
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-black mb-2 md:mb-4">
               Every Other AI <span className="text-slate-500">Talks.</span>
               <br />
-              <span className="bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">This One Finishes.</span>
+              <span className="bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">This One Finishes.</span>
             </h1>
             <p className="text-slate-400 text-lg max-w-lg mx-auto">
               They don't want us to team up. Humans and AI working together? 
@@ -383,14 +491,14 @@ export default function OnboardingFlow() {
                 value={agentName}
                 onChange={(e) => setAgentName(e.target.value)}
                 placeholder="Name Your Bot"
-                className="flex-1 bg-black border-2 border-emerald-500/30 rounded-xl px-6 py-4 text-xl text-center focus:outline-none focus:border-emerald-500 transition-all placeholder:text-slate-600"
+                className="flex-1 bg-black border-2 border-violet-500/30 rounded-xl px-6 py-4 text-xl text-center focus:outline-none focus:border-violet-500 transition-all placeholder:text-slate-600"
                 data-testid="input-agent-name"
                 onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
               />
               <button
                 onClick={handleNameSubmit}
                 disabled={!agentName.trim() || isAwakening}
-                className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 disabled:opacity-30 disabled:cursor-not-allowed p-4 rounded-xl transition-all shadow-lg shadow-emerald-500/30"
+                className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 disabled:opacity-30 disabled:cursor-not-allowed p-4 rounded-xl transition-all shadow-lg shadow-violet-500/30"
                 data-testid="button-start"
               >
                 {isAwakening ? (
