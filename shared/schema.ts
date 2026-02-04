@@ -19,21 +19,30 @@ export type User = typeof users.$inferSelect;
 
 export const telephonyConfigs = pgTable("telephony_configs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Twilio Account Credentials (per-deployment)
+  accountSid: text("account_sid"),
+  authToken: text("auth_token"),
+  isSubAccount: boolean("is_sub_account").default(false),
+  parentAccountSid: text("parent_account_sid"),
+  // Phone Number Info
   phoneNumber: text("phone_number"),
   phoneSid: text("phone_sid"),
   friendlyName: text("friendly_name").default("AI Agent Trunk"),
   messagingServiceSid: text("messaging_service_sid"),
+  // Webhook URLs
   voiceUrl: text("voice_url"),
   voiceFallbackUrl: text("voice_fallback_url"),
   statusCallbackUrl: text("status_callback_url"),
   smsUrl: text("sms_url"),
   smsFallbackUrl: text("sms_fallback_url"),
   errorUrl: text("error_url"),
+  // Firewall Settings
   firewallEnabled: boolean("firewall_enabled").default(true),
   allowedNumbers: text("allowed_numbers").array().default(sql`ARRAY[]::text[]`),
   maxCallDuration: integer("max_call_duration").default(60),
   timeout: integer("timeout").default(30),
   callerIdName: text("caller_id_name"),
+  // Owner Info
   ownerPhone: text("owner_phone"),
   ownerEmail: text("owner_email"),
   createdAt: timestamp("created_at").defaultNow(),

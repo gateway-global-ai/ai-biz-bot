@@ -38,8 +38,11 @@ import {
   Ban,
   Loader2,
   User,
-  X
+  X,
+  Key,
+  Check
 } from 'lucide-react';
+import { Label } from '@/components/ui/label';
 
 type TelephonyView = 'provisioning' | 'settings' | 'firewall' | 'diagnostics' | 'history';
 
@@ -108,6 +111,14 @@ export default function TelephonyPanel() {
   const [localMaxCallDuration, setLocalMaxCallDuration] = useState('60');
   const [localTimeout, setLocalTimeout] = useState('30');
   const [settingsInitialized, setSettingsInitialized] = useState(false);
+  
+  // Add Existing Number form state
+  const [showAddExisting, setShowAddExisting] = useState(false);
+  const [existingAccountSid, setExistingAccountSid] = useState('');
+  const [existingAuthToken, setExistingAuthToken] = useState('');
+  const [existingPhoneNumber, setExistingPhoneNumber] = useState('');
+  const [existingPhoneSid, setExistingPhoneSid] = useState('');
+  const [existingFriendlyName, setExistingFriendlyName] = useState('');
 
   const addLog = (msg: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -174,6 +185,47 @@ export default function TelephonyPanel() {
       toast({ title: 'Release Failed', description: error.message, variant: 'destructive' });
     }
   });
+
+  const addExistingNumberMutation = useMutation({
+    mutationFn: async (data: {
+      accountSid: string;
+      authToken: string;
+      phoneNumber: string;
+      phoneSid: string;
+      friendlyName: string;
+    }) => {
+      return apiRequest('POST', '/api/telephony/numbers/existing', data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/telephony/config'] });
+      setShowAddExisting(false);
+      setExistingAccountSid('');
+      setExistingAuthToken('');
+      setExistingPhoneNumber('');
+      setExistingPhoneSid('');
+      setExistingFriendlyName('');
+      toast({ title: 'Success', description: 'Existing number added successfully!' });
+      addLog('Existing phone number configured');
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed', description: error.message, variant: 'destructive' });
+      addLog(`ERROR: ${error.message}`);
+    }
+  });
+
+  const handleAddExistingNumber = () => {
+    if (!existingPhoneNumber) {
+      toast({ title: 'Required', description: 'Phone number is required', variant: 'destructive' });
+      return;
+    }
+    addExistingNumberMutation.mutate({
+      accountSid: existingAccountSid,
+      authToken: existingAuthToken,
+      phoneNumber: existingPhoneNumber,
+      phoneSid: existingPhoneSid,
+      friendlyName: existingFriendlyName || 'AI Agent Trunk',
+    });
+  };
 
   const updateConfigMutation = useMutation({
     mutationFn: async (updates: Partial<TelephonyConfig>) => {
@@ -536,6 +588,130 @@ export default function TelephonyPanel() {
                       <Search className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
                       <p className="text-muted-foreground font-medium">Search for available numbers</p>
                       <p className="text-muted-foreground/70 text-sm mt-1">Enter a 3-digit US area code above</p>
+                    </div>
+                  )}
+                  
+                  {/* Divider */}
+                  <div className="flex items-center gap-4 my-6">
+                    <div className="flex-1 h-px bg-border" />
+                    <span className="text-muted-foreground text-sm">or</span>
+                    <div className="flex-1 h-px bg-border" />
+                  </div>
+                  
+                  {/* Add Existing Number */}
+                  {!showAddExisting ? (
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowAddExisting(true)}
+                      className="w-full gap-2"
+                      data-testid="button-add-existing"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Existing Number
+                    </Button>
+                  ) : (
+                    <div className="border border-border rounded-xl p-6 bg-accent/30 space-y-4 animate-in fade-in slide-in-from-top-2">
+                      <div className="flex justify-between items-center mb-2">
+                        <h4 className="font-semibold flex items-center gap-2">
+                          <Key className="w-4 h-4 text-primary" />
+                          Add Existing Twilio Number
+                        </h4>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setShowAddExisting(false)}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <p className="text-muted-foreground text-sm mb-4">
+                        Enter your Twilio credentials and phone number details. This is for numbers you already own.
+                      </p>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="existingAccountSid">Account SID</Label>
+                          <Input
+                            id="existingAccountSid"
+                            value={existingAccountSid}
+                            onChange={(e) => setExistingAccountSid(e.target.value)}
+                            placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                            className="font-mono text-sm"
+                            data-testid="input-existing-account-sid"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="existingAuthToken">Auth Token</Label>
+                          <Input
+                            id="existingAuthToken"
+                            type="password"
+                            value={existingAuthToken}
+                            onChange={(e) => setExistingAuthToken(e.target.value)}
+                            placeholder="Your auth token"
+                            className="font-mono text-sm"
+                            data-testid="input-existing-auth-token"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="existingPhoneNumber">Phone Number *</Label>
+                          <Input
+                            id="existingPhoneNumber"
+                            value={existingPhoneNumber}
+                            onChange={(e) => setExistingPhoneNumber(e.target.value)}
+                            placeholder="+1234567890"
+                            className="font-mono"
+                            data-testid="input-existing-phone-number"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="existingPhoneSid">Phone SID</Label>
+                          <Input
+                            id="existingPhoneSid"
+                            value={existingPhoneSid}
+                            onChange={(e) => setExistingPhoneSid(e.target.value)}
+                            placeholder="PNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                            className="font-mono text-sm"
+                            data-testid="input-existing-phone-sid"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="existingFriendlyName">Friendly Name</Label>
+                        <Input
+                          id="existingFriendlyName"
+                          value={existingFriendlyName}
+                          onChange={(e) => setExistingFriendlyName(e.target.value)}
+                          placeholder="My AI Agent"
+                          data-testid="input-existing-friendly-name"
+                        />
+                      </div>
+                      
+                      <div className="flex gap-3 pt-2">
+                        <Button 
+                          variant="secondary" 
+                          onClick={() => setShowAddExisting(false)}
+                          className="flex-1"
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          onClick={handleAddExistingNumber}
+                          disabled={!existingPhoneNumber || addExistingNumberMutation.isPending}
+                          className="flex-1 gap-2"
+                          data-testid="button-save-existing"
+                        >
+                          {addExistingNumberMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Check className="w-4 h-4" />
+                          )}
+                          Save Number
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>

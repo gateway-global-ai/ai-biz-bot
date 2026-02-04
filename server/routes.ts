@@ -143,6 +143,55 @@ export async function registerRoutes(
     }
   });
 
+  // Add an existing phone number with credentials
+  app.post("/api/telephony/numbers/existing", async (req, res) => {
+    try {
+      const { accountSid, authToken, phoneNumber, phoneSid, friendlyName, isSubAccount, parentAccountSid } = req.body;
+      
+      if (!phoneNumber) {
+        return res.status(400).json({ error: "Phone number is required" });
+      }
+      
+      // Validate credentials if provided - try to fetch account info
+      if (accountSid && authToken) {
+        try {
+          const testClient = require('twilio')(accountSid, authToken);
+          await testClient.api.accounts(accountSid).fetch();
+        } catch (credError: any) {
+          return res.status(400).json({ error: `Invalid Twilio credentials: ${credError.message}` });
+        }
+      }
+      
+      let config = await storage.getTelephonyConfig();
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : 'https://twilio.gatewayglobal.ai';
+      
+      const updateData = {
+        accountSid: accountSid || null,
+        authToken: authToken || null,
+        phoneNumber,
+        phoneSid: phoneSid || null,
+        friendlyName: friendlyName || 'AI Agent Trunk',
+        isSubAccount: isSubAccount || false,
+        parentAccountSid: parentAccountSid || null,
+        voiceUrl: `${baseUrl}/webhook/voice`,
+        smsUrl: `${baseUrl}/webhook/sms`,
+      };
+      
+      if (config) {
+        await storage.updateTelephonyConfig(config.id, updateData);
+      } else {
+        await storage.createTelephonyConfig(updateData);
+      }
+      
+      res.json({ success: true, message: "Existing number added successfully" });
+    } catch (error: any) {
+      console.error('Error adding existing number:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Release a phone number
   app.post("/api/telephony/numbers/release", async (req, res) => {
     try {
