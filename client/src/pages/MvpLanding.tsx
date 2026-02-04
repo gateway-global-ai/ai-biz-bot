@@ -330,21 +330,27 @@ export default function MvpLanding() {
                 Check your phone at <span className="text-white font-medium">{phone}</span> for updates
               </p>
 
-              <Button
-                data-testid="button-submit-another"
-                onClick={() => {
-                  setStep('input');
-                  setTask('');
-                  setPhone('');
-                  setName('');
-                  setSelectedPersonality(null);
-                  setAgentName('');
-                }}
-                variant="outline"
-                className="border-white/20 text-white hover:bg-white/10"
-              >
-                Submit Another Task
-              </Button>
+              <div className="flex gap-3 justify-center">
+                <Link href="/kimi-audio">
+                  <Button
+                    data-testid="button-try-voice"
+                    variant="outline"
+                    className="border-white/20 text-white hover:bg-white/10"
+                  >
+                    <Mic className="w-4 h-4 mr-2" />
+                    Try Voice AI
+                  </Button>
+                </Link>
+                <Link href="/dashboard">
+                  <Button
+                    data-testid="button-view-dashboard"
+                    className="bg-purple-600 hover:bg-purple-500 text-white"
+                  >
+                    <LayoutDashboard className="w-4 h-4 mr-2" />
+                    View Dashboard
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
           </Card>
         )}
