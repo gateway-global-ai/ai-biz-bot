@@ -280,6 +280,96 @@ export async function registerRoutes(
     }
   });
 
+  // Link an existing Twilio phone number to an agent
+  app.post("/api/telephony/numbers/link", async (req, res) => {
+    try {
+      // E.164 format: starts with +, followed by 1-15 digits
+      const e164Regex = /^\+[1-9]\d{1,14}$/;
+      
+      const linkSchema = z.object({
+        phoneNumber: z.string().min(1, "Phone number is required").transform(val => {
+          // Normalize to E.164: remove everything except + and digits
+          let normalized = val.replace(/[^\d+]/g, '');
+          // Add + if missing and starts with a country code
+          if (!normalized.startsWith('+') && normalized.length >= 10) {
+            normalized = '+' + (normalized.startsWith('1') ? normalized : '1' + normalized);
+          }
+          return normalized;
+        }).refine(val => e164Regex.test(val), {
+          message: "Phone number must be in E.164 format (e.g., +17025551234)"
+        }),
+        phoneSid: z.string().min(1, "Phone SID is required").regex(/^PN[a-zA-Z0-9]{32}$/, "Phone SID must be in format PN followed by 32 characters"),
+        agentId: z.string().min(1, "Agent ID is required"),
+      });
+
+      const parsed = linkSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.errors[0].message });
+      }
+
+      const { phoneNumber, phoneSid, agentId } = parsed.data;
+
+      // Verify the agent exists
+      const agent = await storage.getAgent(agentId);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
+      // Configure webhooks for this number in Twilio
+      const twilioClient = await getTwilioClient();
+      
+      // Use the production base URL from environment or derive from Replit
+      const baseUrl = process.env.WEBHOOK_BASE_URL || 
+                      process.env.REPLIT_DEPLOYMENT_URL || 
+                      `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+      
+      try {
+        // Verify the number exists and belongs to this account first
+        const existingNumber = await twilioClient.incomingPhoneNumbers(phoneSid).fetch();
+        if (!existingNumber) {
+          return res.status(404).json({ 
+            error: "Phone number not found in your Twilio account. Please verify the SID is correct." 
+          });
+        }
+
+        // Update webhooks for voice and SMS
+        await twilioClient.incomingPhoneNumbers(phoneSid).update({
+          voiceUrl: `${baseUrl}/webhook/voice/kimi`,
+          voiceMethod: 'POST',
+          smsUrl: `${baseUrl}/webhook/sms`,
+          smsMethod: 'POST',
+          statusCallback: `${baseUrl}/webhook/status`,
+          statusCallbackMethod: 'POST',
+        });
+      } catch (twilioError: any) {
+        // Provide helpful error messages for common issues
+        if (twilioError.code === 20404) {
+          return res.status(404).json({ 
+            error: "Phone number not found. Make sure the SID is correct and the number belongs to your Twilio account (not a sub-account)." 
+          });
+        }
+        return res.status(400).json({ 
+          error: `Failed to configure Twilio number: ${twilioError.message}` 
+        });
+      }
+
+      // Update the agent with the phone number
+      await storage.updateAgent(agentId, {
+        phoneNumber,
+        phoneSid,
+      });
+
+      res.json({ 
+        success: true, 
+        phoneNumber, 
+        phoneSid,
+        message: "Phone number linked and webhooks configured" 
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Update webhooks
   app.patch("/api/telephony/webhooks", async (req, res) => {
     try {
