@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from '@/hooks/use-toast';
 import { 
   Bot, Plus, Check, ImageIcon, Coffee, Briefcase, FlaskConical,
-  Sparkles, Volume2, MoreVertical, Pencil, Trash2
+  Sparkles, Volume2, MoreVertical, Pencil, Trash2, GraduationCap
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -221,6 +221,19 @@ export default function AgentDashboard() {
                         <div className="text-left">
                           <div className="font-medium">The Lab</div>
                           <div className="text-xs text-slate-500">Fine Tuning</div>
+                        </div>
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start border-amber-500/30 text-amber-300 hover:bg-amber-500/10 hover:border-amber-500/50"
+                        onClick={() => navigateToEnvironment(agent.id, 'classroom')}
+                        data-testid={`button-classroom-${agent.id}`}
+                      >
+                        <GraduationCap className="w-4 h-4 mr-3" />
+                        <div className="text-left">
+                          <div className="font-medium">The Classroom</div>
+                          <div className="text-xs text-slate-500">Learn Something New</div>
                         </div>
                       </Button>
                     </div>

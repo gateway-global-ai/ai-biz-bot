@@ -10,13 +10,14 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (February 2026)
 
-- **NEW: Agent Dashboard with Card Gallery** (`/agents` or `/`):
+- **NEW: Agent Dashboard with Card Gallery** (`/agents` or `/dashboard`):
   - Beautiful card-based view of all agents (replaces table view)
   - Each card displays avatar, name, status, voice, and DISC profile preview
-  - Three environment buttons per agent card:
-    - **The Vibe** (purple) - Reflect & Relax conversations
+  - Four environment buttons per agent card:
+    - **The Vibe** (purple) - Reflect & Relax with Gemini Live voice chat
     - **The Office** (blue) - Collab on Projects with multi-agent invite
     - **The Lab** (green) - Fine Tuning personality controls
+    - **The Classroom** (amber) - Learn Something New with curated lessons
   - Create New Agent card with avatar gallery selection
 
 - **NEW: The Vibe Environment** (`/agent/:agentId/vibe`):
@@ -37,6 +38,21 @@ Preferred communication style: Simple, everyday language.
   - ARCH Communication Model sliders with bar chart visualization
   - 6-section System Identity Prompts editor
   - Save Configuration button to persist personality settings
+
+- **NEW: The Classroom Environment** (`/agent/:agentId/classroom`):
+  - Learning environment with amber/orange gradient theme
+  - Tell your agent what you want to learn and get a curated lesson
+  - Auto-generated presentations with slides, videos, and quizzes
+  - Quick suggestion cards (AI & Machine Learning, Communication Skills, Personal Finance)
+  - Teaching Style controls (Pace, Engagement, Depth, Detail)
+  - Interactive quizzes with immediate feedback
+  - Lesson history to revisit previous lessons
+
+- **Gemini Live Voice Chat** in The Vibe:
+  - Real-time voice conversations using Gemini 2.0 Flash Live model
+  - Aoede voice for natural speech
+  - ARCH Communication Window matching (mirrors your tone, timing, sentence count)
+  - Click Call button to start voice session
 
 - Updated Sidebar Navigation organized into 4 sections:
   - Agent Dashboard: Dashboard, DISC Assessment, Character Tool

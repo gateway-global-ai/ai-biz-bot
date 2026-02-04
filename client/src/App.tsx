@@ -17,6 +17,7 @@ import AgentDashboard from "@/pages/AgentDashboard";
 import TheVibe from "@/pages/TheVibe";
 import TheOffice from "@/pages/TheOffice";
 import TheLab from "@/pages/TheLab";
+import TheClassroom from "@/pages/TheClassroom";
 import CustomerManager from "@/pages/CustomerManager";
 import NotFound from "@/pages/not-found";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
@@ -232,6 +233,7 @@ function AppRouter() {
       <Route path="/agent/:agentId/vibe" component={TheVibe} />
       <Route path="/agent/:agentId/office" component={TheOffice} />
       <Route path="/agent/:agentId/lab" component={TheLab} />
+      <Route path="/agent/:agentId/classroom" component={TheClassroom} />
       <Route path="/agent-manager" component={AgentManager} />
       <Route path="/customers" component={CustomerManager} />
       <Route path="/telephony" component={TelephonyPanel} />
