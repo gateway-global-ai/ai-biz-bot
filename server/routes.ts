@@ -260,6 +260,147 @@ export async function registerRoutes(
     }
   });
 
+  // ===========================================
+  // Gateway Global AI Twilio Provisioning API
+  // ===========================================
+
+  // Search available US numbers by area code
+  app.get("/api/twilio/numbers/available", async (req, res) => {
+    try {
+      const areaCode = (req.query.areaCode as string || '').replace(/\D/g, '').slice(0, 3);
+      const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+      
+      if (!areaCode || areaCode.length !== 3) {
+        return res.status(400).json({ error: "Valid 3-digit area code required" });
+      }
+      
+      const numbers = await searchAvailableNumbers(areaCode, 'US');
+      res.json({ 
+        numbers: numbers.slice(0, limit).map(n => ({
+          phoneNumber: n.phoneNumber,
+          friendlyName: n.friendlyName,
+          locality: n.locality,
+          region: n.region
+        }))
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // List numbers already owned by the account
+  app.get("/api/twilio/numbers", async (req, res) => {
+    try {
+      const numbers = await getIncomingPhoneNumbers();
+      res.json({ 
+        numbers: numbers.map(n => ({
+          sid: n.sid,
+          phoneNumber: n.phoneNumber,
+          friendlyName: n.friendlyName,
+          voiceUrl: n.voiceUrl || null,
+          voiceFallbackUrl: n.voiceFallbackUrl || null,
+          smsUrl: n.smsUrl || null,
+          smsFallbackUrl: n.smsFallbackUrl || null,
+          statusCallback: n.statusCallback || null
+        }))
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Buy a number (E.164 or 10-digit US)
+  app.post("/api/twilio/numbers", async (req, res) => {
+    try {
+      const { phoneNumber, friendlyName } = req.body;
+      
+      if (!phoneNumber) {
+        return res.status(400).json({ error: "phoneNumber is required" });
+      }
+      
+      // Normalize to E.164 if needed
+      let normalizedNumber = phoneNumber;
+      if (!phoneNumber.startsWith('+')) {
+        normalizedNumber = '+1' + phoneNumber.replace(/\D/g, '');
+      }
+      
+      // Default webhook URLs for Gateway Global AI
+      const baseUrl = 'https://twilio.gatewayglobal.ai';
+      const result = await provisionPhoneNumber(
+        normalizedNumber,
+        `${baseUrl}/webhook/voice`,
+        `${baseUrl}/webhook/sms`
+      );
+      
+      // Update with friendlyName if provided
+      if (friendlyName) {
+        await updateCallerIdName(result.sid, friendlyName);
+      }
+      
+      res.json({
+        sid: result.sid,
+        phoneNumber: result.phoneNumber,
+        friendlyName: friendlyName || 'AI Agent Trunk'
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update webhooks for an owned number
+  app.patch("/api/twilio/numbers/:phoneSid", async (req, res) => {
+    try {
+      const { phoneSid } = req.params;
+      const { voiceUrl, voiceFallbackUrl, smsUrl, smsFallbackUrl, statusCallback, friendlyName } = req.body;
+      
+      // Update webhooks
+      await updatePhoneNumberWebhooks(phoneSid, {
+        voiceUrl: voiceUrl || undefined,
+        voiceFallbackUrl: voiceFallbackUrl || undefined,
+        smsUrl: smsUrl || undefined,
+        smsFallbackUrl: smsFallbackUrl || undefined,
+        statusCallback: statusCallback || undefined
+      });
+      
+      // Update friendly name if provided
+      if (friendlyName) {
+        await updateCallerIdName(phoneSid, friendlyName);
+      }
+      
+      // Fetch updated number details
+      const numbers = await getIncomingPhoneNumbers();
+      const updated = numbers.find(n => n.sid === phoneSid);
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Phone number not found" });
+      }
+      
+      res.json({
+        sid: updated.sid,
+        phoneNumber: updated.phoneNumber,
+        friendlyName: updated.friendlyName,
+        voiceUrl: updated.voiceUrl || null,
+        voiceFallbackUrl: updated.voiceFallbackUrl || null,
+        smsUrl: updated.smsUrl || null,
+        smsFallbackUrl: updated.smsFallbackUrl || null,
+        statusCallback: updated.statusCallback || null
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Release (delete) an owned number
+  app.delete("/api/twilio/numbers/:phoneSid", async (req, res) => {
+    try {
+      const { phoneSid } = req.params;
+      await releasePhoneNumber(phoneSid);
+      res.json({ ok: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Send SMS
   app.post("/api/telephony/sms/send", async (req, res) => {
     try {

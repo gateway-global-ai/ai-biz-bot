@@ -108,6 +108,14 @@ Preferred communication style: Simple, everyday language.
   - Twilio signature validation middleware for security
   - XML escaping to prevent TwiML injection attacks
   - Legacy `/api/webhooks/*` routes redirect to new secure endpoints
+- **NEW: Gateway Global AI Twilio Provisioning API**:
+  - `GET /api/twilio/numbers/available` - Search available US numbers by area code
+  - `GET /api/twilio/numbers` - List owned numbers with webhook details
+  - `POST /api/twilio/numbers` - Buy a number (auto-configures webhooks to twilio.gatewayglobal.ai)
+  - `PATCH /api/twilio/numbers/:phoneSid` - Update webhooks for an owned number
+  - `DELETE /api/twilio/numbers/:phoneSid` - Release (delete) an owned number
+  - `POST /api/telephony/configure-webhooks` - Bulk configure all numbers with webhooks
+  - Client API at `client/src/lib/twilioApi.ts` for frontend integration
 - Enhanced Mock Conversation page (`/conversation`):
   - BotAvatar visualizer with sentiment-based animations (calm/engaged/alert)
   - DISC sliders with real-time avatar updates
