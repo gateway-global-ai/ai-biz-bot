@@ -9,11 +9,17 @@ import {
   type InsertAgent,
   type Customer,
   type InsertCustomer,
+  type SmsConversation,
+  type InsertSmsConversation,
+  type SmsMessage,
+  type InsertSmsMessage,
   telephonyConfigs,
   callLogs,
   users,
   agents,
-  customers
+  customers,
+  smsConversations,
+  smsMessages
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or } from "drizzle-orm";
@@ -40,9 +46,20 @@ export interface IStorage {
   // Customer operations
   getCustomers(search?: string): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | undefined>;
+  getCustomerByPhone(phone: string): Promise<Customer | undefined>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: string, updates: Partial<InsertCustomer>): Promise<Customer | undefined>;
   deleteCustomer(id: string): Promise<boolean>;
+  
+  // SMS Conversation operations
+  getConversationByPhone(phoneNumber: string): Promise<SmsConversation | undefined>;
+  getConversation(id: string): Promise<SmsConversation | undefined>;
+  createConversation(conversation: InsertSmsConversation): Promise<SmsConversation>;
+  updateConversation(id: string, updates: Partial<InsertSmsConversation>): Promise<SmsConversation | undefined>;
+  
+  // SMS Message operations
+  getMessagesByConversation(conversationId: string, limit?: number): Promise<SmsMessage[]>;
+  createMessage(message: InsertSmsMessage): Promise<SmsMessage>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -168,6 +185,55 @@ export class DatabaseStorage implements IStorage {
   async deleteCustomer(id: string): Promise<boolean> {
     const result = await db.delete(customers).where(eq(customers.id, id));
     return true;
+  }
+
+  async getCustomerByPhone(phone: string): Promise<Customer | undefined> {
+    // Normalize phone number for comparison (remove spaces, dashes)
+    const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
+    const [customer] = await db.select().from(customers).where(
+      ilike(customers.phone, `%${normalizedPhone.slice(-10)}%`)
+    );
+    return customer;
+  }
+
+  // SMS Conversation operations
+  async getConversationByPhone(phoneNumber: string): Promise<SmsConversation | undefined> {
+    const [conversation] = await db.select().from(smsConversations)
+      .where(eq(smsConversations.phoneNumber, phoneNumber));
+    return conversation;
+  }
+
+  async getConversation(id: string): Promise<SmsConversation | undefined> {
+    const [conversation] = await db.select().from(smsConversations)
+      .where(eq(smsConversations.id, id));
+    return conversation;
+  }
+
+  async createConversation(conversation: InsertSmsConversation): Promise<SmsConversation> {
+    const [created] = await db.insert(smsConversations).values(conversation).returning();
+    return created;
+  }
+
+  async updateConversation(id: string, updates: Partial<InsertSmsConversation>): Promise<SmsConversation | undefined> {
+    const [updated] = await db
+      .update(smsConversations)
+      .set(updates)
+      .where(eq(smsConversations.id, id))
+      .returning();
+    return updated;
+  }
+
+  // SMS Message operations
+  async getMessagesByConversation(conversationId: string, limit: number = 100): Promise<SmsMessage[]> {
+    return db.select().from(smsMessages)
+      .where(eq(smsMessages.conversationId, conversationId))
+      .orderBy(desc(smsMessages.timestamp))
+      .limit(limit);
+  }
+
+  async createMessage(message: InsertSmsMessage): Promise<SmsMessage> {
+    const [created] = await db.insert(smsMessages).values(message).returning();
+    return created;
   }
 }
 

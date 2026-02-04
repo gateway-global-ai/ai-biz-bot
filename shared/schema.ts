@@ -97,6 +97,45 @@ export const availableNumberSchema = z.object({
 
 export type AvailableNumber = z.infer<typeof availableNumberSchema>;
 
+// SMS Conversations for 30-day message history
+export const smsConversations = pgTable("sms_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phoneNumber: text("phone_number").notNull(), // Caller's phone number
+  customerId: varchar("customer_id").references(() => customers.id),
+  agentId: varchar("agent_id").references(() => agents.id),
+  lastMessageAt: timestamp("last_message_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSmsConversationSchema = createInsertSchema(smsConversations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSmsConversation = z.infer<typeof insertSmsConversationSchema>;
+export type SmsConversation = typeof smsConversations.$inferSelect;
+
+// SMS Messages within conversations
+export const smsMessages = pgTable("sms_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").references(() => smsConversations.id).notNull(),
+  direction: text("direction").notNull(), // 'inbound' | 'outbound'
+  body: text("body").notNull(),
+  fromNumber: text("from_number").notNull(),
+  toNumber: text("to_number").notNull(),
+  messageSid: text("message_sid"),
+  status: text("status").default("received"), // received, sent, delivered, failed
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
+export const insertSmsMessageSchema = createInsertSchema(smsMessages).omit({
+  id: true,
+  timestamp: true,
+});
+
+export type InsertSmsMessage = z.infer<typeof insertSmsMessageSchema>;
+export type SmsMessage = typeof smsMessages.$inferSelect;
+
 // DISC Profile Types
 export interface DiscScores {
   dominance: number;

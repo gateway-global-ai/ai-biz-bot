@@ -365,36 +365,22 @@ export async function registerRoutes(
     }
   });
 
-  // Voice webhook handler
+  // Legacy webhook handlers - redirect to new secure endpoints
+  // These are kept for backwards compatibility but should be updated in Twilio config
   app.post("/api/webhooks/voice", (req, res) => {
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-      <Response>
-        <Say voice="alice">Hello! This is your AI Agent. How can I help you today?</Say>
-        <Record maxLength="60" action="/api/webhooks/voice/recording" />
-      </Response>`;
-    res.type('text/xml');
-    res.send(twiml);
+    console.log('[Legacy Webhook] /api/webhooks/voice - Please update Twilio config to use /webhook/voice');
+    res.redirect(307, '/webhook/voice');
   });
 
-  // Voice recording callback
   app.post("/api/webhooks/voice/recording", (req, res) => {
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-      <Response>
-        <Say voice="alice">Thank you for your message. Goodbye!</Say>
-        <Hangup/>
-      </Response>`;
+    console.log('[Legacy Webhook] /api/webhooks/voice/recording - deprecated');
     res.type('text/xml');
-    res.send(twiml);
+    res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
   });
 
-  // SMS webhook handler
   app.post("/api/webhooks/sms", (req, res) => {
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-      <Response>
-        <Message>Thank you for your message! Your AI Agent will respond shortly.</Message>
-      </Response>`;
-    res.type('text/xml');
-    res.send(twiml);
+    console.log('[Legacy Webhook] /api/webhooks/sms - Please update Twilio config to use /webhook/sms');
+    res.redirect(307, '/webhook/sms');
   });
 
   // Status callback handler
@@ -877,6 +863,305 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       });
     } catch (error: any) {
       console.error("TTS synthesize error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============ Twilio Webhooks for Inbound Communications ============
+
+  // Helper to escape XML entities for TwiML safety
+  const escapeXml = (text: string): string => {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  };
+
+  // Twilio signature validation middleware
+  const validateTwilioSignature = (req: any, res: any, next: any) => {
+    // Skip validation only in development with explicit flag or localhost testing
+    const skipValidation = process.env.SKIP_TWILIO_VALIDATION === 'true' || 
+      (process.env.NODE_ENV === 'development' && 
+       (req.hostname === 'localhost' || req.hostname === '127.0.0.1'));
+    
+    if (skipValidation) {
+      return next();
+    }
+    
+    const twilioSignature = req.headers['x-twilio-signature'];
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    
+    if (!twilioSignature || !authToken) {
+      console.warn('[Twilio Webhook] Missing signature or auth token');
+      return res.status(403).send('Forbidden');
+    }
+    
+    // Validate using Twilio's validateRequest
+    try {
+      const twilio = require('twilio');
+      const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+      const isValid = twilio.validateRequest(authToken, twilioSignature, url, req.body);
+      
+      if (!isValid) {
+        console.warn('[Twilio Webhook] Invalid signature');
+        return res.status(403).send('Forbidden');
+      }
+      
+      next();
+    } catch (error) {
+      console.error('[Twilio Webhook] Validation error:', error);
+      return res.status(403).send('Forbidden');
+    }
+  };
+
+  // Inbound SMS webhook - receives SMS from Twilio
+  app.post("/webhook/sms", validateTwilioSignature, async (req, res) => {
+    try {
+      const { From, To, Body, MessageSid } = req.body;
+      
+      console.log(`[SMS Webhook] From: ${From}, To: ${To}, Body: ${Body?.substring(0, 50)}...`);
+      
+      // Find or create conversation for this phone number
+      let conversation = await storage.getConversationByPhone(From);
+      
+      if (!conversation) {
+        // Try to match with existing customer
+        const customer = await storage.getCustomerByPhone(From);
+        
+        conversation = await storage.createConversation({
+          phoneNumber: From,
+          customerId: customer?.id || null,
+          agentId: null,
+          lastMessageAt: new Date(),
+        });
+        
+        console.log(`[SMS Webhook] Created new conversation: ${conversation.id}`);
+      } else {
+        // Update last message time
+        await storage.updateConversation(conversation.id, {
+          lastMessageAt: new Date(),
+        });
+      }
+      
+      // Store the message
+      await storage.createMessage({
+        conversationId: conversation.id,
+        direction: 'inbound',
+        body: Body || '',
+        fromNumber: From,
+        toNumber: To,
+        messageSid: MessageSid,
+        status: 'received',
+      });
+      
+      // Generate AI response using Gemini if available
+      let responseText = "Thank you for your message. An agent will respond shortly.";
+      
+      if (process.env.GEMINI_API_KEY) {
+        try {
+          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          
+          // Get conversation history for context
+          const messages = await storage.getMessagesByConversation(conversation.id, 10);
+          const history = messages.reverse().map(m => 
+            `${m.direction === 'inbound' ? 'Customer' : 'Agent'}: ${m.body}`
+          ).join('\n');
+          
+          const prompt = `You are a helpful AI assistant for Gateway Global. Respond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.
+
+Conversation history:
+${history}
+
+Customer's latest message: ${Body}
+
+Respond as the helpful AI agent:`;
+          
+          const result = await model.generateContent(prompt);
+          responseText = result.response.text() || responseText;
+          
+          // Trim to SMS length
+          if (responseText.length > 160) {
+            responseText = responseText.substring(0, 157) + '...';
+          }
+        } catch (aiError) {
+          console.error('[SMS Webhook] AI response error:', aiError);
+        }
+      }
+      
+      // Store outbound message
+      await storage.createMessage({
+        conversationId: conversation.id,
+        direction: 'outbound',
+        body: responseText,
+        fromNumber: To,
+        toNumber: From,
+        status: 'sent',
+      });
+      
+      // Return TwiML response
+      res.set('Content-Type', 'text/xml');
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>${escapeXml(responseText)}</Message>
+</Response>`);
+      
+    } catch (error: any) {
+      console.error('[SMS Webhook] Error:', error);
+      res.set('Content-Type', 'text/xml');
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>Sorry, we encountered an error. Please try again later.</Message>
+</Response>`);
+    }
+  });
+
+  // Inbound Voice webhook - receives calls from Twilio
+  app.post("/webhook/voice", validateTwilioSignature, async (req, res) => {
+    try {
+      const { From, To, CallSid, CallStatus } = req.body;
+      
+      console.log(`[Voice Webhook] From: ${From}, To: ${To}, Status: ${CallStatus}`);
+      
+      // Log the call
+      const config = await storage.getTelephonyConfig();
+      await storage.createCallLog({
+        configId: config?.id || null,
+        direction: 'inbound',
+        phoneNumber: From,
+        status: CallStatus || 'ringing',
+        callSid: CallSid,
+        duration: 0,
+      });
+      
+      // Check firewall - is this caller allowed?
+      const allowedNumbers = config?.allowedNumbers || [];
+      if (config?.firewallEnabled && allowedNumbers.length > 0) {
+        const isAllowed = allowedNumbers.some(num => 
+          From.includes(num) || num.includes(From.slice(-10))
+        );
+        
+        if (!isAllowed) {
+          console.log(`[Voice Webhook] Blocked caller: ${From}`);
+          res.set('Content-Type', 'text/xml');
+          return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Sorry, this number is not authorized to call this line.</Say>
+  <Hangup/>
+</Response>`);
+        }
+      }
+      
+      // Generate greeting with AI if available
+      let greeting = "Hello, thank you for calling Gateway Global AI. How can I help you today?";
+      
+      // Return TwiML for voice response
+      res.set('Content-Type', 'text/xml');
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">${escapeXml(greeting)}</Say>
+  <Gather input="speech" timeout="5" speechTimeout="auto" action="/webhook/voice/gather">
+    <Say voice="alice">Please tell me how I can assist you.</Say>
+  </Gather>
+  <Say voice="alice">I didn't hear anything. Goodbye.</Say>
+</Response>`);
+      
+    } catch (error: any) {
+      console.error('[Voice Webhook] Error:', error);
+      res.set('Content-Type', 'text/xml');
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Sorry, we encountered an error. Please try again later.</Say>
+  <Hangup/>
+</Response>`);
+    }
+  });
+
+  // Voice gather webhook - handles speech input
+  app.post("/webhook/voice/gather", validateTwilioSignature, async (req, res) => {
+    try {
+      const { SpeechResult, From, CallSid } = req.body;
+      
+      console.log(`[Voice Gather] From: ${From}, Speech: ${SpeechResult}`);
+      
+      let responseText = "I understand. Let me help you with that.";
+      
+      // Generate AI response if available
+      if (process.env.GEMINI_API_KEY && SpeechResult) {
+        try {
+          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          
+          const prompt = `You are a helpful AI phone assistant for Gateway Global. Respond naturally to this caller's request. Keep your response under 200 words for phone readability.
+
+Caller said: "${SpeechResult}"
+
+Respond helpfully:`;
+          
+          const result = await model.generateContent(prompt);
+          responseText = result.response.text() || responseText;
+        } catch (aiError) {
+          console.error('[Voice Gather] AI response error:', aiError);
+        }
+      }
+      
+      res.set('Content-Type', 'text/xml');
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">${escapeXml(responseText)}</Say>
+  <Gather input="speech" timeout="5" speechTimeout="auto" action="/webhook/voice/gather">
+    <Say voice="alice">Is there anything else I can help you with?</Say>
+  </Gather>
+  <Say voice="alice">Thank you for calling. Goodbye.</Say>
+</Response>`);
+      
+    } catch (error: any) {
+      console.error('[Voice Gather] Error:', error);
+      res.set('Content-Type', 'text/xml');
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">Sorry, I had trouble understanding. Let me transfer you to an agent.</Say>
+  <Hangup/>
+</Response>`);
+    }
+  });
+
+  // Voice status callback - tracks call completion
+  app.post("/webhook/voice/status", validateTwilioSignature, async (req, res) => {
+    try {
+      const { CallSid, CallStatus, CallDuration } = req.body;
+      
+      console.log(`[Voice Status] CallSid: ${CallSid}, Status: ${CallStatus}, Duration: ${CallDuration}`);
+      
+      // Update call log with final status
+      // Note: Would need to add a method to update by callSid
+      
+      res.sendStatus(200);
+    } catch (error: any) {
+      console.error('[Voice Status] Error:', error);
+      res.sendStatus(500);
+    }
+  });
+
+  // Get conversation history API
+  app.get("/api/conversations/:phoneNumber", async (req, res) => {
+    try {
+      const { phoneNumber } = req.params;
+      const conversation = await storage.getConversationByPhone(phoneNumber);
+      
+      if (!conversation) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+      
+      const messages = await storage.getMessagesByConversation(conversation.id, 100);
+      
+      res.json({
+        conversation,
+        messages: messages.reverse(), // Oldest first
+      });
+    } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
   });
