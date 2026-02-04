@@ -343,7 +343,7 @@ export default function OnboardingFlow() {
             </p>
           </div>
           
-          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-8 mb-6">
+          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-8 mb-6 relative z-20">
             <p className="text-sm text-slate-500 uppercase tracking-wider mb-3">Name Your Partner</p>
             <input
               type="text"
@@ -359,13 +359,13 @@ export default function OnboardingFlow() {
           <button
             onClick={handleNameSubmit}
             disabled={!agentName.trim() || isAwakening}
-            className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-4 rounded-xl font-bold text-lg flex items-center gap-3 mx-auto transition-all shadow-lg shadow-orange-500/30"
+            className="relative z-20 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-4 rounded-xl font-bold text-lg flex items-center gap-3 mx-auto transition-all shadow-lg shadow-orange-500/30"
             data-testid="button-start"
           >
             {isAwakening ? 'Initializing...' : <>Start The Proof <ArrowRight className="w-5 h-5" /></>}
           </button>
           
-          <p className="mt-8 text-sm text-slate-600">
+          <p className="mt-8 text-sm text-slate-600 relative z-20">
             The 24-Hour Proof: One task. One text. One result. No apps. No friction.
           </p>
         </div>
