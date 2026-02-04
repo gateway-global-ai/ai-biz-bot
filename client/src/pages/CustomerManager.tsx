@@ -9,12 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Users, Plus, Pencil, Trash2, RefreshCw, Search, Mail, Phone, Building, MapPin, Calendar, StickyNote } from 'lucide-react';
-import type { Customer } from '@shared/schema';
+import { Users, Plus, Pencil, Trash2, RefreshCw, Search, Mail, Phone, Building, MapPin, StickyNote, Bot } from 'lucide-react';
+import type { Customer, Agent } from '@shared/schema';
 
 export default function CustomerManager() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
+  const [agentFilter, setAgentFilter] = useState<string>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Partial<Customer>>({});
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -31,18 +32,29 @@ export default function CustomerManager() {
     source: '',
     status: 'new',
     notes: '',
+    agentId: '',
   });
 
   const { data: customers = [], isLoading, refetch } = useQuery<Customer[]>({
     queryKey: ['/api/customers'],
   });
 
+  const { data: agents = [] } = useQuery<Agent[]>({
+    queryKey: ['/api/agents'],
+  });
+
+  const getAgentName = (agentId: string | null) => {
+    if (!agentId) return null;
+    const agent = agents.find(a => a.id === agentId);
+    return agent?.name || 'Unknown Agent';
+  };
+
   const createMutation = useMutation({
     mutationFn: (data: typeof newCustomer) => apiRequest('POST', '/api/customers', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/customers'] });
       setIsCreateOpen(false);
-      setNewCustomer({ name: '', email: '', phone: '', company: '', city: '', state: '', country: '', source: '', status: 'new', notes: '' });
+      setNewCustomer({ name: '', email: '', phone: '', company: '', city: '', state: '', country: '', source: '', status: 'new', notes: '', agentId: '' });
       toast({ title: 'Customer added successfully' });
     },
     onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
@@ -69,12 +81,15 @@ export default function CustomerManager() {
     onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
   });
 
-  const filteredCustomers = customers.filter(customer => 
-    customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    customer.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    customer.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    customer.phone?.includes(searchQuery)
-  );
+  const filteredCustomers = customers.filter(customer => {
+    const matchesSearch = customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      customer.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      customer.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      customer.phone?.includes(searchQuery);
+    const matchesAgent = agentFilter === 'all' || 
+      (agentFilter === 'unassigned' ? !customer.agentId : customer.agentId === agentFilter);
+    return matchesSearch && matchesAgent;
+  });
 
   const startEditing = (customer: Customer) => {
     setEditingId(customer.id);
@@ -214,6 +229,20 @@ export default function CustomerManager() {
                   />
                 </div>
                 <div>
+                  <label className="text-sm text-slate-400 mb-1 block">Assigned Agent</label>
+                  <Select value={newCustomer.agentId} onValueChange={(value) => setNewCustomer({ ...newCustomer, agentId: value })}>
+                    <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-customer-agent">
+                      <SelectValue placeholder="Select agent (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Agent</SelectItem>
+                      {agents.map(agent => (
+                        <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
                   <label className="text-sm text-slate-400 mb-1 block">Status</label>
                   <Select value={newCustomer.status} onValueChange={(value) => setNewCustomer({ ...newCustomer, status: value })}>
                     <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-customer-status">
@@ -256,7 +285,7 @@ export default function CustomerManager() {
 
         <Card className="bg-slate-900/80 border-slate-700">
           <CardHeader className="border-b border-slate-700">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
@@ -267,9 +296,24 @@ export default function CustomerManager() {
                   data-testid="input-search-customers"
                 />
               </div>
-              <Button variant="outline" onClick={() => refetch()} className="border-slate-600" data-testid="button-refresh-customers">
-                <RefreshCw className="w-4 h-4 mr-2" /> Refresh
-              </Button>
+              <div className="flex items-center gap-2">
+                <Select value={agentFilter} onValueChange={setAgentFilter}>
+                  <SelectTrigger className="w-44 bg-slate-800 border-slate-600" data-testid="select-agent-filter">
+                    <Bot className="w-4 h-4 mr-2 text-purple-400" />
+                    <SelectValue placeholder="Filter by agent" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Agents</SelectItem>
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {agents.map(agent => (
+                      <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button variant="outline" onClick={() => refetch()} className="border-slate-600" data-testid="button-refresh-customers">
+                  <RefreshCw className="w-4 h-4 mr-2" /> Refresh
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -290,7 +334,7 @@ export default function CustomerManager() {
                       <th className="text-left p-4 text-sm font-medium text-slate-400">Name</th>
                       <th className="text-left p-4 text-sm font-medium text-slate-400">Contact</th>
                       <th className="text-left p-4 text-sm font-medium text-slate-400">Company</th>
-                      <th className="text-left p-4 text-sm font-medium text-slate-400">Location</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-400">Agent</th>
                       <th className="text-left p-4 text-sm font-medium text-slate-400">Status</th>
                       <th className="text-left p-4 text-sm font-medium text-slate-400">Source</th>
                       <th className="text-right p-4 text-sm font-medium text-slate-400">Actions</th>
@@ -361,26 +405,28 @@ export default function CustomerManager() {
                         </td>
                         <td className="p-4">
                           {editingId === customer.id ? (
-                            <div className="flex gap-1">
-                              <Input 
-                                value={editData.city || ''} 
-                                onChange={(e) => setEditData({ ...editData, city: e.target.value })}
-                                className="bg-slate-800 border-slate-600 h-8 w-20"
-                                placeholder="City"
-                              />
-                              <Input 
-                                value={editData.country || ''} 
-                                onChange={(e) => setEditData({ ...editData, country: e.target.value })}
-                                className="bg-slate-800 border-slate-600 h-8 w-20"
-                                placeholder="Country"
-                              />
-                            </div>
+                            <Select 
+                              value={editData.agentId || ''} 
+                              onValueChange={(value) => setEditData({ ...editData, agentId: value === 'none' ? null : value })}
+                            >
+                              <SelectTrigger className="bg-slate-800 border-slate-600 h-8 w-32">
+                                <SelectValue placeholder="Select agent" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No Agent</SelectItem>
+                                {agents.map(agent => (
+                                  <SelectItem key={agent.id} value={agent.id}>{agent.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           ) : (
-                            (customer.city || customer.country) && (
-                              <div className="flex items-center gap-1 text-slate-400 text-sm">
-                                <MapPin className="w-3 h-3" />
-                                {[customer.city, customer.state, customer.country].filter(Boolean).join(', ')}
+                            customer.agentId ? (
+                              <div className="flex items-center gap-1.5">
+                                <Bot className="w-3.5 h-3.5 text-purple-400" />
+                                <span className="text-slate-300 text-sm">{getAgentName(customer.agentId)}</span>
                               </div>
+                            ) : (
+                              <span className="text-slate-500 text-sm">-</span>
                             )
                           )}
                         </td>
