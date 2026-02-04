@@ -12,22 +12,22 @@ type Gender = 'male' | 'female' | 'neutral';
 // Gemini TTS voices (Chirp HD)
 const GEMINI_VOICES = {
   female: [
-    { id: 'Aoede', name: 'Aoede', description: 'Warm & Conversational', voiceType: 'Gemini TTS' },
-    { id: 'Kore', name: 'Kore', description: 'Calm & Professional', voiceType: 'Gemini TTS' },
-    { id: 'Leda', name: 'Leda', description: 'Friendly & Engaging', voiceType: 'Gemini TTS' },
-    { id: 'Zephyr', name: 'Zephyr', description: 'Bright & Energetic', voiceType: 'Gemini TTS' },
+    { id: 'Aoede', name: 'Aoede', description: 'Warm & Conversational', voiceType: 'Gemini TTS', gender: 'female' as const },
+    { id: 'Kore', name: 'Kore', description: 'Calm & Professional', voiceType: 'Gemini TTS', gender: 'female' as const },
+    { id: 'Leda', name: 'Leda', description: 'Friendly & Engaging', voiceType: 'Gemini TTS', gender: 'female' as const },
+    { id: 'Zephyr', name: 'Zephyr', description: 'Bright & Energetic', voiceType: 'Gemini TTS', gender: 'female' as const },
   ],
   male: [
-    { id: 'Charon', name: 'Charon', description: 'Deep & Authoritative', voiceType: 'Gemini TTS' },
-    { id: 'Fenrir', name: 'Fenrir', description: 'Confident & Dynamic', voiceType: 'Gemini TTS' },
-    { id: 'Orus', name: 'Orus', description: 'Calm & Professional', voiceType: 'Gemini TTS' },
-    { id: 'Puck', name: 'Puck', description: 'Friendly & Approachable', voiceType: 'Gemini TTS' },
+    { id: 'Charon', name: 'Charon', description: 'Deep & Authoritative', voiceType: 'Gemini TTS', gender: 'male' as const },
+    { id: 'Fenrir', name: 'Fenrir', description: 'Confident & Dynamic', voiceType: 'Gemini TTS', gender: 'male' as const },
+    { id: 'Orus', name: 'Orus', description: 'Calm & Professional', voiceType: 'Gemini TTS', gender: 'male' as const },
+    { id: 'Puck', name: 'Puck', description: 'Friendly & Approachable', voiceType: 'Gemini TTS', gender: 'male' as const },
   ],
   neutral: [
-    { id: 'Aoede', name: 'Aoede', description: 'Warm & Conversational', voiceType: 'Gemini TTS' },
-    { id: 'Charon', name: 'Charon', description: 'Deep & Authoritative', voiceType: 'Gemini TTS' },
-    { id: 'Kore', name: 'Kore', description: 'Calm & Professional', voiceType: 'Gemini TTS' },
-    { id: 'Puck', name: 'Puck', description: 'Friendly & Approachable', voiceType: 'Gemini TTS' },
+    { id: 'Aoede', name: 'Aoede', description: 'Warm & Conversational', voiceType: 'Gemini TTS', gender: 'female' as const },
+    { id: 'Charon', name: 'Charon', description: 'Deep & Authoritative', voiceType: 'Gemini TTS', gender: 'male' as const },
+    { id: 'Kore', name: 'Kore', description: 'Calm & Professional', voiceType: 'Gemini TTS', gender: 'female' as const },
+    { id: 'Puck', name: 'Puck', description: 'Friendly & Approachable', voiceType: 'Gemini TTS', gender: 'male' as const },
   ],
 };
 
@@ -730,24 +730,41 @@ export default function OnboardingFlow() {
   const renderVoiceStep = () => {
     const curatedVoices = getCuratedVoices(agentName);
     
+    const getVoiceBorderColor = (voice: typeof curatedVoices[0], isSelected: boolean) => {
+      if (isSelected) {
+        return voice.gender === 'male' 
+          ? 'border-cyan-400 bg-cyan-500/10 shadow-lg shadow-cyan-500/30' 
+          : 'border-pink-400 bg-pink-500/10 shadow-lg shadow-pink-500/30';
+      }
+      return voice.gender === 'male'
+        ? 'border-cyan-500/30 bg-slate-900/50 hover:border-cyan-400/60'
+        : 'border-pink-500/30 bg-slate-900/50 hover:border-pink-400/60';
+    };
+
+    const getVoiceAccentColor = (voice: typeof curatedVoices[0]) => {
+      return voice.gender === 'male' ? 'text-cyan-400' : 'text-pink-400';
+    };
+    
     return (
-      <div className={`z-10 w-full max-w-4xl ${getSlideClass()}`}>
+      <div className={`z-10 w-full max-w-3xl ${getSlideClass()}`}>
         <div className="text-center mb-8">
-          <Volume2 className="w-12 h-12 text-violet-400 mx-auto mb-4" />
+          <div className="relative w-20 h-20 mx-auto mb-4">
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/20 to-purple-600/20 rounded-2xl" />
+            <div className="absolute inset-2 bg-slate-900 rounded-xl flex items-center justify-center border border-violet-500/30">
+              <Bot className="w-10 h-10 text-violet-400" />
+            </div>
+            <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-950 animate-pulse" />
+          </div>
           <h2 className="text-3xl font-bold mb-2">Give {agentName} a Voice</h2>
           <p className="text-slate-400">Click any voice to preview, then select your favorite.</p>
           <p className="text-xs text-slate-600 mt-2">Powered by Google Cloud Chirp 3 HD voices</p>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-2 gap-4 mb-8 max-w-2xl mx-auto">
           {curatedVoices.map((voice) => (
             <div
               key={voice.id}
-              className={`p-5 rounded-xl border-2 transition-all ${
-                selectedVoice === voice.id 
-                  ? 'border-violet-500 bg-violet-500/10 shadow-lg shadow-violet-500/20' 
-                  : 'border-slate-700 bg-slate-900/50 hover:border-slate-600'
-              }`}
+              className={`p-5 rounded-xl border-2 transition-all ${getVoiceBorderColor(voice, selectedVoice === voice.id)}`}
             >
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -757,7 +774,7 @@ export default function OnboardingFlow() {
                   onClick={() => playVoicePreview(voice.id)}
                   className={`p-2 rounded-lg transition-all ${
                     playingVoice === voice.id 
-                      ? 'bg-violet-500 text-white' 
+                      ? voice.gender === 'male' ? 'bg-cyan-500 text-white' : 'bg-pink-500 text-white'
                       : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
                   }`}
                   data-testid={`button-play-${voice.id}`}
@@ -773,12 +790,12 @@ export default function OnboardingFlow() {
               </div>
               <p className="text-sm text-slate-400 mb-2">{voice.description}</p>
               <div className="flex items-center justify-between">
-                <span className="text-xs text-violet-400/70">{voice.voiceType}</span>
+                <span className={`text-xs ${getVoiceAccentColor(voice)}/70`}>{voice.voiceType}</span>
                 <button
                   onClick={() => handleVoiceSelect(voice.id)}
                   className={`text-xs px-3 py-1 rounded-lg transition-all ${
                     selectedVoice === voice.id
-                      ? 'bg-violet-500 text-white'
+                      ? voice.gender === 'male' ? 'bg-cyan-500 text-white' : 'bg-pink-500 text-white'
                       : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
                   }`}
                   data-testid={`button-voice-${voice.id}`}
