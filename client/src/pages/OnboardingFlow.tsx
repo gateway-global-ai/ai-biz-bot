@@ -291,17 +291,12 @@ export default function OnboardingFlow() {
       
       {step === 'name' && (
         <div className="text-center z-10 max-w-xl flex flex-col items-center relative">
-          {/* Gradient fade overlay - rises behind text toward logo */}
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute inset-x-0 top-[50px] md:top-[90px] bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent" />
-          </div>
-          
-          {/* Logo - slightly faded by gradient */}
+          {/* Logo */}
           <div className="mb-0 md:mb-2 relative z-10">
             <img 
               src={gatewayLogoDark} 
               alt="Gateway Global AI" 
-              className="w-[120px] md:w-[220px] lg:w-[300px] h-auto opacity-85" 
+              className="w-[120px] md:w-[220px] lg:w-[300px] h-auto" 
             />
           </div>
           
@@ -316,7 +311,7 @@ export default function OnboardingFlow() {
             </p>
           </div>
           
-          <div className="relative mb-6 flex items-center gap-3 relative z-20">
+          <div className="relative mb-6 flex items-center gap-3 z-30">
             <input
               type="text"
               value={agentName}
@@ -359,17 +354,12 @@ export default function OnboardingFlow() {
       
       {step === 'name' && (
         <div className="text-center z-10 max-w-2xl flex flex-col items-center relative">
-          {/* Gradient fade overlay - rises behind text toward logo */}
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute inset-x-0 top-[60px] md:top-[100px] bottom-0 bg-gradient-to-t from-black via-black/90 to-transparent" />
-          </div>
-          
-          {/* Logo - slightly faded by gradient */}
+          {/* Logo */}
           <div className="mb-0 md:mb-2 relative z-10">
             <img 
               src={gatewayLogoDark} 
               alt="Gateway Global AI" 
-              className="w-[120px] md:w-[220px] lg:w-[300px] h-auto opacity-90" 
+              className="w-[120px] md:w-[220px] lg:w-[300px] h-auto" 
             />
           </div>
           
@@ -385,7 +375,7 @@ export default function OnboardingFlow() {
             </p>
           </div>
           
-          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 md:p-8 mb-6 relative z-20">
+          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 md:p-8 mb-6 relative z-30">
             <p className="text-sm text-slate-500 uppercase tracking-wider mb-3">Name Your Partner</p>
             <div className="flex items-center gap-3">
               <input
