@@ -1796,6 +1796,75 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   });
 
+  // Kimi-Audio enhanced voice webhook - uses Media Streams for real-time AI voice
+  app.post("/webhook/voice/kimi", validateTwilioSignature, async (req, res) => {
+    try {
+      const { From, To, CallSid, CallStatus } = req.body;
+      
+      console.log(`[Kimi Voice] From: ${From}, To: ${To}, Status: ${CallStatus}`);
+      
+      // Log the call
+      const config = await storage.getTelephonyConfig();
+      await storage.createCallLog({
+        configId: config?.id || null,
+        direction: 'inbound',
+        phoneNumber: From,
+        status: CallStatus || 'ringing',
+        callSid: CallSid,
+        duration: 0,
+      });
+      
+      // Check firewall
+      const allowedNumbers = config?.allowedNumbers || [];
+      if (config?.firewallEnabled && allowedNumbers.length > 0) {
+        const isAllowed = allowedNumbers.some(num => 
+          From.includes(num) || num.includes(From.slice(-10))
+        );
+        
+        if (!isAllowed) {
+          console.log(`[Kimi Voice] Blocked caller: ${From}`);
+          res.set('Content-Type', 'text/xml');
+          return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Google.en-US-Neural2-F">Sorry, this number is not authorized.</Say>
+  <Hangup/>
+</Response>`);
+        }
+      }
+      
+      // Build WebSocket URL for Media Streams
+      const host = process.env.REPLIT_DEV_DOMAIN || 
+        (process.env.REPL_SLUG ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'localhost:5000');
+      const wsProtocol = host.includes('localhost') ? 'ws' : 'wss';
+      const streamUrl = `${wsProtocol}://${host}/ws/voice-stream`;
+      
+      console.log(`[Kimi Voice] Stream URL: ${streamUrl}`);
+      
+      // Return TwiML with Media Streams
+      res.set('Content-Type', 'text/xml');
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Google.en-US-Neural2-F">Welcome to Gateway Global AI. I'm connecting you to Kimi, our AI assistant.</Say>
+  <Connect>
+    <Stream url="${streamUrl}">
+      <Parameter name="agentName" value="Kimi"/>
+      <Parameter name="personality" value="helpful"/>
+    </Stream>
+  </Connect>
+  <Say voice="Google.en-US-Neural2-F">The conversation has ended. Goodbye!</Say>
+</Response>`);
+      
+    } catch (error: any) {
+      console.error('[Kimi Voice] Error:', error);
+      res.set('Content-Type', 'text/xml');
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Google.en-US-Neural2-F">Sorry, we encountered an error. Please try again later.</Say>
+  <Hangup/>
+</Response>`);
+    }
+  });
+
   // Inbound Voice webhook - receives calls from Twilio
   app.post("/webhook/voice", validateTwilioSignature, async (req, res) => {
     try {

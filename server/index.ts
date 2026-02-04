@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startTaskScheduler } from "./taskScheduler";
+import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
 
 const app = express();
 const httpServer = createServer(app);
@@ -62,6 +63,12 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
+  
+  // Set up audio temp route for serving temporary audio files
+  setupAudioTempRoute(app);
+  
+  // Set up WebSocket for Twilio Media Streams (Kimi-Audio voice calls)
+  setupVoiceStreamWebSocket(httpServer);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

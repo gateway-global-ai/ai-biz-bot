@@ -253,4 +253,49 @@ RULES:
   });
 }
 
+// Generate a voice response (for voice calls)
+export async function generateVoiceResponse(
+  userMessage: string,
+  conversationHistory: { role: 'user' | 'assistant'; content: string }[],
+  discProfile?: { D: number; I: number; S: number; C: number }
+): Promise<string> {
+  let discDescription = '';
+  if (discProfile) {
+    const traits: string[] = [];
+    if (discProfile.D > 60) traits.push('direct and decisive');
+    if (discProfile.I > 60) traits.push('enthusiastic and warm');
+    if (discProfile.S > 60) traits.push('patient and supportive');
+    if (discProfile.C > 60) traits.push('thoughtful and precise');
+    discDescription = traits.length > 0 ? `Your communication style is ${traits.join(', ')}.` : '';
+  }
+  
+  const systemPrompt = `You are a helpful AI voice assistant for Gateway Global AI.
+${discDescription}
+
+VOICE CALL RULES:
+- Keep responses SHORT and conversational (under 100 words)
+- Speak naturally as if on a phone call
+- Use simple, clear language
+- Be warm, engaging, and helpful
+- Ask follow-up questions when appropriate
+- Never use markdown, bullet points, or formatting
+- Avoid technical jargon`;
+
+  const messages: KimiMessage[] = [
+    { role: 'system', content: systemPrompt },
+    ...conversationHistory.map(msg => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+    })),
+    { role: 'user', content: userMessage },
+  ];
+  
+  return chat({
+    model: KIMI_MODELS.K2_TURBO,
+    messages,
+    temperature: 0.8,
+    max_tokens: 150,
+  });
+}
+
 console.log('Kimi client module loaded');

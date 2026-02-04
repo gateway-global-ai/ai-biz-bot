@@ -21,6 +21,7 @@ import TheClassroom from "@/pages/TheClassroom";
 import CustomerManager from "@/pages/CustomerManager";
 import TwilioAccountManager from "@/pages/TwilioAccountManager";
 import MvpLanding from "@/pages/MvpLanding";
+import KimiAudioDemo from "@/pages/KimiAudioDemo";
 import NotFound from "@/pages/not-found";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
 
@@ -287,6 +288,7 @@ function App() {
           {/* Full-screen routes without sidebar */}
           <Route path="/" component={MvpLanding} />
           <Route path="/onboarding" component={OnboardingFlow} />
+          <Route path="/kimi-audio" component={KimiAudioDemo} />
           {/* All other routes use sidebar layout */}
           <Route component={AppWithSidebar} />
         </Switch>

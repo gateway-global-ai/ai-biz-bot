@@ -45,8 +45,15 @@ The platform features a clean, modern design with a purple gradient theme and an
 ### Third-Party Services
 -   **Twilio**: Telephony provider for SMS, voice calls, and phone number management.
     -   Requires `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`.
--   **Moonshot API (Kimi 2.5)**: Primary AI reasoning engine.
+    -   Voice webhook endpoints: `/webhook/voice` (legacy), `/webhook/voice/kimi` (Kimi-Audio enhanced)
+    -   WebSocket endpoint for Media Streams: `/ws/voice-stream`
+-   **Moonshot API (Kimi 2.5)**: Primary AI reasoning engine for text.
     -   Requires `MOONSHOT_API_KEY`.
+-   **Kimi-Audio (via Replicate)**: Real-time voice AI for phone conversations.
+    -   Requires `REPLICATE_API_TOKEN`.
+    -   Model: `zsxkib/kimi-audio-7b-instruct` on Replicate
+    -   Features: ~300ms latency, audio-to-audio, multi-turn conversations
+    -   Integration files: `server/kimiAudio.ts`, `server/voiceStream.ts`, `server/voiceSession.ts`, `server/audioCodec.ts`
 -   **Google Gemini**: Fallback AI engine and powers Gemini Live voice chat.
 
 ### Database
