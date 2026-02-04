@@ -575,8 +575,8 @@ export default function OnboardingFlow() {
         </div>
       </div>
 
-      {/* Content area - starts below fixed header */}
-      <div className="pt-20 px-4 md:px-8 w-full flex-1 flex flex-col items-center overflow-y-auto">
+      {/* Content area - starts below fixed header, vertically centered on desktop */}
+      <div className="pt-20 px-4 md:px-8 w-full flex-1 flex flex-col items-center justify-center overflow-y-auto">
         {step === 'name' && (
         <div className={`text-center z-10 max-w-xl flex flex-col items-center relative ${getSlideClass()}`}>
           <HeroVisualizer />
@@ -644,8 +644,8 @@ export default function OnboardingFlow() {
         </div>
       </div>
 
-      {/* Content area - starts below fixed header */}
-      <div className="pt-20 px-4 md:px-8 w-full flex-1 flex flex-col items-center overflow-y-auto">
+      {/* Content area - starts below fixed header, vertically centered on desktop */}
+      <div className="pt-20 px-4 md:px-8 w-full flex-1 flex flex-col items-center justify-center overflow-y-auto">
         {step === 'name' && (
         <div className={`text-center z-10 max-w-2xl flex flex-col items-center relative ${getSlideClass()}`}>
           <HeroVisualizer />
