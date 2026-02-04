@@ -167,8 +167,8 @@ export default function TelephonyPanel() {
       const baseUrl = window.location.origin;
       return apiRequest('POST', '/api/telephony/numbers/provision', {
         phoneNumber,
-        voiceUrl: `${baseUrl}/api/webhooks/voice`,
-        smsUrl: `${baseUrl}/api/webhooks/sms`,
+        voiceUrl: `${baseUrl}/webhook/voice/kimi`,
+        smsUrl: `${baseUrl}/webhook/sms`,
       });
     },
     onSuccess: () => {
