@@ -245,13 +245,13 @@ export default function OnboardingFlow() {
       
       {step === 'name' && (
         <div className="text-center z-10 max-w-xl flex flex-col items-center">
-          {/* Logo - smaller on mobile */}
-          <div className="mb-4 md:mb-8">
-            <img src={gatewayLogoDark} alt="Gateway Global AI" className="w-[200px] md:w-[350px] lg:w-[450px] h-auto" />
+          {/* Logo - compact on mobile */}
+          <div className="mb-2 md:mb-6">
+            <img src={gatewayLogoDark} alt="Gateway Global AI" className="w-[100px] md:w-[200px] lg:w-[280px] h-auto" />
           </div>
           
-          <div className="mb-6 md:mb-8">
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+          <div className="mb-4 md:mb-6">
+            <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-4 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               Awaken Your Agent
             </h1>
             <p className="text-slate-400 text-lg">
@@ -308,18 +308,13 @@ export default function OnboardingFlow() {
       
       {step === 'name' && (
         <div className="text-center z-10 max-w-2xl flex flex-col items-center">
-          {/* Logo - smaller on mobile */}
-          <div className="mb-4 md:mb-8">
-            <img src={gatewayLogoDark} alt="Gateway Global AI" className="w-[200px] md:w-[350px] lg:w-[450px] h-auto" />
+          {/* Logo - compact on mobile */}
+          <div className="mb-2 md:mb-6">
+            <img src={gatewayLogoDark} alt="Gateway Global AI" className="w-[100px] md:w-[200px] lg:w-[280px] h-auto" />
           </div>
           
-          <div className="mb-6 md:mb-8">
-            <div className="flex items-center justify-center gap-3 md:gap-4 mb-4 md:mb-6">
-              <Users className="w-8 h-8 md:w-10 md:h-10 text-amber-400" />
-              <Zap className="w-8 h-8 text-white animate-pulse" />
-              <Bot className="w-10 h-10 text-cyan-400" />
-            </div>
-            <h1 className="text-4xl md:text-6xl font-black mb-4">
+          <div className="mb-4 md:mb-6">
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black mb-2 md:mb-4">
               Every Other AI <span className="text-slate-500">Talks.</span>
               <br />
               <span className="bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">This One Finishes.</span>
