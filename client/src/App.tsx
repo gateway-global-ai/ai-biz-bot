@@ -226,8 +226,9 @@ function TwilioHub() {
 function AppRouter() {
   return (
     <Switch>
-      <Route path="/" component={AgentDashboard} />
+      <Route path="/" component={OnboardingFlow} />
       <Route path="/agents" component={AgentDashboard} />
+      <Route path="/dashboard" component={AgentDashboard} />
       <Route path="/agent/:agentId/vibe" component={TheVibe} />
       <Route path="/agent/:agentId/office" component={TheOffice} />
       <Route path="/agent/:agentId/lab" component={TheLab} />
@@ -243,7 +244,6 @@ function AppRouter() {
       <Route path="/disc" component={DiscVisualizer} />
       <Route path="/developer" component={DeveloperPage} />
       <Route path="/business" component={BusinessPage} />
-      <Route path="/onboard" component={OnboardingFlow} />
       <Route path="/assessment" component={DiscAssessment} />
       <Route path="/conversation" component={MockConversation} />
       <Route component={NotFound} />
