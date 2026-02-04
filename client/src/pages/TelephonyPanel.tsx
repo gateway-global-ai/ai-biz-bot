@@ -40,7 +40,8 @@ import {
   User,
   X,
   Key,
-  Check
+  Check,
+  Webhook
 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 
@@ -380,6 +381,33 @@ export default function TelephonyPanel() {
     onError: (error: any) => {
       addLog(`ERROR: ${error.message}`);
       toast({ title: 'Test Failed', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Webhook simulation mutation
+  const simulateWebhookMutation = useMutation({
+    mutationFn: async (data: { type: string; from: string; body?: string; callStatus?: string }) => {
+      const res = await apiRequest('POST', '/api/telephony/simulate-webhook', data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        addLog(`Webhook simulation → ${data.webhookUrl}`);
+        addLog(`Type: ${data.type} | Status: ${data.status}`);
+        addLog(`Signature: ${data.signature}`);
+        if (data.response) {
+          addLog(`Response: ${data.response.substring(0, 200)}...`);
+        }
+        toast({ title: 'Webhook Sent', description: `${data.type} webhook delivered to twilio.gatewayglobal.ai` });
+      } else {
+        addLog(`Webhook failed: Status ${data.status}`);
+        addLog(`Response: ${data.response}`);
+        toast({ title: 'Webhook Failed', description: `Status ${data.status}`, variant: 'destructive' });
+      }
+    },
+    onError: (error: any) => {
+      addLog(`ERROR: ${error.message}`);
+      toast({ title: 'Webhook Failed', description: error.message, variant: 'destructive' });
     }
   });
 
@@ -1272,6 +1300,50 @@ export default function TelephonyPanel() {
                     data-testid="button-test-outbound"
                   >
                     {testOutboundMutation.isPending ? 'Calling...' : 'Make Test Call'}
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Webhook Simulation */}
+              <div className="mb-6">
+                <h4 className="font-semibold text-sm flex items-center gap-2 mb-3">
+                  <Webhook className="w-4 h-4 text-purple-500" />
+                  Webhook Simulator
+                  <Badge variant="outline" className="text-xs ml-2">twilio.gatewayglobal.ai</Badge>
+                </h4>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Test webhooks with proper X-Twilio-Signature - no Twilio credits used
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <Button 
+                    onClick={() => simulateWebhookMutation.mutate({ type: 'sms', from: testNumber || '+15550001234', body: 'Hello from webhook simulator!' })}
+                    variant="outline" 
+                    className="gap-2"
+                    disabled={simulateWebhookMutation.isPending}
+                    data-testid="button-simulate-sms"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    Simulate SMS
+                  </Button>
+                  <Button 
+                    onClick={() => simulateWebhookMutation.mutate({ type: 'voice', from: testNumber || '+15550001234' })}
+                    variant="outline" 
+                    className="gap-2"
+                    disabled={simulateWebhookMutation.isPending}
+                    data-testid="button-simulate-voice"
+                  >
+                    <Phone className="w-4 h-4" />
+                    Simulate Voice
+                  </Button>
+                  <Button 
+                    onClick={() => simulateWebhookMutation.mutate({ type: 'status', from: testNumber || '+15550001234', callStatus: 'completed' })}
+                    variant="outline" 
+                    className="gap-2"
+                    disabled={simulateWebhookMutation.isPending}
+                    data-testid="button-simulate-status"
+                  >
+                    <Activity className="w-4 h-4" />
+                    Simulate Status
                   </Button>
                 </div>
               </div>

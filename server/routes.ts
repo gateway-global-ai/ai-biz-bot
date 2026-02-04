@@ -685,12 +685,10 @@ export async function registerRoutes(
       // Log the test call
       await storage.createCallLog({
         callSid: result.sid,
-        from: config.phoneNumber,
-        to: to,
+        phoneNumber: to,
         direction: 'outbound',
         status: 'initiated',
         duration: 0,
-        startTime: new Date(),
       });
       
       res.json({ success: true, callSid: result.sid, message: "Test call initiated" });
@@ -739,13 +737,10 @@ export async function registerRoutes(
       const testSid = `TEST${Date.now()}`;
       await storage.createCallLog({
         callSid: testSid,
-        from: testFrom,
-        to: config.phoneNumber,
+        phoneNumber: testFrom,
         direction: 'inbound',
         status: 'completed',
         duration: Math.floor(Math.random() * 60) + 5,
-        startTime: new Date(),
-        endTime: new Date(),
       });
 
       res.json({ 
@@ -755,6 +750,105 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       console.error('Test inbound call error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Webhook simulation - generates proper X-Twilio-Signature and calls webhook server
+  app.post("/api/telephony/simulate-webhook", async (req, res) => {
+    try {
+      const { type, from, body, callStatus } = req.body;
+      const webhookType = type || 'sms';
+      const testFrom = from || '+15550001234';
+      
+      const config = await storage.getTelephonyConfig();
+      if (!config?.phoneNumber) {
+        return res.status(400).json({ error: "No phone number provisioned. Please provision a number first." });
+      }
+      
+      // Get auth token - use config's authToken if available, otherwise use env
+      const authToken = (config as any).authToken || process.env.TWILIO_AUTH_TOKEN;
+      const accountSid = (config as any).accountSid || process.env.TWILIO_ACCOUNT_SID;
+      
+      if (!authToken) {
+        return res.status(400).json({ error: "No auth token available for signature generation" });
+      }
+      
+      // Build webhook URL and params based on type
+      const webhookBaseUrl = 'https://twilio.gatewayglobal.ai';
+      let webhookUrl: string;
+      let params: Record<string, string>;
+      
+      if (webhookType === 'sms') {
+        webhookUrl = `${webhookBaseUrl}/webhook/sms`;
+        params = {
+          MessageSid: `SM${Date.now()}`,
+          AccountSid: accountSid || 'ACtest',
+          From: testFrom,
+          To: config.phoneNumber,
+          Body: body || 'Test message from webhook simulator',
+          NumMedia: '0',
+        };
+      } else if (webhookType === 'voice') {
+        webhookUrl = `${webhookBaseUrl}/webhook/voice`;
+        params = {
+          CallSid: `CA${Date.now()}`,
+          AccountSid: accountSid || 'ACtest',
+          From: testFrom,
+          To: config.phoneNumber,
+          CallStatus: 'ringing',
+          Direction: 'inbound',
+          CallerName: 'Test Caller',
+        };
+      } else if (webhookType === 'status') {
+        webhookUrl = `${webhookBaseUrl}/webhook/voice/status`;
+        params = {
+          CallSid: `CA${Date.now()}`,
+          AccountSid: accountSid || 'ACtest',
+          From: testFrom,
+          To: config.phoneNumber,
+          CallStatus: callStatus || 'completed',
+          CallDuration: '30',
+        };
+      } else {
+        return res.status(400).json({ error: "Invalid webhook type. Use 'sms', 'voice', or 'status'" });
+      }
+      
+      // Generate X-Twilio-Signature using Twilio's method
+      const twilio = require('twilio');
+      const signature = twilio.validateRequest.getExpectedTwilioSignature(
+        authToken,
+        webhookUrl,
+        params
+      );
+      
+      // Make the webhook request with proper signature
+      const formBody = Object.entries(params)
+        .map(([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`)
+        .join('&');
+      
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-Twilio-Signature': signature,
+        },
+        body: formBody,
+      });
+      
+      const responseText = await response.text();
+      
+      res.json({
+        success: response.ok,
+        webhookUrl,
+        type: webhookType,
+        status: response.status,
+        signature: signature.substring(0, 20) + '...',
+        response: responseText.substring(0, 500),
+        params,
+      });
+    } catch (error: any) {
+      console.error('Webhook simulation error:', error);
       res.status(500).json({ error: error.message });
     }
   });
