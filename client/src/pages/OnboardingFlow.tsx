@@ -85,6 +85,51 @@ const EMOTION_COLORS: Record<Emotion, { bg: string; glow: string; label: string 
   empathetic: { bg: 'bg-pink-500', glow: 'shadow-pink-500/50', label: 'Empathetic' },
 };
 
+const StarField = () => {
+  const stars = Array.from({ length: 100 }, (_, i) => ({
+    id: i,
+    x: Math.random() * 100,
+    y: Math.random() * 100,
+    size: Math.random() * 2 + 0.5,
+    duration: Math.random() * 40 + 20,
+    delay: Math.random() * 20,
+    opacity: Math.random() * 0.6 + 0.2,
+  }));
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      <style>{`
+        @keyframes starMove {
+          0% { transform: translateY(0) translateX(0); opacity: 0; }
+          10% { opacity: 1; }
+          90% { opacity: 1; }
+          100% { transform: translateY(-100vh) translateX(-20px); opacity: 0; }
+        }
+        @keyframes starTwinkle {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+      {stars.map((star) => (
+        <div
+          key={star.id}
+          className="absolute rounded-full bg-white"
+          style={{
+            left: `${star.x}%`,
+            top: `${star.y}%`,
+            width: star.size,
+            height: star.size,
+            opacity: star.opacity,
+            boxShadow: `0 0 ${star.size * 2}px rgba(255,255,255,0.8)`,
+            animation: `starMove ${star.duration}s linear infinite, starTwinkle ${Math.random() * 3 + 2}s ease-in-out infinite`,
+            animationDelay: `${star.delay}s, ${Math.random() * 2}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
 const ParticleField = ({ active, color }: { active: boolean; color: string }) => {
   const particles = Array.from({ length: 50 }, (_, i) => ({
     id: i,
@@ -241,6 +286,7 @@ export default function OnboardingFlow() {
 
   const renderAwakeningVariant = () => (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center p-8 pt-12 relative overflow-hidden">
+      <StarField />
       <ParticleField active={isAwakening} color="#818cf8" />
       
       {step === 'name' && (
@@ -308,6 +354,7 @@ export default function OnboardingFlow() {
 
   const renderProofVariant = () => (
     <div className="min-h-screen bg-black text-white flex flex-col items-center p-8 pt-12 relative overflow-hidden">
+      <StarField />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
       
       {step === 'name' && (
