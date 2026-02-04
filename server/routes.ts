@@ -1903,12 +1903,12 @@ Keep responses concise and engaging. If asked personal questions, you can share 
 
   // Twilio signature validation middleware
   const validateTwilioSignature = (req: any, res: any, next: any) => {
-    // Skip validation only in development with explicit flag or localhost testing
+    // Skip validation in development or if explicitly disabled
     const skipValidation = process.env.SKIP_TWILIO_VALIDATION === 'true' || 
-      (process.env.NODE_ENV === 'development' && 
-       (req.hostname === 'localhost' || req.hostname === '127.0.0.1'));
+      process.env.NODE_ENV === 'development';
     
     if (skipValidation) {
+      console.log('[Twilio Webhook] Skipping validation (development mode)');
       return next();
     }
     
@@ -1922,11 +1922,24 @@ Keep responses concise and engaging. If asked personal questions, you can share 
     
     // Validate using Twilio's validateRequest
     try {
-      const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-      const isValid = twilio.validateRequest(authToken, twilioSignature, url, req.body);
+      // Handle proxy scenarios - use x-forwarded-proto if available
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+      const host = req.get('host');
+      const url = `${protocol}://${host}${req.originalUrl}`;
+      
+      console.log(`[Twilio Webhook] Validating URL: ${url}`);
+      
+      let isValid = twilio.validateRequest(authToken, twilioSignature, url, req.body);
+      
+      // Try with https if http failed (common proxy issue)
+      if (!isValid && protocol === 'http') {
+        const httpsUrl = `https://${host}${req.originalUrl}`;
+        console.log(`[Twilio Webhook] Retrying with HTTPS: ${httpsUrl}`);
+        isValid = twilio.validateRequest(authToken, twilioSignature, httpsUrl, req.body);
+      }
       
       if (!isValid) {
-        console.warn('[Twilio Webhook] Invalid signature');
+        console.warn('[Twilio Webhook] Invalid signature for all URL variants');
         return res.status(403).send('Forbidden');
       }
       
