@@ -29,7 +29,6 @@ const SYSTEM_ITEMS = [
   { id: 'servers', label: 'Server Control', path: '/servers', icon: Server },
   { id: 'global_config', label: 'Global Config', path: '/config', icon: Settings },
   { id: 'tests', label: 'Orchestrator', path: '/tests', icon: Play },
-  { id: 'results', label: 'Results & AI', path: '/results', icon: Activity },
   { id: 'security', label: 'Security Audit', path: '/security', icon: ShieldAlert },
 ];
 
