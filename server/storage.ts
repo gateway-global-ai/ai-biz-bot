@@ -15,6 +15,12 @@ import {
   type InsertSmsMessage,
   type Task,
   type InsertTask,
+  type AdminUser,
+  type InsertAdminUser,
+  type OtpCode,
+  type InsertOtpCode,
+  type AuthSession,
+  type InsertAuthSession,
   telephonyConfigs,
   callLogs,
   users,
@@ -22,10 +28,13 @@ import {
   customers,
   smsConversations,
   smsMessages,
-  tasks
+  tasks,
+  adminUsers,
+  otpCodes,
+  authSessions
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, ilike, or, lte, isNull, and } from "drizzle-orm";
+import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -284,6 +293,72 @@ export class DatabaseStorage implements IStorage {
       .where(eq(tasks.id, id))
       .returning();
     return updated;
+  }
+
+  // Admin User operations
+  async getAdminUserByPhone(phone: string): Promise<AdminUser | undefined> {
+    const [user] = await db.select().from(adminUsers).where(eq(adminUsers.phone, phone));
+    return user;
+  }
+
+  async getAdminUserById(id: string): Promise<AdminUser | undefined> {
+    const [user] = await db.select().from(adminUsers).where(eq(adminUsers.id, id));
+    return user;
+  }
+
+  async createAdminUser(user: InsertAdminUser): Promise<AdminUser> {
+    const [created] = await db.insert(adminUsers).values(user).returning();
+    return created;
+  }
+
+  async updateAdminUserLastLogin(id: string): Promise<void> {
+    await db.update(adminUsers).set({ lastLoginAt: new Date() }).where(eq(adminUsers.id, id));
+  }
+
+  // OTP Code operations
+  async createOtpCode(otp: InsertOtpCode): Promise<OtpCode> {
+    const [created] = await db.insert(otpCodes).values(otp).returning();
+    return created;
+  }
+
+  async getValidOtpCode(phone: string, code: string): Promise<OtpCode | undefined> {
+    const now = new Date();
+    const [otp] = await db.select().from(otpCodes)
+      .where(
+        and(
+          eq(otpCodes.phone, phone),
+          eq(otpCodes.code, code),
+          eq(otpCodes.used, false),
+          gt(otpCodes.expiresAt, now)
+        )
+      );
+    return otp;
+  }
+
+  async markOtpUsed(id: string): Promise<void> {
+    await db.update(otpCodes).set({ used: true }).where(eq(otpCodes.id, id));
+  }
+
+  // Auth Session operations
+  async createAuthSession(session: InsertAuthSession): Promise<AuthSession> {
+    const [created] = await db.insert(authSessions).values(session).returning();
+    return created;
+  }
+
+  async getValidAuthSession(token: string): Promise<AuthSession | undefined> {
+    const now = new Date();
+    const [session] = await db.select().from(authSessions)
+      .where(
+        and(
+          eq(authSessions.token, token),
+          gt(authSessions.expiresAt, now)
+        )
+      );
+    return session;
+  }
+
+  async deleteAuthSession(token: string): Promise<void> {
+    await db.delete(authSessions).where(eq(authSessions.token, token));
   }
 }
 

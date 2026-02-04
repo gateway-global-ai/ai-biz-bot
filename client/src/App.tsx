@@ -1,10 +1,11 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import TelephonyPanel from "@/pages/TelephonyPanel";
 import DiscVisualizer from "@/pages/DiscVisualizer";
 import DeveloperPage from "@/pages/DeveloperPage";
@@ -22,7 +23,9 @@ import CustomerManager from "@/pages/CustomerManager";
 import TwilioAccountManager from "@/pages/TwilioAccountManager";
 import MvpLanding from "@/pages/MvpLanding";
 import KimiAudioDemo from "@/pages/KimiAudioDemo";
+import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
+import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
 
 function ServerPanel() {
@@ -257,6 +260,24 @@ function AppRouter() {
   );
 }
 
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect to="/login" />;
+  }
+
+  return <>{children}</>;
+}
+
 function AppWithSidebar() {
   const sidebarStyle = {
     "--sidebar-width": "16rem",
@@ -264,19 +285,21 @@ function AppWithSidebar() {
   };
 
   return (
-    <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full bg-slate-950 text-slate-200">
-        <AppSidebar />
-        <div className="flex flex-col flex-1">
-          <header className="flex items-center gap-2 p-2 border-b border-slate-800 bg-slate-900">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
-          </header>
-          <main className="flex-1 overflow-y-auto">
-            <AppRouter />
-          </main>
+    <ProtectedRoute>
+      <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+        <div className="flex h-screen w-full bg-slate-950 text-slate-200">
+          <AppSidebar />
+          <div className="flex flex-col flex-1">
+            <header className="flex items-center gap-2 p-2 border-b border-slate-800 bg-slate-900">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+            </header>
+            <main className="flex-1 overflow-y-auto">
+              <AppRouter />
+            </main>
+          </div>
         </div>
-      </div>
-    </SidebarProvider>
+      </SidebarProvider>
+    </ProtectedRoute>
   );
 }
 
@@ -284,14 +307,16 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Switch>
-          {/* Full-screen routes without sidebar */}
-          <Route path="/" component={MvpLanding} />
-          <Route path="/onboarding" component={OnboardingFlow} />
-          <Route path="/kimi-audio" component={KimiAudioDemo} />
-          {/* All other routes use sidebar layout */}
-          <Route component={AppWithSidebar} />
-        </Switch>
+        <AuthProvider>
+          <Switch>
+            {/* Public routes */}
+            <Route path="/" component={MvpLanding} />
+            <Route path="/login" component={Login} />
+            <Route path="/kimi-audio" component={KimiAudioDemo} />
+            {/* Protected routes with sidebar */}
+            <Route component={AppWithSidebar} />
+          </Switch>
+        </AuthProvider>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>

@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Phone, Mic, AudioWaveform, Zap, Globe, MessageSquare, Volume2, Clock, LayoutDashboard, Settings, Home } from "lucide-react";
+import { Phone, Mic, AudioWaveform, Zap, Globe, MessageSquare, Volume2, Clock, Home } from "lucide-react";
 
 export default function KimiAudioDemo() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -51,16 +51,9 @@ export default function KimiAudioDemo() {
             </span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link href="/dashboard">
-              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-dashboard">
-                <LayoutDashboard className="w-4 h-4 mr-2" />
-                Dashboard
-              </Button>
-            </Link>
-            <Link href="/telephony">
-              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-telephony">
-                <Phone className="w-4 h-4 mr-2" />
-                Telephony
+            <Link href="/login">
+              <Button variant="outline" size="sm" className="border-white/30 text-white hover:bg-white/10" data-testid="link-admin-login">
+                Admin Login
               </Button>
             </Link>
           </div>

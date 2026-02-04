@@ -19,6 +19,7 @@ import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, in
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
+import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -59,6 +60,12 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Auth routes
+  app.post("/api/auth/send-otp", sendOtp);
+  app.post("/api/auth/verify-otp", verifyOtp);
+  app.get("/api/auth/session", verifySession);
+  app.post("/api/auth/logout", logout);
+
   // Gemini API key endpoint (for client-side Gemini Live)
   app.get("/api/gemini-key", (req, res) => {
     const apiKey = process.env.GEMINI_API_KEY;

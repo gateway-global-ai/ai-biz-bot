@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, CheckCircle2, Sparkles, MessageSquare, Clock, ArrowRight, Target, Users, Shield, Search, LayoutDashboard, Phone, Mic, type LucideIcon } from 'lucide-react';
+import { Loader2, CheckCircle2, Sparkles, MessageSquare, Clock, ArrowRight, Target, Users, Shield, Search, Mic, type LucideIcon } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 type Step = 'input' | 'personality' | 'submitting' | 'success';
@@ -118,16 +118,9 @@ export default function MvpLanding() {
                 Voice AI
               </Button>
             </Link>
-            <Link href="/dashboard">
-              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-dashboard">
-                <LayoutDashboard className="w-4 h-4 mr-2" />
-                Dashboard
-              </Button>
-            </Link>
-            <Link href="/telephony">
-              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-telephony">
-                <Phone className="w-4 h-4 mr-2" />
-                Telephony
+            <Link href="/login">
+              <Button variant="outline" size="sm" className="border-white/30 text-white hover:bg-white/10" data-testid="link-admin-login">
+                Admin Login
               </Button>
             </Link>
           </div>
@@ -330,24 +323,14 @@ export default function MvpLanding() {
                 Check your phone at <span className="text-white font-medium">{phone}</span> for updates
               </p>
 
-              <div className="flex gap-3 justify-center">
+              <div className="flex justify-center">
                 <Link href="/kimi-audio">
                   <Button
                     data-testid="button-try-voice"
-                    variant="outline"
-                    className="border-white/20 text-white hover:bg-white/10"
+                    className="bg-purple-600 hover:bg-purple-500 text-white"
                   >
                     <Mic className="w-4 h-4 mr-2" />
                     Try Voice AI
-                  </Button>
-                </Link>
-                <Link href="/dashboard">
-                  <Button
-                    data-testid="button-view-dashboard"
-                    className="bg-purple-600 hover:bg-purple-500 text-white"
-                  >
-                    <LayoutDashboard className="w-4 h-4 mr-2" />
-                    View Dashboard
                   </Button>
                 </Link>
               </div>
