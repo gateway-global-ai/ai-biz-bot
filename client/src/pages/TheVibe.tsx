@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRoute, useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,10 +9,48 @@ import { Label } from '@/components/ui/label';
 import { 
   ChevronLeft, Coffee, Send, Music, Moon, Sparkles,
   Server, Zap, Cpu, Radio, Mic, MicOff, Volume2, VolumeX,
-  Phone, PhoneOff
+  Phone, PhoneOff, AlertCircle
 } from 'lucide-react';
+import { GoogleGenAI, Modality, type LiveServerMessage } from '@google/genai';
 import type { Agent } from '@shared/schema';
 import type { DiscScores, ArchProfile } from '@shared/schema';
+
+function decodeBase64(base64: string): Uint8Array {
+  const binaryString = atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+async function decodeAudioData(
+  data: Uint8Array,
+  ctx: AudioContext,
+  sampleRate: number,
+  numChannels: number
+): Promise<AudioBuffer> {
+  const dataInt16 = new Int16Array(data.buffer);
+  const frameCount = dataInt16.length / numChannels;
+  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+  for (let ch = 0; ch < numChannels; ch++) {
+    const channelData = buffer.getChannelData(ch);
+    for (let i = 0; i < frameCount; i++) {
+      channelData[i] = dataInt16[i * numChannels + ch] / 32768;
+    }
+  }
+  return buffer;
+}
 
 import avatar1 from '@assets/freepik__melissa-model-as-a-superhuman-metal-android-smooth__8_1770156432895.png';
 import avatar2 from '@assets/freepik__melissa-model-turned-into-a-futuristic-ai-robot-wi__8_1770156535941.png';
@@ -192,9 +230,16 @@ export default function TheVibe() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [isVoiceCallActive, setIsVoiceCallActive] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [isModelSpeaking, setIsModelSpeaking] = useState(false);
   
-  const recognitionRef = useRef<any>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const sessionRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const nextStartTimeRef = useRef<number>(0);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   
   const [discScores, setDiscScores] = useState<DiscScores>(VIBE_PRESETS.calm);
   
@@ -215,30 +260,173 @@ export default function TheVibe() {
     }
   }, [messages]);
 
-  const speakText = (text: string) => {
-    if (!voiceEnabled || typeof window === 'undefined' || !window.speechSynthesis) return;
-    
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.1;
-    utterance.volume = 0.9;
-    
-    const voices = window.speechSynthesis.getVoices();
-    const femaleVoice = voices.find(v => 
-      v.name.includes('Samantha') || 
-      v.name.includes('Victoria') || 
-      v.name.includes('Karen') ||
-      v.name.includes('female') ||
-      v.name.includes('Female')
-    ) || voices[0];
-    if (femaleVoice) utterance.voice = femaleVoice;
-    
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    
-    window.speechSynthesis.speak(utterance);
-  };
+  const stopVoiceSession = useCallback(() => {
+    if (sessionRef.current) {
+      sessionRef.current.close?.();
+      sessionRef.current = null;
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(track => track.stop());
+      micStreamRef.current = null;
+    }
+    activeSourcesRef.current.forEach(source => source.stop());
+    activeSourcesRef.current.clear();
+    setIsVoiceCallActive(false);
+    setIsModelSpeaking(false);
+    setIsListening(false);
+  }, []);
+
+  const startVoiceSession = useCallback(async () => {
+    setVoiceError(null);
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (window as any).GEMINI_API_KEY;
+      
+      const res = await fetch('/api/gemini-key');
+      const keyData = await res.json();
+      
+      if (!keyData.apiKey) {
+        throw new Error("Gemini API Key is not configured.");
+      }
+      
+      const ai = new GoogleGenAI({ apiKey: keyData.apiKey });
+      
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      }
+      
+      const outCtx = audioContextRef.current;
+      if (outCtx.state === 'suspended') await outCtx.resume();
+      
+      if (!analyserRef.current) {
+        analyserRef.current = outCtx.createAnalyser();
+        analyserRef.current.fftSize = 256;
+      }
+      
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (err) {
+        console.error("Microphone permission denied:", err);
+        setVoiceError("Microphone access denied. Please check your browser permissions.");
+        return;
+      }
+      
+      micStreamRef.current = stream;
+
+      const systemInstruction = `
+        You are ${agent?.name || 'a friendly AI companion'} in The Vibe room - a space for relaxed, authentic conversation.
+        
+        *** CRITICAL: ARCH COMMUNICATION WINDOW MATCHING ***
+        You MUST mirror the user's communication style EXACTLY:
+        
+        1. SENTENCE MATCHING: If user says ONE sentence, respond with ONE sentence. Never more.
+        2. TONE MATCHING: If user is casual ("whats up!"), be casual back ("Hey! What's good!")
+        3. ENERGY MATCHING: Match their vibe - chill gets chill, energetic gets energetic
+        4. TIMING: Keep responses SHORT - under 1 second of speaking time for quick exchanges
+        5. NO ASSUMPTIONS: Never say things like "take your time" or "there's no rush" - don't assume their emotional state
+        6. USER LEADS: The user always leads the conversation flow
+        
+        GOOD EXAMPLES:
+        - User: "Whats up vibe bot!" → You: "Hey hey! What's good!"
+        - User: "yo" → You: "Yo!"
+        - User: "this is cool" → You: "Right? I dig it."
+        
+        BAD EXAMPLES (DON'T DO THIS):
+        - User: "Whats up!" → You: "I'm here with you. Take your time, there's no rush. What's on your mind?" (VIBE KILLER)
+        
+        Current Mood: ${mood.toUpperCase()}
+        DISC Profile: D:${discScores.dominance}%, I:${discScores.influence}%, S:${discScores.steadiness}%, C:${discScores.conscientiousness}%
+        
+        Keep it real, keep it natural, match the energy.
+      `;
+
+      const sessionPromise = ai.live.connect({
+        model: 'gemini-2.0-flash-live-001',
+        callbacks: {
+          onopen: () => {
+            setIsVoiceCallActive(true);
+            setIsListening(true);
+            const inCtx = new AudioContext({ sampleRate: 16000 });
+            const source = inCtx.createMediaStreamSource(stream);
+            const scriptProcessor = inCtx.createScriptProcessor(4096, 1, 1);
+            
+            scriptProcessor.onaudioprocess = (e) => {
+              const inputData = e.inputBuffer.getChannelData(0);
+              const int16 = new Int16Array(inputData.length);
+              for (let i = 0; i < inputData.length; i++) {
+                int16[i] = inputData[i] * 32768;
+              }
+              const pcmBlob = {
+                data: encodeBase64(new Uint8Array(int16.buffer)),
+                mimeType: 'audio/pcm;rate=16000',
+              };
+              sessionPromise.then(session => {
+                session.sendRealtimeInput({ media: pcmBlob });
+              }).catch(e => console.error("Session send error:", e));
+            };
+            
+            source.connect(scriptProcessor);
+            scriptProcessor.connect(inCtx.destination);
+          },
+          onmessage: async (message: LiveServerMessage) => {
+            const serverContent = message.serverContent as any;
+            const base64Audio = serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+            if (base64Audio) {
+              setIsModelSpeaking(true);
+              setIsSpeaking(true);
+              nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outCtx.currentTime);
+              const audioBuffer = await decodeAudioData(decodeBase64(base64Audio), outCtx, 24000, 1);
+              const source = outCtx.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(analyserRef.current!);
+              analyserRef.current!.connect(outCtx.destination);
+              
+              source.addEventListener('ended', () => {
+                activeSourcesRef.current.delete(source);
+                if (activeSourcesRef.current.size === 0) {
+                  setIsModelSpeaking(false);
+                  setIsSpeaking(false);
+                }
+              });
+
+              source.start(nextStartTimeRef.current);
+              nextStartTimeRef.current += audioBuffer.duration;
+              activeSourcesRef.current.add(source);
+            }
+
+            if (serverContent?.interrupted) {
+              activeSourcesRef.current.forEach(s => s.stop());
+              activeSourcesRef.current.clear();
+              nextStartTimeRef.current = 0;
+              setIsModelSpeaking(false);
+              setIsSpeaking(false);
+            }
+          },
+          onclose: () => {
+            stopVoiceSession();
+          },
+          onerror: (e) => {
+            console.error("Live API Error:", e);
+            setVoiceError("Connection error. Please try again.");
+            stopVoiceSession();
+          }
+        },
+        config: {
+          responseModalities: [Modality.AUDIO],
+          systemInstruction,
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Aoede' } }
+          }
+        }
+      });
+
+      sessionRef.current = await sessionPromise;
+    } catch (err: any) {
+      console.error("Failed to start voice:", err);
+      setVoiceError(err.message || "Could not start voice session.");
+      stopVoiceSession();
+    }
+  }, [agent, mood, discScores, stopVoiceSession]);
 
   const handleSendMessage = (inputText?: string) => {
     const textToSend = inputText || message;
@@ -253,63 +441,23 @@ export default function TheVibe() {
     setTimeout(() => {
       const response = generateVibeResponse(textToSend, agent?.name || 'Agent', mood);
       setMessages(prev => [...prev, { role: 'agent', text: response }]);
-      
-      if (chatMode === 'voice' || isVoiceCallActive) {
-        speakText(response);
-      }
     }, responseDelay);
-  };
-
-  const startVoiceRecognition = () => {
-    if (typeof window === 'undefined') return;
-    
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.error('Speech recognition not supported');
-      return;
-    }
-    
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US';
-    
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      handleSendMessage(transcript);
-    };
-    
-    recognition.onerror = (event: any) => {
-      console.error('Speech recognition error:', event.error);
-      setIsListening(false);
-    };
-    
-    recognitionRef.current = recognition;
-    recognition.start();
-  };
-
-  const stopVoiceRecognition = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    }
   };
 
   const toggleVoiceCall = () => {
     if (isVoiceCallActive) {
-      setIsVoiceCallActive(false);
-      stopVoiceRecognition();
-      if (typeof window !== 'undefined' && window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-      }
+      stopVoiceSession();
     } else {
-      setIsVoiceCallActive(true);
-      setChatMode('voice');
+      startVoiceSession();
     }
   };
+
+  useEffect(() => {
+    return () => {
+      stopVoiceSession();
+    };
+  }, [stopVoiceSession]);
+
 
   if (!agent) {
     return (
@@ -521,29 +669,52 @@ export default function TheVibe() {
                 </Button>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-3">
-                <button
-                  onClick={isListening ? stopVoiceRecognition : startVoiceRecognition}
-                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 ${
-                    isListening 
-                      ? 'bg-red-500 animate-pulse scale-110' 
-                      : 'bg-purple-600 hover:bg-purple-500 hover:scale-105'
-                  }`}
-                  data-testid="button-mic"
-                >
-                  {isListening ? (
-                    <MicOff className="w-6 h-6 text-white" />
-                  ) : (
-                    <Mic className="w-6 h-6 text-white" />
-                  )}
-                </button>
-                <p className="text-xs text-slate-500">
-                  {isListening ? 'Listening... tap to stop' : 'Tap to speak'}
-                </p>
-                {isVoiceCallActive && (
-                  <p className="text-xs text-green-400 flex items-center gap-1">
-                    <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                    Voice call active
+              <div className="flex flex-col items-center gap-4 py-4">
+                {isVoiceCallActive ? (
+                  <>
+                    <div className="relative">
+                      <div className={`absolute inset-0 rounded-full blur-xl transition-all duration-500 ${
+                        isModelSpeaking ? 'bg-purple-500/50 scale-150' : 'bg-green-500/30 scale-100'
+                      }`} />
+                      <div className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${
+                        isModelSpeaking 
+                          ? 'bg-purple-600 scale-110' 
+                          : 'bg-green-600'
+                      }`}>
+                        {isModelSpeaking ? (
+                          <Volume2 className="w-8 h-8 text-white animate-pulse" />
+                        ) : (
+                          <Mic className="w-8 h-8 text-white" />
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm text-white font-medium">
+                        {isModelSpeaking ? `${agent?.name} is speaking...` : 'Listening to you...'}
+                      </p>
+                      <p className="text-xs text-green-400 flex items-center justify-center gap-1 mt-1">
+                        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                        Gemini Live connected
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center">
+                      <Phone className="w-8 h-8 text-slate-500" />
+                    </div>
+                    <p className="text-sm text-slate-400">Click "Call" to start voice chat</p>
+                  </>
+                )}
+                {voiceError && (
+                  <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/10 px-3 py-2 rounded-lg">
+                    <AlertCircle className="w-4 h-4" />
+                    {voiceError}
+                  </div>
+                )}
+                {!isVoiceCallActive && (
+                  <p className="text-xs text-slate-600 text-center max-w-xs">
+                    Voice chat uses Gemini Live for natural conversation with ARCH window matching
                   </p>
                 )}
               </div>

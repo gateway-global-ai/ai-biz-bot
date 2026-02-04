@@ -57,6 +57,15 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Gemini API key endpoint (for client-side Gemini Live)
+  app.get("/api/gemini-key", (req, res) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "Gemini API key not configured" });
+    }
+    res.json({ apiKey });
+  });
+  
   // Get telephony config
   app.get("/api/telephony/config", async (req, res) => {
     try {
