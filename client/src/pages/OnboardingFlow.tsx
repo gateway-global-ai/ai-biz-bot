@@ -568,13 +568,13 @@ export default function OnboardingFlow() {
   );
 
   const renderAwakeningVariant = () => (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center relative overflow-hidden overflow-x-hidden fixed inset-0">
+    <div className="min-h-screen h-screen bg-slate-950 text-white relative overflow-hidden overflow-x-hidden fixed inset-0">
       <StarField />
       <FloatingMenu />
       <ParticleField active={isAwakening} color="#818cf8" />
       
-      {/* Fixed Header with Step Progress Indicator */}
-      <div className="fixed top-0 left-0 right-0 h-16 z-40 flex items-center justify-center pointer-events-none">
+      {/* Fixed Header with Step Progress Indicator - 8% of viewport */}
+      <div className="absolute top-0 left-0 right-0 h-[8vh] z-40 flex items-center justify-center pointer-events-none">
         <div className="flex items-center gap-2">
           {STEPS.map((s, i) => (
             <div key={s} className="flex items-center">
@@ -591,8 +591,13 @@ export default function OnboardingFlow() {
         </div>
       </div>
 
-      {/* Content area - starts below fixed header, vertically centered on desktop */}
-      <div className="pt-20 px-4 md:px-8 w-full flex-1 flex flex-col items-center justify-center overflow-y-auto">
+      {/* Content area - CSS Grid for perfect centering with percentage spacing */}
+      <div className="h-full w-full grid grid-rows-[8vh_1fr_8vh] px-4 md:px-8">
+        {/* Top spacer matching header */}
+        <div />
+        
+        {/* Center content - takes remaining space, vertically centered */}
+        <div className="flex flex-col items-center justify-center overflow-y-auto py-4">
         {step === 'name' && (
         <div className={`text-center z-10 max-w-xl flex flex-col items-center relative ${getSlideClass()}`}>
           <HeroVisualizer />
@@ -632,18 +637,22 @@ export default function OnboardingFlow() {
         {step === 'voice' && renderVoiceStep()}
         {step === 'finetune' && renderFineTuneStep()}
         {step === 'meet' && renderMeetStep()}
+        </div>
+        
+        {/* Bottom spacer matching header */}
+        <div />
       </div>
     </div>
   );
 
   const renderProofVariant = () => (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center relative overflow-hidden overflow-x-hidden fixed inset-0">
+    <div className="min-h-screen h-screen bg-black text-white relative overflow-hidden overflow-x-hidden fixed inset-0">
       <StarField />
       <FloatingMenu />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
       
-      {/* Fixed Header with Step Progress Indicator */}
-      <div className="fixed top-0 left-0 right-0 h-16 z-40 flex items-center justify-center pointer-events-none">
+      {/* Fixed Header with Step Progress Indicator - 8% of viewport */}
+      <div className="absolute top-0 left-0 right-0 h-[8vh] z-40 flex items-center justify-center pointer-events-none">
         <div className="flex items-center gap-2">
           {STEPS.map((s, i) => (
             <div key={s} className="flex items-center">
@@ -660,8 +669,13 @@ export default function OnboardingFlow() {
         </div>
       </div>
 
-      {/* Content area - starts below fixed header, vertically centered on desktop */}
-      <div className="pt-20 px-4 md:px-8 w-full flex-1 flex flex-col items-center justify-center overflow-y-auto">
+      {/* Content area - CSS Grid for perfect centering with percentage spacing */}
+      <div className="h-full w-full grid grid-rows-[8vh_1fr_8vh] px-4 md:px-8">
+        {/* Top spacer matching header */}
+        <div />
+        
+        {/* Center content - takes remaining space, vertically centered */}
+        <div className="flex flex-col items-center justify-center overflow-y-auto py-4">
         {step === 'name' && (
         <div className={`text-center z-10 max-w-2xl flex flex-col items-center relative ${getSlideClass()}`}>
           <HeroVisualizer />
@@ -705,6 +719,10 @@ export default function OnboardingFlow() {
         {step === 'voice' && renderVoiceStep()}
         {step === 'finetune' && renderFineTuneStep()}
         {step === 'meet' && renderMeetStep()}
+        </div>
+        
+        {/* Bottom spacer matching header */}
+        <div />
       </div>
     </div>
   );
