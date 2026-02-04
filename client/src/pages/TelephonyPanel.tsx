@@ -256,22 +256,67 @@ export default function TelephonyPanel() {
     }
   };
 
-  const simulateCall = (direction: 'inbound' | 'outbound') => {
-    const number = testNumber || '+1 (555) 000-0000';
-    addLog(`Simulating ${direction} call: ${number}`);
-    
-    if (direction === 'inbound' && config?.firewallEnabled) {
-      const isAllowed = config.allowedNumbers?.includes(number);
-      if (!isAllowed) {
-        setTimeout(() => addLog(`BLOCKED: ${number} not in allowed list`), 500);
-        return;
+  // Test outbound call mutation - makes a real call via Twilio
+  const testOutboundMutation = useMutation({
+    mutationFn: async ({ to, message }: { to: string; message?: string }) => {
+      const res = await apiRequest('POST', '/api/telephony/test/outbound', { to, message });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        addLog(`Outbound call initiated: ${data.callSid}`);
+        addLog(data.message);
+        toast({ title: 'Call Initiated', description: data.message });
+        queryClient.invalidateQueries({ queryKey: ['/api/telephony/calls'] });
+      } else {
+        addLog(`ERROR: ${data.error || 'Unknown error'}`);
       }
+    },
+    onError: (error: any) => {
+      addLog(`ERROR: ${error.message}`);
+      toast({ title: 'Call Failed', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  // Test inbound call mutation - simulates an inbound call
+  const testInboundMutation = useMutation({
+    mutationFn: async ({ from }: { from: string }) => {
+      const res = await apiRequest('POST', '/api/telephony/test/inbound', { from });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.blocked) {
+        addLog(`BLOCKED: ${data.message}`);
+        toast({ title: 'Call Blocked', description: data.message, variant: 'destructive' });
+      } else if (data.success) {
+        addLog(`Inbound call simulated: ${data.callSid}`);
+        addLog(data.message);
+        toast({ title: 'Inbound Test Complete', description: data.message });
+        queryClient.invalidateQueries({ queryKey: ['/api/telephony/calls'] });
+      } else {
+        addLog(`ERROR: ${data.error || 'Unknown error'}`);
+      }
+    },
+    onError: (error: any) => {
+      addLog(`ERROR: ${error.message}`);
+      toast({ title: 'Test Failed', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const handleTestCall = (direction: 'inbound' | 'outbound') => {
+    const number = testNumber.trim();
+    if (!number) {
+      toast({ title: 'Phone Required', description: 'Please enter a phone number', variant: 'destructive' });
+      return;
     }
     
-    setTimeout(() => addLog('SIP/2.0 100 Trying'), 300);
-    setTimeout(() => addLog('SIP/2.0 180 Ringing'), 800);
-    setTimeout(() => addLog('SIP/2.0 200 OK - Session established'), 1500);
-    setTimeout(() => addLog(`Call completed. Duration: ${Math.floor(Math.random() * 60 + 10)}s`), 3000);
+    addLog(`Testing ${direction} call: ${number}`);
+    
+    if (direction === 'outbound') {
+      testOutboundMutation.mutate({ to: number });
+    } else {
+      testInboundMutation.mutate({ from: number });
+    }
   };
 
   // Initialize local state from config
@@ -911,12 +956,13 @@ export default function TelephonyPanel() {
                     data-testid="input-test-number"
                   />
                   <Button 
-                    onClick={() => simulateCall('inbound')} 
+                    onClick={() => handleTestCall('inbound')} 
                     variant="secondary" 
                     className="w-full"
+                    disabled={testInboundMutation.isPending}
                     data-testid="button-test-inbound"
                   >
-                    Simulate Inbound
+                    {testInboundMutation.isPending ? 'Testing...' : 'Test Inbound'}
                   </Button>
                 </div>
                 <div className="p-4 bg-accent/50 rounded-xl border border-border space-y-3">
@@ -932,12 +978,13 @@ export default function TelephonyPanel() {
                     data-testid="input-test-outbound-number"
                   />
                   <Button 
-                    onClick={() => simulateCall('outbound')} 
+                    onClick={() => handleTestCall('outbound')} 
                     variant="secondary" 
                     className="w-full"
+                    disabled={testOutboundMutation.isPending}
                     data-testid="button-test-outbound"
                   >
-                    Simulate Outbound
+                    {testOutboundMutation.isPending ? 'Calling...' : 'Make Test Call'}
                   </Button>
                 </div>
               </div>

@@ -555,6 +555,106 @@ export async function registerRoutes(
     }
   });
 
+  // Test outbound call - makes a real call with a simple greeting
+  app.post("/api/telephony/test/outbound", async (req, res) => {
+    try {
+      const { to, message } = req.body;
+      if (!to) {
+        return res.status(400).json({ error: "To phone number is required" });
+      }
+      
+      const config = await storage.getTelephonyConfig();
+      if (!config?.phoneNumber) {
+        return res.status(400).json({ error: "No phone number provisioned. Please provision a number first." });
+      }
+
+      // Create a simple TwiML URL that speaks a message
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : 'https://twilio.gatewayglobal.ai';
+      
+      const greeting = encodeURIComponent(message || "Hello! This is a test call from Gateway Global AI. Your phone system is working correctly. Goodbye!");
+      const twimlUrl = `${baseUrl}/api/twiml/test?message=${greeting}`;
+      
+      const result = await makeCall(to, twimlUrl, config.phoneNumber);
+      
+      // Log the test call
+      await storage.createCallLog({
+        callSid: result.sid,
+        from: config.phoneNumber,
+        to: to,
+        direction: 'outbound',
+        status: 'initiated',
+        duration: 0,
+        startTime: new Date(),
+      });
+      
+      res.json({ success: true, callSid: result.sid, message: "Test call initiated" });
+    } catch (error: any) {
+      console.error('Test outbound call error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // TwiML endpoint for test calls
+  app.all("/api/twiml/test", (req, res) => {
+    const message = req.query.message as string || "This is a test call from Gateway Global AI.";
+    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">${message}</Say>
+  <Pause length="1"/>
+  <Hangup/>
+</Response>`;
+    res.type('text/xml').send(twiml);
+  });
+
+  // Test inbound call simulation - triggers webhook locally
+  app.post("/api/telephony/test/inbound", async (req, res) => {
+    try {
+      const { from } = req.body;
+      const testFrom = from || "+15550001234";
+      
+      const config = await storage.getTelephonyConfig();
+      if (!config?.phoneNumber) {
+        return res.status(400).json({ error: "No phone number provisioned. Please provision a number first." });
+      }
+
+      // Check firewall
+      if (config.firewallEnabled) {
+        const isAllowed = config.allowedNumbers?.some(n => n === testFrom);
+        if (!isAllowed) {
+          return res.json({ 
+            success: false, 
+            blocked: true, 
+            message: `Call from ${testFrom} blocked by firewall - not in allowed list` 
+          });
+        }
+      }
+
+      // Simulate an inbound call log
+      const testSid = `TEST${Date.now()}`;
+      await storage.createCallLog({
+        callSid: testSid,
+        from: testFrom,
+        to: config.phoneNumber,
+        direction: 'inbound',
+        status: 'completed',
+        duration: Math.floor(Math.random() * 60) + 5,
+        startTime: new Date(),
+        endTime: new Date(),
+      });
+
+      res.json({ 
+        success: true, 
+        callSid: testSid, 
+        message: `Simulated inbound call from ${testFrom} processed successfully` 
+      });
+    } catch (error: any) {
+      console.error('Test inbound call error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get call logs from Twilio
   app.get("/api/telephony/calls", async (req, res) => {
     try {
