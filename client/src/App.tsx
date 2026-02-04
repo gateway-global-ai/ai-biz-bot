@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import TelephonyPanel from "@/pages/TelephonyPanel";
 import GatewayAdmin from "@/pages/GatewayAdmin";
 import AgentTelephony from "@/pages/AgentTelephony";
+import AgentChat from "@/pages/AgentChat";
 import DiscVisualizer from "@/pages/DiscVisualizer";
 import DeveloperPage from "@/pages/DeveloperPage";
 import BusinessPage from "@/pages/BusinessPage";
@@ -317,6 +318,7 @@ function App() {
             <Route path="/" component={MvpLanding} />
             <Route path="/login" component={Login} />
             <Route path="/kimi-audio" component={KimiAudioDemo} />
+            <Route path="/chat/:agentId" component={AgentChat} />
             {/* Protected routes with sidebar */}
             <Route component={AppWithSidebar} />
           </Switch>

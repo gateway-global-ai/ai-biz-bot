@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from '@/hooks/use-toast';
 import { 
   Bot, Plus, Check, ImageIcon, Coffee, Briefcase, FlaskConical,
-  Sparkles, Volume2, MoreVertical, Pencil, Trash2, GraduationCap, Phone
+  Sparkles, Volume2, MoreVertical, Pencil, Trash2, GraduationCap, Phone,
+  Share2, Copy, ExternalLink, MessageCircle
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -49,6 +50,7 @@ export default function AgentDashboard() {
   const [, setLocation] = useLocation();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [copiedAgentId, setCopiedAgentId] = useState<string | null>(null);
   const [newAgent, setNewAgent] = useState({
     name: '',
     voiceId: 'kore',
@@ -95,6 +97,18 @@ export default function AgentDashboard() {
     },
     onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
   });
+
+  const copyAgentChatLink = (agentId: string) => {
+    const chatUrl = `${window.location.origin}/chat/${agentId}`;
+    navigator.clipboard.writeText(chatUrl);
+    setCopiedAgentId(agentId);
+    toast({ title: 'Chat link copied to clipboard!' });
+    setTimeout(() => setCopiedAgentId(null), 2000);
+  };
+
+  const openAgentChat = (agentId: string) => {
+    window.open(`/chat/${agentId}`, '_blank');
+  };
 
   const getAvatarById = (avatarId: string | null | undefined) => {
     return AVATAR_OPTIONS.find(a => a.id === avatarId) || AVATAR_OPTIONS[0];
@@ -210,6 +224,46 @@ export default function AgentDashboard() {
                   </div>
 
                   <CardContent className="p-4">
+                    <div className="mb-4 p-3 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 rounded-lg border border-purple-500/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <MessageCircle className="w-4 h-4 text-purple-400" />
+                          <span className="text-sm font-medium text-white" data-testid={`text-chat-link-label-${agent.id}`}>Public Chat Link</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => copyAgentChatLink(agent.id)}
+                            data-testid={`button-copy-link-${agent.id}`}
+                          >
+                            {copiedAgentId === agent.id ? (
+                              <Check className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <Copy className="w-4 h-4 text-purple-300" />
+                            )}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => openAgentChat(agent.id)}
+                            data-testid={`button-open-chat-${agent.id}`}
+                          >
+                            <ExternalLink className="w-4 h-4 text-purple-300" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={`${window.location.origin}/chat/${agent.id}`}
+                          readOnly
+                          className="text-xs bg-slate-800/50 border-slate-700 text-slate-300 font-mono"
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
+                          data-testid={`input-chat-url-${agent.id}`}
+                        />
+                      </div>
+                    </div>
+
                     <div className="flex flex-col gap-2">
                       <Button
                         variant="outline"

@@ -1572,6 +1572,86 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   });
 
   // ============================================
+  // PUBLIC AGENT CHAT API
+  // ============================================
+
+  // Simple in-memory rate limiting for public chat
+  const chatRateLimits = new Map<string, { count: number; resetTime: number }>();
+  const CHAT_RATE_LIMIT = 20; // requests per minute
+  const CHAT_RATE_WINDOW = 60000; // 1 minute in ms
+
+  app.post("/api/chat", async (req, res) => {
+    try {
+      // Rate limiting by IP
+      const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
+      const now = Date.now();
+      const rateInfo = chatRateLimits.get(clientIp);
+      
+      if (rateInfo) {
+        if (now > rateInfo.resetTime) {
+          chatRateLimits.set(clientIp, { count: 1, resetTime: now + CHAT_RATE_WINDOW });
+        } else if (rateInfo.count >= CHAT_RATE_LIMIT) {
+          return res.status(429).json({ error: "Rate limit exceeded. Please try again later." });
+        } else {
+          rateInfo.count++;
+        }
+      } else {
+        chatRateLimits.set(clientIp, { count: 1, resetTime: now + CHAT_RATE_WINDOW });
+      }
+
+      // Validate request body with Zod
+      const chatSchema = z.object({
+        agentId: z.string().min(1),
+        message: z.string().min(1).max(4000),
+        history: z.array(z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string(),
+        })).max(20).optional().default([]),
+      });
+
+      const parsed = chatSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const { agentId, message, history } = parsed.data;
+
+      const agent = await storage.getAgent(agentId);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
+      // Build system prompt based on agent personality
+      const discProfile = `D:${agent.dominance} I:${agent.influence} S:${agent.steadiness} C:${agent.conscientiousness}`;
+      const systemPrompt = agent.systemPrompt || `You are ${agent.name}, a helpful AI assistant with the following DISC personality profile: ${discProfile}. 
+Be conversational, helpful, and maintain a consistent personality. Your voice style is ${agent.voiceName}.
+Keep responses concise and engaging. If asked personal questions, you can share that you're an AI assistant named ${agent.name}.`;
+
+      // Build conversation messages
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        ...history.slice(-10).map((m: any) => ({ 
+          role: m.role as 'user' | 'assistant', 
+          content: m.content 
+        })),
+        { role: 'user' as const, content: message },
+      ];
+
+      const response = await chat({
+        model: KIMI_MODELS.K2_TURBO,
+        messages,
+        temperature: 0.7,
+        max_tokens: 1024,
+      });
+
+      res.json({ response });
+    } catch (error: any) {
+      console.error('Chat error:', error);
+      res.status(500).json({ error: error.message || 'Failed to generate response' });
+    }
+  });
+
+  // ============================================
   // CUSTOMER/LEAD MANAGEMENT API
   // ============================================
 
