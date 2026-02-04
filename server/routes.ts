@@ -16,8 +16,7 @@ import {
 } from "./twilio";
 import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
-import { GoogleGenAI } from "@google/genai";
-import textToSpeech from "@google-cloud/text-to-speech";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -592,7 +591,7 @@ export async function registerRoutes(
         return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
       }
 
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
       const discDescription = discProfile ? 
         `The agent has a DISC profile with: D=${discProfile.dominance}%, I=${discProfile.influence}%, S=${discProfile.steadiness}%, C=${discProfile.conscientiousness}%` :
@@ -607,38 +606,40 @@ Generate a brief, natural-sounding conversation response for this scenario: ${sc
 
 Keep the response conversational, warm, and under 100 words. Speak directly as the agent.`;
 
-      const textResponse = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: conversationPrompt,
-      });
+      // Generate text response
+      const textModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const textResult = await textModel.generateContent(conversationPrompt);
+      const conversationText = textResult.response.text() || "Hello! I'm your AI assistant. How can I help you today?";
 
-      const conversationText = textResponse.text || "Hello! I'm your AI assistant. How can I help you today?";
-
-      const ttsResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-preview-tts',
-        contents: conversationText,
-        config: {
-          responseModalities: ['audio'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: {
-                voiceName: 'Kore'
+      // Generate TTS using direct API call (Gemini TTS model)
+      const ttsResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: conversationText }] }],
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName: 'Kore' }
+                }
               }
             }
-          }
+          })
         }
-      });
+      );
 
       let audioData = null;
-      if (ttsResponse.candidates?.[0]?.content?.parts) {
-        for (const part of ttsResponse.candidates[0].content.parts) {
-          if (part.inlineData?.mimeType?.startsWith('audio/')) {
-            audioData = {
-              data: part.inlineData.data,
-              mimeType: part.inlineData.mimeType
-            };
-            break;
-          }
+      if (ttsResponse.ok) {
+        const ttsData = await ttsResponse.json();
+        const audioPart = ttsData.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+        if (audioPart) {
+          audioData = {
+            data: audioPart.data,
+            mimeType: audioPart.mimeType
+          };
         }
       }
 
@@ -799,56 +800,80 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
   // ============ Google Cloud Text-to-Speech API ============
 
-  // List available voices
+  // Gemini TTS - Available voices (Chirp 3 HD)
+  const GEMINI_TTS_VOICES = [
+    { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
+    { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+    { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
+    { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
+    { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+    { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+    { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
+    { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+  ];
+
+  // List available Gemini TTS voices
   app.get("/api/tts/voices", async (req, res) => {
-    try {
-      const client = new textToSpeech.TextToSpeechClient();
-      const [result] = await client.listVoices({});
-      
-      // Filter to English voices and format for frontend
-      const voices = result.voices
-        ?.filter(voice => voice.languageCodes?.some(code => code.startsWith('en-')))
-        .map(voice => ({
-          name: voice.name,
-          languageCodes: voice.languageCodes,
-          ssmlGender: voice.ssmlGender,
-          naturalSampleRateHertz: voice.naturalSampleRateHertz,
-        })) || [];
-      
-      res.json({ voices });
-    } catch (error: any) {
-      console.error("TTS list voices error:", error);
-      res.status(500).json({ error: error.message });
-    }
+    res.json({ voices: GEMINI_TTS_VOICES });
   });
 
-  // Synthesize speech for voice preview
+  // Synthesize speech using Gemini TTS
   app.post("/api/tts/synthesize", async (req, res) => {
     try {
-      const { text, voiceName, languageCode = 'en-US' } = req.body;
+      const { text, voiceName } = req.body;
       
       if (!text || !voiceName) {
         return res.status(400).json({ error: "text and voiceName are required" });
       }
 
-      const client = new textToSpeech.TextToSpeechClient();
-      
-      const request = {
-        input: { text },
-        voice: { 
-          languageCode,
-          name: voiceName 
-        },
-        audioConfig: { audioEncoding: 'MP3' as const },
-      };
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Gemini API key not configured" });
+      }
 
-      const [response] = await client.synthesizeSpeech(request);
+      // Use Gemini 2.5 Flash TTS model
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text }]
+            }],
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: {
+                    voiceName: voiceName
+                  }
+                }
+              }
+            }
+          })
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error("Gemini TTS error:", error);
+        return res.status(500).json({ error: "Failed to generate speech" });
+      }
+
+      const data = await response.json();
       
-      // Return base64 encoded audio
-      const audioBase64 = Buffer.from(response.audioContent as Uint8Array).toString('base64');
+      // Extract audio data from response
+      const audioData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      const mimeType = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.mimeType || 'audio/wav';
+      
+      if (!audioData) {
+        return res.status(500).json({ error: "No audio data in response" });
+      }
+
       res.json({ 
-        audio: audioBase64,
-        contentType: 'audio/mpeg'
+        audio: audioData,
+        contentType: mimeType
       });
     } catch (error: any) {
       console.error("TTS synthesize error:", error);

@@ -9,26 +9,25 @@ type Emotion = 'calm' | 'engaged' | 'focused' | 'energized' | 'empathetic';
 type SlideDirection = 'left' | 'right' | 'none';
 type Gender = 'male' | 'female' | 'neutral';
 
-// Curated list of best Chirp 3 HD voices for agents
-const CHIRP_HD_VOICES = {
+// Gemini TTS voices (Chirp HD)
+const GEMINI_VOICES = {
   female: [
-    { id: 'en-US-Chirp3-HD-Aoede', name: 'Aoede', description: 'Warm & Conversational', accent: 'American', voiceType: 'Chirp 3 HD' },
-    { id: 'en-US-Chirp3-HD-Kore', name: 'Kore', description: 'Calm & Professional', accent: 'American', voiceType: 'Chirp 3 HD' },
-    { id: 'en-US-Chirp3-HD-Leda', name: 'Leda', description: 'Friendly & Engaging', accent: 'American', voiceType: 'Chirp 3 HD' },
-    { id: 'en-GB-Chirp3-HD-Aoede', name: 'Aoede', description: 'Warm & Conversational', accent: 'British', voiceType: 'Chirp 3 HD' },
-    { id: 'en-AU-Chirp3-HD-Aoede', name: 'Aoede', description: 'Warm & Conversational', accent: 'Australian', voiceType: 'Chirp 3 HD' },
+    { id: 'Aoede', name: 'Aoede', description: 'Warm & Conversational', voiceType: 'Gemini TTS' },
+    { id: 'Kore', name: 'Kore', description: 'Calm & Professional', voiceType: 'Gemini TTS' },
+    { id: 'Leda', name: 'Leda', description: 'Friendly & Engaging', voiceType: 'Gemini TTS' },
+    { id: 'Zephyr', name: 'Zephyr', description: 'Bright & Energetic', voiceType: 'Gemini TTS' },
   ],
   male: [
-    { id: 'en-US-Chirp3-HD-Charon', name: 'Charon', description: 'Deep & Authoritative', accent: 'American', voiceType: 'Chirp 3 HD' },
-    { id: 'en-US-Chirp3-HD-Fenrir', name: 'Fenrir', description: 'Confident & Dynamic', accent: 'American', voiceType: 'Chirp 3 HD' },
-    { id: 'en-US-Chirp3-HD-Orus', name: 'Orus', description: 'Calm & Professional', accent: 'American', voiceType: 'Chirp 3 HD' },
-    { id: 'en-GB-Chirp3-HD-Charon', name: 'Charon', description: 'Deep & Authoritative', accent: 'British', voiceType: 'Chirp 3 HD' },
-    { id: 'en-AU-Chirp3-HD-Fenrir', name: 'Fenrir', description: 'Confident & Dynamic', accent: 'Australian', voiceType: 'Chirp 3 HD' },
+    { id: 'Charon', name: 'Charon', description: 'Deep & Authoritative', voiceType: 'Gemini TTS' },
+    { id: 'Fenrir', name: 'Fenrir', description: 'Confident & Dynamic', voiceType: 'Gemini TTS' },
+    { id: 'Orus', name: 'Orus', description: 'Calm & Professional', voiceType: 'Gemini TTS' },
+    { id: 'Puck', name: 'Puck', description: 'Friendly & Approachable', voiceType: 'Gemini TTS' },
   ],
   neutral: [
-    { id: 'en-US-Chirp3-HD-Puck', name: 'Puck', description: 'Balanced & Versatile', accent: 'American', voiceType: 'Chirp 3 HD' },
-    { id: 'en-US-Neural2-C', name: 'Neural C', description: 'Clear & Natural', accent: 'American', voiceType: 'Neural2' },
-    { id: 'en-GB-Neural2-C', name: 'Neural C', description: 'Clear & Natural', accent: 'British', voiceType: 'Neural2' },
+    { id: 'Aoede', name: 'Aoede', description: 'Warm & Conversational', voiceType: 'Gemini TTS' },
+    { id: 'Charon', name: 'Charon', description: 'Deep & Authoritative', voiceType: 'Gemini TTS' },
+    { id: 'Kore', name: 'Kore', description: 'Calm & Professional', voiceType: 'Gemini TTS' },
+    { id: 'Puck', name: 'Puck', description: 'Friendly & Approachable', voiceType: 'Gemini TTS' },
   ],
 };
 
@@ -356,9 +355,9 @@ export default function OnboardingFlow() {
   const getCuratedVoices = (name: string) => {
     const gender = detectGender(name);
     switch (gender) {
-      case 'male': return CHIRP_HD_VOICES.male;
-      case 'female': return CHIRP_HD_VOICES.female;
-      default: return CHIRP_HD_VOICES.neutral;
+      case 'male': return GEMINI_VOICES.male;
+      case 'female': return GEMINI_VOICES.female;
+      default: return GEMINI_VOICES.neutral;
     }
   };
 
@@ -709,7 +708,6 @@ export default function OnboardingFlow() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <span className="font-bold text-lg">{voice.name}</span>
-                  <span className="text-xs text-slate-500 ml-2">({voice.accent})</span>
                 </div>
                 <button
                   onClick={() => playVoicePreview(voice.id)}
