@@ -253,28 +253,39 @@ function AppRouter() {
   );
 }
 
-function App() {
+function AppWithSidebar() {
   const sidebarStyle = {
     "--sidebar-width": "16rem",
     "--sidebar-width-icon": "3rem",
   };
 
   return (
+    <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+      <div className="flex h-screen w-full bg-slate-950 text-slate-200">
+        <AppSidebar />
+        <div className="flex flex-col flex-1">
+          <header className="flex items-center gap-2 p-2 border-b border-slate-800 bg-slate-900">
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+          </header>
+          <main className="flex-1 overflow-y-auto">
+            <AppRouter />
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+function App() {
+  return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-          <div className="flex h-screen w-full bg-slate-950 text-slate-200">
-            <AppSidebar />
-            <div className="flex flex-col flex-1">
-              <header className="flex items-center gap-2 p-2 border-b border-slate-800 bg-slate-900">
-                <SidebarTrigger data-testid="button-sidebar-toggle" />
-              </header>
-              <main className="flex-1 overflow-y-auto">
-                <AppRouter />
-              </main>
-            </div>
-          </div>
-        </SidebarProvider>
+        <Switch>
+          {/* Full-screen routes without sidebar */}
+          <Route path="/" component={OnboardingFlow} />
+          {/* All other routes use sidebar layout */}
+          <Route component={AppWithSidebar} />
+        </Switch>
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
