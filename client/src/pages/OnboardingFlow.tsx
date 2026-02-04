@@ -405,7 +405,7 @@ export default function OnboardingFlow() {
   );
 
   const renderAwakeningVariant = () => (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center p-8 pt-12 relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center p-4 md:p-8 pt-12 relative overflow-hidden overflow-x-hidden fixed inset-0">
       <StarField />
       <FloatingMenu />
       <ParticleField active={isAwakening} color="#818cf8" />
@@ -462,7 +462,7 @@ export default function OnboardingFlow() {
   );
 
   const renderProofVariant = () => (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center p-8 pt-12 relative overflow-hidden">
+    <div className="min-h-screen bg-black text-white flex flex-col items-center p-4 md:p-8 pt-12 relative overflow-hidden overflow-x-hidden fixed inset-0">
       <StarField />
       <FloatingMenu />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
@@ -483,8 +483,7 @@ export default function OnboardingFlow() {
             </p>
           </div>
           
-          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 md:p-8 mb-6 relative z-30">
-            <p className="text-sm text-slate-500 uppercase tracking-wider mb-3">Name Your Partner</p>
+          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 md:p-6 relative z-30">
             <div className="flex items-center gap-3">
               <input
                 type="text"
