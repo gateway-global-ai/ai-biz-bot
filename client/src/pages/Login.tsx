@@ -53,7 +53,8 @@ export default function Login() {
         title: "Welcome back!",
         description: `Logged in as ${data.user.name || data.user.phone}`,
       });
-      setLocation("/dashboard");
+      // Use window.location for reliable redirect after auth state update
+      window.location.href = "/dashboard";
     },
     onError: (error: any) => {
       toast({
