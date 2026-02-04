@@ -21,6 +21,8 @@ import {
   type InsertOtpCode,
   type AuthSession,
   type InsertAuthSession,
+  type TwilioSubAccount,
+  type InsertTwilioSubAccount,
   telephonyConfigs,
   callLogs,
   users,
@@ -31,7 +33,8 @@ import {
   tasks,
   adminUsers,
   otpCodes,
-  authSessions
+  authSessions,
+  twilioSubAccounts
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -79,6 +82,13 @@ export interface IStorage {
   getTasksPendingUpdate(): Promise<Task[]>;
   createTask(task: InsertTask): Promise<Task>;
   updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined>;
+  
+  // Twilio Sub-Accounts operations
+  getTwilioSubAccounts(): Promise<TwilioSubAccount[]>;
+  getTwilioSubAccount(id: string): Promise<TwilioSubAccount | undefined>;
+  createTwilioSubAccount(account: InsertTwilioSubAccount): Promise<TwilioSubAccount>;
+  updateTwilioSubAccount(id: string, updates: Partial<InsertTwilioSubAccount>): Promise<TwilioSubAccount | undefined>;
+  deleteTwilioSubAccount(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -359,6 +369,34 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAuthSession(token: string): Promise<void> {
     await db.delete(authSessions).where(eq(authSessions.token, token));
+  }
+
+  // Twilio Sub-Accounts operations
+  async getTwilioSubAccounts(): Promise<TwilioSubAccount[]> {
+    return await db.select().from(twilioSubAccounts).orderBy(desc(twilioSubAccounts.createdAt));
+  }
+
+  async getTwilioSubAccount(id: string): Promise<TwilioSubAccount | undefined> {
+    const [account] = await db.select().from(twilioSubAccounts).where(eq(twilioSubAccounts.id, id));
+    return account;
+  }
+
+  async createTwilioSubAccount(account: InsertTwilioSubAccount): Promise<TwilioSubAccount> {
+    const [newAccount] = await db.insert(twilioSubAccounts).values(account).returning();
+    return newAccount;
+  }
+
+  async updateTwilioSubAccount(id: string, updates: Partial<InsertTwilioSubAccount>): Promise<TwilioSubAccount | undefined> {
+    const [updated] = await db.update(twilioSubAccounts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(twilioSubAccounts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTwilioSubAccount(id: string): Promise<boolean> {
+    const result = await db.delete(twilioSubAccounts).where(eq(twilioSubAccounts.id, id));
+    return true;
   }
 }
 

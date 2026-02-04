@@ -6,16 +6,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Globe, Phone, Users, BarChart3, Settings, Check, 
-  Loader2, PhoneCall, MessageSquare, Clock, TrendingUp 
+  Loader2, PhoneCall, MessageSquare, Clock, TrendingUp,
+  Building2, Plus, Trash2, Key
 } from 'lucide-react';
-import type { TelephonyConfig, Customer, CallLog } from '@shared/schema';
+import type { TelephonyConfig, Customer, CallLog, TwilioSubAccount } from '@shared/schema';
 
 export default function GatewayAdmin() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('config');
+  const [showCreateSubAccount, setShowCreateSubAccount] = useState(false);
+  const [newSubAccountName, setNewSubAccountName] = useState('');
+  const [newSubAccountEmail, setNewSubAccountEmail] = useState('');
 
   const { data: config, isLoading: configLoading } = useQuery<TelephonyConfig>({
     queryKey: ['/api/telephony/config'],
@@ -29,12 +35,38 @@ export default function GatewayAdmin() {
     queryKey: ['/api/call-logs'],
   });
 
+  const { data: subAccounts = [], isLoading: subAccountsLoading } = useQuery<TwilioSubAccount[]>({
+    queryKey: ['/api/twilio/sub-accounts'],
+  });
+
   const updateConfigMutation = useMutation({
     mutationFn: (data: Partial<TelephonyConfig>) => 
       apiRequest('PATCH', '/api/telephony/config', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/telephony/config'] });
       toast({ title: 'Gateway configuration updated' });
+    },
+    onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
+  });
+
+  const createSubAccountMutation = useMutation({
+    mutationFn: (data: { friendlyName: string; ownerEmail?: string }) =>
+      apiRequest('POST', '/api/twilio/sub-accounts', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/twilio/sub-accounts'] });
+      toast({ title: 'Sub-account created successfully' });
+      setShowCreateSubAccount(false);
+      setNewSubAccountName('');
+      setNewSubAccountEmail('');
+    },
+    onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
+  });
+
+  const deleteSubAccountMutation = useMutation({
+    mutationFn: (id: string) => apiRequest('DELETE', `/api/twilio/sub-accounts/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/twilio/sub-accounts'] });
+      toast({ title: 'Sub-account deleted' });
     },
     onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
   });
@@ -117,6 +149,10 @@ export default function GatewayAdmin() {
             <TabsTrigger value="config" className="data-[state=active]:bg-purple-600" data-testid="tab-config">
               <Settings className="w-4 h-4 mr-2" />
               Gateway Config
+            </TabsTrigger>
+            <TabsTrigger value="sub-accounts" className="data-[state=active]:bg-purple-600" data-testid="tab-sub-accounts">
+              <Building2 className="w-4 h-4 mr-2" />
+              Sub-Accounts
             </TabsTrigger>
             <TabsTrigger value="customers" className="data-[state=active]:bg-purple-600" data-testid="tab-customers">
               <Users className="w-4 h-4 mr-2" />
@@ -207,6 +243,128 @@ export default function GatewayAdmin() {
                       </Button>
                     </div>
                   </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="sub-accounts" className="space-y-4">
+            <Card className="bg-slate-900/50 border-slate-800">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-white flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-blue-400" />
+                    Twilio Sub-Accounts
+                  </CardTitle>
+                  <CardDescription>
+                    Manage Twilio sub-accounts for multi-tenant phone number provisioning
+                  </CardDescription>
+                </div>
+                <Dialog open={showCreateSubAccount} onOpenChange={setShowCreateSubAccount}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-blue-600 hover:bg-blue-500" data-testid="button-create-sub-account">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Sub-Account
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-slate-900 border-slate-700">
+                    <DialogHeader>
+                      <DialogTitle className="text-white">Create Twilio Sub-Account</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 pt-4">
+                      <div>
+                        <Label className="text-slate-300">Account Name</Label>
+                        <Input
+                          value={newSubAccountName}
+                          onChange={(e) => setNewSubAccountName(e.target.value)}
+                          placeholder="e.g. Client XYZ"
+                          className="bg-slate-800 border-slate-700 mt-1"
+                          data-testid="input-sub-account-name"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-slate-300">Owner Email (optional)</Label>
+                        <Input
+                          value={newSubAccountEmail}
+                          onChange={(e) => setNewSubAccountEmail(e.target.value)}
+                          placeholder="owner@example.com"
+                          className="bg-slate-800 border-slate-700 mt-1"
+                          data-testid="input-sub-account-email"
+                        />
+                      </div>
+                      <Button 
+                        className="w-full bg-blue-600 hover:bg-blue-500"
+                        onClick={() => createSubAccountMutation.mutate({
+                          friendlyName: newSubAccountName || 'Gateway Sub-Account',
+                          ownerEmail: newSubAccountEmail || undefined
+                        })}
+                        disabled={createSubAccountMutation.isPending}
+                        data-testid="button-confirm-create-sub-account"
+                      >
+                        {createSubAccountMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        ) : null}
+                        Create Sub-Account
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </CardHeader>
+              <CardContent>
+                {subAccountsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+                  </div>
+                ) : subAccounts.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400">
+                    <Building2 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No sub-accounts yet</p>
+                    <p className="text-sm mt-1">Create a sub-account to provision phone numbers for clients</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {subAccounts.map((account) => (
+                      <div
+                        key={account.id}
+                        className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700"
+                        data-testid={`sub-account-row-${account.id}`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                            <Building2 className="w-6 h-6 text-blue-400" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-white">{account.friendlyName}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs text-slate-400 font-mono">{account.accountSid}</span>
+                              {account.ownerEmail && (
+                                <span className="text-xs text-slate-500">• {account.ownerEmail}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <Badge className={
+                            account.status === 'active' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                            account.status === 'suspended' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' :
+                            'bg-slate-500/20 text-slate-400 border-slate-500/30'
+                          }>
+                            {account.status}
+                          </Badge>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                            onClick={() => deleteSubAccountMutation.mutate(account.id)}
+                            disabled={deleteSubAccountMutation.isPending}
+                            data-testid={`button-delete-sub-account-${account.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>

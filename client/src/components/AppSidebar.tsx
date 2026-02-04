@@ -22,8 +22,6 @@ const AGENT_ITEMS = [
 const OPERATIONS_ITEMS = [
   { id: 'gateway-admin', label: 'Gateway Admin', path: '/gateway-admin', icon: Globe },
   { id: 'customers', label: 'Customer Manager', path: '/customers', icon: Users },
-  { id: 'twilio', label: 'Twilio Account', path: '/twilio-account', icon: Building2 },
-  { id: 'twilio-hub', label: 'Twilio Hub', path: '/twilio', icon: MessageSquare },
 ];
 
 const SYSTEM_ITEMS = [

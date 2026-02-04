@@ -423,3 +423,24 @@ export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({
 
 export type InsertAuthSession = z.infer<typeof insertAuthSessionSchema>;
 export type AuthSession = typeof authSessions.$inferSelect;
+
+// Twilio Sub-Accounts for multi-tenant phone number management
+export const twilioSubAccounts = pgTable("twilio_sub_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountSid: text("account_sid").notNull().unique(), // Twilio sub-account SID
+  authToken: text("auth_token").notNull(), // Sub-account auth token
+  friendlyName: text("friendly_name").notNull(),
+  status: text("status").default("active"), // active, suspended, closed
+  ownerEmail: text("owner_email"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTwilioSubAccountSchema = createInsertSchema(twilioSubAccounts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertTwilioSubAccount = z.infer<typeof insertTwilioSubAccountSchema>;
+export type TwilioSubAccount = typeof twilioSubAccounts.$inferSelect;

@@ -975,6 +975,100 @@ export async function registerRoutes(
     }
   });
 
+  // Twilio Sub-Accounts API
+  // Helper to strip sensitive fields from sub-account responses
+  const sanitizeSubAccount = (account: any) => {
+    const { authToken, ...safe } = account;
+    return { ...safe, hasAuthToken: !!authToken };
+  };
+
+  app.get("/api/twilio/sub-accounts", async (req, res) => {
+    try {
+      const accounts = await storage.getTwilioSubAccounts();
+      // Strip authToken from responses - never expose credentials to client
+      res.json(accounts.map(sanitizeSubAccount));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/twilio/sub-accounts", async (req, res) => {
+    try {
+      const { friendlyName, ownerEmail } = req.body;
+      
+      if (!friendlyName || typeof friendlyName !== 'string') {
+        return res.status(400).json({ error: 'friendlyName is required' });
+      }
+      
+      // Create sub-account via Twilio API
+      const client = await getTwilioClient();
+      const subAccount = await client.api.accounts.create({
+        friendlyName: friendlyName || 'Gateway Sub-Account'
+      });
+
+      // Save to database
+      const saved = await storage.createTwilioSubAccount({
+        accountSid: subAccount.sid,
+        authToken: subAccount.authToken,
+        friendlyName: subAccount.friendlyName,
+        status: subAccount.status,
+        ownerEmail: ownerEmail || null,
+      });
+
+      // Return sanitized response without authToken
+      res.json(sanitizeSubAccount(saved));
+    } catch (error: any) {
+      console.error('Error creating sub-account:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/twilio/sub-accounts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { friendlyName, ownerEmail, status } = req.body;
+      
+      // Only allow safe fields to be updated - never authToken/accountSid
+      const allowedUpdates: any = {};
+      if (friendlyName !== undefined) allowedUpdates.friendlyName = friendlyName;
+      if (ownerEmail !== undefined) allowedUpdates.ownerEmail = ownerEmail;
+      if (status !== undefined && ['active', 'suspended'].includes(status)) {
+        allowedUpdates.status = status;
+      }
+      
+      const updated = await storage.updateTwilioSubAccount(id, allowedUpdates);
+      if (!updated) {
+        return res.status(404).json({ error: "Sub-account not found" });
+      }
+      res.json(sanitizeSubAccount(updated));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/twilio/sub-accounts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const account = await storage.getTwilioSubAccount(id);
+      if (!account) {
+        return res.status(404).json({ error: "Sub-account not found" });
+      }
+
+      // Close sub-account in Twilio (sets to 'closed' status)
+      try {
+        const client = await getTwilioClient();
+        await client.api.accounts(account.accountSid).update({ status: 'closed' });
+      } catch (e) {
+        console.log('Twilio sub-account close warning:', e);
+      }
+
+      await storage.deleteTwilioSubAccount(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Legacy webhook handlers - redirect to new secure endpoints
   // These are kept for backwards compatibility but should be updated in Twilio config
   app.post("/api/webhooks/voice", (req, res) => {
