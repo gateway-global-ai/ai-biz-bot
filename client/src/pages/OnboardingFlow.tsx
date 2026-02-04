@@ -332,13 +332,29 @@ export default function OnboardingFlow() {
   const [menuOpen, setMenuOpen] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Cleanup audio on unmount or step change
+  // Cleanup audio on unmount
   useEffect(() => {
-    return () => {
+    const stopAudio = () => {
       if (audioRef.current) {
         audioRef.current.pause();
+        audioRef.current.src = '';
         audioRef.current = null;
       }
+      setPlayingVoice(null);
+    };
+
+    // Stop audio when page becomes hidden (user navigates away)
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopAudio();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      stopAudio();
     };
   }, []);
 
