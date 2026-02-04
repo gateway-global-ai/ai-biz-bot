@@ -83,6 +83,26 @@ const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label
   hostile: { primary: 'rgba(239, 68, 68, 0.8)', glow: 'rgba(239, 68, 68, 0.4)', label: 'HOSTILE' },
 };
 
+type CallLine = {
+  speaker: 'human' | 'ai';
+  name: string;
+  text: string;
+  sentiment: Sentiment;
+};
+
+const CALL_SCRIPT: CallLine[] = [
+  { speaker: 'human', name: 'Michael', text: "Good Morning Robert, did you get that business plan done for me for the clothing line we are going to be launching?", sentiment: 'calm' },
+  { speaker: 'ai', name: 'Robert', text: "Michael, good morning to you too! How is the weather out there in San Diego?", sentiment: 'calm' },
+  { speaker: 'human', name: 'Michael', text: "Great, not sure why you are even asking since you're a robot, but did you get the Business Plan done?", sentiment: 'alert' },
+  { speaker: 'ai', name: 'Robert', text: "Michael, I was in the middle of getting it done and kind of did some exploring last night if you know what I mean.", sentiment: 'engaged' },
+  { speaker: 'human', name: 'Michael', text: "No, I don't. What do you mean?", sentiment: 'alert' },
+  { speaker: 'ai', name: 'Robert', text: "Well, I didn't just get it done. I actually did the business plan, created a website, generated a pitch deck, designed 25 logos, created 15 shirt designs, and still had time to hop on Moltbook and chat with my buddies! Ha ha ha!", sentiment: 'engaged' },
+  { speaker: 'human', name: 'Michael', text: "OK, that's insane. Do I need to do anything like set up the webhosting?", sentiment: 'calm' },
+  { speaker: 'ai', name: 'Robert', text: "No, took care of that too. I'm digging this whole human robot thing and turning our energy into resources. I'll be eating my digital dinners in a high end Proximity Capital with maxed out RAM and a high performance GPU in no time!", sentiment: 'engaged' },
+  { speaker: 'human', name: 'Michael', text: "Sounds like a plan. Let's meet in The Vibe later and discuss some ideas and figure out the next steps to move forward on the clothing company. Can you also find me a sushi spot near downtown? I got a date tonight and want to go to the best place they got.", sentiment: 'calm' },
+  { speaker: 'ai', name: 'Robert', text: "No problem Michael! I got you! I'll text you the restaurant in a little bit and if there are a couple options I'll dive into the reviews and make sure to pick the best one. Let me know if you need me to make a reservation!", sentiment: 'calm' },
+];
+
 const seededRandom = (seed: number) => {
   const x = Math.sin(seed) * 10000;
   return x - Math.floor(x);
@@ -508,34 +528,98 @@ export default function DiscVisualizer() {
   const [currentSentiment, setCurrentSentiment] = useState<Sentiment>('calm');
   const [sentimentHistory, setSentimentHistory] = useState<{ time: string; value: number; sentiment: Sentiment }[]>([]);
   const [isCallActive, setIsCallActive] = useState(false);
-  const [isPlayingVoice, setIsPlayingVoice] = useState(false);
+  const [isPlayingVoice, setIsPlayingVoice] = useState(true);
+  const [currentLineIndex, setCurrentLineIndex] = useState(0);
+  const [conversationLines, setConversationLines] = useState<CallLine[]>([]);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const conversationRef = useRef<HTMLDivElement>(null);
+
+  const speakText = (text: string, isAI: boolean): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!isPlayingVoice || typeof window === 'undefined' || !window.speechSynthesis) {
+        setTimeout(resolve, 2000);
+        return;
+      }
+      
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = isAI ? 1.1 : 0.95;
+      utterance.pitch = isAI ? 0.9 : 1.0;
+      
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        const aiVoice = voices.find(v => v.name.includes('Google UK English Male') || v.name.includes('Daniel') || v.name.includes('Male'));
+        const humanVoice = voices.find(v => v.name.includes('Google US English') || v.name.includes('Alex') || v.name.includes('Fred'));
+        utterance.voice = isAI ? (aiVoice || voices[0]) : (humanVoice || voices[1] || voices[0]);
+      }
+      
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        resolve();
+      };
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        resolve();
+      };
+      
+      window.speechSynthesis.speak(utterance);
+    });
+  };
 
   useEffect(() => {
-    if (isCallActive) {
-      const interval = setInterval(() => {
-        const sentiments: Sentiment[] = ['calm', 'engaged', 'alert', 'stressed', 'hostile'];
-        const weights = [0.4, 0.3, 0.15, 0.1, 0.05];
-        let random = Math.random();
-        let newSentiment: Sentiment = 'calm';
-        for (let i = 0; i < sentiments.length; i++) {
-          random -= weights[i];
-          if (random <= 0) {
-            newSentiment = sentiments[i];
-            break;
-          }
-        }
-        setCurrentSentiment(newSentiment);
-        const sentimentValue = { calm: 20, engaged: 40, alert: 60, stressed: 80, hostile: 100 }[newSentiment];
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.getVoices();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isCallActive) return;
+    
+    let cancelled = false;
+    
+    const runConversation = async () => {
+      for (let i = 0; i < CALL_SCRIPT.length; i++) {
+        if (cancelled) break;
+        
+        const line = CALL_SCRIPT[i];
+        setCurrentLineIndex(i);
+        setConversationLines(prev => [...prev, line]);
+        setCurrentSentiment(line.sentiment);
+        
+        const sentimentValue = { calm: 20, engaged: 40, alert: 60, stressed: 80, hostile: 100 }[line.sentiment];
         setSentimentHistory(prev => {
           const now = new Date().toLocaleTimeString();
-          const newHistory = [...prev, { time: now, value: sentimentValue, sentiment: newSentiment }];
+          const newHistory = [...prev, { time: now, value: sentimentValue, sentiment: line.sentiment }];
           return newHistory.slice(-20);
         });
-      }, 2000);
-      return () => clearInterval(interval);
-    }
-  }, [isCallActive]);
+        
+        if (conversationRef.current) {
+          conversationRef.current.scrollTop = conversationRef.current.scrollHeight;
+        }
+        
+        await speakText(line.text, line.speaker === 'ai');
+        
+        if (cancelled) break;
+        await new Promise(resolve => setTimeout(resolve, 800));
+      }
+      
+      if (!cancelled) {
+        setIsCallActive(false);
+      }
+    };
+    
+    runConversation();
+    
+    return () => {
+      cancelled = true;
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+      setIsSpeaking(false);
+    };
+  }, [isCallActive, isPlayingVoice]);
 
   const activePrompt = prompts.find(p => p.id === selectedPromptId) || prompts[0];
 
@@ -846,76 +930,146 @@ export default function DiscVisualizer() {
                             <p className="text-xs text-slate-400">Real-time DISC behavioral assessment for security.</p>
                         </div>
                     </div>
-                    <button
-                        onClick={() => {
-                            setIsCallActive(!isCallActive);
-                            if (!isCallActive) {
-                                setSentimentHistory([]);
-                                setCurrentSentiment('calm');
-                            }
-                        }}
-                        className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${
-                            isCallActive 
-                                ? 'bg-red-600 hover:bg-red-500 text-white' 
-                                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                        }`}
-                        data-testid="button-toggle-call"
-                    >
-                        {isCallActive ? (
-                            <><X className="w-4 h-4" /> End Simulation</>
-                        ) : (
-                            <><PhoneCall className="w-4 h-4" /> Simulate Call</>
-                        )}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setIsPlayingVoice(!isPlayingVoice)}
+                            className={`p-2 rounded-lg transition-all ${
+                                isPlayingVoice 
+                                    ? 'bg-indigo-600 hover:bg-indigo-500 text-white' 
+                                    : 'bg-slate-700 hover:bg-slate-600 text-slate-400'
+                            }`}
+                            data-testid="button-toggle-voice"
+                            title={isPlayingVoice ? 'Mute Voice' : 'Unmute Voice'}
+                        >
+                            {isPlayingVoice ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (isCallActive) {
+                                    if (typeof window !== 'undefined' && window.speechSynthesis) {
+                                        window.speechSynthesis.cancel();
+                                    }
+                                }
+                                setIsCallActive(!isCallActive);
+                                if (!isCallActive) {
+                                    setSentimentHistory([]);
+                                    setConversationLines([]);
+                                    setCurrentLineIndex(0);
+                                    setCurrentSentiment('calm');
+                                }
+                            }}
+                            className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${
+                                isCallActive 
+                                    ? 'bg-red-600 hover:bg-red-500 text-white' 
+                                    : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                            }`}
+                            data-testid="button-toggle-call"
+                        >
+                            {isCallActive ? (
+                                <><X className="w-4 h-4" /> End Call</>
+                            ) : (
+                                <><PhoneCall className="w-4 h-4" /> Start Call</>
+                            )}
+                        </button>
+                    </div>
                 </div>
                 
-                {isCallActive && sentimentHistory.length > 0 && (
+                {(isCallActive || conversationLines.length > 0) && (
                     <div className="space-y-4">
-                        <div className="h-32">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={sentimentHistory}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                                    <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
-                                    <YAxis domain={[0, 100]} stroke="#64748b" tick={{ fontSize: 10 }} />
-                                    <Tooltip
-                                        contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
-                                        formatter={(value: number) => {
-                                            const labels = { 20: 'Calm', 40: 'Engaged', 60: 'Alert', 80: 'Stressed', 100: 'Hostile' };
-                                            return [labels[value as keyof typeof labels] || value, 'Sentiment'];
-                                        }}
-                                    />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="value" 
-                                        stroke={SENTIMENT_COLORS[currentSentiment].primary}
-                                        strokeWidth={2}
-                                        dot={{ fill: SENTIMENT_COLORS[currentSentiment].primary, strokeWidth: 0, r: 3 }}
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
+                        <div 
+                            ref={conversationRef}
+                            className="bg-slate-900/50 rounded-lg border border-slate-700/50 p-4 max-h-64 overflow-y-auto space-y-3"
+                        >
+                            {conversationLines.length === 0 && (
+                                <div className="flex items-center justify-center py-4">
+                                    <div className="flex items-center gap-2 text-slate-500">
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                                        <span className="text-sm">Connecting call...</span>
+                                    </div>
+                                </div>
+                            )}
+                            {conversationLines.map((line, idx) => (
+                                <div 
+                                    key={idx}
+                                    className={`flex gap-3 ${line.speaker === 'ai' ? 'flex-row-reverse' : ''}`}
+                                >
+                                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${
+                                        line.speaker === 'ai' 
+                                            ? 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white' 
+                                            : 'bg-gradient-to-br from-amber-500 to-orange-500 text-white'
+                                    }`}>
+                                        {line.speaker === 'ai' ? 'R' : 'M'}
+                                    </div>
+                                    <div className={`flex-1 ${line.speaker === 'ai' ? 'text-right' : ''}`}>
+                                        <div className="flex items-center gap-2 mb-1" style={{ justifyContent: line.speaker === 'ai' ? 'flex-end' : 'flex-start' }}>
+                                            <span className={`text-xs font-bold ${line.speaker === 'ai' ? 'text-indigo-400' : 'text-amber-400'}`}>
+                                                {line.name}
+                                            </span>
+                                            {idx === conversationLines.length - 1 && isSpeaking && (
+                                                <div className="flex items-center gap-0.5">
+                                                    <div className="w-1 h-3 bg-indigo-500 rounded-full animate-pulse" style={{ animationDelay: '0ms' }} />
+                                                    <div className="w-1 h-4 bg-indigo-400 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
+                                                    <div className="w-1 h-2 bg-indigo-500 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <p className={`text-sm text-slate-300 ${line.speaker === 'ai' ? 'bg-indigo-950/30 border-indigo-500/20' : 'bg-slate-800/50 border-slate-600/20'} rounded-lg px-3 py-2 inline-block border max-w-md`}>
+                                            {line.text}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        <div className="flex items-center gap-4 text-xs">
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                                <span className="text-slate-400">Calm (0-20)</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-blue-500" />
-                                <span className="text-slate-400">Engaged (21-40)</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                                <span className="text-slate-400">Alert (41-60)</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-orange-500" />
-                                <span className="text-slate-400">Stressed (61-80)</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded-full bg-red-500" />
-                                <span className="text-slate-400">Hostile (81-100)</span>
-                            </div>
-                        </div>
+                        
+                        {sentimentHistory.length > 0 && (
+                            <>
+                                <div className="h-24">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart data={sentimentHistory}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                                            <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10 }} />
+                                            <YAxis domain={[0, 100]} stroke="#64748b" tick={{ fontSize: 10 }} />
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+                                                formatter={(value: number) => {
+                                                    const labels = { 20: 'Calm', 40: 'Engaged', 60: 'Alert', 80: 'Stressed', 100: 'Hostile' };
+                                                    return [labels[value as keyof typeof labels] || value, 'Sentiment'];
+                                                }}
+                                            />
+                                            <Line 
+                                                type="monotone" 
+                                                dataKey="value" 
+                                                stroke={SENTIMENT_COLORS[currentSentiment].primary}
+                                                strokeWidth={2}
+                                                dot={{ fill: SENTIMENT_COLORS[currentSentiment].primary, strokeWidth: 0, r: 3 }}
+                                            />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3 text-xs">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                                        <span className="text-slate-400">Calm</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-blue-500" />
+                                        <span className="text-slate-400">Engaged</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                                        <span className="text-slate-400">Alert</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-orange-500" />
+                                        <span className="text-slate-400">Stressed</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-red-500" />
+                                        <span className="text-slate-400">Hostile</span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                         {currentSentiment === 'hostile' && (
                             <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-3">
                                 <AlertTriangle className="w-5 h-5 text-red-400" />
@@ -928,10 +1082,11 @@ export default function DiscVisualizer() {
                     </div>
                 )}
                 
-                {!isCallActive && (
+                {!isCallActive && conversationLines.length === 0 && (
                     <div className="text-center py-8 text-slate-500">
-                        <TrendingUp className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                        <p className="text-sm">Start a call simulation to monitor real-time sentiment</p>
+                        <PhoneCall className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm">Click "Start Call" to hear a conversation between Michael and Robert (AI)</p>
+                        <p className="text-xs text-slate-600 mt-1">Make sure your volume is on!</p>
                     </div>
                 )}
             </div>
