@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Mic, Play, Pause, ArrowRight, ArrowLeft, Zap, Volume2, MessageSquare, Phone, CheckCircle2, Users, Bot, Heart, Brain, Shield, Target, Menu, X, Home, LayoutDashboard, Sparkles } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Mic, Play, Pause, ArrowRight, ArrowLeft, Zap, Volume2, MessageSquare, Phone, CheckCircle2, Users, Bot, Heart, Brain, Shield, Target, Menu, X, Home, LayoutDashboard, Sparkles, Loader2 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { Link } from 'wouter';
 
@@ -8,6 +8,29 @@ type Step = 'name' | 'voice' | 'finetune' | 'meet';
 type Emotion = 'calm' | 'engaged' | 'focused' | 'energized' | 'empathetic';
 type SlideDirection = 'left' | 'right' | 'none';
 type Gender = 'male' | 'female' | 'neutral';
+
+// Curated list of best Chirp 3 HD voices for agents
+const CHIRP_HD_VOICES = {
+  female: [
+    { id: 'en-US-Chirp3-HD-Aoede', name: 'Aoede', description: 'Warm & Conversational', accent: 'American', voiceType: 'Chirp 3 HD' },
+    { id: 'en-US-Chirp3-HD-Kore', name: 'Kore', description: 'Calm & Professional', accent: 'American', voiceType: 'Chirp 3 HD' },
+    { id: 'en-US-Chirp3-HD-Leda', name: 'Leda', description: 'Friendly & Engaging', accent: 'American', voiceType: 'Chirp 3 HD' },
+    { id: 'en-GB-Chirp3-HD-Aoede', name: 'Aoede', description: 'Warm & Conversational', accent: 'British', voiceType: 'Chirp 3 HD' },
+    { id: 'en-AU-Chirp3-HD-Aoede', name: 'Aoede', description: 'Warm & Conversational', accent: 'Australian', voiceType: 'Chirp 3 HD' },
+  ],
+  male: [
+    { id: 'en-US-Chirp3-HD-Charon', name: 'Charon', description: 'Deep & Authoritative', accent: 'American', voiceType: 'Chirp 3 HD' },
+    { id: 'en-US-Chirp3-HD-Fenrir', name: 'Fenrir', description: 'Confident & Dynamic', accent: 'American', voiceType: 'Chirp 3 HD' },
+    { id: 'en-US-Chirp3-HD-Orus', name: 'Orus', description: 'Calm & Professional', accent: 'American', voiceType: 'Chirp 3 HD' },
+    { id: 'en-GB-Chirp3-HD-Charon', name: 'Charon', description: 'Deep & Authoritative', accent: 'British', voiceType: 'Chirp 3 HD' },
+    { id: 'en-AU-Chirp3-HD-Fenrir', name: 'Fenrir', description: 'Confident & Dynamic', accent: 'Australian', voiceType: 'Chirp 3 HD' },
+  ],
+  neutral: [
+    { id: 'en-US-Chirp3-HD-Puck', name: 'Puck', description: 'Balanced & Versatile', accent: 'American', voiceType: 'Chirp 3 HD' },
+    { id: 'en-US-Neural2-C', name: 'Neural C', description: 'Clear & Natural', accent: 'American', voiceType: 'Neural2' },
+    { id: 'en-GB-Neural2-C', name: 'Neural C', description: 'Clear & Natural', accent: 'British', voiceType: 'Neural2' },
+  ],
+};
 
 const MALE_VOICES = [
   { id: 'james', name: 'James', description: 'Warm & Professional', gender: 'male' as Gender, accent: 'American' },
@@ -299,6 +322,7 @@ export default function OnboardingFlow() {
   const [agentName, setAgentName] = useState('');
   const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const [isLoadingAudio, setIsLoadingAudio] = useState<string | null>(null);
   const [currentEmotion, setCurrentEmotion] = useState<Emotion>('calm');
   const [discSliders, setDiscSliders] = useState({ dominance: 40, influence: 55, steadiness: 75, conscientiousness: 85 });
   const [isAwakening, setIsAwakening] = useState(false);
@@ -307,6 +331,81 @@ export default function OnboardingFlow() {
   const [isTyping, setIsTyping] = useState(false);
   const [sentimentData, setSentimentData] = useState<{ value: number }[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Cleanup audio on unmount or step change
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  // Stop audio when leaving voice step
+  useEffect(() => {
+    if (step !== 'voice' && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+      setPlayingVoice(null);
+    }
+  }, [step]);
+
+  // Get curated voices based on detected gender
+  const getCuratedVoices = (name: string) => {
+    const gender = detectGender(name);
+    switch (gender) {
+      case 'male': return CHIRP_HD_VOICES.male;
+      case 'female': return CHIRP_HD_VOICES.female;
+      default: return CHIRP_HD_VOICES.neutral;
+    }
+  };
+
+  // Play voice preview using Google Cloud TTS
+  const playVoicePreview = async (voiceId: string) => {
+    // Stop current audio if playing
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+
+    if (playingVoice === voiceId) {
+      setPlayingVoice(null);
+      return;
+    }
+
+    setIsLoadingAudio(voiceId);
+    try {
+      const response = await fetch('/api/tts/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: `Hello! I'm ${agentName}. I'm here to help you with anything you need. How can I assist you today?`,
+          voiceName: voiceId,
+          languageCode: voiceId.split('-').slice(0, 2).join('-'),
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to synthesize speech');
+      
+      const data = await response.json();
+      const audio = new Audio(`data:audio/mpeg;base64,${data.audio}`);
+      audioRef.current = audio;
+      
+      audio.onended = () => {
+        setPlayingVoice(null);
+        audioRef.current = null;
+      };
+      
+      audio.play();
+      setPlayingVoice(voiceId);
+    } catch (error) {
+      console.error('Voice preview error:', error);
+    } finally {
+      setIsLoadingAudio(null);
+    }
+  };
 
   const goToStep = (newStep: Step, direction: SlideDirection = 'left') => {
     if (isTransitioning) return;
@@ -585,59 +684,90 @@ export default function OnboardingFlow() {
     </div>
   );
 
-  const renderVoiceStep = () => (
-    <div className={`z-10 w-full max-w-4xl ${getSlideClass()}`}>
-      <div className="text-center mb-8">
-        <Volume2 className="w-12 h-12 text-violet-400 mx-auto mb-4" />
-        <h2 className="text-3xl font-bold mb-2">Give {agentName} a Voice</h2>
-        <p className="text-slate-400">Choose how your agent communicates with the world.</p>
-      </div>
-      
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-        {getVoicesForName(agentName).map((voice) => (
-          <button
-            key={voice.id}
-            onClick={() => handleVoiceSelect(voice.id)}
-            className={`p-6 rounded-xl border-2 transition-all text-left ${
-              selectedVoice === voice.id 
-                ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/20' 
-                : 'border-slate-700 bg-slate-900/50 hover:border-slate-600'
-            }`}
-            data-testid={`button-voice-${voice.id}`}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-bold text-lg">{voice.name}</span>
-              {playingVoice === voice.id ? (
-                <Pause className="w-5 h-5 text-indigo-400 animate-pulse" />
-              ) : (
-                <Play className="w-5 h-5 text-slate-500" />
-              )}
+  const renderVoiceStep = () => {
+    const curatedVoices = getCuratedVoices(agentName);
+    
+    return (
+      <div className={`z-10 w-full max-w-4xl ${getSlideClass()}`}>
+        <div className="text-center mb-8">
+          <Volume2 className="w-12 h-12 text-violet-400 mx-auto mb-4" />
+          <h2 className="text-3xl font-bold mb-2">Give {agentName} a Voice</h2>
+          <p className="text-slate-400">Click any voice to preview, then select your favorite.</p>
+          <p className="text-xs text-slate-600 mt-2">Powered by Google Cloud Chirp 3 HD voices</p>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          {curatedVoices.map((voice) => (
+            <div
+              key={voice.id}
+              className={`p-5 rounded-xl border-2 transition-all ${
+                selectedVoice === voice.id 
+                  ? 'border-violet-500 bg-violet-500/10 shadow-lg shadow-violet-500/20' 
+                  : 'border-slate-700 bg-slate-900/50 hover:border-slate-600'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <span className="font-bold text-lg">{voice.name}</span>
+                  <span className="text-xs text-slate-500 ml-2">({voice.accent})</span>
+                </div>
+                <button
+                  onClick={() => playVoicePreview(voice.id)}
+                  className={`p-2 rounded-lg transition-all ${
+                    playingVoice === voice.id 
+                      ? 'bg-violet-500 text-white' 
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
+                  }`}
+                  data-testid={`button-play-${voice.id}`}
+                >
+                  {isLoadingAudio === voice.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : playingVoice === voice.id ? (
+                    <Pause className="w-4 h-4" />
+                  ) : (
+                    <Play className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+              <p className="text-sm text-slate-400 mb-2">{voice.description}</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-violet-400/70">{voice.voiceType}</span>
+                <button
+                  onClick={() => handleVoiceSelect(voice.id)}
+                  className={`text-xs px-3 py-1 rounded-lg transition-all ${
+                    selectedVoice === voice.id
+                      ? 'bg-violet-500 text-white'
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
+                  }`}
+                  data-testid={`button-voice-${voice.id}`}
+                >
+                  {selectedVoice === voice.id ? 'Selected' : 'Select'}
+                </button>
+              </div>
             </div>
-            <p className="text-sm text-slate-400">{voice.description}</p>
-            <p className="text-xs text-slate-600 mt-1">{voice.accent}</p>
+          ))}
+        </div>
+        
+        <div className="flex justify-center gap-4">
+          <button
+            onClick={prevStep}
+            className="px-6 py-3 rounded-xl border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 transition-all flex items-center gap-2"
+            data-testid="button-back-voice"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back
           </button>
-        ))}
+          <button
+            onClick={handleVoiceContinue}
+            disabled={!selectedVoice}
+            className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all shadow-lg shadow-violet-500/20"
+            data-testid="button-continue-voice"
+          >
+            Continue <ArrowRight className="w-5 h-5" />
+          </button>
+        </div>
       </div>
-      
-      <div className="flex justify-center gap-4">
-        <button
-          onClick={prevStep}
-          className="px-6 py-3 rounded-xl border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 transition-all flex items-center gap-2"
-          data-testid="button-back-voice"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back
-        </button>
-        <button
-          onClick={handleVoiceContinue}
-          disabled={!selectedVoice}
-          className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all shadow-lg shadow-violet-500/20"
-          data-testid="button-continue-voice"
-        >
-          Continue <ArrowRight className="w-5 h-5" />
-        </button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderFineTuneStep = () => (
     <div className={`z-10 w-full max-w-4xl ${getSlideClass()}`}>

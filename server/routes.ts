@@ -17,6 +17,7 @@ import {
 import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
+import textToSpeech from "@google-cloud/text-to-speech";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -792,6 +793,65 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       await storage.deleteCustomer(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============ Google Cloud Text-to-Speech API ============
+
+  // List available voices
+  app.get("/api/tts/voices", async (req, res) => {
+    try {
+      const client = new textToSpeech.TextToSpeechClient();
+      const [result] = await client.listVoices({});
+      
+      // Filter to English voices and format for frontend
+      const voices = result.voices
+        ?.filter(voice => voice.languageCodes?.some(code => code.startsWith('en-')))
+        .map(voice => ({
+          name: voice.name,
+          languageCodes: voice.languageCodes,
+          ssmlGender: voice.ssmlGender,
+          naturalSampleRateHertz: voice.naturalSampleRateHertz,
+        })) || [];
+      
+      res.json({ voices });
+    } catch (error: any) {
+      console.error("TTS list voices error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Synthesize speech for voice preview
+  app.post("/api/tts/synthesize", async (req, res) => {
+    try {
+      const { text, voiceName, languageCode = 'en-US' } = req.body;
+      
+      if (!text || !voiceName) {
+        return res.status(400).json({ error: "text and voiceName are required" });
+      }
+
+      const client = new textToSpeech.TextToSpeechClient();
+      
+      const request = {
+        input: { text },
+        voice: { 
+          languageCode,
+          name: voiceName 
+        },
+        audioConfig: { audioEncoding: 'MP3' as const },
+      };
+
+      const [response] = await client.synthesizeSpeech(request);
+      
+      // Return base64 encoded audio
+      const audioBase64 = Buffer.from(response.audioContent as Uint8Array).toString('base64');
+      res.json({ 
+        audio: audioBase64,
+        contentType: 'audio/mpeg'
+      });
+    } catch (error: any) {
+      console.error("TTS synthesize error:", error);
       res.status(500).json({ error: error.message });
     }
   });
