@@ -211,6 +211,45 @@ export async function registerRoutes(
     }
   });
 
+  // Auto-configure all phone numbers with Gateway Global AI webhooks
+  app.post("/api/telephony/configure-webhooks", async (req, res) => {
+    try {
+      const baseUrl = req.body.baseUrl || 'https://twilio.gatewayglobal.ai';
+      const numbers = await getIncomingPhoneNumbers();
+      
+      const results = [];
+      for (const num of numbers) {
+        try {
+          await updatePhoneNumberWebhooks(num.sid, {
+            voiceUrl: `${baseUrl}/webhook/voice`,
+            smsUrl: `${baseUrl}/webhook/sms`,
+            statusCallback: `${baseUrl}/webhook/voice/status`,
+          });
+          results.push({ 
+            phoneNumber: num.phoneNumber, 
+            success: true,
+            voiceUrl: `${baseUrl}/webhook/voice`,
+            smsUrl: `${baseUrl}/webhook/sms`
+          });
+        } catch (err: any) {
+          results.push({ 
+            phoneNumber: num.phoneNumber, 
+            success: false, 
+            error: err.message 
+          });
+        }
+      }
+      
+      res.json({ 
+        message: `Configured ${results.filter(r => r.success).length}/${numbers.length} phone numbers`,
+        baseUrl,
+        results 
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get default phone number
   app.get("/api/telephony/default-number", async (req, res) => {
     try {
