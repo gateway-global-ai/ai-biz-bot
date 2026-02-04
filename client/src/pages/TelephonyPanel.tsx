@@ -127,6 +127,8 @@ export default function TelephonyPanel() {
   const [existingAuthToken, setExistingAuthToken] = useState('');
   const [existingPhoneNumber, setExistingPhoneNumber] = useState('');
   const [existingPhoneSid, setExistingPhoneSid] = useState('');
+  const [existingIsSubAccount, setExistingIsSubAccount] = useState(false);
+  const [existingParentAccountSid, setExistingParentAccountSid] = useState('');
   const [existingFriendlyName, setExistingFriendlyName] = useState('');
 
   const addLog = (msg: string) => {
@@ -202,10 +204,12 @@ export default function TelephonyPanel() {
       phoneNumber: string;
       phoneSid: string;
       friendlyName: string;
+      isSubAccount: boolean;
+      parentAccountSid: string | null;
     }) => {
       return apiRequest('POST', '/api/telephony/numbers/existing', data);
     },
-    onSuccess: () => {
+    onSuccess: (response: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/telephony/config'] });
       setShowAddExisting(false);
       setExistingAccountSid('');
@@ -213,7 +217,9 @@ export default function TelephonyPanel() {
       setExistingPhoneNumber('');
       setExistingPhoneSid('');
       setExistingFriendlyName('');
-      toast({ title: 'Success', description: 'Existing number added successfully!' });
+      setExistingIsSubAccount(false);
+      setExistingParentAccountSid('');
+      toast({ title: 'Success', description: response?.message || 'Number configured successfully!' });
       addLog('Existing phone number configured');
     },
     onError: (error: any) => {
@@ -233,7 +239,20 @@ export default function TelephonyPanel() {
       phoneNumber: existingPhoneNumber,
       phoneSid: existingPhoneSid,
       friendlyName: existingFriendlyName || 'AI Agent Trunk',
+      isSubAccount: existingIsSubAccount,
+      parentAccountSid: existingIsSubAccount ? existingParentAccountSid : null,
     });
+  };
+  
+  const resetExistingForm = () => {
+    setShowAddExisting(false);
+    setExistingAccountSid('');
+    setExistingAuthToken('');
+    setExistingPhoneNumber('');
+    setExistingPhoneSid('');
+    setExistingFriendlyName('');
+    setExistingIsSubAccount(false);
+    setExistingParentAccountSid('');
   };
 
   const updateConfigMutation = useMutation({
@@ -628,7 +647,7 @@ export default function TelephonyPanel() {
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          onClick={() => setShowAddExisting(false)}
+                          onClick={resetExistingForm}
                         >
                           <X className="w-4 h-4" />
                         </Button>
@@ -699,10 +718,44 @@ export default function TelephonyPanel() {
                         />
                       </div>
                       
+                      {/* Sub-Account Toggle */}
+                      <div className="border border-border rounded-lg p-4 bg-background/50">
+                        <div className="flex items-center gap-3 mb-3">
+                          <input
+                            type="checkbox"
+                            id="existingIsSubAccount"
+                            checked={existingIsSubAccount}
+                            onChange={(e) => setExistingIsSubAccount(e.target.checked)}
+                            className="w-4 h-4 rounded border-border"
+                            data-testid="checkbox-is-subaccount"
+                          />
+                          <Label htmlFor="existingIsSubAccount" className="cursor-pointer">
+                            This is a Sub-Account
+                          </Label>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Check this if the credentials belong to a Twilio sub-account (created from a parent account).
+                        </p>
+                        
+                        {existingIsSubAccount && (
+                          <div className="space-y-2 animate-in fade-in slide-in-from-top-1">
+                            <Label htmlFor="existingParentAccountSid">Parent Account SID</Label>
+                            <Input
+                              id="existingParentAccountSid"
+                              value={existingParentAccountSid}
+                              onChange={(e) => setExistingParentAccountSid(e.target.value)}
+                              placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                              className="font-mono text-sm"
+                              data-testid="input-parent-account-sid"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      
                       <div className="flex gap-3 pt-2">
                         <Button 
                           variant="secondary" 
-                          onClick={() => setShowAddExisting(false)}
+                          onClick={resetExistingForm}
                           className="flex-1"
                         >
                           Cancel
@@ -797,9 +850,17 @@ export default function TelephonyPanel() {
                           </div>
                         )}
                         {config.isSubAccount && (
-                          <div>
-                            <Badge variant="outline" className="text-xs">Sub-Account</Badge>
-                          </div>
+                          <>
+                            <div>
+                              <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-500 border-amber-500/30">Sub-Account</Badge>
+                            </div>
+                            {config.parentAccountSid && (
+                              <div className="md:col-span-2">
+                                <span className="text-muted-foreground">Parent Account:</span>
+                                <span className="ml-2 font-mono text-foreground">{config.parentAccountSid}</span>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
