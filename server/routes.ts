@@ -1950,32 +1950,53 @@ Keep responses concise and engaging. If asked personal questions, you can share 
     }
   };
 
-  // Inbound SMS webhook - receives SMS from Twilio
+  // Inbound SMS webhook - receives SMS from Twilio with Caller ID lookup
   app.post("/webhook/sms", validateTwilioSignature, async (req, res) => {
     try {
       const { From, To, Body, MessageSid } = req.body;
       
       console.log(`[SMS Webhook] From: ${From}, To: ${To}, Body: ${Body?.substring(0, 50)}...`);
       
+      // ========== CALLER ID LOOKUP ==========
+      // Look up caller in customer database to personalize the response
+      const customer = await storage.getCustomerByPhone(From);
+      let assignedAgent = null;
+      let customerTasks: any[] = [];
+      
+      if (customer) {
+        console.log(`[SMS Webhook] Caller ID matched: ${customer.name} (${customer.id})`);
+        
+        // Get their assigned agent
+        if (customer.agentId) {
+          assignedAgent = await storage.getAgent(customer.agentId);
+          console.log(`[SMS Webhook] Assigned agent: ${assignedAgent?.name || 'Unknown'}`);
+        }
+        
+        // Get their active tasks/projects
+        customerTasks = await storage.getTasksByPhone(From);
+        console.log(`[SMS Webhook] Customer has ${customerTasks.length} tasks`);
+      } else {
+        console.log(`[SMS Webhook] No customer match for: ${From}`);
+      }
+      
       // Find or create conversation for this phone number
       let conversation = await storage.getConversationByPhone(From);
       
       if (!conversation) {
-        // Try to match with existing customer
-        const customer = await storage.getCustomerByPhone(From);
-        
         conversation = await storage.createConversation({
           phoneNumber: From,
           customerId: customer?.id || null,
-          agentId: null,
+          agentId: customer?.agentId || null,
           lastMessageAt: new Date(),
         });
         
         console.log(`[SMS Webhook] Created new conversation: ${conversation.id}`);
       } else {
-        // Update last message time
+        // Update last message time and link to customer/agent if found
         await storage.updateConversation(conversation.id, {
           lastMessageAt: new Date(),
+          customerId: customer?.id || conversation.customerId,
+          agentId: customer?.agentId || conversation.agentId,
         });
       }
       
@@ -1990,8 +2011,33 @@ Keep responses concise and engaging. If asked personal questions, you can share 
         status: 'received',
       });
       
+      // ========== BUILD CONTEXT FOR AI ==========
+      // Build personalized context based on caller ID lookup
+      const callerName = customer?.name || 'there';
+      const agentName = assignedAgent?.name || 'Gateway';
+      const agentPersonality = assignedAgent?.systemPrompt || 
+        'You are a helpful AI assistant for Gateway Global. You help people complete tasks and stay updated on their progress.';
+      
+      // Build task context
+      let taskContext = '';
+      const activeTasks = customerTasks.filter(t => t.status !== 'completed' && t.status !== 'failed');
+      if (activeTasks.length > 0) {
+        taskContext = '\n\nActive projects/tasks for this customer:\n' + 
+          activeTasks.map(t => `- ${t.task} (Status: ${t.status})`).join('\n');
+      }
+      
+      // Build customer context
+      let customerContext = '';
+      if (customer) {
+        customerContext = `\n\nYou are speaking with ${customer.name}`;
+        if (customer.company) customerContext += ` from ${customer.company}`;
+        if (customer.notes) customerContext += `\nNotes about this customer: ${customer.notes}`;
+      }
+      
+      const fullPersonality = `${agentPersonality}${customerContext}${taskContext}\n\nAddress the customer by name when appropriate. Be warm, helpful, and reference their projects if relevant to the conversation.`;
+      
       // Generate AI response using Kimi (primary) or Gemini (fallback)
-      let responseText = "Thank you for your message. An agent will respond shortly.";
+      let responseText = `Hi ${callerName}! Thank you for your message. An agent will respond shortly.`;
       
       // Get conversation history for context
       const messages = await storage.getMessagesByConversation(conversation.id, 10);
@@ -2004,8 +2050,8 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       if (process.env.MOONSHOT_API_KEY) {
         try {
           responseText = await generateSmsResponse({
-            agentName: 'Gateway',
-            personality: 'You are a helpful AI assistant for Gateway Global. You help people complete tasks and stay updated on their progress.',
+            agentName: agentName,
+            personality: fullPersonality,
             conversationHistory: history,
             userMessage: Body || '',
           });
@@ -2024,7 +2070,7 @@ Keep responses concise and engaging. If asked personal questions, you can share 
               const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
               const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
               const historyText = history.map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`).join('\n');
-              const prompt = `You are a helpful AI assistant for Gateway Global. Respond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.\n\nConversation history:\n${historyText}\n\nCustomer's latest message: ${Body}\n\nRespond as the helpful AI agent:`;
+              const prompt = `${fullPersonality}\n\nRespond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.\n\nConversation history:\n${historyText}\n\nCustomer's latest message: ${Body}\n\nRespond as ${agentName}:`;
               const result = await model.generateContent(prompt);
               responseText = result.response.text() || responseText;
               if (responseText.length > 160) {
@@ -2041,7 +2087,7 @@ Keep responses concise and engaging. If asked personal questions, you can share 
           const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
           const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
           const historyText = history.map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`).join('\n');
-          const prompt = `You are a helpful AI assistant for Gateway Global. Respond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.\n\nConversation history:\n${historyText}\n\nCustomer's latest message: ${Body}\n\nRespond as the helpful AI agent:`;
+          const prompt = `${fullPersonality}\n\nRespond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.\n\nConversation history:\n${historyText}\n\nCustomer's latest message: ${Body}\n\nRespond as ${agentName}:`;
           const result = await model.generateContent(prompt);
           responseText = result.response.text() || responseText;
           if (responseText.length > 160) {
