@@ -13,16 +13,19 @@ import {
   type InsertSmsConversation,
   type SmsMessage,
   type InsertSmsMessage,
+  type Task,
+  type InsertTask,
   telephonyConfigs,
   callLogs,
   users,
   agents,
   customers,
   smsConversations,
-  smsMessages
+  smsMessages,
+  tasks
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, ilike, or } from "drizzle-orm";
+import { eq, desc, ilike, or, lte, isNull, and } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -60,6 +63,13 @@ export interface IStorage {
   // SMS Message operations
   getMessagesByConversation(conversationId: string, limit?: number): Promise<SmsMessage[]>;
   createMessage(message: InsertSmsMessage): Promise<SmsMessage>;
+  
+  // Task operations (MVP)
+  getTask(id: string): Promise<Task | undefined>;
+  getTasksByPhone(phone: string): Promise<Task[]>;
+  getTasksPendingUpdate(): Promise<Task[]>;
+  createTask(task: InsertTask): Promise<Task>;
+  updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -234,6 +244,46 @@ export class DatabaseStorage implements IStorage {
   async createMessage(message: InsertSmsMessage): Promise<SmsMessage> {
     const [created] = await db.insert(smsMessages).values(message).returning();
     return created;
+  }
+
+  // Task operations (MVP)
+  async getTask(id: string): Promise<Task | undefined> {
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    return task;
+  }
+
+  async getTasksByPhone(phone: string): Promise<Task[]> {
+    return db.select().from(tasks)
+      .where(eq(tasks.userPhone, phone))
+      .orderBy(desc(tasks.createdAt));
+  }
+
+  async getTasksPendingUpdate(): Promise<Task[]> {
+    const now = new Date();
+    return db.select().from(tasks)
+      .where(
+        and(
+          lte(tasks.nextUpdateAt, now),
+          or(
+            eq(tasks.status, 'started'),
+            eq(tasks.status, 'in_progress')
+          )
+        )
+      );
+  }
+
+  async createTask(task: InsertTask): Promise<Task> {
+    const [created] = await db.insert(tasks).values(task).returning();
+    return created;
+  }
+
+  async updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined> {
+    const [updated] = await db
+      .update(tasks)
+      .set(updates)
+      .where(eq(tasks.id, id))
+      .returning();
+    return updated;
   }
 }
 

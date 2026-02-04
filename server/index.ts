@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { startTaskScheduler } from "./taskScheduler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -98,6 +99,10 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      
+      // Start the task scheduler for 24-hour SMS automation
+      // Checks every 5 minutes for tasks that need updates
+      startTaskScheduler(5);
     },
   );
 })();

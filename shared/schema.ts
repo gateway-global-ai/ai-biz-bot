@@ -334,3 +334,34 @@ export const insertCustomerSchema = createInsertSchema(customers).omit({
 
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export type Customer = typeof customers.$inferSelect;
+
+// MVP Tasks table - for 24-hour trial tasks
+export const tasks = pgTable("tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userName: text("user_name").notNull(),
+  userPhone: text("user_phone").notNull(),
+  agentName: text("agent_name").notNull(),
+  personalityId: text("personality_id").notNull(), // achiever, collaborator, supporter, analyst
+  task: text("task").notNull(),
+  parsedTask: jsonb("parsed_task"), // Parsed task details from Kimi
+  status: text("status").notNull().default("pending"), // pending, started, in_progress, completed, failed
+  estimatedHours: integer("estimated_hours").default(24),
+  dominance: integer("dominance").default(50),
+  influence: integer("influence").default(50),
+  steadiness: integer("steadiness").default(50),
+  conscientiousness: integer("conscientiousness").default(50),
+  result: text("result"), // Final task result
+  nextUpdateAt: timestamp("next_update_at"), // When to send next SMS update
+  updatesCount: integer("updates_count").default(0), // Number of updates sent
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTaskSchema = createInsertSchema(tasks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTask = z.infer<typeof insertTaskSchema>;
+export type Task = typeof tasks.$inferSelect;

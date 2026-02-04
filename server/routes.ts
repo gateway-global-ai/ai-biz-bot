@@ -18,6 +18,7 @@ import {
 import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -1170,6 +1171,154 @@ export async function registerRoutes(
     }
   });
 
+  // =====================================================
+  // MVP Task Submission API
+  // =====================================================
+  
+  // Zod schema for task submission validation
+  const taskSubmitSchema = z.object({
+    task: z.string().min(5, "Task must be at least 5 characters"),
+    phone: z.string().min(10, "Phone number must be at least 10 digits"),
+    name: z.string().min(1, "Name is required"),
+    agentName: z.string().min(1, "Agent name is required"),
+    personality: z.object({
+      id: z.enum(['achiever', 'collaborator', 'supporter', 'analyst']),
+      name: z.string(),
+      description: z.string(),
+      icon: z.string(),
+      disc: z.object({
+        dominance: z.number().min(0).max(100),
+        influence: z.number().min(0).max(100),
+        steadiness: z.number().min(0).max(100),
+        conscientiousness: z.number().min(0).max(100),
+      }),
+    }),
+  });
+
+  // Submit a new task (from MVP landing page)
+  app.post("/api/tasks/submit", async (req, res) => {
+    try {
+      // Validate request body with Zod
+      const validationResult = taskSubmitSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          error: "Validation failed", 
+          details: validationResult.error.flatten().fieldErrors 
+        });
+      }
+      
+      const { task, phone, name, personality, agentName } = validationResult.data;
+      
+      // Normalize phone number (remove formatting)
+      const normalizedPhone = phone.replace(/\D/g, '');
+      if (normalizedPhone.length < 10) {
+        return res.status(400).json({ error: "Invalid phone number" });
+      }
+      
+      // Format to E.164 for Twilio
+      const e164Phone = normalizedPhone.startsWith('1') 
+        ? `+${normalizedPhone}` 
+        : `+1${normalizedPhone}`;
+      
+      // Parse task using Kimi (with partial mode)
+      let parsedTask = null;
+      try {
+        const { parseTask } = await import("./kimi");
+        parsedTask = await parseTask(task);
+        console.log('[Task Submit] Parsed task:', parsedTask);
+      } catch (parseError) {
+        console.error('[Task Submit] Task parsing error:', parseError);
+      }
+      
+      // Calculate next update time (1 hour from now)
+      const nextUpdateAt = new Date(Date.now() + 60 * 60 * 1000);
+      
+      // Create the task with validated DISC values
+      const newTask = await storage.createTask({
+        userName: name,
+        userPhone: e164Phone,
+        agentName,
+        personalityId: personality.id,
+        task,
+        parsedTask,
+        status: 'started',
+        estimatedHours: parsedTask?.estimatedHours || 24,
+        dominance: personality.disc.dominance,
+        influence: personality.disc.influence,
+        steadiness: personality.disc.steadiness,
+        conscientiousness: personality.disc.conscientiousness,
+        startedAt: new Date(),
+        nextUpdateAt,
+        updatesCount: 1,
+      });
+      
+      console.log('[Task Submit] Created task:', newTask.id);
+      
+      // Send immediate SMS confirmation
+      try {
+        const { generateTaskUpdate } = await import("./kimi");
+        
+        const smsMessage = await generateTaskUpdate({
+          agentName,
+          taskDescription: task,
+          hoursElapsed: 0,
+          totalHours: 24,
+          updateType: 'start',
+        });
+        
+        // Send SMS via Twilio
+        const config = await storage.getTelephonyConfig();
+        if (config?.phoneNumber && config?.accountSid && config?.authToken) {
+          const { sendSms } = await import("./twilio");
+          await sendSms(e164Phone, smsMessage, config.phoneNumber);
+          console.log(`[Task Submit] Sent initial SMS to ${e164Phone}`);
+        } else {
+          console.warn('[Task Submit] No Twilio config, skipping SMS');
+        }
+      } catch (smsError) {
+        console.error('[Task Submit] SMS send error:', smsError);
+      }
+      
+      res.json({ 
+        success: true, 
+        taskId: newTask.id,
+        message: `Task created! ${agentName} will text you shortly.`
+      });
+      
+    } catch (error: any) {
+      console.error('[Task Submit] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Get task status (for optional dashboard)
+  app.get("/api/tasks/:id", async (req, res) => {
+    try {
+      const task = await storage.getTask(req.params.id);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      res.json(task);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Get tasks by phone number
+  app.get("/api/tasks/phone/:phone", async (req, res) => {
+    try {
+      const normalizedPhone = req.params.phone.replace(/\D/g, '');
+      const e164Phone = normalizedPhone.startsWith('1') 
+        ? `+${normalizedPhone}` 
+        : `+1${normalizedPhone}`;
+      
+      const tasks = await storage.getTasksByPhone(e164Phone);
+      res.json(tasks);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Generate mock conversation with Gemini TTS
   app.post("/api/conversation/generate", async (req, res) => {
     try {
@@ -1558,38 +1707,65 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
         status: 'received',
       });
       
-      // Generate AI response using Gemini if available
+      // Generate AI response using Kimi (primary) or Gemini (fallback)
       let responseText = "Thank you for your message. An agent will respond shortly.";
       
-      if (process.env.GEMINI_API_KEY) {
+      // Get conversation history for context
+      const messages = await storage.getMessagesByConversation(conversation.id, 10);
+      const history = messages.reverse().map(m => ({
+        role: m.direction === 'inbound' ? 'user' as const : 'assistant' as const,
+        content: m.body || '',
+      }));
+      
+      // Try Kimi first (preferred), fallback to Gemini
+      if (process.env.MOONSHOT_API_KEY) {
+        try {
+          responseText = await generateSmsResponse({
+            agentName: 'Gateway',
+            personality: 'You are a helpful AI assistant for Gateway Global. You help people complete tasks and stay updated on their progress.',
+            conversationHistory: history,
+            userMessage: Body || '',
+          });
+          
+          // Trim to SMS length
+          if (responseText.length > 320) {
+            responseText = responseText.substring(0, 317) + '...';
+          }
+          console.log('[SMS Webhook] Kimi response generated successfully');
+        } catch (kimiError) {
+          console.error('[SMS Webhook] Kimi error, trying Gemini fallback:', kimiError);
+          
+          // Fallback to Gemini
+          if (process.env.GEMINI_API_KEY) {
+            try {
+              const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+              const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+              const historyText = history.map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`).join('\n');
+              const prompt = `You are a helpful AI assistant for Gateway Global. Respond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.\n\nConversation history:\n${historyText}\n\nCustomer's latest message: ${Body}\n\nRespond as the helpful AI agent:`;
+              const result = await model.generateContent(prompt);
+              responseText = result.response.text() || responseText;
+              if (responseText.length > 160) {
+                responseText = responseText.substring(0, 157) + '...';
+              }
+            } catch (geminiError) {
+              console.error('[SMS Webhook] Gemini fallback error:', geminiError);
+            }
+          }
+        }
+      } else if (process.env.GEMINI_API_KEY) {
+        // No Kimi key, use Gemini directly
         try {
           const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
           const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-          
-          // Get conversation history for context
-          const messages = await storage.getMessagesByConversation(conversation.id, 10);
-          const history = messages.reverse().map(m => 
-            `${m.direction === 'inbound' ? 'Customer' : 'Agent'}: ${m.body}`
-          ).join('\n');
-          
-          const prompt = `You are a helpful AI assistant for Gateway Global. Respond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.
-
-Conversation history:
-${history}
-
-Customer's latest message: ${Body}
-
-Respond as the helpful AI agent:`;
-          
+          const historyText = history.map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`).join('\n');
+          const prompt = `You are a helpful AI assistant for Gateway Global. Respond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.\n\nConversation history:\n${historyText}\n\nCustomer's latest message: ${Body}\n\nRespond as the helpful AI agent:`;
           const result = await model.generateContent(prompt);
           responseText = result.response.text() || responseText;
-          
-          // Trim to SMS length
           if (responseText.length > 160) {
             responseText = responseText.substring(0, 157) + '...';
           }
-        } catch (aiError) {
-          console.error('[SMS Webhook] AI response error:', aiError);
+        } catch (geminiError) {
+          console.error('[SMS Webhook] Gemini error:', geminiError);
         }
       }
       
@@ -1690,22 +1866,52 @@ Respond as the helpful AI agent:`;
       
       let responseText = "I understand. Let me help you with that.";
       
-      // Generate AI response if available
-      if (process.env.GEMINI_API_KEY && SpeechResult) {
-        try {
-          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-          
-          const prompt = `You are a helpful AI phone assistant for Gateway Global. Respond naturally to this caller's request. Keep your response under 200 words for phone readability.
-
-Caller said: "${SpeechResult}"
-
-Respond helpfully:`;
-          
-          const result = await model.generateContent(prompt);
-          responseText = result.response.text() || responseText;
-        } catch (aiError) {
-          console.error('[Voice Gather] AI response error:', aiError);
+      // Generate AI response using Kimi (primary) or Gemini (fallback)
+      if (SpeechResult) {
+        if (process.env.MOONSHOT_API_KEY) {
+          try {
+            responseText = await chat({
+              model: KIMI_MODELS.K2_TURBO,
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are a helpful AI phone assistant for Gateway Global. Respond naturally and conversationally. Keep your response under 100 words for phone readability. No markdown, no bullet points.',
+                },
+                {
+                  role: 'user',
+                  content: SpeechResult,
+                },
+              ],
+              temperature: 0.7,
+              max_tokens: 300,
+            });
+            console.log('[Voice Gather] Kimi response generated successfully');
+          } catch (kimiError) {
+            console.error('[Voice Gather] Kimi error, trying Gemini fallback:', kimiError);
+            
+            // Fallback to Gemini
+            if (process.env.GEMINI_API_KEY) {
+              try {
+                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+                const prompt = `You are a helpful AI phone assistant for Gateway Global. Respond naturally to this caller's request. Keep your response under 200 words for phone readability.\n\nCaller said: "${SpeechResult}"\n\nRespond helpfully:`;
+                const result = await model.generateContent(prompt);
+                responseText = result.response.text() || responseText;
+              } catch (geminiError) {
+                console.error('[Voice Gather] Gemini fallback error:', geminiError);
+              }
+            }
+          }
+        } else if (process.env.GEMINI_API_KEY) {
+          try {
+            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+            const prompt = `You are a helpful AI phone assistant for Gateway Global. Respond naturally to this caller's request. Keep your response under 200 words for phone readability.\n\nCaller said: "${SpeechResult}"\n\nRespond helpfully:`;
+            const result = await model.generateContent(prompt);
+            responseText = result.response.text() || responseText;
+          } catch (geminiError) {
+            console.error('[Voice Gather] Gemini error:', geminiError);
+          }
         }
       }
       
