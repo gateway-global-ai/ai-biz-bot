@@ -747,17 +747,19 @@ export default function OnboardingFlow() {
     
     return (
       <div className={`z-10 w-full max-w-3xl ${getSlideClass()}`}>
-        <div className="text-center mb-8">
-          <div className="relative w-20 h-20 mx-auto mb-4">
-            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/20 to-purple-600/20 rounded-2xl" />
-            <div className="absolute inset-2 bg-slate-900 rounded-xl flex items-center justify-center border border-violet-500/30">
-              <Bot className="w-10 h-10 text-violet-400" />
+        <div className="text-center mb-8 md:mb-12">
+          <div className="relative w-24 h-24 md:w-28 md:h-28 mx-auto mb-6">
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-500/30 to-purple-600/30 rounded-2xl animate-pulse" />
+            <div className="absolute inset-2 bg-slate-900/90 rounded-xl flex items-center justify-center border-2 border-violet-500/50 shadow-lg shadow-violet-500/20">
+              <Bot className="w-12 h-12 md:w-14 md:h-14 text-violet-400" />
             </div>
-            <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-950 animate-pulse" />
+            <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-slate-950 animate-pulse" />
           </div>
-          <h2 className="text-3xl font-bold mb-2">Give {agentName} a Voice</h2>
-          <p className="text-slate-400">Click any voice to preview, then select your favorite.</p>
-          <p className="text-xs text-slate-600 mt-2">Powered by Google Cloud Chirp 3 HD voices</p>
+          <h1 className="text-3xl md:text-5xl lg:text-6xl font-black mb-4">
+            Give <span className="bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">{agentName}</span> a Voice
+          </h1>
+          <p className="text-lg md:text-xl text-slate-400">Click any voice to preview, then select your favorite.</p>
+          <p className="text-xs text-slate-600 mt-3">Powered by Google Cloud Chirp 3 HD voices</p>
         </div>
         
         <div className="grid grid-cols-2 gap-4 mb-8 max-w-2xl mx-auto">
