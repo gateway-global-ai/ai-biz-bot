@@ -337,7 +337,6 @@ export default function OnboardingFlow() {
     const stopAudio = () => {
       if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current.src = '';
         audioRef.current = null;
       }
       setPlayingVoice(null);
