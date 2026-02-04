@@ -270,39 +270,34 @@ export default function OnboardingFlow() {
             </p>
           </div>
           
-          <div className="relative mb-6">
+          <div className="relative mb-6 flex items-center gap-3 relative z-20">
             <input
               type="text"
               value={agentName}
               onChange={(e) => setAgentName(e.target.value)}
-              placeholder="Enter a name..."
-              className="w-full bg-slate-900/80 border-2 border-indigo-500/30 rounded-xl px-6 py-4 text-xl text-center focus:outline-none focus:border-indigo-500 transition-all placeholder:text-slate-600"
+              placeholder="Name Your Bot"
+              className="flex-1 bg-slate-900/80 border-2 border-emerald-500/30 rounded-xl px-6 py-4 text-xl text-center focus:outline-none focus:border-emerald-500 transition-all placeholder:text-slate-500"
               data-testid="input-agent-name"
               onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
             />
-            {agentName && (
-              <div className="absolute -bottom-6 left-0 right-0 text-center text-sm text-indigo-400">
-                "{agentName}" is awakening...
-              </div>
-            )}
+            <button
+              onClick={handleNameSubmit}
+              disabled={!agentName.trim() || isAwakening}
+              className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 disabled:opacity-30 disabled:cursor-not-allowed p-4 rounded-xl transition-all shadow-lg shadow-emerald-500/30"
+              data-testid="button-awaken"
+            >
+              {isAwakening ? (
+                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <ArrowRight className="w-6 h-6" />
+              )}
+            </button>
           </div>
-          
-          <button
-            onClick={handleNameSubmit}
-            disabled={!agentName.trim() || isAwakening}
-            className="mt-8 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-4 rounded-xl font-bold text-lg flex items-center gap-3 mx-auto transition-all shadow-lg shadow-indigo-500/30"
-            data-testid="button-awaken"
-          >
-            {isAwakening ? (
-              <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Awakening...
-              </>
-            ) : (
-              <>
-                Begin Awakening <ArrowRight className="w-5 h-5" />
-              </>
-            )}
-          </button>
+          {agentName && (
+            <p className="text-sm text-emerald-400 relative z-20">
+              "{agentName}" is awakening...
+            </p>
+          )}
         </div>
       )}
 
@@ -343,27 +338,32 @@ export default function OnboardingFlow() {
             </p>
           </div>
           
-          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-8 mb-6 relative z-20">
+          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 md:p-8 mb-6 relative z-20">
             <p className="text-sm text-slate-500 uppercase tracking-wider mb-3">Name Your Partner</p>
-            <input
-              type="text"
-              value={agentName}
-              onChange={(e) => setAgentName(e.target.value)}
-              placeholder="Give it a name..."
-              className="w-full bg-black border-2 border-slate-700 rounded-xl px-6 py-4 text-xl text-center focus:outline-none focus:border-amber-500 transition-all placeholder:text-slate-700"
-              data-testid="input-agent-name"
-              onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
-            />
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                value={agentName}
+                onChange={(e) => setAgentName(e.target.value)}
+                placeholder="Name Your Bot"
+                className="flex-1 bg-black border-2 border-emerald-500/30 rounded-xl px-6 py-4 text-xl text-center focus:outline-none focus:border-emerald-500 transition-all placeholder:text-slate-600"
+                data-testid="input-agent-name"
+                onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
+              />
+              <button
+                onClick={handleNameSubmit}
+                disabled={!agentName.trim() || isAwakening}
+                className="bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 disabled:opacity-30 disabled:cursor-not-allowed p-4 rounded-xl transition-all shadow-lg shadow-emerald-500/30"
+                data-testid="button-start"
+              >
+                {isAwakening ? (
+                  <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <ArrowRight className="w-6 h-6" />
+                )}
+              </button>
+            </div>
           </div>
-          
-          <button
-            onClick={handleNameSubmit}
-            disabled={!agentName.trim() || isAwakening}
-            className="relative z-20 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-4 rounded-xl font-bold text-lg flex items-center gap-3 mx-auto transition-all shadow-lg shadow-orange-500/30"
-            data-testid="button-start"
-          >
-            {isAwakening ? 'Initializing...' : <>Start The Proof <ArrowRight className="w-5 h-5" /></>}
-          </button>
           
           <p className="mt-8 text-sm text-slate-600 relative z-20">
             The 24-Hour Proof: One task. One text. One result. No apps. No friction.
