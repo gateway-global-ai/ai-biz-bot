@@ -98,6 +98,16 @@ Preferred communication style: Simple, everyday language.
 - Added Recharts library for DISC/ARCH visualizations
 - Added owner verification fields (ownerPhone, ownerEmail) to telephony firewall section
 - Updated shared/schema.ts with DISC/ARCH types and Server/TestSuite/Security types
+- **NEW: Twilio Inbound Webhooks** (February 2026):
+  - Inbound SMS handling at `/webhook/sms` with AI-powered responses via Gemini
+  - Inbound voice calls at `/webhook/voice` with TwiML speech-to-text and AI responses
+  - Voice gather continuation at `/webhook/voice/gather` for multi-turn conversations
+  - Call status tracking at `/webhook/voice/status` for analytics
+  - SMS conversation storage with 30-day message history (smsConversations, smsMessages tables)
+  - Customer matching by phone number for personalized responses
+  - Twilio signature validation middleware for security
+  - XML escaping to prevent TwiML injection attacks
+  - Legacy `/api/webhooks/*` routes redirect to new secure endpoints
 - Enhanced Mock Conversation page (`/conversation`):
   - BotAvatar visualizer with sentiment-based animations (calm/engaged/alert)
   - DISC sliders with real-time avatar updates
