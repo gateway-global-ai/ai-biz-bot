@@ -126,7 +126,7 @@ export default function Login() {
                 <Input
                   data-testid="input-phone"
                   type="tel"
-                  placeholder="(702) 540-5471"
+                  placeholder="(555) 123-4567"
                   value={phone}
                   onChange={(e) => setPhone(formatPhone(e.target.value))}
                   className="pl-10 bg-white/10 border-white/20 text-white placeholder:text-white/50 h-12"
