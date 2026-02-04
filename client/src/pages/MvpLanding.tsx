@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { Link } from 'wouter';
 import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, CheckCircle2, Sparkles, MessageSquare, Clock, ArrowRight, Target, Users, Shield, Search, type LucideIcon } from 'lucide-react';
+import { Loader2, CheckCircle2, Sparkles, MessageSquare, Clock, ArrowRight, Target, Users, Shield, Search, LayoutDashboard, Phone, Mic, type LucideIcon } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 type Step = 'input' | 'personality' | 'submitting' | 'success';
@@ -106,6 +107,32 @@ export default function MvpLanding() {
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse" />
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse delay-1000" />
       </div>
+
+      <nav className="relative z-20 border-b border-white/10 bg-black/20 backdrop-blur-sm">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <span className="text-white font-bold text-lg">Gateway Global AI</span>
+          <div className="flex items-center gap-3">
+            <Link href="/kimi-audio">
+              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-voice-ai">
+                <Mic className="w-4 h-4 mr-2" />
+                Voice AI
+              </Button>
+            </Link>
+            <Link href="/dashboard">
+              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-dashboard">
+                <LayoutDashboard className="w-4 h-4 mr-2" />
+                Dashboard
+              </Button>
+            </Link>
+            <Link href="/telephony">
+              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-telephony">
+                <Phone className="w-4 h-4 mr-2" />
+                Telephony
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </nav>
 
       <div className="relative z-10 container mx-auto px-4 py-12 max-w-2xl">
         {/* Header */}

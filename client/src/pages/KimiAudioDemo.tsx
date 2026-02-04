@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Phone, Mic, AudioWaveform, Zap, Globe, MessageSquare, Volume2, Clock } from "lucide-react";
+import { Phone, Mic, AudioWaveform, Zap, Globe, MessageSquare, Volume2, Clock, LayoutDashboard, Settings, Home } from "lucide-react";
 
 export default function KimiAudioDemo() {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -40,6 +41,31 @@ export default function KimiAudioDemo() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmZmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PGNpcmNsZSBjeD0iMzAiIGN5PSIzMCIgcj0iMiIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
+      
+      <nav className="relative z-20 border-b border-white/10 bg-black/20 backdrop-blur-sm">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          <Link href="/">
+            <span className="text-white font-bold text-lg cursor-pointer hover:text-purple-300 transition-colors flex items-center gap-2" data-testid="link-home">
+              <Home className="w-5 h-5" />
+              Gateway Global AI
+            </span>
+          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard">
+              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-dashboard">
+                <LayoutDashboard className="w-4 h-4 mr-2" />
+                Dashboard
+              </Button>
+            </Link>
+            <Link href="/telephony">
+              <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-telephony">
+                <Phone className="w-4 h-4 mr-2" />
+                Telephony
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </nav>
       
       <div className="relative z-10 container mx-auto px-4 py-12">
         <div className="text-center mb-12">
