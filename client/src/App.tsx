@@ -19,6 +19,7 @@ import TheOffice from "@/pages/TheOffice";
 import TheLab from "@/pages/TheLab";
 import TheClassroom from "@/pages/TheClassroom";
 import CustomerManager from "@/pages/CustomerManager";
+import TwilioAccountManager from "@/pages/TwilioAccountManager";
 import NotFound from "@/pages/not-found";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
 
@@ -237,6 +238,7 @@ function AppRouter() {
       <Route path="/agent-manager" component={AgentManager} />
       <Route path="/customers" component={CustomerManager} />
       <Route path="/telephony" component={TelephonyPanel} />
+      <Route path="/twilio-account" component={TwilioAccountManager} />
       <Route path="/twilio" component={TwilioHub} />
       <Route path="/servers" component={ServerPanel} />
       <Route path="/config" component={GlobalConfig} />

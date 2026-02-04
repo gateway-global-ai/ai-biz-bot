@@ -95,6 +95,19 @@ export default function TelephonyPanel() {
   const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
   const [isTailing, setIsTailing] = useState(false);
   const [testNumber, setTestNumber] = useState('');
+  
+  // Local form state for settings (prevents mutation on every keystroke)
+  const [localFriendlyName, setLocalFriendlyName] = useState('');
+  const [localVoiceUrl, setLocalVoiceUrl] = useState('');
+  const [localVoiceFallbackUrl, setLocalVoiceFallbackUrl] = useState('');
+  const [localStatusCallbackUrl, setLocalStatusCallbackUrl] = useState('');
+  const [localSmsUrl, setLocalSmsUrl] = useState('');
+  const [localSmsFallbackUrl, setLocalSmsFallbackUrl] = useState('');
+  const [localOwnerPhone, setLocalOwnerPhone] = useState('');
+  const [localOwnerEmail, setLocalOwnerEmail] = useState('');
+  const [localMaxCallDuration, setLocalMaxCallDuration] = useState('60');
+  const [localTimeout, setLocalTimeout] = useState('30');
+  const [settingsInitialized, setSettingsInitialized] = useState(false);
 
   const addLog = (msg: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -259,6 +272,60 @@ export default function TelephonyPanel() {
     setTimeout(() => addLog('SIP/2.0 180 Ringing'), 800);
     setTimeout(() => addLog('SIP/2.0 200 OK - Session established'), 1500);
     setTimeout(() => addLog(`Call completed. Duration: ${Math.floor(Math.random() * 60 + 10)}s`), 3000);
+  };
+
+  // Initialize local state from config
+  useEffect(() => {
+    if (config) {
+      setLocalFriendlyName(config.friendlyName || '');
+      setLocalVoiceUrl(config.voiceUrl || '');
+      setLocalVoiceFallbackUrl(config.voiceFallbackUrl || '');
+      setLocalStatusCallbackUrl(config.statusCallbackUrl || '');
+      setLocalSmsUrl(config.smsUrl || '');
+      setLocalSmsFallbackUrl(config.smsFallbackUrl || '');
+      setLocalOwnerPhone(config.ownerPhone || '');
+      setLocalOwnerEmail(config.ownerEmail || '');
+      setLocalMaxCallDuration(String(config.maxCallDuration || 60));
+      setLocalTimeout(String(config.timeout || 30));
+      setSettingsInitialized(true);
+    }
+  }, [config?.id]); // Only re-init when config id changes (new config loaded)
+
+  // Save settings handler
+  const saveSettings = async () => {
+    if (!config?.id) return;
+    
+    // Save config to database
+    updateConfigMutation.mutate({
+      friendlyName: localFriendlyName || null,
+      voiceUrl: localVoiceUrl || null,
+      voiceFallbackUrl: localVoiceFallbackUrl || null,
+      statusCallbackUrl: localStatusCallbackUrl || null,
+      smsUrl: localSmsUrl || null,
+      smsFallbackUrl: localSmsFallbackUrl || null,
+      maxCallDuration: parseInt(localMaxCallDuration) || 60,
+      timeout: parseInt(localTimeout) || 30,
+    });
+    
+    // Also sync webhooks to Twilio if phone is provisioned
+    if (config.phoneSid) {
+      updateWebhooksMutation.mutate({
+        phoneSid: config.phoneSid,
+        voiceUrl: localVoiceUrl || '',
+        voiceFallbackUrl: localVoiceFallbackUrl || '',
+        statusCallback: localStatusCallbackUrl || '',
+        smsUrl: localSmsUrl || '',
+        smsFallbackUrl: localSmsFallbackUrl || '',
+      });
+    }
+  };
+
+  // Save firewall settings handler
+  const saveFirewallSettings = () => {
+    updateFirewallMutation.mutate({
+      ownerPhone: localOwnerPhone || undefined,
+      ownerEmail: localOwnerEmail || undefined,
+    });
   };
 
   const tabs: { id: TelephonyView; label: string; icon: any }[] = [
@@ -501,8 +568,8 @@ export default function TelephonyPanel() {
                     <div className="space-y-2">
                       <label className="text-sm text-muted-foreground">Friendly Name / Caller ID</label>
                       <Input 
-                        value={config?.friendlyName || ''}
-                        onChange={(e) => updateConfigMutation.mutate({ friendlyName: e.target.value })}
+                        value={localFriendlyName}
+                        onChange={(e) => setLocalFriendlyName(e.target.value)}
                         placeholder="AI Agent Trunk"
                         data-testid="input-friendly-name"
                       />
@@ -539,8 +606,8 @@ export default function TelephonyPanel() {
                         <PhoneIncoming className="w-3 h-3" /> Voice Webhook URL
                       </label>
                       <Input 
-                        value={config?.voiceUrl || ''}
-                        onChange={(e) => updateConfigMutation.mutate({ voiceUrl: e.target.value })}
+                        value={localVoiceUrl}
+                        onChange={(e) => setLocalVoiceUrl(e.target.value)}
                         placeholder="https://your-domain.com/api/webhooks/voice"
                         className="font-mono text-sm"
                         data-testid="input-voice-url"
@@ -549,8 +616,8 @@ export default function TelephonyPanel() {
                     <div className="space-y-2">
                       <label className="text-sm text-muted-foreground">Voice Fallback URL</label>
                       <Input 
-                        value={config?.voiceFallbackUrl || ''}
-                        onChange={(e) => updateConfigMutation.mutate({ voiceFallbackUrl: e.target.value })}
+                        value={localVoiceFallbackUrl}
+                        onChange={(e) => setLocalVoiceFallbackUrl(e.target.value)}
                         className="font-mono text-sm"
                         data-testid="input-voice-fallback-url"
                       />
@@ -558,8 +625,8 @@ export default function TelephonyPanel() {
                     <div className="space-y-2">
                       <label className="text-sm text-muted-foreground">Status Callback URL</label>
                       <Input 
-                        value={config?.statusCallbackUrl || ''}
-                        onChange={(e) => updateConfigMutation.mutate({ statusCallbackUrl: e.target.value })}
+                        value={localStatusCallbackUrl}
+                        onChange={(e) => setLocalStatusCallbackUrl(e.target.value)}
                         className="font-mono text-sm"
                         data-testid="input-status-callback-url"
                       />
@@ -578,8 +645,8 @@ export default function TelephonyPanel() {
                         <MessageSquare className="w-3 h-3" /> SMS Webhook URL
                       </label>
                       <Input 
-                        value={config?.smsUrl || ''}
-                        onChange={(e) => updateConfigMutation.mutate({ smsUrl: e.target.value })}
+                        value={localSmsUrl}
+                        onChange={(e) => setLocalSmsUrl(e.target.value)}
                         placeholder="https://your-domain.com/api/webhooks/sms"
                         className="font-mono text-sm"
                         data-testid="input-sms-url"
@@ -588,8 +655,8 @@ export default function TelephonyPanel() {
                     <div className="space-y-2">
                       <label className="text-sm text-muted-foreground">SMS Fallback URL</label>
                       <Input 
-                        value={config?.smsFallbackUrl || ''}
-                        onChange={(e) => updateConfigMutation.mutate({ smsFallbackUrl: e.target.value })}
+                        value={localSmsFallbackUrl}
+                        onChange={(e) => setLocalSmsFallbackUrl(e.target.value)}
                         className="font-mono text-sm"
                         data-testid="input-sms-fallback-url"
                       />
@@ -603,24 +670,13 @@ export default function TelephonyPanel() {
                     Debugging & Timing
                   </h4>
                   <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-sm text-destructive font-medium flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" /> Error Webhook URL
-                      </label>
-                      <Input 
-                        value={config?.errorUrl || ''}
-                        onChange={(e) => updateConfigMutation.mutate({ errorUrl: e.target.value })}
-                        className="font-mono text-sm"
-                        data-testid="input-error-url"
-                      />
-                    </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <label className="text-sm text-muted-foreground">Max Call Duration (min)</label>
                         <Input 
                           type="number"
-                          value={config?.maxCallDuration || 60}
-                          onChange={(e) => updateConfigMutation.mutate({ maxCallDuration: parseInt(e.target.value) || 60 })}
+                          value={localMaxCallDuration}
+                          onChange={(e) => setLocalMaxCallDuration(e.target.value)}
                           data-testid="input-max-duration"
                         />
                       </div>
@@ -628,8 +684,8 @@ export default function TelephonyPanel() {
                         <label className="text-sm text-muted-foreground">Ring Timeout (sec)</label>
                         <Input 
                           type="number"
-                          value={config?.timeout || 30}
-                          onChange={(e) => updateConfigMutation.mutate({ timeout: parseInt(e.target.value) || 30 })}
+                          value={localTimeout}
+                          onChange={(e) => setLocalTimeout(e.target.value)}
                           data-testid="input-timeout"
                         />
                       </div>
@@ -637,35 +693,24 @@ export default function TelephonyPanel() {
                   </div>
                 </div>
               </div>
+              
+              {/* Save Button */}
+              <div className="mt-8 pt-6 border-t border-border flex justify-end">
+                <Button 
+                  onClick={saveSettings}
+                  disabled={updateConfigMutation.isPending}
+                  className="gap-2"
+                  data-testid="button-save-settings"
+                >
+                  {updateConfigMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
+                  Save Configuration
+                </Button>
+              </div>
 
-              {config?.phoneSid && (
-                <div className="mt-8 pt-6 border-t border-border">
-                  <Button 
-                    onClick={() => {
-                      if (config.phoneSid) {
-                        updateWebhooksMutation.mutate({
-                          phoneSid: config.phoneSid,
-                          voiceUrl: config.voiceUrl,
-                          voiceFallbackUrl: config.voiceFallbackUrl,
-                          statusCallback: config.statusCallbackUrl,
-                          smsUrl: config.smsUrl,
-                          smsFallbackUrl: config.smsFallbackUrl,
-                        });
-                      }
-                    }}
-                    disabled={updateWebhooksMutation.isPending}
-                    className="gap-2"
-                    data-testid="button-sync-webhooks"
-                  >
-                    {updateWebhooksMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4" />
-                    )}
-                    Sync Webhooks to Twilio
-                  </Button>
-                </div>
-              )}
             </Card>
           )}
 
@@ -734,8 +779,8 @@ export default function TelephonyPanel() {
                   <div className="space-y-2">
                     <label className="text-sm text-muted-foreground">Owner Phone Number</label>
                     <Input 
-                      value={config?.ownerPhone || ''}
-                      onChange={(e) => updateFirewallMutation.mutate({ ownerPhone: e.target.value })}
+                      value={localOwnerPhone}
+                      onChange={(e) => setLocalOwnerPhone(e.target.value)}
                       placeholder="+1 (555) 123-4567"
                       className="font-mono"
                       data-testid="input-owner-phone"
@@ -744,12 +789,28 @@ export default function TelephonyPanel() {
                   <div className="space-y-2">
                     <label className="text-sm text-muted-foreground">Owner Email</label>
                     <Input 
-                      value={config?.ownerEmail || ''}
-                      onChange={(e) => updateFirewallMutation.mutate({ ownerEmail: e.target.value })}
+                      value={localOwnerEmail}
+                      onChange={(e) => setLocalOwnerEmail(e.target.value)}
                       placeholder="owner@example.com"
                       data-testid="input-owner-email"
                     />
                   </div>
+                </div>
+                <div className="flex justify-end mt-4">
+                  <Button 
+                    onClick={saveFirewallSettings}
+                    disabled={updateFirewallMutation.isPending}
+                    size="sm"
+                    className="gap-2"
+                    data-testid="button-save-owner"
+                  >
+                    {updateFirewallMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4" />
+                    )}
+                    Save Owner Info
+                  </Button>
                 </div>
               </div>
 

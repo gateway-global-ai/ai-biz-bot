@@ -12,7 +12,8 @@ import {
   getCallLogs as getTwilioCallLogs,
   getMessageLogs,
   updateCallerIdName,
-  getTwilioFromPhoneNumber
+  getTwilioFromPhoneNumber,
+  getTwilioClient
 } from "./twilio";
 import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
@@ -396,6 +397,129 @@ export async function registerRoutes(
       const { phoneSid } = req.params;
       await releasePhoneNumber(phoneSid);
       res.json({ ok: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ===========================================
+  // Twilio Account Management API
+  // ===========================================
+
+  // Get account info
+  app.get("/api/twilio/account", async (req, res) => {
+    try {
+      const client = await getTwilioClient();
+      const account = await client.api.accounts(process.env.TWILIO_ACCOUNT_SID).fetch();
+      res.json({
+        sid: account.sid,
+        friendlyName: account.friendlyName,
+        status: account.status,
+        type: account.type,
+        dateCreated: account.dateCreated,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get sub-accounts
+  app.get("/api/twilio/subaccounts", async (req, res) => {
+    try {
+      const client = await getTwilioClient();
+      const accounts = await client.api.accounts.list({ limit: 50 });
+      // Filter out the main account
+      const subAccounts = accounts.filter((acc: any) => acc.sid !== process.env.TWILIO_ACCOUNT_SID);
+      res.json(subAccounts.map((acc: any) => ({
+        sid: acc.sid,
+        friendlyName: acc.friendlyName,
+        status: acc.status,
+        dateCreated: acc.dateCreated,
+      })));
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create sub-account
+  app.post("/api/twilio/subaccounts", async (req, res) => {
+    try {
+      const { friendlyName } = req.body;
+      if (!friendlyName) {
+        return res.status(400).json({ error: "friendlyName is required" });
+      }
+      const client = await getTwilioClient();
+      const account = await client.api.accounts.create({ friendlyName });
+      res.json({
+        sid: account.sid,
+        friendlyName: account.friendlyName,
+        status: account.status,
+        dateCreated: account.dateCreated,
+        authToken: account.authToken, // Only returned on creation
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update sub-account (suspend/close)
+  app.patch("/api/twilio/subaccounts/:sid", async (req, res) => {
+    try {
+      const { sid } = req.params;
+      const { status } = req.body;
+      if (!status || !['active', 'suspended', 'closed'].includes(status)) {
+        return res.status(400).json({ error: "Valid status required: active, suspended, or closed" });
+      }
+      const client = await getTwilioClient();
+      const account = await client.api.accounts(sid).update({ status });
+      res.json({
+        sid: account.sid,
+        friendlyName: account.friendlyName,
+        status: account.status,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get billing/balance info
+  app.get("/api/twilio/billing", async (req, res) => {
+    try {
+      const client = await getTwilioClient();
+      const balance = await client.balance.fetch();
+      
+      // Get usage records for this month
+      const today = new Date();
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      
+      let callCount = 0;
+      let smsCount = 0;
+      let totalCost = 0;
+      
+      try {
+        const usageRecords = await client.usage.records.thisMonth.list({ limit: 100 });
+        for (const record of usageRecords) {
+          if (record.category === 'calls') {
+            callCount = parseInt(record.count) || 0;
+            totalCost += parseFloat(record.price) || 0;
+          } else if (record.category === 'sms') {
+            smsCount = parseInt(record.count) || 0;
+            totalCost += parseFloat(record.price) || 0;
+          }
+        }
+      } catch (usageError) {
+        console.log('Usage records not available:', usageError);
+      }
+
+      res.json({
+        balance: balance.balance,
+        currency: balance.currency,
+        usageThisMonth: {
+          calls: callCount,
+          sms: smsCount,
+          totalCost: totalCost.toFixed(2),
+        }
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

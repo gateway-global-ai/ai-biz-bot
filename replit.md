@@ -65,9 +65,23 @@ Preferred communication style: Simple, everyday language.
   - ARCH Communication Window matching (mirrors your tone, timing, sentence count)
   - Click Call button to start voice session
 
+- **NEW: Twilio Account Manager** (`/twilio-account`):
+  - Four-tab interface: Credentials, Sub-Accounts, Phone Numbers, Billing
+  - View account SID, status, and type
+  - Create and suspend sub-accounts for multi-tenant management
+  - View all provisioned phone numbers with capabilities
+  - Billing dashboard with balance and usage statistics
+  - API endpoints: GET /api/twilio/account, /api/twilio/subaccounts, /api/twilio/billing
+  
+- **Fixed: Telephony Panel Input Boxes**:
+  - All inputs now use local state (no more mutation on every keystroke)
+  - Added "Save Configuration" button to persist changes
+  - Added "Save Owner Info" button for firewall settings
+  - Inputs are now fully editable without triggering errors
+
 - Updated Sidebar Navigation organized into 4 sections:
   - Agent Dashboard: Dashboard, DISC Assessment, Character Tool
-  - Operations: Customer Manager, Telephony, Twilio Hub
+  - Operations: Customer Manager, Telephony, Twilio Account, Twilio Hub
   - System: Server Control, Config, Orchestrator, Results, Security
   - Access Portals: Create Your Agent, Developer, Business
 - Added Customer Manager page (`/customers`):
