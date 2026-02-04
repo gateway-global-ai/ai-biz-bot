@@ -552,28 +552,32 @@ export default function OnboardingFlow() {
   );
 
   const renderAwakeningVariant = () => (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center p-4 md:p-8 pt-12 relative overflow-hidden overflow-x-hidden fixed inset-0">
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center relative overflow-hidden overflow-x-hidden fixed inset-0">
       <StarField />
       <FloatingMenu />
       <ParticleField active={isAwakening} color="#818cf8" />
       
-      {/* Step Progress Indicator */}
-      <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2">
-        {STEPS.map((s, i) => (
-          <div key={s} className="flex items-center">
-            <div className={`w-2 h-2 rounded-full transition-all ${
-              STEPS.indexOf(step) >= i ? 'bg-violet-500' : 'bg-slate-700'
-            }`} />
-            {i < STEPS.length - 1 && (
-              <div className={`w-6 h-0.5 transition-all ${
-                STEPS.indexOf(step) > i ? 'bg-violet-500' : 'bg-slate-700'
+      {/* Fixed Header with Step Progress Indicator */}
+      <div className="fixed top-0 left-0 right-0 h-16 z-40 flex items-center justify-center pointer-events-none">
+        <div className="flex items-center gap-2">
+          {STEPS.map((s, i) => (
+            <div key={s} className="flex items-center">
+              <div className={`w-2 h-2 rounded-full transition-all ${
+                STEPS.indexOf(step) >= i ? 'bg-violet-500' : 'bg-slate-700'
               }`} />
-            )}
-          </div>
-        ))}
+              {i < STEPS.length - 1 && (
+                <div className={`w-6 h-0.5 transition-all ${
+                  STEPS.indexOf(step) > i ? 'bg-violet-500' : 'bg-slate-700'
+                }`} />
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {step === 'name' && (
+      {/* Content area - starts below fixed header */}
+      <div className="pt-20 px-4 md:px-8 w-full flex-1 flex flex-col items-center overflow-y-auto">
+        {step === 'name' && (
         <div className={`text-center z-10 max-w-xl flex flex-col items-center relative ${getSlideClass()}`}>
           <HeroVisualizer />
           
@@ -609,35 +613,40 @@ export default function OnboardingFlow() {
         </div>
       )}
 
-      {step === 'voice' && renderVoiceStep()}
-      {step === 'finetune' && renderFineTuneStep()}
-      {step === 'meet' && renderMeetStep()}
+        {step === 'voice' && renderVoiceStep()}
+        {step === 'finetune' && renderFineTuneStep()}
+        {step === 'meet' && renderMeetStep()}
+      </div>
     </div>
   );
 
   const renderProofVariant = () => (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center p-4 md:p-8 pt-12 relative overflow-hidden overflow-x-hidden fixed inset-0">
+    <div className="min-h-screen bg-black text-white flex flex-col items-center relative overflow-hidden overflow-x-hidden fixed inset-0">
       <StarField />
       <FloatingMenu />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
       
-      {/* Step Progress Indicator */}
-      <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2">
-        {STEPS.map((s, i) => (
-          <div key={s} className="flex items-center">
-            <div className={`w-2 h-2 rounded-full transition-all ${
-              STEPS.indexOf(step) >= i ? 'bg-violet-500' : 'bg-slate-700'
-            }`} />
-            {i < STEPS.length - 1 && (
-              <div className={`w-6 h-0.5 transition-all ${
-                STEPS.indexOf(step) > i ? 'bg-violet-500' : 'bg-slate-700'
+      {/* Fixed Header with Step Progress Indicator */}
+      <div className="fixed top-0 left-0 right-0 h-16 z-40 flex items-center justify-center pointer-events-none">
+        <div className="flex items-center gap-2">
+          {STEPS.map((s, i) => (
+            <div key={s} className="flex items-center">
+              <div className={`w-2 h-2 rounded-full transition-all ${
+                STEPS.indexOf(step) >= i ? 'bg-violet-500' : 'bg-slate-700'
               }`} />
-            )}
-          </div>
-        ))}
+              {i < STEPS.length - 1 && (
+                <div className={`w-6 h-0.5 transition-all ${
+                  STEPS.indexOf(step) > i ? 'bg-violet-500' : 'bg-slate-700'
+                }`} />
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {step === 'name' && (
+      {/* Content area - starts below fixed header */}
+      <div className="pt-20 px-4 md:px-8 w-full flex-1 flex flex-col items-center overflow-y-auto">
+        {step === 'name' && (
         <div className={`text-center z-10 max-w-2xl flex flex-col items-center relative ${getSlideClass()}`}>
           <HeroVisualizer />
           
@@ -677,9 +686,10 @@ export default function OnboardingFlow() {
         </div>
       )}
 
-      {step === 'voice' && renderVoiceStep()}
-      {step === 'finetune' && renderFineTuneStep()}
-      {step === 'meet' && renderMeetStep()}
+        {step === 'voice' && renderVoiceStep()}
+        {step === 'finetune' && renderFineTuneStep()}
+        {step === 'meet' && renderMeetStep()}
+      </div>
     </div>
   );
 
