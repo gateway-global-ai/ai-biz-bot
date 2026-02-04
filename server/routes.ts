@@ -81,7 +81,12 @@ export async function registerRoutes(
           friendlyName: "AI Agent Trunk",
         });
       }
-      res.json(config);
+      // Never return authToken to client - add hasAuthToken indicator instead
+      const { authToken, ...safeConfig } = config as any;
+      res.json({
+        ...safeConfig,
+        hasAuthToken: !!authToken,
+      });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -148,24 +153,68 @@ export async function registerRoutes(
     try {
       const { accountSid, authToken, phoneNumber, phoneSid, friendlyName, isSubAccount, parentAccountSid } = req.body;
       
+      // Validation
       if (!phoneNumber) {
         return res.status(400).json({ error: "Phone number is required" });
       }
       
-      // Validate credentials if provided - try to fetch account info
+      // Phone number format validation
+      if (!phoneNumber.match(/^\+?[1-9]\d{1,14}$/)) {
+        return res.status(400).json({ error: "Invalid phone number format. Use E.164 format (e.g., +1234567890)" });
+      }
+      
+      // If credentials provided, validate them
+      let twilioClient = null;
       if (accountSid && authToken) {
+        // Require both if either is provided
+        if (!accountSid || !authToken) {
+          return res.status(400).json({ error: "Both Account SID and Auth Token are required" });
+        }
+        
         try {
-          const testClient = require('twilio')(accountSid, authToken);
-          await testClient.api.accounts(accountSid).fetch();
+          twilioClient = require('twilio')(accountSid, authToken);
+          await twilioClient.api.accounts(accountSid).fetch();
         } catch (credError: any) {
           return res.status(400).json({ error: `Invalid Twilio credentials: ${credError.message}` });
+        }
+        
+        // If phoneSid provided, verify it belongs to this account
+        if (phoneSid) {
+          try {
+            const phoneInfo = await twilioClient.incomingPhoneNumbers(phoneSid).fetch();
+            if (phoneInfo.phoneNumber !== phoneNumber) {
+              return res.status(400).json({ error: "Phone SID does not match the provided phone number" });
+            }
+          } catch (sidError: any) {
+            return res.status(400).json({ error: `Phone SID verification failed: ${sidError.message}` });
+          }
+        }
+      }
+      
+      const baseUrl = 'https://twilio.gatewayglobal.ai'; // Production webhook URL
+      const voiceUrl = `${baseUrl}/webhook/voice`;
+      const smsUrl = `${baseUrl}/webhook/sms`;
+      const statusCallback = `${baseUrl}/webhook/voice/status`;
+      
+      // If we have credentials and phoneSid, configure webhooks on Twilio
+      if (twilioClient && phoneSid) {
+        try {
+          await twilioClient.incomingPhoneNumbers(phoneSid).update({
+            voiceUrl: voiceUrl,
+            voiceMethod: 'POST',
+            smsUrl: smsUrl,
+            smsMethod: 'POST',
+            statusCallback: statusCallback,
+            statusCallbackMethod: 'POST',
+          });
+          console.log(`Configured webhooks for ${phoneNumber} on Twilio`);
+        } catch (webhookError: any) {
+          console.error('Failed to configure webhooks:', webhookError);
+          // Continue anyway - user can manually configure webhooks
         }
       }
       
       let config = await storage.getTelephonyConfig();
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : 'https://twilio.gatewayglobal.ai';
       
       const updateData = {
         accountSid: accountSid || null,
@@ -175,8 +224,9 @@ export async function registerRoutes(
         friendlyName: friendlyName || 'AI Agent Trunk',
         isSubAccount: isSubAccount || false,
         parentAccountSid: parentAccountSid || null,
-        voiceUrl: `${baseUrl}/webhook/voice`,
-        smsUrl: `${baseUrl}/webhook/sms`,
+        voiceUrl,
+        smsUrl,
+        statusCallbackUrl: statusCallback,
       };
       
       if (config) {
@@ -185,7 +235,12 @@ export async function registerRoutes(
         await storage.createTelephonyConfig(updateData);
       }
       
-      res.json({ success: true, message: "Existing number added successfully" });
+      res.json({ 
+        success: true, 
+        message: phoneSid && twilioClient 
+          ? "Number added and webhooks configured on Twilio" 
+          : "Number added - configure webhooks manually if needed"
+      });
     } catch (error: any) {
       console.error('Error adding existing number:', error);
       res.status(500).json({ error: error.message });

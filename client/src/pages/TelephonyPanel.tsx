@@ -60,21 +60,30 @@ interface AvailableNumber {
 
 interface TelephonyConfig {
   id: string;
+  // Twilio credentials (authToken never returned to client)
+  accountSid: string | null;
+  hasAuthToken: boolean; // Server indicates if token is set without revealing it
+  isSubAccount: boolean;
+  parentAccountSid: string | null;
+  // Phone info
   phoneNumber: string | null;
   phoneSid: string | null;
   friendlyName: string | null;
   messagingServiceSid: string | null;
+  // Webhooks
   voiceUrl: string | null;
   voiceFallbackUrl: string | null;
   statusCallbackUrl: string | null;
   smsUrl: string | null;
   smsFallbackUrl: string | null;
   errorUrl: string | null;
+  // Firewall
   firewallEnabled: boolean;
   allowedNumbers: string[];
   maxCallDuration: number;
   timeout: number;
   callerIdName: string | null;
+  // Owner
   ownerPhone: string | null;
   ownerEmail: string | null;
 }
@@ -716,44 +725,85 @@ export default function TelephonyPanel() {
                   )}
                 </div>
               ) : (
-                <div className="bg-primary/5 border border-primary/20 p-6 md:p-8 rounded-2xl">
-                  <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                    <div className="flex items-center gap-6">
-                      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
-                        <Signal className="w-8 h-8 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-primary font-semibold uppercase mb-1 tracking-wider">
-                          Active Trunk Line
-                        </p>
-                        <p className="text-3xl md:text-4xl font-mono text-foreground tracking-wider" data-testid="text-phone-number">
-                          {config.phoneNumber}
-                        </p>
-                        <div className="flex gap-4 mt-2">
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> Max: {config.maxCallDuration}m
-                          </span>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Timer className="w-3 h-3" /> Timeout: {config.timeout}s
-                          </span>
+                <div className="space-y-4">
+                  <div className="bg-primary/5 border border-primary/20 p-6 md:p-8 rounded-2xl">
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                      <div className="flex items-center gap-6">
+                        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/30">
+                          <Signal className="w-8 h-8 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-primary font-semibold uppercase mb-1 tracking-wider">
+                            Active Trunk Line
+                          </p>
+                          <p className="text-3xl md:text-4xl font-mono text-foreground tracking-wider" data-testid="text-phone-number">
+                            {config.phoneNumber}
+                          </p>
+                          <div className="flex flex-wrap gap-4 mt-2">
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="w-3 h-3" /> Max: {config.maxCallDuration}m
+                            </span>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Timer className="w-3 h-3" /> Timeout: {config.timeout}s
+                            </span>
+                            {config.accountSid && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Key className="w-3 h-3 mr-1" />
+                                Custom Credentials
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      <Button 
+                        variant="destructive"
+                        onClick={() => config.phoneSid && releaseMutation.mutate(config.phoneSid)}
+                        disabled={releaseMutation.isPending || !config.phoneSid}
+                        className="gap-2"
+                        data-testid="button-release-number"
+                      >
+                        {releaseMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                        Release Number
+                      </Button>
                     </div>
-                    <Button 
-                      variant="destructive"
-                      onClick={() => config.phoneSid && releaseMutation.mutate(config.phoneSid)}
-                      disabled={releaseMutation.isPending || !config.phoneSid}
-                      className="gap-2"
-                      data-testid="button-release-number"
-                    >
-                      {releaseMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="w-4 h-4" />
-                      )}
-                      Release Number
-                    </Button>
                   </div>
+                  
+                  {/* Credentials Info */}
+                  {config.accountSid && (
+                    <div className="bg-accent/30 border border-border p-4 rounded-xl">
+                      <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                        <Key className="w-4 h-4 text-primary" />
+                        Twilio Credentials
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">Account SID:</span>
+                          <span className="ml-2 font-mono text-foreground">{config.accountSid}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Auth Token:</span>
+                          <span className="ml-2 font-mono text-foreground">
+                            {config.hasAuthToken ? '••••••••••••••••' : 'Not set'}
+                          </span>
+                        </div>
+                        {config.phoneSid && (
+                          <div>
+                            <span className="text-muted-foreground">Phone SID:</span>
+                            <span className="ml-2 font-mono text-foreground">{config.phoneSid}</span>
+                          </div>
+                        )}
+                        {config.isSubAccount && (
+                          <div>
+                            <Badge variant="outline" className="text-xs">Sub-Account</Badge>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </Card>
