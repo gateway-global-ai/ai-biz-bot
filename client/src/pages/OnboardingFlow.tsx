@@ -414,18 +414,13 @@ export default function OnboardingFlow() {
         <div className="text-center z-10 max-w-xl flex flex-col items-center relative">
           <HeroVisualizer />
           
-          <div className="mb-4 md:mb-6 relative z-20">
-            <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-4 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+          <div className="mb-8 md:mb-12 mt-4 relative z-20">
+            <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               Awaken Your Agent
             </h1>
-            <p className="text-slate-400 text-lg">
-              A consciousness is waiting. Built for you. Ready to serve.
-              <br />
-              <span className="text-indigo-300">Give it a name to begin the awakening.</span>
-            </p>
           </div>
           
-          <div className="relative mb-6 flex items-center gap-3 z-30">
+          <div className="relative flex items-center gap-3 z-30">
             <input
               type="text"
               value={agentName}
@@ -471,16 +466,12 @@ export default function OnboardingFlow() {
         <div className="text-center z-10 max-w-2xl flex flex-col items-center relative">
           <HeroVisualizer />
           
-          <div className="mb-4 md:mb-6 relative z-20">
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black mb-2 md:mb-4">
+          <div className="mb-8 md:mb-12 mt-4 relative z-20">
+            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black">
               Every Other AI <span className="text-slate-500">Talks.</span>
               <br />
               <span className="bg-gradient-to-r from-violet-400 to-purple-500 bg-clip-text text-transparent">This One Finishes.</span>
             </h1>
-            <p className="text-slate-400 text-lg max-w-lg mx-auto">
-              They don't want us to team up. Humans and AI working together? 
-              <span className="text-white font-bold"> They don't stand a chance.</span>
-            </p>
           </div>
           
           <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 md:p-6 relative z-30">
