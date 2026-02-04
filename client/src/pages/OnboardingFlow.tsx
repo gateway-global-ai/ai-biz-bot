@@ -244,13 +244,22 @@ export default function OnboardingFlow() {
       <ParticleField active={isAwakening} color="#818cf8" />
       
       {step === 'name' && (
-        <div className="text-center z-10 max-w-xl flex flex-col items-center">
-          {/* Logo - compact on mobile */}
-          <div className="mb-2 md:mb-6">
-            <img src={gatewayLogoDark} alt="Gateway Global AI" className="w-[100px] md:w-[200px] lg:w-[280px] h-auto" />
+        <div className="text-center z-10 max-w-xl flex flex-col items-center relative">
+          {/* Gradient fade overlay - rises behind text toward logo */}
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-x-0 top-[50px] md:top-[90px] bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent" />
           </div>
           
-          <div className="mb-4 md:mb-6">
+          {/* Logo - slightly faded by gradient */}
+          <div className="mb-0 md:mb-2 relative z-10">
+            <img 
+              src={gatewayLogoDark} 
+              alt="Gateway Global AI" 
+              className="w-[120px] md:w-[220px] lg:w-[300px] h-auto opacity-85" 
+            />
+          </div>
+          
+          <div className="mb-4 md:mb-6 relative z-20">
             <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold mb-2 md:mb-4 bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               Awaken Your Agent
             </h1>
@@ -307,13 +316,22 @@ export default function OnboardingFlow() {
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
       
       {step === 'name' && (
-        <div className="text-center z-10 max-w-2xl flex flex-col items-center">
-          {/* Logo - compact on mobile */}
-          <div className="mb-2 md:mb-6">
-            <img src={gatewayLogoDark} alt="Gateway Global AI" className="w-[100px] md:w-[200px] lg:w-[280px] h-auto" />
+        <div className="text-center z-10 max-w-2xl flex flex-col items-center relative">
+          {/* Gradient fade overlay - rises behind text toward logo */}
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-x-0 top-[60px] md:top-[100px] bottom-0 bg-gradient-to-t from-black via-black/90 to-transparent" />
           </div>
           
-          <div className="mb-4 md:mb-6">
+          {/* Logo - slightly faded by gradient */}
+          <div className="mb-0 md:mb-2 relative z-10">
+            <img 
+              src={gatewayLogoDark} 
+              alt="Gateway Global AI" 
+              className="w-[120px] md:w-[220px] lg:w-[300px] h-auto opacity-90" 
+            />
+          </div>
+          
+          <div className="mb-4 md:mb-6 relative z-20">
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-black mb-2 md:mb-4">
               Every Other AI <span className="text-slate-500">Talks.</span>
               <br />
