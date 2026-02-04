@@ -874,7 +874,14 @@ export async function registerRoutes(
       }
       
       // Build webhook URL and params based on type
-      const webhookBaseUrl = 'https://twilio.gatewayglobal.ai';
+      // Use the published app URL or dev domain, NOT the old hardcoded domain
+      const webhookBaseUrl = process.env.REPLIT_DOMAINS 
+        ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+        : process.env.REPLIT_DEV_DOMAIN 
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+          : 'http://localhost:5000';
+      
+      console.log(`[Webhook Simulation] Using base URL: ${webhookBaseUrl}`);
       let webhookUrl: string;
       let params: Record<string, string>;
       
