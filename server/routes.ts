@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
   provisionPhoneNumber, 
@@ -180,7 +181,7 @@ export async function registerRoutes(
         }
         
         try {
-          twilioClient = require('twilio')(accountSid, authToken);
+          twilioClient = twilio(accountSid, authToken);
           await twilioClient.api.accounts(accountSid).fetch();
         } catch (credError: any) {
           return res.status(400).json({ error: `Invalid Twilio credentials: ${credError.message}` });
@@ -823,8 +824,7 @@ export async function registerRoutes(
       }
       
       // Generate X-Twilio-Signature using Twilio's method
-      const twilio = require('twilio');
-      const signature = twilio.validateRequest.getExpectedTwilioSignature(
+      const signature = twilio.getExpectedTwilioSignature(
         authToken,
         webhookUrl,
         params
@@ -1658,7 +1658,6 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     
     // Validate using Twilio's validateRequest
     try {
-      const twilio = require('twilio');
       const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
       const isValid = twilio.validateRequest(authToken, twilioSignature, url, req.body);
       
