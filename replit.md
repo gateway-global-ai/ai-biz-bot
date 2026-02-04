@@ -46,7 +46,50 @@ The platform features a clean, modern design with a purple gradient theme and an
 -   **Twilio**: Telephony provider for SMS, voice calls, and phone number management.
     -   Requires `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN`.
     -   Voice webhook endpoints: `/webhook/voice` (legacy), `/webhook/voice/kimi` (Kimi-Audio enhanced)
+    -   SMS webhook endpoint: `/webhook/sms`
     -   WebSocket endpoint for Media Streams: `/ws/voice-stream`
+
+## CRITICAL: Twilio SMS Troubleshooting
+
+**ALWAYS run this health check FIRST when SMS isn't working:**
+
+### SMS Health Check Procedure
+1. **Check Twilio Alerts** - Look for error codes (especially 50056)
+   ```javascript
+   client.monitor.alerts.list({limit: 5})
+   ```
+
+2. **Check if message came through a Messaging Service**
+   ```javascript
+   client.messages('SM...').fetch() // Check messagingServiceSid field
+   ```
+
+3. **If Messaging Service is involved, check ITS webhook config:**
+   ```javascript
+   client.messaging.v1.services('MG...').fetch()
+   // Look at: inboundRequestUrl, useInboundWebhookOnNumber
+   ```
+
+4. **Test the webhook endpoint directly:**
+   ```bash
+   curl -X POST "https://YOUR_DOMAIN/webhook/sms" \
+     -d "From=%2B1234567890&To=%2B0987654321&Body=Test"
+   ```
+
+### Common Issues
+- **Error 50056**: Webhook returned non-200 status or no webhook URL configured
+- **Messaging Service with empty inboundRequestUrl**: Messages have nowhere to go!
+- **useInboundWebhookOnNumber: false**: Won't fall back to phone number webhook
+- **Wrong webhook URL**: Check if pointing to non-existent domain
+
+### Key Messaging Services (as of Feb 2026)
+- `MGd16163508f2fcc1236a989f83664d9fb` - Customer Care A2P Messaging Service
+- Webhook should point to: `https://{REPLIT_DEV_DOMAIN}/webhook/sms`
+
+### Diagnostic Endpoints
+- `GET /api/twilio/numbers` - List all phone numbers with webhook configs
+- `GET /api/telephony/messages` - Recent message logs from Twilio
+- `POST /api/telephony/simulate-webhook` - Test webhook locally
 -   **Moonshot API (Kimi 2.5)**: Primary AI reasoning engine for text.
     -   Requires `MOONSHOT_API_KEY`.
 -   **Kimi-Audio (via Replicate)**: Real-time voice AI for phone conversations.
