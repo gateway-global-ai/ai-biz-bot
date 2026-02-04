@@ -293,6 +293,9 @@ export const agents = pgTable("agents", {
   conscientiousness: integer("conscientiousness").default(50),
   avatarId: text("avatar_id").default("avatar1"), // character avatar for chat backdrop
   systemPrompt: text("system_prompt"),
+  // Agent-specific telephony
+  phoneNumber: text("phone_number"),
+  phoneSid: text("phone_sid"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

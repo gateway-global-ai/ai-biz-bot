@@ -31,6 +31,20 @@ export async function getTwilioClient() {
 
 export async function getTwilioFromPhoneNumber() {
   if (cachedPhoneNumber) return cachedPhoneNumber;
+  
+  // First try database config (Gateway Global number)
+  try {
+    const { storage } = await import('./storage');
+    const config = await storage.getTelephonyConfig();
+    if (config?.phoneNumber) {
+      cachedPhoneNumber = config.phoneNumber;
+      return config.phoneNumber;
+    }
+  } catch (e) {
+    // Fallback to env vars if storage fails
+  }
+  
+  // Fallback to environment variables
   const { phoneNumber } = getCredentials();
   cachedPhoneNumber = phoneNumber || null;
   return phoneNumber;

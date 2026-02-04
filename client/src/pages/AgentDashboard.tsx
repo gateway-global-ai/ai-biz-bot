@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from '@/hooks/use-toast';
 import { 
   Bot, Plus, Check, ImageIcon, Coffee, Briefcase, FlaskConical,
-  Sparkles, Volume2, MoreVertical, Pencil, Trash2, GraduationCap
+  Sparkles, Volume2, MoreVertical, Pencil, Trash2, GraduationCap, Phone
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -48,6 +48,7 @@ export default function AgentDashboard() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [newAgent, setNewAgent] = useState({
     name: '',
     voiceId: 'kore',
@@ -80,6 +81,17 @@ export default function AgentDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
       toast({ title: 'Agent deleted' });
+    },
+    onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Agent> }) => 
+      apiRequest('PATCH', `/api/agents/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
+      setEditingAgent(null);
+      toast({ title: 'Agent updated successfully' });
     },
     onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
   });
@@ -149,9 +161,23 @@ export default function AgentDashboard() {
                         <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
                           <DropdownMenuItem 
                             className="text-slate-300 hover:text-white cursor-pointer"
-                            onClick={() => navigateToEnvironment(agent.id, 'lab')}
+                            onClick={() => setEditingAgent(agent)}
+                            data-testid={`button-edit-agent-${agent.id}`}
                           >
                             <Pencil className="w-4 h-4 mr-2" /> Edit Agent
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            className="text-slate-300 hover:text-white cursor-pointer"
+                            onClick={() => navigateToEnvironment(agent.id, 'lab')}
+                          >
+                            <FlaskConical className="w-4 h-4 mr-2" /> Fine Tune
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            className="text-blue-400 hover:text-blue-300 cursor-pointer"
+                            onClick={() => setLocation(`/agent/${agent.id}/telephony`)}
+                            data-testid={`button-telephony-agent-${agent.id}`}
+                          >
+                            <Phone className="w-4 h-4 mr-2" /> Telephony
                           </DropdownMenuItem>
                           <DropdownMenuItem 
                             className="text-red-400 hover:text-red-300 cursor-pointer"
@@ -344,6 +370,114 @@ export default function AgentDashboard() {
             </Dialog>
           </div>
         )}
+
+        {/* Edit Agent Dialog */}
+        <Dialog open={!!editingAgent} onOpenChange={(open) => !open && setEditingAgent(null)}>
+          <DialogContent className="bg-slate-900 border-slate-700">
+            <DialogHeader>
+              <DialogTitle className="text-white">Edit Agent</DialogTitle>
+            </DialogHeader>
+            {editingAgent && (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-slate-400 block mb-2">Agent Name</label>
+                  <Input
+                    data-testid="input-edit-agent-name"
+                    value={editingAgent.name}
+                    onChange={(e) => setEditingAgent({ ...editingAgent, name: e.target.value })}
+                    className="bg-slate-800 border-slate-600"
+                    placeholder="Enter agent name"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-slate-400 block mb-2">Avatar</label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {AVATAR_OPTIONS.map(avatar => (
+                      <button
+                        key={avatar.id}
+                        onClick={() => setEditingAgent({ ...editingAgent, avatarId: avatar.id })}
+                        className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                          editingAgent.avatarId === avatar.id ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-slate-600'
+                        }`}
+                      >
+                        <img src={avatar.src} alt={avatar.name} className="w-full h-full object-cover" />
+                        {editingAgent.avatarId === avatar.id && (
+                          <div className="absolute inset-0 bg-indigo-500/20 flex items-center justify-center">
+                            <Check className="w-6 h-6 text-white" />
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm text-slate-400 block mb-2">Voice</label>
+                  <Select
+                    value={editingAgent.voiceId}
+                    onValueChange={(v) => {
+                      const voice = VOICES.find(voice => voice.id === v);
+                      setEditingAgent({ ...editingAgent, voiceId: v, voiceName: voice?.name || v });
+                    }}
+                  >
+                    <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-edit-agent-voice">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VOICES.map(v => (
+                        <SelectItem key={v.id} value={v.id}>
+                          {v.name} - {v.description}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm text-slate-400 block mb-2">Status</label>
+                  <Select
+                    value={editingAgent.status}
+                    onValueChange={(v) => setEditingAgent({ ...editingAgent, status: v })}
+                  >
+                    <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-edit-agent-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="paused">Paused</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setEditingAgent(null)}
+                    className="flex-1 border-slate-600"
+                    data-testid="button-cancel-edit"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => updateMutation.mutate({ 
+                      id: editingAgent.id, 
+                      data: { 
+                        name: editingAgent.name, 
+                        avatarId: editingAgent.avatarId,
+                        voiceId: editingAgent.voiceId,
+                        voiceName: editingAgent.voiceName,
+                        status: editingAgent.status,
+                      } 
+                    })}
+                    disabled={!editingAgent.name || updateMutation.isPending}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500"
+                    data-testid="button-save-agent"
+                  >
+                    {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

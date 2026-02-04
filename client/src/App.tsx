@@ -7,6 +7,8 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import TelephonyPanel from "@/pages/TelephonyPanel";
+import GatewayAdmin from "@/pages/GatewayAdmin";
+import AgentTelephony from "@/pages/AgentTelephony";
 import DiscVisualizer from "@/pages/DiscVisualizer";
 import DeveloperPage from "@/pages/DeveloperPage";
 import BusinessPage from "@/pages/BusinessPage";
@@ -240,8 +242,10 @@ function AppRouter() {
       <Route path="/agent/:agentId/office" component={TheOffice} />
       <Route path="/agent/:agentId/lab" component={TheLab} />
       <Route path="/agent/:agentId/classroom" component={TheClassroom} />
+      <Route path="/agent/:agentId/telephony" component={AgentTelephony} />
       <Route path="/agent-manager" component={AgentManager} />
       <Route path="/customers" component={CustomerManager} />
+      <Route path="/gateway-admin" component={GatewayAdmin} />
       <Route path="/telephony" component={TelephonyPanel} />
       <Route path="/twilio-account" component={TwilioAccountManager} />
       <Route path="/twilio" component={TwilioHub} />
