@@ -10,6 +10,17 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (February 2026)
 
+- **NEW: Carousel-Style Onboarding Flow** (`/`):
+  - 4-step frictionless free trial: Name Your Bot → Select A Voice → Fine Tune It → Meet Your Creation
+  - Smooth slide-left/slide-right CSS animations between steps
+  - Stationary interface with content sliding (retains users better)
+  - Step progress indicator with 4 dots at top
+  - DISC personality sliders in Fine Tune step
+  - Back buttons for easy navigation between steps
+  - Removed extra text, added more white space for cleaner UI
+  - HeroVisualizer with spinning rings and animated starfield background
+  - Floating menu button for navigation to dashboards
+
 - **NEW: Agent Dashboard with Card Gallery** (`/agents` or `/dashboard`):
   - Beautiful card-based view of all agents (replaces table view)
   - Each card displays avatar, name, status, voice, and DISC profile preview

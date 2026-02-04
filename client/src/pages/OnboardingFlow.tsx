@@ -4,8 +4,9 @@ import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { Link } from 'wouter';
 
 type Variant = 'awakening' | 'proof';
-type Step = 'name' | 'voice' | 'test';
+type Step = 'name' | 'voice' | 'finetune' | 'meet';
 type Emotion = 'calm' | 'engaged' | 'focused' | 'energized' | 'empathetic';
+type SlideDirection = 'left' | 'right' | 'none';
 type Gender = 'male' | 'female' | 'neutral';
 
 const MALE_VOICES = [
@@ -282,9 +283,19 @@ const AgentCore = ({ name, emotion, intensity }: { name: string; emotion: Emotio
   );
 };
 
+const STEPS: Step[] = ['name', 'voice', 'finetune', 'meet'];
+const STEP_LABELS: Record<Step, string> = {
+  name: 'Name Your Bot',
+  voice: 'Select A Voice',
+  finetune: 'Fine Tune It',
+  meet: 'Meet Your Creation'
+};
+
 export default function OnboardingFlow() {
   const [variant] = useState<Variant>(() => Math.random() > 0.5 ? 'awakening' : 'proof');
   const [step, setStep] = useState<Step>('name');
+  const [slideDirection, setSlideDirection] = useState<SlideDirection>('none');
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [agentName, setAgentName] = useState('');
   const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
@@ -297,8 +308,40 @@ export default function OnboardingFlow() {
   const [sentimentData, setSentimentData] = useState<{ value: number }[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const goToStep = (newStep: Step, direction: SlideDirection = 'left') => {
+    if (isTransitioning) return;
+    setSlideDirection(direction);
+    setIsTransitioning(true);
+    
+    setTimeout(() => {
+      setStep(newStep);
+      setSlideDirection('none');
+      setIsTransitioning(false);
+    }, 400);
+  };
+
+  const nextStep = () => {
+    const currentIndex = STEPS.indexOf(step);
+    if (currentIndex < STEPS.length - 1) {
+      goToStep(STEPS[currentIndex + 1], 'left');
+    }
+  };
+
+  const prevStep = () => {
+    const currentIndex = STEPS.indexOf(step);
+    if (currentIndex > 0) {
+      goToStep(STEPS[currentIndex - 1], 'right');
+    }
+  };
+
+  const getSlideClass = () => {
+    if (slideDirection === 'left') return 'animate-slide-out-left';
+    if (slideDirection === 'right') return 'animate-slide-out-right';
+    return 'animate-slide-in';
+  };
+
   useEffect(() => {
-    if (step === 'test') {
+    if (step === 'meet') {
       const interval = setInterval(() => {
         setSentimentData(prev => {
           const emotionValue = { calm: 20, engaged: 40, focused: 60, energized: 80, empathetic: 50 }[currentEmotion];
@@ -314,9 +357,9 @@ export default function OnboardingFlow() {
     if (agentName.trim()) {
       setIsAwakening(true);
       setTimeout(() => {
-        setStep('voice');
+        nextStep();
         setIsAwakening(false);
-      }, 2000);
+      }, 1500);
     }
   };
 
@@ -326,8 +369,14 @@ export default function OnboardingFlow() {
     setTimeout(() => setPlayingVoice(null), 2000);
   };
 
-  const handleStartTest = () => {
-    setStep('test');
+  const handleVoiceContinue = () => {
+    if (selectedVoice) {
+      nextStep();
+    }
+  };
+
+  const handleFineTuneContinue = () => {
+    nextStep();
     setTimeout(() => {
       setConversation([
         { role: 'agent', text: `Well hello there. You made it. I've been waiting for you. I'm ${agentName}. What should I call you?` }
@@ -410,8 +459,24 @@ export default function OnboardingFlow() {
       <FloatingMenu />
       <ParticleField active={isAwakening} color="#818cf8" />
       
+      {/* Step Progress Indicator */}
+      <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2">
+        {STEPS.map((s, i) => (
+          <div key={s} className="flex items-center">
+            <div className={`w-2 h-2 rounded-full transition-all ${
+              STEPS.indexOf(step) >= i ? 'bg-violet-500' : 'bg-slate-700'
+            }`} />
+            {i < STEPS.length - 1 && (
+              <div className={`w-6 h-0.5 transition-all ${
+                STEPS.indexOf(step) > i ? 'bg-violet-500' : 'bg-slate-700'
+              }`} />
+            )}
+          </div>
+        ))}
+      </div>
+
       {step === 'name' && (
-        <div className="text-center z-10 max-w-xl flex flex-col items-center relative">
+        <div className={`text-center z-10 max-w-xl flex flex-col items-center relative ${getSlideClass()}`}>
           <HeroVisualizer />
           
           <div className="mb-8 md:mb-12 mt-4 relative z-20">
@@ -443,16 +508,12 @@ export default function OnboardingFlow() {
               )}
             </button>
           </div>
-          {agentName && (
-            <p className="text-sm text-violet-400 relative z-20">
-              "{agentName}" is awakening...
-            </p>
-          )}
         </div>
       )}
 
       {step === 'voice' && renderVoiceStep()}
-      {step === 'test' && renderTestStep()}
+      {step === 'finetune' && renderFineTuneStep()}
+      {step === 'meet' && renderMeetStep()}
     </div>
   );
 
@@ -462,8 +523,24 @@ export default function OnboardingFlow() {
       <FloatingMenu />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
       
+      {/* Step Progress Indicator */}
+      <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2">
+        {STEPS.map((s, i) => (
+          <div key={s} className="flex items-center">
+            <div className={`w-2 h-2 rounded-full transition-all ${
+              STEPS.indexOf(step) >= i ? 'bg-violet-500' : 'bg-slate-700'
+            }`} />
+            {i < STEPS.length - 1 && (
+              <div className={`w-6 h-0.5 transition-all ${
+                STEPS.indexOf(step) > i ? 'bg-violet-500' : 'bg-slate-700'
+              }`} />
+            )}
+          </div>
+        ))}
+      </div>
+
       {step === 'name' && (
-        <div className="text-center z-10 max-w-2xl flex flex-col items-center relative">
+        <div className={`text-center z-10 max-w-2xl flex flex-col items-center relative ${getSlideClass()}`}>
           <HeroVisualizer />
           
           <div className="mb-8 md:mb-12 mt-4 relative z-20">
@@ -499,22 +576,19 @@ export default function OnboardingFlow() {
               </button>
             </div>
           </div>
-          
-          <p className="mt-8 text-sm text-slate-600 relative z-20">
-            The 24-Hour Proof: One task. One text. One result. No apps. No friction.
-          </p>
         </div>
       )}
 
       {step === 'voice' && renderVoiceStep()}
-      {step === 'test' && renderTestStep()}
+      {step === 'finetune' && renderFineTuneStep()}
+      {step === 'meet' && renderMeetStep()}
     </div>
   );
 
   const renderVoiceStep = () => (
-    <div className="z-10 w-full max-w-4xl">
+    <div className={`z-10 w-full max-w-4xl ${getSlideClass()}`}>
       <div className="text-center mb-8">
-        <Volume2 className="w-12 h-12 text-indigo-400 mx-auto mb-4" />
+        <Volume2 className="w-12 h-12 text-violet-400 mx-auto mb-4" />
         <h2 className="text-3xl font-bold mb-2">Give {agentName} a Voice</h2>
         <p className="text-slate-400">Choose how your agent communicates with the world.</p>
       </div>
@@ -547,24 +621,122 @@ export default function OnboardingFlow() {
       
       <div className="flex justify-center gap-4">
         <button
-          onClick={() => setStep('name')}
+          onClick={prevStep}
           className="px-6 py-3 rounded-xl border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 transition-all flex items-center gap-2"
+          data-testid="button-back-voice"
         >
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
         <button
-          onClick={handleStartTest}
+          onClick={handleVoiceContinue}
           disabled={!selectedVoice}
-          className="bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all shadow-lg shadow-emerald-500/20"
-          data-testid="button-start-test"
+          className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all shadow-lg shadow-violet-500/20"
+          data-testid="button-continue-voice"
         >
-          Start Live Test <Mic className="w-5 h-5" />
+          Continue <ArrowRight className="w-5 h-5" />
         </button>
       </div>
     </div>
   );
 
-  const renderTestStep = () => (
+  const renderFineTuneStep = () => (
+    <div className={`z-10 w-full max-w-4xl ${getSlideClass()}`}>
+      <div className="text-center mb-8">
+        <Brain className="w-12 h-12 text-purple-400 mx-auto mb-4" />
+        <h2 className="text-3xl font-bold mb-2">Fine Tune {agentName}</h2>
+        <p className="text-slate-400">Adjust the personality sliders to shape your agent's behavior.</p>
+      </div>
+      
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6 mb-8">
+        <h3 className="text-lg font-bold mb-6 text-center">DISC Profile</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <div className="flex justify-between mb-2">
+              <span className="text-sm font-medium text-red-400">Dominance</span>
+              <span className="text-sm text-slate-400">{discSliders.dominance}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={discSliders.dominance}
+              onChange={(e) => setDiscSliders(prev => ({ ...prev, dominance: parseInt(e.target.value) }))}
+              className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-red-500"
+              data-testid="slider-dominance"
+            />
+            <p className="text-xs text-slate-500 mt-1">Direct, assertive, results-oriented</p>
+          </div>
+          <div>
+            <div className="flex justify-between mb-2">
+              <span className="text-sm font-medium text-yellow-400">Influence</span>
+              <span className="text-sm text-slate-400">{discSliders.influence}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={discSliders.influence}
+              onChange={(e) => setDiscSliders(prev => ({ ...prev, influence: parseInt(e.target.value) }))}
+              className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+              data-testid="slider-influence"
+            />
+            <p className="text-xs text-slate-500 mt-1">Enthusiastic, collaborative, optimistic</p>
+          </div>
+          <div>
+            <div className="flex justify-between mb-2">
+              <span className="text-sm font-medium text-green-400">Steadiness</span>
+              <span className="text-sm text-slate-400">{discSliders.steadiness}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={discSliders.steadiness}
+              onChange={(e) => setDiscSliders(prev => ({ ...prev, steadiness: parseInt(e.target.value) }))}
+              className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-green-500"
+              data-testid="slider-steadiness"
+            />
+            <p className="text-xs text-slate-500 mt-1">Patient, reliable, team-oriented</p>
+          </div>
+          <div>
+            <div className="flex justify-between mb-2">
+              <span className="text-sm font-medium text-blue-400">Conscientiousness</span>
+              <span className="text-sm text-slate-400">{discSliders.conscientiousness}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={discSliders.conscientiousness}
+              onChange={(e) => setDiscSliders(prev => ({ ...prev, conscientiousness: parseInt(e.target.value) }))}
+              className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              data-testid="slider-conscientiousness"
+            />
+            <p className="text-xs text-slate-500 mt-1">Analytical, detail-focused, quality-driven</p>
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex justify-center gap-4">
+        <button
+          onClick={prevStep}
+          className="px-6 py-3 rounded-xl border border-slate-700 text-slate-400 hover:text-white hover:border-slate-600 transition-all flex items-center gap-2"
+          data-testid="button-back-finetune"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+        <button
+          onClick={handleFineTuneContinue}
+          className="bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 px-8 py-3 rounded-xl font-bold flex items-center gap-3 transition-all shadow-lg shadow-emerald-500/20"
+          data-testid="button-meet-creation"
+        >
+          Meet Your Creation <Sparkles className="w-5 h-5" />
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderMeetStep = () => (
     <div className="z-10 w-full max-w-6xl">
       {/* Hero Visualizer Section */}
       <div className="flex flex-col items-center mb-8">
