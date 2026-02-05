@@ -131,6 +131,18 @@ Service: `server/mcp/googleWorkspace.ts`
 | `schedule` | Calendar integration status |
 | `add task [description]` | Create new task |
 | `my tasks` | View current tasks |
+| `report [Place ID]` | Area business insights report |
+| `competitors` | Competition analysis |
+
+### Places Aggregate API Integration
+Service: `server/mcp/placesAggregate.ts`
+- Uses Google Places Aggregate API (`areainsights.googleapis.com/v1:computeInsights`)
+- Authenticated via OAuth access token (same as Google Workspace - `cloud-platform` scope)
+- No separate API key needed - uses existing Google OAuth credentials
+- API endpoints: `/api/reports/area-insights` (raw), `/api/reports/business-report` (formatted)
+- Report includes: competitor count, nearby business density by type, rating breakdown, price level distribution
+- Available in both Admin Panel chat (via Gemini function calling) and SMS ("report [Place ID]")
+- SMS format: condensed text report; Chat format: markdown with percentages
 
 ### Integration with Gateway Task System
 - Customer lookup via `storage.getCustomerByPhone()`

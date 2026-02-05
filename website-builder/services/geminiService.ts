@@ -331,7 +331,20 @@ const listTasksTool: FunctionDeclaration = {
   }
 };
 
-// All Google Workspace tools
+const generateBusinessReportTool: FunctionDeclaration = {
+  name: "generateBusinessReport",
+  description: "Generate an area insights report for a business using their Google Places ID. Shows competitor count, nearby business density, rating breakdown, and price level distribution within a given radius.",
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      placeId: { type: Type.STRING, description: "The Google Places ID of the business (e.g., ChIJN1t_tDeuEmsRUsoyG83frY4)" },
+      businessType: { type: Type.STRING, description: "Optional business type to focus the report on (e.g., restaurant, cafe, gym, store)" },
+      radiusMeters: { type: Type.NUMBER, description: "Search radius in meters (default 5000)" }
+    },
+    required: ["placeId"]
+  }
+};
+
 const googleWorkspaceTools: FunctionDeclaration[] = [
   integrationTool,
   googleCalendarTool,
@@ -339,7 +352,8 @@ const googleWorkspaceTools: FunctionDeclaration[] = [
   googleDocsTool,
   googleSheetsTool,
   listCalendarEventsTool,
-  listTasksTool
+  listTasksTool,
+  generateBusinessReportTool
 ];
 
 export const createSupportChatSession = (hasGoogleWorkspace: boolean = false) => {
@@ -368,6 +382,7 @@ export const createSupportChatSession = (hasGoogleWorkspace: boolean = false) =>
     - Google Tasks: Create and list to-do items
     - Google Docs: Create documents and proposals
     - Google Sheets: Create spreadsheets for tracking data
+    - Area Insights: Generate business reports using Google Places Aggregate API
     
     TOOL USAGE RULES:
     - When user asks to schedule something → Use createCalendarEvent
@@ -376,6 +391,7 @@ export const createSupportChatSession = (hasGoogleWorkspace: boolean = false) =>
     - When user asks to track data/create a list → Use createSpreadsheet
     - When user asks about their schedule → Use listCalendarEvents
     - When user asks about their to-do list → Use listTasks
+    - When user asks about competitors, area report, business insights, or nearby businesses → Use generateBusinessReport with their Place ID
     
     For other integrations (Square, Shopify, etc.), explain how you can help generate API keys or webhooks.
     Be helpful, proactive, and enthusiastic about automation. Take action when the user requests it.
@@ -401,7 +417,8 @@ export type GoogleWorkspaceTool =
   | 'createDocument'
   | 'createSpreadsheet'
   | 'listCalendarEvents'
-  | 'listTasks';
+  | 'listTasks'
+  | 'generateBusinessReport';
 
 export interface ToolCallResult {
   success: boolean;

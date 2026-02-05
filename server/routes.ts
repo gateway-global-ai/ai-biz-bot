@@ -23,6 +23,7 @@ import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
+import { computeInsights, generateBusinessReport, formatReportForSms, formatReportForChat, type BusinessReportRequest, type PlacesAggregateInsightRequest } from "./mcp/placesAggregate";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -181,7 +182,81 @@ export async function registerRoutes(
     const wasConnected = googleWorkspaceCredentials.delete(businessId);
     res.json({ success: true, wasConnected });
   });
-  
+
+  // ============ Places Aggregate API - Business Reports ============
+
+  app.post("/api/reports/area-insights", async (req, res) => {
+    try {
+      const { businessId, request: insightRequest } = req.body;
+
+      if (!businessId) {
+        return res.status(400).json({ success: false, error: "businessId is required" });
+      }
+      if (!insightRequest) {
+        return res.status(400).json({ success: false, error: "request body is required" });
+      }
+
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({
+          success: false,
+          error: "Google account not connected. Please connect Google in the Admin Panel first.",
+          requiresAuth: true
+        });
+      }
+
+      const result = await computeInsights(credentials.accessToken, insightRequest);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      console.error("[Places Aggregate] Error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/reports/business-report", async (req, res) => {
+    try {
+      const { businessId, placeId, businessType, radiusMeters, includeCompetitors } = req.body;
+
+      if (!businessId) {
+        return res.status(400).json({ success: false, error: "businessId is required" });
+      }
+      if (!placeId) {
+        return res.status(400).json({ success: false, error: "placeId is required (Google Places ID)" });
+      }
+
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({
+          success: false,
+          error: "Google account not connected. Please connect Google in the Admin Panel first.",
+          requiresAuth: true
+        });
+      }
+
+      const report = await generateBusinessReport(credentials.accessToken, {
+        placeId,
+        businessType,
+        radiusMeters: radiusMeters || 5000,
+        includeCompetitors: includeCompetitors || false
+      });
+
+      const formattedChat = formatReportForChat(report);
+      const formattedSms = formatReportForSms(report);
+
+      res.json({
+        success: true,
+        report,
+        formatted: {
+          chat: formattedChat,
+          sms: formattedSms
+        }
+      });
+    } catch (error: any) {
+      console.error("[Business Report] Error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Get telephony config
   app.get("/api/telephony/config", async (req, res) => {
     try {
@@ -2646,7 +2721,8 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       // Business owner commands for website/business management
       const bizBotKeywords = ['visitors', 'how many visitors', 'traffic', 'reviews', 'bad reviews', 'update hours', 
         'change hours', 'my website', 'website stats', 'check website', 'new reviews', 'schedule', 'calendar',
-        'add task', 'create task', 'my tasks', 'create event', 'schedule meeting'];
+        'add task', 'create task', 'my tasks', 'create event', 'schedule meeting',
+        'report', 'area report', 'business report', 'competitors', 'competition', 'nearby businesses'];
       const isBizBotCommand = bizBotKeywords.some(kw => bodyLower.includes(kw));
       
       if (isBizBotCommand) {
@@ -2712,14 +2788,36 @@ Keep responses concise and engaging. If asked personal questions, you can share 
                 responseText = '📋 Add Task\n\nReply with "add task [description]"\n\nExample: "add task Call supplier about delivery"';
               }
             }
+          } else if (bodyLower.includes('report') || bodyLower.includes('competitors') || bodyLower.includes('competition') || bodyLower.includes('nearby businesses')) {
+            const placeIdMatch = Body.match(/(?:places\/)?([A-Za-z0-9_-]{20,})/);
+            const businessId = customer?.id || 'default';
+            const credentials = googleWorkspaceCredentials.get(businessId);
+
+            if (!credentials) {
+              responseText = 'Area Report requires Google connection.\n\nVisit your admin panel to connect Google, then text:\n"report [your Google Place ID]"\n\nFind your Place ID at: google.com/maps';
+            } else if (!placeIdMatch) {
+              responseText = 'Area Report\n\nTo generate a report, text:\n"report [Google Place ID]"\n\nExample: "report ChIJN1t_tDeuEmsRUsoyG83frY4"\n\nFind your Place ID on Google Maps.';
+            } else {
+              try {
+                const placeId = placeIdMatch[1];
+                const report = await generateBusinessReport(credentials.accessToken, {
+                  placeId,
+                  radiusMeters: 5000
+                });
+                responseText = formatReportForSms(report);
+              } catch (reportError: any) {
+                console.error('[SMS Biz Bot] Report generation error:', reportError.message);
+                responseText = 'Could not generate report. Please check your Place ID and try again, or visit your admin panel.';
+              }
+            }
           } else {
-            // General business query - use AI to respond
-            responseText = '🤖 AI Biz Bot\n\nI can help with:\n' +
-              '• "visitors" - Website traffic stats\n' +
-              '• "reviews" - Recent customer reviews\n' +
-              '• "update hours" - Change business hours\n' +
-              '• "schedule" - Calendar & events\n' +
-              '• "add task" - Create reminders\n\n' +
+            responseText = 'AI Biz Bot\n\nI can help with:\n' +
+              '- "visitors" - Website traffic stats\n' +
+              '- "reviews" - Recent customer reviews\n' +
+              '- "update hours" - Change business hours\n' +
+              '- "schedule" - Calendar & events\n' +
+              '- "add task" - Create reminders\n' +
+              '- "report [Place ID]" - Area business report\n\n' +
               'What would you like to do?';
           }
           

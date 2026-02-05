@@ -254,7 +254,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCustomerByPhone(phone: string): Promise<Customer | undefined> {
-    // Normalize phone number for comparison (remove spaces, dashes)
+    if (!phone) return undefined;
     const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
     const [customer] = await db.select().from(customers).where(
       ilike(customers.phone, `%${normalizedPhone.slice(-10)}%`)

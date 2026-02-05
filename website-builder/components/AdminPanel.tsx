@@ -157,6 +157,48 @@ const AdminPanel: React.FC<Props> = ({
             }
           }
           // Handle Google Workspace tool calls
+          else if (call.name === 'generateBusinessReport') {
+            const businessId = (window as any).__BUSINESS_ID__ || 'default';
+            try {
+              const reportResponse = await fetch(`${backendUrl}/api/reports/business-report`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  businessId,
+                  placeId: args.placeId,
+                  businessType: args.businessType,
+                  radiusMeters: args.radiusMeters || 5000
+                })
+              });
+              const reportData = await reportResponse.json();
+
+              if (reportData.success) {
+                setChatMessages(prev => [...prev, {
+                  role: 'model',
+                  text: reportData.formatted.chat,
+                  isToolResult: true,
+                  toolSuccess: true
+                }]);
+                functionResult = { success: true, report: reportData.report };
+              } else {
+                setChatMessages(prev => [...prev, {
+                  role: 'model',
+                  text: `Report generation failed: ${reportData.error}`,
+                  isToolResult: true,
+                  toolSuccess: false
+                }]);
+                functionResult = { success: false, error: reportData.error };
+              }
+            } catch (reportErr: any) {
+              setChatMessages(prev => [...prev, {
+                role: 'model',
+                text: `Could not generate report: ${reportErr.message}`,
+                isToolResult: true,
+                toolSuccess: false
+              }]);
+              functionResult = { success: false, error: reportErr.message };
+            }
+          }
           else if (['createCalendarEvent', 'listCalendarEvents', 'createTask', 'listTasks', 'createDocument', 'createSpreadsheet'].includes(call.name)) {
             const toolResult = await executeGoogleTool(call.name, args);
             
