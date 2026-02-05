@@ -1,0 +1,7 @@
+{
+  "name": "AI Virtual Classroom",
+  "description": "An interactive voice-enabled classroom where an AI agent teaches personalized lessons with real-time visual aids.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
