@@ -102,7 +102,7 @@ export async function registerRoutes(
     }
   });
 
-  // Update telephony config
+  // Update telephony config by ID
   app.patch("/api/telephony/config/:id", async (req, res) => {
     try {
       const { id } = req.params;
@@ -111,6 +111,37 @@ export async function registerRoutes(
         return res.status(400).json({ error: parsed.error.message });
       }
       const config = await storage.updateTelephonyConfig(id, parsed.data);
+      if (!config) {
+        return res.status(404).json({ error: "Config not found" });
+      }
+      res.json(config);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update telephony config (singleton - auto-get or create config first)
+  app.patch("/api/telephony/config", async (req, res) => {
+    try {
+      const parsed = updateConfigSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+      
+      // Get or create the singleton config
+      let existingConfig = await storage.getTelephonyConfig();
+      if (!existingConfig) {
+        existingConfig = await storage.createTelephonyConfig({
+          phoneNumber: null,
+          firewallEnabled: true,
+          allowedNumbers: [],
+          maxCallDuration: 60,
+          timeout: 30,
+          friendlyName: "AI Agent Trunk",
+        });
+      }
+      
+      const config = await storage.updateTelephonyConfig(existingConfig.id, parsed.data);
       if (!config) {
         return res.status(404).json({ error: "Config not found" });
       }
@@ -506,7 +537,13 @@ export async function registerRoutes(
           voiceFallbackUrl: n.voiceFallbackUrl || null,
           smsUrl: n.smsUrl || null,
           smsFallbackUrl: n.smsFallbackUrl || null,
-          statusCallback: n.statusCallback || null
+          statusCallback: n.statusCallback || null,
+          capabilities: {
+            voice: n.capabilities?.voice ?? true,
+            sms: n.capabilities?.sms ?? true,
+            mms: n.capabilities?.mms ?? false,
+          },
+          dateCreated: n.dateCreated || new Date().toISOString(),
         }))
       });
     } catch (error: any) {
@@ -2264,6 +2301,21 @@ Keep responses concise and engaging. If asked personal questions, you can share 
     } catch (error: any) {
       console.error('Chat error:', error);
       res.status(500).json({ error: error.message || 'Failed to generate response' });
+    }
+  });
+
+  // ============================================
+  // CALL LOGS API (alias for Gateway Admin)
+  // ============================================
+
+  // Get call logs (for Gateway Admin Usage & Logs tab)
+  app.get("/api/call-logs", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const logs = await storage.getCallLogs(undefined, limit);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -22,6 +22,14 @@ export default function GatewayAdmin() {
   const [showCreateSubAccount, setShowCreateSubAccount] = useState(false);
   const [newSubAccountName, setNewSubAccountName] = useState('');
   const [newSubAccountEmail, setNewSubAccountEmail] = useState('');
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
+  
+  // Local state for editable fields
+  const [editedPhoneNumber, setEditedPhoneNumber] = useState('');
+  const [editedPhoneSid, setEditedPhoneSid] = useState('');
+  const [editedFriendlyName, setEditedFriendlyName] = useState('');
+  const [editedAccountSid, setEditedAccountSid] = useState('');
+  const [hasChanges, setHasChanges] = useState(false);
 
   const { data: config, isLoading: configLoading } = useQuery<TelephonyConfig>({
     queryKey: ['/api/telephony/config'],
@@ -70,6 +78,62 @@ export default function GatewayAdmin() {
     },
     onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
   });
+
+  // Initialize edited values when config loads
+  const initializeEditedValues = () => {
+    if (config) {
+      setEditedPhoneNumber(config.phoneNumber || '');
+      setEditedPhoneSid(config.phoneSid || '');
+      setEditedFriendlyName(config.friendlyName || '');
+      setEditedAccountSid(config.accountSid || '');
+      setHasChanges(false);
+    }
+  };
+
+  // Check for changes
+  const checkForChanges = () => {
+    if (!config) return false;
+    return (
+      editedPhoneNumber !== (config.phoneNumber || '') ||
+      editedPhoneSid !== (config.phoneSid || '') ||
+      editedFriendlyName !== (config.friendlyName || '') ||
+      editedAccountSid !== (config.accountSid || '')
+    );
+  };
+
+  const handleSaveConfig = () => {
+    updateConfigMutation.mutate({
+      phoneNumber: editedPhoneNumber || undefined,
+      phoneSid: editedPhoneSid || undefined,
+      friendlyName: editedFriendlyName || undefined,
+      accountSid: editedAccountSid || undefined,
+    });
+    setHasChanges(false);
+  };
+
+  // Update hasChanges whenever fields change
+  const handleFieldChange = (field: string, value: string) => {
+    switch (field) {
+      case 'phoneNumber':
+        setEditedPhoneNumber(value);
+        break;
+      case 'phoneSid':
+        setEditedPhoneSid(value);
+        break;
+      case 'friendlyName':
+        setEditedFriendlyName(value);
+        break;
+      case 'accountSid':
+        setEditedAccountSid(value);
+        break;
+    }
+    setHasChanges(true);
+  };
+
+  // Initialize when config loads
+  useEffect(() => {
+    initializeEditedValues();
+  }, [config]);
 
   const totalCalls = callLogs.length;
   const completedCalls = callLogs.filter(c => c.status === 'completed').length;
@@ -187,14 +251,15 @@ export default function GatewayAdmin() {
                         <label className="text-sm text-slate-400 block mb-2">Phone Number</label>
                         <div className="flex items-center gap-2">
                           <Input 
-                            value={config?.phoneNumber || ''} 
-                            readOnly 
+                            value={editedPhoneNumber} 
+                            onChange={(e) => handleFieldChange('phoneNumber', e.target.value)}
+                            placeholder="+1 (555) 123-4567"
                             className="bg-slate-800 border-slate-700"
                             data-testid="input-gateway-phone"
                           />
-                          {config?.phoneNumber && (
+                          {editedPhoneNumber && (
                             <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                              <Check className="w-3 h-3 mr-1" /> Active
+                              <Check className="w-3 h-3 mr-1" /> Configured
                             </Badge>
                           )}
                         </div>
@@ -202,8 +267,9 @@ export default function GatewayAdmin() {
                       <div>
                         <label className="text-sm text-slate-400 block mb-2">Phone SID</label>
                         <Input 
-                          value={config?.phoneSid || ''} 
-                          readOnly 
+                          value={editedPhoneSid} 
+                          onChange={(e) => handleFieldChange('phoneSid', e.target.value)}
+                          placeholder="PN..."
                           className="bg-slate-800 border-slate-700 font-mono text-xs"
                           data-testid="input-gateway-sid"
                         />
@@ -213,34 +279,54 @@ export default function GatewayAdmin() {
                       <div>
                         <label className="text-sm text-slate-400 block mb-2">Friendly Name</label>
                         <Input 
-                          value={config?.friendlyName || ''} 
-                          readOnly 
+                          value={editedFriendlyName} 
+                          onChange={(e) => handleFieldChange('friendlyName', e.target.value)}
+                          placeholder="AI Agent Trunk"
                           className="bg-slate-800 border-slate-700"
+                          data-testid="input-gateway-friendly-name"
                         />
                       </div>
                       <div>
                         <label className="text-sm text-slate-400 block mb-2">Account SID</label>
                         <Input 
-                          value={config?.accountSid ? `${config.accountSid.slice(0, 10)}...` : 'Not configured'} 
-                          readOnly 
+                          value={editedAccountSid} 
+                          onChange={(e) => handleFieldChange('accountSid', e.target.value)}
+                          placeholder="AC..."
                           className="bg-slate-800 border-slate-700 font-mono text-xs"
+                          data-testid="input-gateway-account-sid"
                         />
                       </div>
                     </div>
-                    <div className="pt-4 border-t border-slate-800">
-                      <p className="text-sm text-slate-400 mb-4">
-                        This is the main Gateway Global number used for platform SMS (OTP authentication, task updates).
-                        To change this number, use the Twilio Account manager.
-                      </p>
-                      <Button 
-                        variant="outline" 
-                        className="border-purple-500/30 text-purple-300 hover:bg-purple-500/10"
-                        onClick={() => window.location.href = '/twilio-account'}
-                        data-testid="button-manage-twilio"
-                      >
-                        <Settings className="w-4 h-4 mr-2" />
-                        Manage Twilio Settings
-                      </Button>
+                    <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-slate-400 mb-2">
+                          Configure the main Gateway Global number for platform SMS and OTP.
+                        </p>
+                        <Button 
+                          variant="outline" 
+                          className="border-purple-500/30 text-purple-300 hover:bg-purple-500/10"
+                          onClick={() => window.location.href = '/twilio-account'}
+                          data-testid="button-manage-twilio"
+                        >
+                          <Settings className="w-4 h-4 mr-2" />
+                          Manage Twilio Settings
+                        </Button>
+                      </div>
+                      {hasChanges && (
+                        <Button 
+                          onClick={handleSaveConfig}
+                          disabled={updateConfigMutation.isPending}
+                          className="bg-purple-600 hover:bg-purple-500"
+                          data-testid="button-save-config"
+                        >
+                          {updateConfigMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          ) : (
+                            <Check className="w-4 h-4 mr-2" />
+                          )}
+                          Save Changes
+                        </Button>
+                      )}
                     </div>
                   </>
                 )}

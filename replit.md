@@ -37,6 +37,11 @@ The platform features a clean, modern design with a purple gradient theme and an
 - **Onboarding Experience**: A/B tested flows ("The Awakening," "The 24-Hour Proof") with dynamic agent behavior.
 - **A2P 10-DLC Compliance System**: Monetized service for businesses to register brands and campaigns with The Campaign Registry (TCR) for high-volume SMS.
 - **Website Builder Template**: GenAI Business Site Generator in `website-builder/` that creates instant professional websites from Google Maps data with AI voice concierge and chat support. Uses window-injected API keys (`window.__GOOGLE_MAPS_KEY__`, `window.__GEMINI_API_KEY__`).
+- **Core Agents (Auto-Seeded)**: Four core agents are automatically created on server startup:
+  - **Onboarding Agent** - Guides new users through agent creation (Kimi K2.5, warm/encouraging personality)
+  - **Classroom Agent** - Powers the self-improving micro-lesson system using WHY framework (Kimi K2.5)
+  - **Coding Agent** - Developer assistance with code review and analysis (Kimi K2 via HuggingFace)
+  - **AI Biz Bot** - Helps businesses leverage AI for growth and automation (Kimi K2.5)
 
 ### Agent Behavioral Guardrails
 Located in `server/kimi.ts` within `generateSmsResponse()` and `generateTaskUpdate()` system prompts:

@@ -34,12 +34,6 @@ import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
 
 function ServerPanel() {
-  const servers = [
-    { id: '1', name: 'Alpha-Test-Node', ip: '10.0.1.12', region: 'us-east-1', status: 'online', cpuUsage: 45, memoryUsage: 62 },
-    { id: '2', name: 'Beta-Staging', ip: '10.0.2.45', region: 'eu-west-2', status: 'busy', cpuUsage: 88, memoryUsage: 91 },
-    { id: '3', name: 'Gamma-Legacy', ip: '10.0.3.99', region: 'us-west-1', status: 'offline', cpuUsage: 0, memoryUsage: 0 },
-  ];
-
   return (
     <div className="p-6">
       <div className="mb-6 flex justify-between items-center">
@@ -48,59 +42,37 @@ function ServerPanel() {
             <Server className="w-6 h-6 text-indigo-400" />
             Server Control Panel
           </h2>
-          <p className="text-slate-400">Real-time monitoring and infrastructure management.</p>
+          <p className="text-slate-400">Connect and manage external servers and hosting providers.</p>
         </div>
-        <button className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium" data-testid="button-add-server">
-          Add Server
-        </button>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {servers.map(server => (
-          <div key={server.id} className="bg-slate-800 rounded-xl border border-slate-700 p-5">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-white font-bold">{server.name}</h3>
-                <p className="text-xs text-slate-500 font-mono">{server.ip} • {server.region}</p>
-              </div>
-              <span className={`px-2 py-1 rounded text-xs font-bold ${
-                server.status === 'online' ? 'bg-green-500/20 text-green-400' :
-                server.status === 'busy' ? 'bg-yellow-500/20 text-yellow-400' :
-                'bg-slate-700 text-slate-400'
-              }`}>
-                {server.status}
-              </span>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-xs text-slate-400 mb-1">
-                  <span>CPU Usage</span>
-                  <span>{server.cpuUsage}%</span>
-                </div>
-                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${server.cpuUsage}%` }} />
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs text-slate-400 mb-1">
-                  <span>Memory</span>
-                  <span>{server.memoryUsage}%</span>
-                </div>
-                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-pink-500 rounded-full" style={{ width: `${server.memoryUsage}%` }} />
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button className="flex-1 py-2 text-xs font-bold bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
-                {server.status === 'offline' ? 'Boot' : 'Shutdown'}
-              </button>
-              <button className="flex-1 py-2 text-xs font-bold bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300">
-                Reboot
-              </button>
+      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+        <div className="text-center py-8">
+          <Server className="w-16 h-16 mx-auto text-slate-600 mb-4" />
+          <h3 className="text-lg font-semibold text-white mb-2">No Servers Connected</h3>
+          <p className="text-slate-400 mb-6 max-w-md mx-auto">
+            Connect your external servers (Hostinger, DigitalOcean, AWS, etc.) to monitor and manage them from Gateway Global AI.
+          </p>
+          <p className="text-sm text-slate-500 mb-4">
+            Server integration requires API credentials from your hosting provider.
+          </p>
+          <div className="flex justify-center gap-3">
+            <div className="bg-slate-900 px-4 py-2 rounded-lg border border-slate-700">
+              <p className="text-xs text-slate-500 mb-1">Supported Providers</p>
+              <p className="text-sm text-slate-300">Hostinger • DigitalOcean • AWS • VPS</p>
             </div>
           </div>
-        ))}
+        </div>
+      </div>
+      
+      <div className="mt-6 bg-slate-800/50 rounded-xl border border-slate-700 p-4">
+        <h4 className="text-sm font-semibold text-white mb-2">Coming Soon</h4>
+        <ul className="text-sm text-slate-400 space-y-1">
+          <li>• One-click server provisioning</li>
+          <li>• Real-time monitoring and alerts</li>
+          <li>• Automated scaling and load balancing</li>
+          <li>• Integration with Hostinger API for DNS and hosting management</li>
+        </ul>
       </div>
     </div>
   );
@@ -116,8 +88,34 @@ function GlobalConfig() {
         </h2>
         <p className="text-slate-400">Manage environment variables and system settings.</p>
       </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
-        <p className="text-slate-400 text-center py-12">Configuration panel coming soon...</p>
+      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 space-y-4">
+        <div className="border-b border-slate-700 pb-4">
+          <h3 className="text-lg font-semibold text-white mb-2">Platform Settings</h3>
+          <p className="text-sm text-slate-400 mb-4">
+            These settings control global platform behavior and can be configured via environment secrets.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+            <p className="text-xs text-slate-500 uppercase mb-1">AI Provider</p>
+            <p className="text-white font-medium">Moonshot AI (Kimi K2.5)</p>
+          </div>
+          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+            <p className="text-xs text-slate-500 uppercase mb-1">Telephony Provider</p>
+            <p className="text-white font-medium">Twilio</p>
+          </div>
+          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+            <p className="text-xs text-slate-500 uppercase mb-1">Voice AI</p>
+            <p className="text-white font-medium">Kimi-Audio (Replicate)</p>
+          </div>
+          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+            <p className="text-xs text-slate-500 uppercase mb-1">Task Scheduler</p>
+            <p className="text-white font-medium">Active (5 min interval)</p>
+          </div>
+        </div>
+        <p className="text-sm text-slate-500 text-center pt-4">
+          To modify API keys and secrets, use the Secrets tab in your Replit workspace.
+        </p>
       </div>
     </div>
   );
@@ -239,6 +237,7 @@ function AppRouter() {
   return (
     <Switch>
       <Route path="/" component={OnboardingFlow} />
+      <Route path="/onboard" component={OnboardingFlow} />
       <Route path="/agents" component={AgentDashboard} />
       <Route path="/dashboard" component={AgentDashboard} />
       <Route path="/agent/:agentId/vibe" component={TheVibe} />
