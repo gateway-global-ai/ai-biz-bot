@@ -30,7 +30,14 @@ The platform features a clean, modern design with a purple gradient theme and an
   - Database tables: `knowledge_topics` (tracks popular topics), `lesson_plans` (versioned lessons with quiz stats), `lesson_sessions` (user progress/feedback)
   - Token limits prevent runaway costs (LESSON_GENERATION: 4000, LESSON_IMPROVEMENT: 6000, SLIDE_CONTENT: 1500)
   - Auto-improvement triggers: 5+ completions AND (avg quiz score < 70% OR 3+ feedback submissions)
-  - API endpoints: `/api/classroom/lesson` (create/retrieve), `/api/classroom/complete` (record progress), `/api/classroom/improve/:topicId` (manual improve)
+  - API endpoints: `/api/classroom/lesson` (create/retrieve), `/api/classroom/complete` (record progress), `/api/classroom/improve/:topicId` (manual improve), `/api/classroom/generate-image` (Flux via Replicate), `/api/classroom/tts` (Kimi-Audio via Replicate)
+- **Immersive NEXUS Classroom** (`/nexus-classroom`): Full-featured virtual classroom experience with:
+  - Kimi K2.5 for lesson plan generation with WHY pedagogical framework
+  - Real-time image generation via Replicate Flux for custom slide visuals
+  - Kimi-Audio via Replicate for text-to-speech narration
+  - Interactive quiz system with scoring
+  - Audio visualizer for real-time audio feedback
+  - Frontend service: `client/src/pages/classroom/kimiClassroomService.ts`
 - **Twilio Account Management**: Interface to manage Twilio credentials, sub-accounts, phone numbers, and billing.
 - **Customer Relationship Management**: A Customer Manager page for lead capture, status tracking, and notes.
 - **DISC Assessment**: An interactive 24-question assessment with API integration for bots.

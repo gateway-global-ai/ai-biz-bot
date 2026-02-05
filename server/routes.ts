@@ -4034,5 +4034,82 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
+  // Classroom image generation using Replicate (Flux model)
+  app.post("/api/classroom/generate-image", async (req, res) => {
+    try {
+      const { prompt, aspectRatio = "16:9" } = req.body;
+      if (!prompt) {
+        return res.status(400).json({ error: "Prompt is required" });
+      }
+      
+      const Replicate = (await import("replicate")).default;
+      const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
+      
+      // Use Flux for high-quality educational images
+      const output = await replicate.run(
+        "black-forest-labs/flux-schnell",
+        {
+          input: {
+            prompt: `Educational illustration: ${prompt}. High quality, clear, professional, suitable for teaching.`,
+            aspect_ratio: aspectRatio,
+            output_format: "webp",
+            output_quality: 90
+          }
+        }
+      );
+      
+      // Flux returns an array of URLs
+      const imageUrl = Array.isArray(output) ? output[0] : output;
+      res.json({ imageUrl });
+    } catch (error: any) {
+      console.error("[Classroom] Image generation error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Classroom TTS using Kimi-Audio via Replicate
+  app.post("/api/classroom/tts", async (req, res) => {
+    try {
+      const { text } = req.body;
+      if (!text) {
+        return res.status(400).json({ error: "Text is required" });
+      }
+      
+      const Replicate = (await import("replicate")).default;
+      const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
+      
+      // Use Kimi-Audio for TTS
+      const output = await replicate.run(
+        "zsxkib/kimi-audio-7b-instruct:40ab49e15bb65fc63a67f8207c821e592ed4a545e0e1452c34ba7268c64f7a0a",
+        {
+          input: {
+            messages: JSON.stringify([
+              { role: "user", message_type: "text", content: `Please read aloud: ${text}` }
+            ]),
+            output_type: "audio",
+            audio_temperature: 0.7,
+            text_temperature: 0.0,
+          }
+        }
+      );
+      
+      // Parse Kimi-Audio response
+      let audioUrl = "";
+      if (Array.isArray(output)) {
+        for (const item of output) {
+          if (typeof item === "string" && item.startsWith("http")) {
+            audioUrl = item;
+            break;
+          }
+        }
+      }
+      
+      res.json({ audioUrl });
+    } catch (error: any) {
+      console.error("[Classroom] TTS error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }

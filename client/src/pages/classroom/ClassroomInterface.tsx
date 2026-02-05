@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { LessonPlan, BoardContent } from './types';
-import { ClassroomSession, generateSpeech, generateClassroomImage } from './geminiService';
+import { ClassroomSession, generateSpeech, generateClassroomImage } from './kimiClassroomService';
 import { decodeAudioData } from './audioUtils';
 import AudioVisualizer from './AudioVisualizer';
 import QuizView from './QuizView';
