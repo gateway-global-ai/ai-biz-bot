@@ -1,77 +1,93 @@
-export interface PlacesAggregateInsightRequest {
-  insights: ('INSIGHT_COUNT' | 'INSIGHT_PLACES')[];
-  filter: {
-    locationFilter: LocationFilter;
-    typeFilter: TypeFilter;
-    operatingStatus?: string[];
-    priceLevels?: string[];
-    ratingFilter?: {
-      minRating?: number;
-      maxRating?: number;
+const PLACES_AGGREGATE_URL = 'https://places.googleapis.com/places/v1:aggregateSearch';
+
+export interface AggregateSearchRequest {
+  locationRestriction: {
+    circle: {
+      center: { latitude: number; longitude: number };
+      radius: number;
     };
   };
-}
-
-interface LocationFilter {
-  circle?: {
-    latLng?: { latitude: number; longitude: number };
-    place?: string;
-    radius: number;
-  };
-  region?: {
-    place: string;
-  };
-  customArea?: {
-    polygon: {
-      coordinates: { latitude: number; longitude: number }[];
-    };
-  };
-}
-
-interface TypeFilter {
   includedTypes?: string[];
-  excludedTypes?: string[];
-  includedPrimaryTypes?: string[];
-  excludedPrimaryTypes?: string[];
+  priceLevels?: PriceLevel[];
+  openNow?: boolean;
 }
 
-export interface PlacesAggregateResponse {
-  count?: string;
-  placeInsights?: { place: string }[];
+export type PriceLevel =
+  | 'PRICE_LEVEL_INEXPENSIVE'
+  | 'PRICE_LEVEL_MODERATE'
+  | 'PRICE_LEVEL_EXPENSIVE'
+  | 'PRICE_LEVEL_VERY_EXPENSIVE';
+
+export interface AggregateSearchResponse {
+  places: AggregatePlace[];
+  aggregationInfo?: {
+    aggregationInterval?: string;
+    placeCount?: number;
+  };
+}
+
+export interface AggregatePlace {
+  displayName?: { text: string };
+  placeTypeCount?: number;
+  averageRating?: number;
+  ratingCount?: number;
+  priceLevelHistogram?: Record<string, number>;
+  accessibilityOptions?: Record<string, number>;
 }
 
 export interface BusinessReportRequest {
-  placeId: string;
-  businessType?: string;
+  latitude: number;
+  longitude: number;
   radiusMeters?: number;
-  includeCompetitors?: boolean;
+  businessTypes?: string[];
+  businessName?: string;
 }
 
 export interface BusinessReport {
-  businessPlaceId: string;
+  businessName: string;
   generatedAt: string;
-  competitorCount: number;
-  nearbyByType: Record<string, number>;
-  ratingBreakdown: {
-    fiveStarCount: number;
-    fourStarCount: number;
-    threeAndBelowCount: number;
-  };
-  priceLevelBreakdown: Record<string, number>;
-  competitorPlaceIds?: string[];
+  location: { latitude: number; longitude: number };
+  radiusMeters: number;
+  results: CategoryResult[];
+  summary: ReportSummary;
 }
 
-const AREA_INSIGHTS_URL = 'https://areainsights.googleapis.com/v1:computeInsights';
+export interface CategoryResult {
+  type: string;
+  placeCount: number;
+  averageRating: number | null;
+  ratingCount: number;
+  priceLevelHistogram: Record<string, number>;
+}
 
-export async function computeInsights(
-  accessToken: string,
-  request: PlacesAggregateInsightRequest
-): Promise<PlacesAggregateResponse> {
-  const response = await fetch(AREA_INSIGHTS_URL, {
+export interface ReportSummary {
+  totalBusinesses: number;
+  overallAverageRating: number | null;
+  topCategory: string;
+  priceLevelBreakdown: Record<string, number>;
+}
+
+function getApiKey(): string {
+  const key = process.env.GOOGLE_CLOUD_API_KEY;
+  if (!key) {
+    throw new Error('GOOGLE_CLOUD_API_KEY is not set. Add your Google Cloud API key to use Places Aggregate API.');
+  }
+  return key;
+}
+
+export async function aggregateSearch(
+  request: AggregateSearchRequest,
+  apiKey?: string
+): Promise<AggregateSearchResponse> {
+  const key = apiKey || getApiKey();
+
+  console.log('[Places Aggregate] Request:', JSON.stringify(request, null, 2));
+
+  const response = await fetch(PLACES_AGGREGATE_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': key
     },
     body: JSON.stringify(request)
   });
@@ -82,193 +98,123 @@ export async function computeInsights(
     throw new Error(`Places Aggregate API error (${response.status}): ${errorText}`);
   }
 
-  return await response.json();
+  const data = await response.json();
+  console.log('[Places Aggregate] Response:', JSON.stringify(data, null, 2));
+  return data;
 }
 
 export async function generateBusinessReport(
-  accessToken: string,
-  params: BusinessReportRequest
+  params: BusinessReportRequest,
+  apiKey?: string
 ): Promise<BusinessReport> {
-  const { placeId, businessType, radiusMeters = 5000, includeCompetitors = false } = params;
+  const {
+    latitude,
+    longitude,
+    radiusMeters = 5000,
+    businessTypes = ['lodging', 'restaurant', 'cafe', 'store', 'bar', 'gas_station'],
+    businessName = 'Business'
+  } = params;
 
-  const placeRef = placeId.startsWith('places/') ? placeId : `places/${placeId}`;
+  const results: CategoryResult[] = [];
 
-  const locationFilter: LocationFilter = {
-    circle: {
-      place: placeRef,
-      radius: radiusMeters
-    }
-  };
-
-  const businessTypes = businessType
-    ? [businessType]
-    : ['restaurant', 'cafe', 'store', 'bar', 'beauty_salon', 'gym'];
-
-  const nearbyByType: Record<string, number> = {};
   for (const type of businessTypes) {
     try {
-      const result = await computeInsights(accessToken, {
-        insights: ['INSIGHT_COUNT'],
-        filter: {
-          locationFilter,
-          typeFilter: { includedTypes: [type] },
-          operatingStatus: ['OPERATING_STATUS_OPERATIONAL']
-        }
+      const response = await aggregateSearch({
+        locationRestriction: {
+          circle: {
+            center: { latitude, longitude },
+            radius: radiusMeters
+          }
+        },
+        includedTypes: [type]
+      }, apiKey);
+
+      const place = response.places?.[0];
+      const placeCount = place?.placeTypeCount ?? response.aggregationInfo?.placeCount ?? 0;
+
+      results.push({
+        type,
+        placeCount,
+        averageRating: place?.averageRating ?? null,
+        ratingCount: place?.ratingCount ?? 0,
+        priceLevelHistogram: place?.priceLevelHistogram ?? {}
       });
-      nearbyByType[type] = parseInt(result.count || '0', 10);
     } catch (error: any) {
-      console.warn(`[Places Aggregate] Failed to get count for type ${type}:`, error.message);
-      nearbyByType[type] = -1;
+      console.warn(`[Places Aggregate] Failed for type "${type}":`, error.message);
+      results.push({
+        type,
+        placeCount: 0,
+        averageRating: null,
+        ratingCount: 0,
+        priceLevelHistogram: {}
+      });
     }
   }
 
-  const primaryType = businessType || 'restaurant';
+  const totalBusinesses = results.reduce((sum, r) => sum + r.placeCount, 0);
 
-  let competitorCount = 0;
-  try {
-    const compResult = await computeInsights(accessToken, {
-      insights: ['INSIGHT_COUNT'],
-      filter: {
-        locationFilter,
-        typeFilter: { includedTypes: [primaryType] },
-        operatingStatus: ['OPERATING_STATUS_OPERATIONAL']
-      }
-    });
-    competitorCount = parseInt(compResult.count || '0', 10);
-  } catch (error: any) {
-    console.warn('[Places Aggregate] Failed to get competitor count:', error.message);
-  }
+  const ratedResults = results.filter(r => r.averageRating !== null);
+  const overallAverageRating = ratedResults.length > 0
+    ? Math.round((ratedResults.reduce((sum, r) => sum + (r.averageRating ?? 0), 0) / ratedResults.length) * 10) / 10
+    : null;
 
-  let fiveStarCount = 0;
-  let fourStarCount = 0;
-  let threeAndBelowCount = 0;
-  try {
-    const fiveStar = await computeInsights(accessToken, {
-      insights: ['INSIGHT_COUNT'],
-      filter: {
-        locationFilter,
-        typeFilter: { includedTypes: [primaryType] },
-        operatingStatus: ['OPERATING_STATUS_OPERATIONAL'],
-        ratingFilter: { minRating: 4.5, maxRating: 5.0 }
-      }
-    });
-    fiveStarCount = parseInt(fiveStar.count || '0', 10);
-
-    const fourStar = await computeInsights(accessToken, {
-      insights: ['INSIGHT_COUNT'],
-      filter: {
-        locationFilter,
-        typeFilter: { includedTypes: [primaryType] },
-        operatingStatus: ['OPERATING_STATUS_OPERATIONAL'],
-        ratingFilter: { minRating: 3.5, maxRating: 4.49 }
-      }
-    });
-    fourStarCount = parseInt(fourStar.count || '0', 10);
-
-    const threeStar = await computeInsights(accessToken, {
-      insights: ['INSIGHT_COUNT'],
-      filter: {
-        locationFilter,
-        typeFilter: { includedTypes: [primaryType] },
-        operatingStatus: ['OPERATING_STATUS_OPERATIONAL'],
-        ratingFilter: { minRating: 1.0, maxRating: 3.49 }
-      }
-    });
-    threeAndBelowCount = parseInt(threeStar.count || '0', 10);
-  } catch (error: any) {
-    console.warn('[Places Aggregate] Failed to get rating breakdown:', error.message);
-  }
+  const topCategory = results.reduce((top, r) => r.placeCount > (top?.placeCount ?? 0) ? r : top, results[0]);
 
   const priceLevelBreakdown: Record<string, number> = {};
-  const priceLevels = [
-    'PRICE_LEVEL_FREE',
-    'PRICE_LEVEL_INEXPENSIVE',
-    'PRICE_LEVEL_MODERATE',
-    'PRICE_LEVEL_EXPENSIVE',
-    'PRICE_LEVEL_VERY_EXPENSIVE'
-  ];
-  for (const level of priceLevels) {
-    try {
-      const priceResult = await computeInsights(accessToken, {
-        insights: ['INSIGHT_COUNT'],
-        filter: {
-          locationFilter,
-          typeFilter: { includedTypes: [primaryType] },
-          operatingStatus: ['OPERATING_STATUS_OPERATIONAL'],
-          priceLevels: [level]
-        }
-      });
-      priceLevelBreakdown[level] = parseInt(priceResult.count || '0', 10);
-    } catch (error: any) {
-      priceLevelBreakdown[level] = -1;
-    }
-  }
-
-  let competitorPlaceIds: string[] | undefined;
-  if (includeCompetitors) {
-    try {
-      const placesResult = await computeInsights(accessToken, {
-        insights: ['INSIGHT_PLACES'],
-        filter: {
-          locationFilter,
-          typeFilter: { includedTypes: [primaryType] },
-          operatingStatus: ['OPERATING_STATUS_OPERATIONAL']
-        }
-      });
-      competitorPlaceIds = placesResult.placeInsights?.map(p => p.place) || [];
-    } catch (error: any) {
-      console.warn('[Places Aggregate] Failed to get competitor place IDs:', error.message);
+  for (const r of results) {
+    for (const [level, count] of Object.entries(r.priceLevelHistogram)) {
+      priceLevelBreakdown[level] = (priceLevelBreakdown[level] || 0) + count;
     }
   }
 
   return {
-    businessPlaceId: placeRef,
+    businessName,
     generatedAt: new Date().toISOString(),
-    competitorCount,
-    nearbyByType,
-    ratingBreakdown: {
-      fiveStarCount,
-      fourStarCount,
-      threeAndBelowCount
-    },
-    priceLevelBreakdown,
-    competitorPlaceIds
+    location: { latitude, longitude },
+    radiusMeters,
+    results,
+    summary: {
+      totalBusinesses,
+      overallAverageRating,
+      topCategory: topCategory?.type || 'unknown',
+      priceLevelBreakdown
+    }
   };
 }
 
 export function formatReportForSms(report: BusinessReport): string {
   const lines: string[] = [];
-  lines.push('Business Area Report');
+  lines.push(`Area Report: ${report.businessName}`);
+  lines.push(`Radius: ${(report.radiusMeters / 1000).toFixed(1)}km`);
   lines.push('');
 
-  lines.push(`Competitors nearby: ${report.competitorCount}`);
-  lines.push('');
-
-  lines.push('Nearby businesses:');
-  for (const [type, count] of Object.entries(report.nearbyByType)) {
-    if (count >= 0) {
-      const label = type.replace(/_/g, ' ');
-      lines.push(`  ${label}: ${count}`);
-    }
+  lines.push(`Total nearby businesses: ${report.summary.totalBusinesses}`);
+  if (report.summary.overallAverageRating !== null) {
+    lines.push(`Avg rating: ${report.summary.overallAverageRating}/5`);
   }
   lines.push('');
 
-  lines.push('Rating breakdown:');
-  lines.push(`  4.5-5 star: ${report.ratingBreakdown.fiveStarCount}`);
-  lines.push(`  3.5-4.5 star: ${report.ratingBreakdown.fourStarCount}`);
-  lines.push(`  Below 3.5: ${report.ratingBreakdown.threeAndBelowCount}`);
-  lines.push('');
+  lines.push('By category:');
+  for (const r of report.results) {
+    if (r.placeCount > 0) {
+      const label = r.type.replace(/_/g, ' ');
+      const rating = r.averageRating !== null ? ` (${r.averageRating}/5)` : '';
+      lines.push(`  ${label}: ${r.placeCount}${rating}`);
+    }
+  }
 
   const priceLabels: Record<string, string> = {
-    'PRICE_LEVEL_FREE': 'Free',
     'PRICE_LEVEL_INEXPENSIVE': '$',
     'PRICE_LEVEL_MODERATE': '$$',
     'PRICE_LEVEL_EXPENSIVE': '$$$',
     'PRICE_LEVEL_VERY_EXPENSIVE': '$$$$'
   };
-  lines.push('Price levels:');
-  for (const [level, count] of Object.entries(report.priceLevelBreakdown)) {
-    if (count >= 0) {
+
+  const priceEntries = Object.entries(report.summary.priceLevelBreakdown).filter(([, v]) => v > 0);
+  if (priceEntries.length > 0) {
+    lines.push('');
+    lines.push('Price levels:');
+    for (const [level, count] of priceEntries) {
       lines.push(`  ${priceLabels[level] || level}: ${count}`);
     }
   }
@@ -279,51 +225,76 @@ export function formatReportForSms(report: BusinessReport): string {
 export function formatReportForChat(report: BusinessReport): string {
   const sections: string[] = [];
 
-  sections.push(`**Business Area Insights Report**`);
+  sections.push(`**Area Insights Report: ${report.businessName}**`);
   sections.push(`Generated: ${new Date(report.generatedAt).toLocaleString()}`);
+  sections.push(`Search radius: ${(report.radiusMeters / 1000).toFixed(1)} km`);
   sections.push('');
 
-  sections.push(`**Competition Analysis**`);
-  sections.push(`Total competitors in area: **${report.competitorCount}**`);
-  sections.push('');
-
-  sections.push(`**Nearby Business Density**`);
-  for (const [type, count] of Object.entries(report.nearbyByType)) {
-    if (count >= 0) {
-      const label = type.charAt(0).toUpperCase() + type.slice(1).replace(/_/g, ' ');
-      sections.push(`- ${label}: ${count}`);
-    }
+  sections.push(`**Summary**`);
+  sections.push(`- Total businesses found: **${report.summary.totalBusinesses}**`);
+  if (report.summary.overallAverageRating !== null) {
+    sections.push(`- Overall average rating: **${report.summary.overallAverageRating}/5**`);
   }
+  sections.push(`- Most common category: **${report.summary.topCategory.replace(/_/g, ' ')}**`);
   sections.push('');
 
-  sections.push(`**Competitor Rating Breakdown**`);
-  const total = report.ratingBreakdown.fiveStarCount + report.ratingBreakdown.fourStarCount + report.ratingBreakdown.threeAndBelowCount;
-  if (total > 0) {
-    sections.push(`- 4.5-5.0 stars: ${report.ratingBreakdown.fiveStarCount} (${Math.round(report.ratingBreakdown.fiveStarCount / total * 100)}%)`);
-    sections.push(`- 3.5-4.5 stars: ${report.ratingBreakdown.fourStarCount} (${Math.round(report.ratingBreakdown.fourStarCount / total * 100)}%)`);
-    sections.push(`- Below 3.5: ${report.ratingBreakdown.threeAndBelowCount} (${Math.round(report.ratingBreakdown.threeAndBelowCount / total * 100)}%)`);
+  sections.push(`**Business Density by Category**`);
+  for (const r of report.results) {
+    const label = r.type.charAt(0).toUpperCase() + r.type.slice(1).replace(/_/g, ' ');
+    const rating = r.averageRating !== null ? ` | Avg rating: ${r.averageRating}/5` : '';
+    const ratingCount = r.ratingCount > 0 ? ` (${r.ratingCount} reviews)` : '';
+    sections.push(`- ${label}: ${r.placeCount} places${rating}${ratingCount}`);
   }
-  sections.push('');
 
   const priceLabels: Record<string, string> = {
-    'PRICE_LEVEL_FREE': 'Free',
     'PRICE_LEVEL_INEXPENSIVE': 'Budget ($)',
     'PRICE_LEVEL_MODERATE': 'Moderate ($$)',
     'PRICE_LEVEL_EXPENSIVE': 'Expensive ($$$)',
-    'PRICE_LEVEL_VERY_EXPENSIVE': 'Very Expensive ($$$$)'
+    'PRICE_LEVEL_VERY_EXPENSIVE': 'Premium ($$$$)'
   };
-  sections.push(`**Price Level Distribution**`);
-  for (const [level, count] of Object.entries(report.priceLevelBreakdown)) {
-    if (count >= 0) {
+
+  const priceEntries = Object.entries(report.summary.priceLevelBreakdown).filter(([, v]) => v > 0);
+  if (priceEntries.length > 0) {
+    sections.push('');
+    sections.push(`**Price Level Distribution**`);
+    for (const [level, count] of priceEntries) {
       sections.push(`- ${priceLabels[level] || level}: ${count}`);
     }
   }
 
-  if (report.competitorPlaceIds && report.competitorPlaceIds.length > 0) {
-    sections.push('');
-    sections.push(`**Competitor Place IDs** (${report.competitorPlaceIds.length} found)`);
-    sections.push(`Use Google Place Details to look up each competitor.`);
+  return sections.join('\n');
+}
+
+export async function lookupPlaceByName(
+  name: string,
+  apiKey?: string
+): Promise<{ placeId: string; latitude: number; longitude: number; formattedAddress: string } | null> {
+  const key = apiKey || getApiKey();
+
+  const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': key,
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location'
+    },
+    body: JSON.stringify({ textQuery: name })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[Places Lookup] API error:', response.status, errorText);
+    throw new Error(`Places lookup error (${response.status}): ${errorText}`);
   }
 
-  return sections.join('\n');
+  const data = await response.json();
+  const place = data.places?.[0];
+  if (!place) return null;
+
+  return {
+    placeId: place.id,
+    latitude: place.location?.latitude,
+    longitude: place.location?.longitude,
+    formattedAddress: place.formattedAddress || ''
+  };
 }

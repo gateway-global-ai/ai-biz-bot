@@ -23,7 +23,7 @@ import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
-import { computeInsights, generateBusinessReport, formatReportForSms, formatReportForChat, type BusinessReportRequest, type PlacesAggregateInsightRequest } from "./mcp/placesAggregate";
+import { aggregateSearch, generateBusinessReport, formatReportForSms, formatReportForChat, lookupPlaceByName, type AggregateSearchRequest, type BusinessReportRequest } from "./mcp/placesAggregate";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -185,27 +185,15 @@ export async function registerRoutes(
 
   // ============ Places Aggregate API - Business Reports ============
 
-  app.post("/api/reports/area-insights", async (req, res) => {
+  app.post("/api/reports/aggregate-search", async (req, res) => {
     try {
-      const { businessId, request: insightRequest } = req.body;
+      const { request: searchRequest } = req.body;
 
-      if (!businessId) {
-        return res.status(400).json({ success: false, error: "businessId is required" });
-      }
-      if (!insightRequest) {
-        return res.status(400).json({ success: false, error: "request body is required" });
+      if (!searchRequest || !searchRequest.locationRestriction) {
+        return res.status(400).json({ success: false, error: "request with locationRestriction is required" });
       }
 
-      const credentials = googleWorkspaceCredentials.get(businessId);
-      if (!credentials) {
-        return res.status(401).json({
-          success: false,
-          error: "Google account not connected. Please connect Google in the Admin Panel first.",
-          requiresAuth: true
-        });
-      }
-
-      const result = await computeInsights(credentials.accessToken, insightRequest);
+      const result = await aggregateSearch(searchRequest);
       res.json({ success: true, data: result });
     } catch (error: any) {
       console.error("[Places Aggregate] Error:", error.message);
@@ -215,44 +203,75 @@ export async function registerRoutes(
 
   app.post("/api/reports/business-report", async (req, res) => {
     try {
-      const { businessId, placeId, businessType, radiusMeters, includeCompetitors } = req.body;
+      const { businessName, latitude, longitude, radiusMeters, businessTypes } = req.body;
 
-      if (!businessId) {
-        return res.status(400).json({ success: false, error: "businessId is required" });
-      }
-      if (!placeId) {
-        return res.status(400).json({ success: false, error: "placeId is required (Google Places ID)" });
+      if (latitude === undefined || longitude === undefined) {
+        if (!businessName) {
+          return res.status(400).json({ success: false, error: "Either latitude/longitude or businessName is required" });
+        }
+        try {
+          const place = await lookupPlaceByName(businessName);
+          if (!place) {
+            return res.status(404).json({ success: false, error: `Could not find location for "${businessName}"` });
+          }
+          const report = await generateBusinessReport({
+            latitude: place.latitude,
+            longitude: place.longitude,
+            radiusMeters: radiusMeters || 5000,
+            businessTypes,
+            businessName: businessName
+          });
+
+          res.json({
+            success: true,
+            lookedUpPlace: place,
+            report,
+            formatted: {
+              chat: formatReportForChat(report),
+              sms: formatReportForSms(report)
+            }
+          });
+          return;
+        } catch (lookupErr: any) {
+          return res.status(500).json({ success: false, error: `Place lookup failed: ${lookupErr.message}` });
+        }
       }
 
-      const credentials = googleWorkspaceCredentials.get(businessId);
-      if (!credentials) {
-        return res.status(401).json({
-          success: false,
-          error: "Google account not connected. Please connect Google in the Admin Panel first.",
-          requiresAuth: true
-        });
-      }
-
-      const report = await generateBusinessReport(credentials.accessToken, {
-        placeId,
-        businessType,
+      const report = await generateBusinessReport({
+        latitude,
+        longitude,
         radiusMeters: radiusMeters || 5000,
-        includeCompetitors: includeCompetitors || false
+        businessTypes,
+        businessName: businessName || 'Business'
       });
-
-      const formattedChat = formatReportForChat(report);
-      const formattedSms = formatReportForSms(report);
 
       res.json({
         success: true,
         report,
         formatted: {
-          chat: formattedChat,
-          sms: formattedSms
+          chat: formatReportForChat(report),
+          sms: formatReportForSms(report)
         }
       });
     } catch (error: any) {
       console.error("[Business Report] Error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/reports/lookup-place", async (req, res) => {
+    try {
+      const { name } = req.body;
+      if (!name) {
+        return res.status(400).json({ success: false, error: "name is required" });
+      }
+      const place = await lookupPlaceByName(name);
+      if (!place) {
+        return res.status(404).json({ success: false, error: `No place found for "${name}"` });
+      }
+      res.json({ success: true, place });
+    } catch (error: any) {
+      console.error("[Place Lookup] Error:", error.message);
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -2789,25 +2808,33 @@ Keep responses concise and engaging. If asked personal questions, you can share 
               }
             }
           } else if (bodyLower.includes('report') || bodyLower.includes('competitors') || bodyLower.includes('competition') || bodyLower.includes('nearby businesses')) {
-            const placeIdMatch = Body.match(/(?:places\/)?([A-Za-z0-9_-]{20,})/);
-            const businessId = customer?.id || 'default';
-            const credentials = googleWorkspaceCredentials.get(businessId);
-
-            if (!credentials) {
-              responseText = 'Area Report requires Google connection.\n\nVisit your admin panel to connect Google, then text:\n"report [your Google Place ID]"\n\nFind your Place ID at: google.com/maps';
-            } else if (!placeIdMatch) {
-              responseText = 'Area Report\n\nTo generate a report, text:\n"report [Google Place ID]"\n\nExample: "report ChIJN1t_tDeuEmsRUsoyG83frY4"\n\nFind your Place ID on Google Maps.';
+            if (!process.env.GOOGLE_CLOUD_API_KEY) {
+              responseText = 'Area Reports are not available yet. API key needs to be configured by an administrator.';
             } else {
-              try {
-                const placeId = placeIdMatch[1];
-                const report = await generateBusinessReport(credentials.accessToken, {
-                  placeId,
-                  radiusMeters: 5000
-                });
-                responseText = formatReportForSms(report);
-              } catch (reportError: any) {
-                console.error('[SMS Biz Bot] Report generation error:', reportError.message);
-                responseText = 'Could not generate report. Please check your Place ID and try again, or visit your admin panel.';
+              const customerPlace = process.env.CUSTOMER_PLACE;
+              const bodyAfterReport = Body.replace(/^(report|competitors|competition|nearby businesses)\s*/i, '').trim();
+              const searchName = bodyAfterReport || customerPlace;
+
+              if (!searchName) {
+                responseText = 'Area Report\n\nTo generate a report, text:\n"report [business name or location]"\n\nExample: "report Boardwalk Suites Lafayette"';
+              } else {
+                try {
+                  const place = await lookupPlaceByName(searchName);
+                  if (!place) {
+                    responseText = `Could not find "${searchName}" on Google Maps. Try a more specific name.`;
+                  } else {
+                    const report = await generateBusinessReport({
+                      latitude: place.latitude,
+                      longitude: place.longitude,
+                      radiusMeters: 5000,
+                      businessName: searchName
+                    });
+                    responseText = formatReportForSms(report);
+                  }
+                } catch (reportError: any) {
+                  console.error('[SMS Biz Bot] Report generation error:', reportError.message);
+                  responseText = 'Could not generate report. Please try again or check the business name.';
+                }
               }
             }
           } else {
@@ -2817,7 +2844,7 @@ Keep responses concise and engaging. If asked personal questions, you can share 
               '- "update hours" - Change business hours\n' +
               '- "schedule" - Calendar & events\n' +
               '- "add task" - Create reminders\n' +
-              '- "report [Place ID]" - Area business report\n\n' +
+              '- "report [business name]" - Area business report\n\n' +
               'What would you like to do?';
           }
           

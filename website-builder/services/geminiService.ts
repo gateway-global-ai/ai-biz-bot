@@ -333,15 +333,15 @@ const listTasksTool: FunctionDeclaration = {
 
 const generateBusinessReportTool: FunctionDeclaration = {
   name: "generateBusinessReport",
-  description: "Generate an area insights report for a business using their Google Places ID. Shows competitor count, nearby business density, rating breakdown, and price level distribution within a given radius.",
+  description: "Generate an area insights report for a business by name. Looks up the business on Google Maps, then shows nearby business density by category, average ratings, and price level distribution within a given radius.",
   parameters: {
     type: Type.OBJECT,
     properties: {
-      placeId: { type: Type.STRING, description: "The Google Places ID of the business (e.g., ChIJN1t_tDeuEmsRUsoyG83frY4)" },
-      businessType: { type: Type.STRING, description: "Optional business type to focus the report on (e.g., restaurant, cafe, gym, store)" },
+      businessName: { type: Type.STRING, description: "The name and location of the business (e.g., 'Boardwalk Suites Lafayette')" },
+      businessType: { type: Type.STRING, description: "Optional business type to focus the report on (e.g., restaurant, cafe, lodging, store)" },
       radiusMeters: { type: Type.NUMBER, description: "Search radius in meters (default 5000)" }
     },
-    required: ["placeId"]
+    required: ["businessName"]
   }
 };
 
@@ -391,7 +391,7 @@ export const createSupportChatSession = (hasGoogleWorkspace: boolean = false) =>
     - When user asks to track data/create a list → Use createSpreadsheet
     - When user asks about their schedule → Use listCalendarEvents
     - When user asks about their to-do list → Use listTasks
-    - When user asks about competitors, area report, business insights, or nearby businesses → Use generateBusinessReport with their Place ID
+    - When user asks about competitors, area report, business insights, or nearby businesses → Use generateBusinessReport with the business name
     
     For other integrations (Square, Shopify, etc.), explain how you can help generate API keys or webhooks.
     Be helpful, proactive, and enthusiastic about automation. Take action when the user requests it.
