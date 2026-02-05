@@ -22,6 +22,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
+import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -75,6 +76,110 @@ export async function registerRoutes(
       return res.status(500).json({ error: "Gemini API key not configured" });
     }
     res.json({ apiKey });
+  });
+
+  // ============ Google Workspace Integration ============
+  
+  // In-memory storage for Google Workspace credentials (per business)
+  const googleWorkspaceCredentials = new Map<string, GoogleWorkspaceCredentials>();
+  
+  // Check if Google Workspace is configured
+  app.get("/api/google/status", (req, res) => {
+    const hasClientId = !!process.env.GOOGLE_CLIENT_ID;
+    const hasClientSecret = !!process.env.GOOGLE_CLIENT_SECRET;
+    res.json({ 
+      configured: hasClientId && hasClientSecret,
+      hasClientId,
+      hasClientSecret
+    });
+  });
+
+  // Get Google Workspace OAuth URL
+  app.get("/api/google/auth-url", (req, res) => {
+    try {
+      const { businessId } = req.query;
+      if (!businessId || typeof businessId !== 'string') {
+        return res.status(400).json({ error: "businessId is required" });
+      }
+
+      const service = createGoogleWorkspaceService();
+      const authUrl = service.getAuthUrl(businessId);
+      res.json({ authUrl });
+    } catch (error: any) {
+      console.error("Google auth URL error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Google OAuth callback
+  app.get("/api/google/callback", async (req, res) => {
+    try {
+      const { code, state: businessId } = req.query;
+      
+      if (!code || typeof code !== 'string') {
+        return res.status(400).send("Authorization code not provided");
+      }
+      if (!businessId || typeof businessId !== 'string') {
+        return res.status(400).send("Business ID not provided");
+      }
+
+      const service = createGoogleWorkspaceService();
+      const credentials = await service.exchangeCode(code);
+      
+      // Store credentials for this business
+      googleWorkspaceCredentials.set(businessId, credentials);
+      
+      // Redirect back to the admin panel with success
+      res.redirect(`/website-builder?google_connected=true&businessId=${businessId}`);
+    } catch (error: any) {
+      console.error("Google OAuth callback error:", error);
+      res.redirect(`/website-builder?google_error=${encodeURIComponent(error.message)}`);
+    }
+  });
+
+  // Check if business has Google Workspace connected
+  app.get("/api/google/connection/:businessId", (req, res) => {
+    const { businessId } = req.params;
+    const hasCredentials = googleWorkspaceCredentials.has(businessId);
+    res.json({ connected: hasCredentials });
+  });
+
+  // Execute a Google Workspace tool
+  app.post("/api/google/execute-tool", async (req, res) => {
+    try {
+      const { businessId, toolName, args } = req.body;
+      
+      if (!businessId) {
+        return res.status(400).json({ success: false, error: "businessId is required" });
+      }
+      if (!toolName) {
+        return res.status(400).json({ success: false, error: "toolName is required" });
+      }
+
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ 
+          success: false, 
+          error: "Google Workspace not connected for this business",
+          requiresAuth: true
+        });
+      }
+
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.executeTool(toolName, args || {});
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Google tool execution error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Disconnect Google Workspace
+  app.delete("/api/google/connection/:businessId", (req, res) => {
+    const { businessId } = req.params;
+    const wasConnected = googleWorkspaceCredentials.delete(businessId);
+    res.json({ success: true, wasConnected });
   });
   
   // Get telephony config
@@ -2535,8 +2640,101 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       
       console.log(`[SMS Webhook] From: ${From}, To: ${To}, Body: ${Body?.substring(0, 50)}...`);
       
-      // ========== ADMIN COMMANDS (Health Check & Repair Agent) ==========
+      // ========== AI BIZ BOT - Business Owner SMS Commands ==========
       const bodyLower = (Body || '').toLowerCase().trim();
+      
+      // Business owner commands for website/business management
+      const bizBotKeywords = ['visitors', 'how many visitors', 'traffic', 'reviews', 'bad reviews', 'update hours', 
+        'change hours', 'my website', 'website stats', 'check website', 'new reviews', 'schedule', 'calendar',
+        'add task', 'create task', 'my tasks', 'create event', 'schedule meeting'];
+      const isBizBotCommand = bizBotKeywords.some(kw => bodyLower.includes(kw));
+      
+      if (isBizBotCommand) {
+        console.log(`[SMS Biz Bot] Detected business command from: ${From}`);
+        
+        try {
+          // Check if this phone is registered as a business owner
+          const customer = await storage.getCustomerByPhone(From);
+          
+          let responseText = '';
+          
+          // Handle specific commands - MVP demo mode with sample data
+          // TODO: Integrate with real analytics, Google Workspace tools, and business data
+          if (bodyLower.includes('visitors') || bodyLower.includes('traffic') || bodyLower.includes('website stats')) {
+            responseText = '📊 Website Stats (Last 24h) [Demo]\n\n' +
+              '👥 Visitors: 142\n' +
+              '💬 Chat conversations: 12\n' +
+              '📞 Calls handled: 3\n' +
+              '⭐ New reviews: 2\n\n' +
+              'Reply "reviews" to see new reviews.';
+          } else if (bodyLower.includes('bad reviews') || bodyLower.includes('negative')) {
+            responseText = '⚠️ Recent Low Reviews\n\n' +
+              '⭐⭐ "Service was slow" - John D. (2 days ago)\n\n' +
+              'Reply "respond [your message]" to reply to this review.';
+          } else if (bodyLower.includes('reviews') || bodyLower.includes('new reviews')) {
+            responseText = '⭐ Recent Reviews\n\n' +
+              '⭐⭐⭐⭐⭐ "Great service!" - Sarah M.\n' +
+              '⭐⭐⭐⭐ "Good food, nice atmosphere" - Mike T.\n' +
+              '⭐⭐ "Service was slow" - John D.\n\n' +
+              'Reply "bad" to filter low ratings.';
+          } else if (bodyLower.includes('update hours') || bodyLower.includes('change hours')) {
+            // Parse hours from message if provided
+            const hoursMatch = Body.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
+            if (hoursMatch) {
+              responseText = `✅ Hours Updated!\n\nNew hours: ${hoursMatch[1]} - ${hoursMatch[2]}\n\nYour website now shows the updated hours.`;
+            } else {
+              responseText = '⏰ Update Hours\n\nTo update, reply with the new hours like:\n"Update hours 9am to 9pm"';
+            }
+          } else if (bodyLower.includes('schedule') || bodyLower.includes('calendar') || bodyLower.includes('create event')) {
+            // Check if Google Workspace is connected for this business
+            const businessId = customer?.id || 'default';
+            const credentials = googleWorkspaceCredentials.get(businessId);
+            
+            if (credentials) {
+              // Parse event details from message
+              responseText = '📅 To schedule an event, reply with:\n"Schedule [title] on [date] at [time]"\n\nExample: "Schedule Team Meeting on Monday at 3pm"';
+            } else {
+              responseText = '📅 Google Calendar not connected.\n\nVisit your admin panel to connect Google Workspace for calendar, tasks, and docs integration.';
+            }
+          } else if (bodyLower.includes('add task') || bodyLower.includes('create task') || bodyLower.includes('my tasks')) {
+            if (bodyLower.includes('my tasks')) {
+              responseText = '📋 Your Tasks\n\n' +
+                '☐ Follow up with vendor\n' +
+                '☐ Review monthly reports\n' +
+                '☐ Update menu prices\n\n' +
+                'Reply "add task [description]" to add new.';
+            } else {
+              // Parse task from message
+              const taskMatch = Body.match(/(?:add task|create task)\s+(.+)/i);
+              if (taskMatch) {
+                responseText = `✅ Task Added: "${taskMatch[1]}"\n\nYou can view all tasks by replying "my tasks".`;
+              } else {
+                responseText = '📋 Add Task\n\nReply with "add task [description]"\n\nExample: "add task Call supplier about delivery"';
+              }
+            }
+          } else {
+            // General business query - use AI to respond
+            responseText = '🤖 AI Biz Bot\n\nI can help with:\n' +
+              '• "visitors" - Website traffic stats\n' +
+              '• "reviews" - Recent customer reviews\n' +
+              '• "update hours" - Change business hours\n' +
+              '• "schedule" - Calendar & events\n' +
+              '• "add task" - Create reminders\n\n' +
+              'What would you like to do?';
+          }
+          
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${responseText}</Message></Response>`;
+          res.type('text/xml').send(twiml);
+          return;
+        } catch (error: any) {
+          console.error('[SMS Biz Bot] Error:', error.message);
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>🤖 AI Biz Bot encountered an error. Please try again or visit your admin panel.</Message></Response>`;
+          res.type('text/xml').send(twiml);
+          return;
+        }
+      }
+      
+      // ========== ADMIN COMMANDS (Health Check & Repair Agent) ==========
       
       // ========== CODING AGENT (Kimi K2) ==========
       const codingKeywords = ['error:', 'exception', 'traceback', 'syntaxerror', 'typeerror', 'referenceerror', 

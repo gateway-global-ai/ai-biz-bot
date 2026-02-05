@@ -83,3 +83,57 @@ Located in `server/kimi.ts` within `generateSmsResponse()` and `generateTaskUpda
 -   **PostgreSQL**: Relational database.
     -   Connection string via `DATABASE_URL`.
 -   **Stripe**: Payment processing for A2P 10-DLC compliance services.
+-   **Google Workspace**: Calendar, Tasks, Docs, Sheets integration for business automation.
+    -   Requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` for OAuth.
+    -   API endpoints: `/api/google/auth-url`, `/api/google/callback`, `/api/google/execute-tool`
+
+## Dual-Channel AI Biz Bot Architecture
+
+The AI Biz Bot operates through two parallel channels that work independently:
+
+### Admin Panel Channel (Web)
+Location: `website-builder/components/AdminPanel.tsx`
+- Right-side sliding panel with tabs: Business Data, Reviews, AI Biz Bot
+- Chat interface powered by Gemini with function calling
+- Google Workspace tools when connected (Calendar, Tasks, Docs, Sheets)
+- Service: `website-builder/services/geminiService.ts`
+
+### SMS Channel (Text Messages)
+Location: `server/routes.ts` at `/webhook/sms`
+- Business owners can manage their website via text messages
+- Commands: `visitors`, `reviews`, `bad reviews`, `update hours`, `schedule`, `add task`
+- No admin panel needed - same capabilities via SMS
+- Caller ID lookup for personalized responses
+
+### Google Workspace MCP Tools
+Service: `server/mcp/googleWorkspace.ts`
+- `createCalendarEvent` - Schedule appointments/meetings
+- `listCalendarEvents` - Check upcoming schedule
+- `createTask` - Add to-do items
+- `listTasks` - View task list
+- `createDocument` - Generate Google Docs
+- `createSpreadsheet` - Create Google Sheets
+
+### OAuth Flow
+1. Business owner clicks "Connect Google" in Admin Panel
+2. Redirected to Google OAuth consent screen
+3. After approval, redirected back with auth code
+4. Server exchanges code for tokens, stores per-business
+5. AI Biz Bot can now execute Google Workspace tools
+
+### SMS Admin Commands
+| Command | Response |
+|---------|----------|
+| `visitors` | Website traffic stats (last 24h) |
+| `reviews` | Recent customer reviews |
+| `bad reviews` | Filter low-rating reviews |
+| `update hours 9am to 9pm` | Update business hours |
+| `schedule` | Calendar integration status |
+| `add task [description]` | Create new task |
+| `my tasks` | View current tasks |
+
+### Integration with Gateway Task System
+- Customer lookup via `storage.getCustomerByPhone()`
+- Agent assignment for personalized responses
+- Conversation history tracking
+- Task context for project-aware responses

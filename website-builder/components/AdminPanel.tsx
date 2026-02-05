@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Review, ChatMessage } from '../types';
 import { createSupportChatSession } from '../services/geminiService';
 import { Chat } from '@google/genai';
@@ -16,6 +16,8 @@ interface Props {
 }
 
 type Tab = 'data' | 'reviews' | 'integrations';
+
+const BACKEND_API_URL = (typeof window !== 'undefined' && (window as any).__BACKEND_API_URL__) || '';
 
 const AdminPanel: React.FC<Props> = ({ 
   data, 
@@ -36,6 +38,65 @@ const AdminPanel: React.FC<Props> = ({
   const [chatInput, setChatInput] = useState('');
   const [isChatTyping, setIsChatTyping] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  
+  // Google Workspace State
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleConfigured, setGoogleConfigured] = useState(false);
+  
+  // Get business ID from place data
+  const businessId = data?.place_id || data?.rawPlaceData?.place_id || 'default';
+  
+  // Check Google Workspace connection status
+  useEffect(() => {
+    const checkGoogleStatus = async () => {
+      try {
+        // Check if Google is configured on the server
+        const statusRes = await fetch(`${BACKEND_API_URL}/api/google/status`);
+        if (statusRes.ok) {
+          const status = await statusRes.json();
+          setGoogleConfigured(status.configured);
+        }
+        
+        // Check if this business has Google connected
+        const connRes = await fetch(`${BACKEND_API_URL}/api/google/connection/${businessId}`);
+        if (connRes.ok) {
+          const conn = await connRes.json();
+          setGoogleConnected(conn.connected);
+        }
+      } catch (e) {
+        console.log('Google status check failed (may not be configured):', e);
+      }
+    };
+    
+    checkGoogleStatus();
+  }, [businessId]);
+  
+  // Execute Google Workspace tool call
+  const executeGoogleTool = useCallback(async (toolName: string, args: any) => {
+    try {
+      const response = await fetch(`${BACKEND_API_URL}/api/google/execute-tool`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId, toolName, args })
+      });
+      return await response.json();
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }, [businessId]);
+  
+  // Connect to Google Workspace
+  const handleConnectGoogle = async () => {
+    try {
+      const res = await fetch(`${BACKEND_API_URL}/api/google/auth-url?businessId=${businessId}`);
+      if (res.ok) {
+        const { authUrl } = await res.json();
+        window.location.href = authUrl;
+      }
+    } catch (e) {
+      console.error('Failed to get Google auth URL:', e);
+    }
+  };
 
   // Auto-scroll chat
   useEffect(() => {
@@ -47,9 +108,12 @@ const AdminPanel: React.FC<Props> = ({
   const handleStartChat = async () => {
     setIsChatTyping(true);
     try {
-      const session = await createSupportChatSession();
+      const session = await createSupportChatSession(googleConnected);
       setAdminChatSession(session);
-      setChatMessages([{ role: 'model', text: "Hello! I'm the AI Biz Bot. How can I help you integrate real-time data today?" }]);
+      const welcomeMsg = googleConnected 
+        ? "Hello! I'm the AI Biz Bot with Google Workspace connected. I can create calendar events, tasks, documents, and spreadsheets for you. What would you like to do?"
+        : "Hello! I'm the AI Biz Bot. How can I help you integrate real-time data today?";
+      setChatMessages([{ role: 'model', text: welcomeMsg }]);
     } catch (e) {
       console.error("Failed to start admin chat", e);
     } finally {
@@ -68,13 +132,15 @@ const AdminPanel: React.FC<Props> = ({
     try {
       const response = await adminChatSession.sendMessage({ message: msg });
       
-      // Check for function calls (Upsell Trigger)
+      // Check for function calls
       if (response.functionCalls && response.functionCalls.length > 0) {
         for (const call of response.functionCalls) {
+          const args = call.args as any;
+          let functionResult: any = { result: "Unknown function" };
+          
+          // Handle suggestIntegration (upsell)
           if (call.name === 'suggestIntegration') {
-            const args = call.args as any;
             if (args.integrationType === 'google_workspace') {
-              // Add the Upsell Card to the chat
               setChatMessages(prev => [...prev, {
                 role: 'model',
                 text: "I can definitely help with that! Integrating Google Workspace is the best way to handle professional emails and appointments. Here are the details:",
@@ -84,26 +150,96 @@ const AdminPanel: React.FC<Props> = ({
                   price: "$99",
                   description: "Get professional email, calendar, and collaboration tools fully integrated into your site.",
                   features: ["Professional Email (@yourbusiness.com)", "Appointment Booking & Calendar", "Drive Storage & Docs", "24/7 Priority Support"],
-                  cta: "Add Integration"
+                  cta: googleConfigured ? "Connect Google" : "Contact Sales"
                 }
               }]);
-
-              // Send response back to Gemini to complete the turn
-              // We construct a function response to let the model know we displayed it.
-              // Note: The structure requires the 'functionResponse' key for the part.
-              await adminChatSession.sendMessage({
-                message: [{
-                  functionResponse: {
-                    name: call.name,
-                    response: { result: "Upsell card displayed to user." },
-                    id: call.id
-                  }
-                }]
-              });
-              // We don't necessarily need to add the model's follow-up text if the UI card speaks for itself,
-              // but typically the model might say "Let me know if you want to proceed."
+              functionResult = { result: "Upsell card displayed to user." };
             }
           }
+          // Handle Google Workspace tool calls
+          else if (['createCalendarEvent', 'listCalendarEvents', 'createTask', 'listTasks', 'createDocument', 'createSpreadsheet'].includes(call.name)) {
+            const toolResult = await executeGoogleTool(call.name, args);
+            
+            if (toolResult.success) {
+              // Format success message based on tool
+              let successMsg = "";
+              switch (call.name) {
+                case 'createCalendarEvent':
+                  successMsg = `Created calendar event: "${toolResult.data.summary}"\nLink: ${toolResult.data.htmlLink}`;
+                  break;
+                case 'listCalendarEvents':
+                  const events = toolResult.data.events || [];
+                  successMsg = events.length > 0 
+                    ? `Upcoming events:\n${events.map((e: any) => `• ${e.summary} - ${new Date(e.start).toLocaleDateString()}`).join('\n')}`
+                    : "No upcoming events found.";
+                  break;
+                case 'createTask':
+                  successMsg = `Created task: "${toolResult.data.title}"`;
+                  break;
+                case 'listTasks':
+                  const tasks = toolResult.data.tasks || [];
+                  successMsg = tasks.length > 0
+                    ? `Your tasks:\n${tasks.map((t: any) => `• ${t.title} (${t.status})`).join('\n')}`
+                    : "No tasks found.";
+                  break;
+                case 'createDocument':
+                  successMsg = `Created document: "${toolResult.data.title}"\nOpen it here: ${toolResult.data.url}`;
+                  break;
+                case 'createSpreadsheet':
+                  successMsg = `Created spreadsheet: "${toolResult.data.title}"\nOpen it here: ${toolResult.data.url}`;
+                  break;
+              }
+              
+              setChatMessages(prev => [...prev, { 
+                role: 'model', 
+                text: successMsg,
+                isToolResult: true,
+                toolSuccess: true
+              }]);
+              functionResult = { success: true, ...toolResult.data };
+            } else {
+              // Handle error or auth required
+              if (toolResult.requiresAuth) {
+                setChatMessages(prev => [...prev, {
+                  role: 'model',
+                  text: "Google Workspace is not connected yet. Would you like to connect it now?",
+                  isUpsell: true,
+                  upsellData: {
+                    title: "Connect Google Workspace",
+                    price: "Free",
+                    description: "Connect your Google account to enable calendar, tasks, docs, and sheets integration.",
+                    features: ["Google Calendar", "Google Tasks", "Google Docs", "Google Sheets"],
+                    cta: "Connect Now"
+                  }
+                }]);
+              } else {
+                setChatMessages(prev => [...prev, { 
+                  role: 'model', 
+                  text: `Error: ${toolResult.error}`,
+                  isToolResult: true,
+                  toolSuccess: false
+                }]);
+              }
+              functionResult = { error: toolResult.error };
+            }
+          }
+          
+          // Send function response back to Gemini
+          await adminChatSession.sendMessage({
+            message: [{
+              functionResponse: {
+                name: call.name,
+                response: functionResult,
+                id: call.id
+              }
+            }]
+          });
+        }
+        
+        // Get follow-up text from model after function calls
+        const followUp = await adminChatSession.sendMessage({ message: "Please provide a brief summary of what was done." });
+        if (followUp.text) {
+          setChatMessages(prev => [...prev, { role: 'model', text: followUp.text! }]);
         }
       } else {
          // Standard text response

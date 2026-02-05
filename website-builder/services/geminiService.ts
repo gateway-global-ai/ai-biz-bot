@@ -194,25 +194,217 @@ const integrationTool: FunctionDeclaration = {
   }
 };
 
-export const createSupportChatSession = () => {
-  const systemInstruction = `
+// Google Workspace MCP Tools
+const googleCalendarTool: FunctionDeclaration = {
+  name: 'createCalendarEvent',
+  description: 'Creates a new event in Google Calendar. Use when the user wants to schedule appointments, meetings, or reminders.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      summary: {
+        type: Type.STRING,
+        description: 'Title of the event'
+      },
+      description: {
+        type: Type.STRING,
+        description: 'Description or notes for the event'
+      },
+      startTime: {
+        type: Type.STRING,
+        description: 'Start time in ISO 8601 format (e.g., 2026-02-10T10:00:00-05:00)'
+      },
+      endTime: {
+        type: Type.STRING,
+        description: 'End time in ISO 8601 format'
+      },
+      attendees: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: 'List of attendee email addresses'
+      }
+    },
+    required: ['summary', 'startTime', 'endTime']
+  }
+};
+
+const googleTasksTool: FunctionDeclaration = {
+  name: 'createTask',
+  description: 'Creates a new task in Google Tasks. Use when the user wants to add a to-do item or reminder.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      title: {
+        type: Type.STRING,
+        description: 'Title of the task'
+      },
+      notes: {
+        type: Type.STRING,
+        description: 'Additional notes or details'
+      },
+      dueDate: {
+        type: Type.STRING,
+        description: 'Due date in ISO 8601 format'
+      }
+    },
+    required: ['title']
+  }
+};
+
+const googleDocsTool: FunctionDeclaration = {
+  name: 'createDocument',
+  description: 'Creates a new Google Document. Use when the user wants to create a document, proposal, or written content.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      title: {
+        type: Type.STRING,
+        description: 'Title of the document'
+      },
+      content: {
+        type: Type.STRING,
+        description: 'Initial content to add to the document'
+      }
+    },
+    required: ['title']
+  }
+};
+
+const googleSheetsTool: FunctionDeclaration = {
+  name: 'createSpreadsheet',
+  description: 'Creates a new Google Spreadsheet. Use when the user wants to track data, create reports, or manage lists.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      title: {
+        type: Type.STRING,
+        description: 'Title of the spreadsheet'
+      },
+      headers: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: 'Column headers for the first row'
+      },
+      data: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING }
+        },
+        description: 'Initial data rows (array of arrays)'
+      }
+    },
+    required: ['title']
+  }
+};
+
+const listCalendarEventsTool: FunctionDeclaration = {
+  name: 'listCalendarEvents',
+  description: 'Lists upcoming events from Google Calendar. Use when the user wants to check their schedule.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      maxResults: {
+        type: Type.NUMBER,
+        description: 'Maximum number of events to return (default 10)'
+      },
+      timeMin: {
+        type: Type.STRING,
+        description: 'Start of time range in ISO 8601 format (defaults to now)'
+      }
+    },
+    required: []
+  }
+};
+
+const listTasksTool: FunctionDeclaration = {
+  name: 'listTasks',
+  description: 'Lists tasks from Google Tasks. Use when the user wants to see their to-do list.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      maxResults: {
+        type: Type.NUMBER,
+        description: 'Maximum number of tasks to return (default 10)'
+      }
+    },
+    required: []
+  }
+};
+
+// All Google Workspace tools
+const googleWorkspaceTools: FunctionDeclaration[] = [
+  integrationTool,
+  googleCalendarTool,
+  googleTasksTool,
+  googleDocsTool,
+  googleSheetsTool,
+  listCalendarEventsTool,
+  listTasksTool
+];
+
+export const createSupportChatSession = (hasGoogleWorkspace: boolean = false) => {
+  const baseInstruction = `
     You are the "AI Biz Bot", an expert technical integration specialist for this website builder platform.
     You are talking to the BUSINESS OWNER.
     
-    Your goal is to help them integrate external data sources and tools.
+    Your goal is to help them integrate external data sources and tools, and perform actions on their behalf.
+  `;
+  
+  const noWorkspaceInstruction = `
+    ${baseInstruction}
     
     CRITICAL INSTRUCTION:
-    If the user asks about "emails", "gmail", "Google Workspace", "booking appointments", "calendar", or "scheduling", you MUST call the "suggestIntegration" tool with integrationType="google_workspace".
+    If the user asks about "emails", "gmail", "Google Workspace", "booking appointments", "calendar", or "scheduling", you MUST call the "suggestIntegration" tool with integrationType="google_workspace" to offer them the integration.
     
     For other integrations (Square, Shopify, etc.), explain how you can help generate API keys or webhooks.
     Be helpful, technical but accessible, and enthusiastic about automation.
   `;
   
+  const withWorkspaceInstruction = `
+    ${baseInstruction}
+    
+    GOOGLE WORKSPACE CONNECTED - You have full access to:
+    - Google Calendar: Create events, check schedule, manage appointments
+    - Google Tasks: Create and list to-do items
+    - Google Docs: Create documents and proposals
+    - Google Sheets: Create spreadsheets for tracking data
+    
+    TOOL USAGE RULES:
+    - When user asks to schedule something → Use createCalendarEvent
+    - When user asks to add a task/reminder → Use createTask
+    - When user asks to create a document → Use createDocument
+    - When user asks to track data/create a list → Use createSpreadsheet
+    - When user asks about their schedule → Use listCalendarEvents
+    - When user asks about their to-do list → Use listTasks
+    
+    For other integrations (Square, Shopify, etc.), explain how you can help generate API keys or webhooks.
+    Be helpful, proactive, and enthusiastic about automation. Take action when the user requests it.
+  `;
+
+  const systemInstruction = hasGoogleWorkspace ? withWorkspaceInstruction : noWorkspaceInstruction;
+  const tools = hasGoogleWorkspace ? googleWorkspaceTools : [integrationTool];
+  
   return ai.chats.create({
     model: "gemini-2.5-flash",
     config: { 
       systemInstruction,
-      tools: [{ functionDeclarations: [integrationTool] }]
+      tools: [{ functionDeclarations: tools }]
     }
   });
 };
+
+// Export types for external tool handlers
+export type GoogleWorkspaceTool = 
+  | 'suggestIntegration'
+  | 'createCalendarEvent'
+  | 'createTask'
+  | 'createDocument'
+  | 'createSpreadsheet'
+  | 'listCalendarEvents'
+  | 'listTasks';
+
+export interface ToolCallResult {
+  success: boolean;
+  data?: any;
+  error?: string;
+}

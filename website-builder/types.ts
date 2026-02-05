@@ -51,4 +51,6 @@ export interface ChatMessage {
     features: string[];
     cta: string;
   };
+  isToolResult?: boolean;
+  toolSuccess?: boolean;
 }
