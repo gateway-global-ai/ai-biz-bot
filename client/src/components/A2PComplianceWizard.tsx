@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useSearch } from "wouter";
 import { 
   Building2, 
   FileText, 
@@ -107,6 +108,31 @@ export function A2PComplianceWizard() {
     website: '',
     vertical: '',
   });
+
+  const searchString = useSearch();
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const paymentStatus = params.get('a2p_payment');
+    const brandId = params.get('brand_id');
+    
+    if (paymentStatus === 'success' && brandId) {
+      toast({ 
+        title: "Payment successful", 
+        description: "Your brand registration has been submitted for review." 
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/a2p/brands'] });
+      setActiveTab('brands');
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (paymentStatus === 'cancelled') {
+      toast({ 
+        title: "Payment cancelled", 
+        description: "Your payment was cancelled. You can try again anytime.",
+        variant: "destructive"
+      });
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [searchString, toast]);
 
   const [campaignForm, setCampaignForm] = useState<CampaignFormData>({
     useCase: '',

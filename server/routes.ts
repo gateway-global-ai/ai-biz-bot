@@ -3532,6 +3532,84 @@ Keep responses concise and engaging. If asked personal questions, you can share 
     }
   });
 
+  // Stripe webhook for A2P payment completion
+  app.post("/api/stripe/webhook/a2p", async (req, res) => {
+    try {
+      const { getUncachableStripeClient, getStripeSecretKey } = await import('./stripeClient');
+      const Stripe = await import('stripe');
+      const stripe = await getUncachableStripeClient();
+      
+      const sig = req.headers['stripe-signature'];
+      if (!sig) {
+        return res.status(400).json({ error: 'Missing stripe-signature header' });
+      }
+
+      const webhookSecret = process.env.STRIPE_A2P_WEBHOOK_SECRET;
+      if (!webhookSecret) {
+        console.warn('STRIPE_A2P_WEBHOOK_SECRET not configured, skipping signature verification');
+        const body = req.body;
+        if (body?.type === 'checkout.session.completed') {
+          await handleA2PCheckoutComplete(body.data.object);
+        }
+        return res.json({ received: true });
+      }
+
+      const rawBody = (req as any).rawBody;
+      if (!rawBody) {
+        return res.status(400).json({ error: 'Raw body not available' });
+      }
+
+      let event;
+      try {
+        event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+      } catch (err: any) {
+        console.error('Webhook signature verification failed:', err.message);
+        return res.status(400).json({ error: `Webhook Error: ${err.message}` });
+      }
+
+      if (event.type === 'checkout.session.completed') {
+        await handleA2PCheckoutComplete(event.data.object);
+      }
+
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error('A2P Stripe webhook error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  async function handleA2PCheckoutComplete(session: any) {
+    const { brandId, type, vettingType } = session.metadata || {};
+    
+    if (type !== 'a2p_brand_registration' || !brandId) {
+      console.log('Ignoring non-A2P checkout session');
+      return;
+    }
+
+    const brand = await storage.getA2pBrand(brandId);
+    if (!brand) {
+      console.error('Brand not found for payment:', brandId);
+      return;
+    }
+
+    if (brand.stripePaymentId) {
+      console.log('Brand already has payment recorded:', brandId);
+      return;
+    }
+
+    const totalAmount = session.amount_total || (vettingType === 'expedited' ? 13400 : 8900);
+
+    await storage.updateA2pBrand(brandId, {
+      stripePaymentId: session.payment_intent as string,
+      amountPaid: totalAmount,
+      vettingStatus: 'pending',
+      vettingProvider: 'campaign-verify',
+      brandStatus: 'pending',
+    });
+
+    console.log(`A2P brand ${brandId} payment complete: $${(totalAmount / 100).toFixed(2)}`);
+  }
+
   // A2P Compliance payment - Create checkout session for brand registration
   app.post("/api/a2p/brands/:id/pay", async (req, res) => {
     try {
