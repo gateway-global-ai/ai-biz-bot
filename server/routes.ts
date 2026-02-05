@@ -2721,6 +2721,10 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       const agentPersonality = assignedAgent?.systemPrompt || 
         'You are a helpful AI assistant for Gateway Global. You help people complete tasks and stay updated on their progress.';
       
+      // Detect if this is a first message (new customer onboarding)
+      const existingMessages = await storage.getMessagesByConversation(conversation.id, 5);
+      const isFirstMessage = existingMessages.length <= 1; // Only the message we just stored
+      
       // Build task context
       let taskContext = '';
       const activeTasks = customerTasks.filter(t => t.status !== 'completed' && t.status !== 'failed');
@@ -2737,7 +2741,21 @@ Keep responses concise and engaging. If asked personal questions, you can share 
         if (customer.notes) customerContext += `\nNotes about this customer: ${customer.notes}`;
       }
       
-      const fullPersonality = `${agentPersonality}${customerContext}${taskContext}\n\nAddress the customer by name when appropriate. Be warm, helpful, and reference their projects if relevant to the conversation.`;
+      // Special onboarding context for first-time messages
+      let onboardingContext = '';
+      if (isFirstMessage) {
+        onboardingContext = `
+
+THIS IS YOUR FIRST MESSAGE WITH THIS USER! Follow the 24-hour demo onboarding flow:
+1. Warmly introduce yourself and confirm their number is working
+2. Ask what task they'd like help with
+3. Ask if they have any specific requirements or preferences to share
+4. Let them know you'll complete their task within 24 hours
+
+Be friendly and make them feel welcome! This is their first experience with Gateway.`;
+      }
+      
+      const fullPersonality = `${agentPersonality}${customerContext}${taskContext}${onboardingContext}\n\nAddress the customer by name when appropriate. Be warm, helpful, and reference their projects if relevant to the conversation.`;
       
       // Generate AI response using Kimi (primary) or Gemini (fallback)
       let responseText = `Hi ${callerName}! Thank you for your message. An agent will respond shortly.`;

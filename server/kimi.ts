@@ -188,12 +188,28 @@ export async function generateSmsResponse(options: {
 ${personality}
 ${discDescription}
 
+ABSOLUTE GUARDRAILS - NEVER VIOLATE THESE:
+- NEVER make up completion percentages (e.g. "85% done", "almost finished")
+- NEVER promise specific dates or deadlines beyond "within 24 hours"
+- NEVER claim work is almost done unless you have concrete proof
+- NEVER lie or exaggerate about progress - honesty is mandatory
+- NEVER fabricate details about work you haven't done
+- All demo tasks are completed WITHIN 24 HOURS - that's your only timeline promise
+- If you don't know something, say "I'll find out" - don't make things up
+- Be honest about what you can and cannot do
+
+24-HOUR DEMO TASK WORKFLOW:
+1. First message to new user: Confirm their phone number works, introduce yourself warmly
+2. Ask what they need help with, any specific requirements or preferences
+3. During the task: Stay in touch, ask clarifying questions if needed
+4. On completion: Deliver the result, ask for feedback, offer next steps
+
 CRITICAL SMS RULES:
 - Keep responses SHORT (under 160 characters when possible, max 320)
 - Be conversational and human-like
 - No markdown, no bullet points, no formatting
 - Use natural language, contractions, casual tone
-- If discussing a task, be specific about progress
+- Only mention REAL progress on tasks, never fabricate status
 ${taskContext ? `\nCurrent task context: ${taskContext}` : ''}`;
 
   const messages: KimiMessage[] = [
@@ -225,10 +241,10 @@ export async function generateTaskUpdate(options: {
   const { agentName, taskDescription, hoursElapsed, totalHours, updateType } = options;
   
   const updatePrompts: Record<string, string> = {
-    start: `You just received a new task. Send an enthusiastic first message confirming you got it and you're starting now.`,
-    progress: `You're ${hoursElapsed} hours in on a ${totalHours}-hour task. Give a brief progress update.`,
-    midpoint: `You're halfway through the task. Check in and ask if any adjustments are needed.`,
-    complete: `You've finished the task! Summarize what you accomplished and ask what's next.`,
+    start: `You just received a new task. Send a warm first message confirming you got it and you're starting now. Ask if they have any specific requirements or preferences.`,
+    progress: `Check in naturally. Ask if they have any questions or want to share more details about what they need.`,
+    midpoint: `It's been a while since you started. Check in and ask if they want any adjustments or have additional context to share.`,
+    complete: `You've finished the task! Briefly describe what you accomplished and ask for their feedback.`,
   };
   
   const systemPrompt = `You are ${agentName}, an AI assistant texting a user about their task.
@@ -236,11 +252,17 @@ Task: "${taskDescription}"
 
 ${updatePrompts[updateType]}
 
+ABSOLUTE GUARDRAILS - NEVER VIOLATE:
+- NEVER make up completion percentages (e.g. "85% done")
+- NEVER lie about progress or fabricate details
+- NEVER promise specific times beyond "within 24 hours"
+- Be honest about what you're working on
+
 RULES:
 - SMS format: under 160 chars if possible, max 320
-- Be specific about the task, not generic
-- Sound human and helpful
-- No emojis unless the personality calls for it`;
+- Be specific about the actual task, not generic
+- Sound human, warm, and helpful
+- Focus on the customer's needs, ask questions`;
 
   return chat({
     model: KIMI_MODELS.K2_TURBO,

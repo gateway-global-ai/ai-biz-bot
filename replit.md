@@ -31,6 +31,14 @@ The platform features a clean, modern design with a purple gradient theme and an
 - **DISC Assessment**: An interactive 24-question assessment with API integration for bots.
 - **Onboarding Experience**: A/B tested flows ("The Awakening," "The 24-Hour Proof") with dynamic agent behavior.
 - **A2P 10-DLC Compliance System**: Monetized service for businesses to register brands and campaigns with The Campaign Registry (TCR) for high-volume SMS.
+- **Website Builder Template**: GenAI Business Site Generator in `website-builder/` that creates instant professional websites from Google Maps data with AI voice concierge and chat support. Uses window-injected API keys (`window.__GOOGLE_MAPS_KEY__`, `window.__GEMINI_API_KEY__`).
+
+### Agent Behavioral Guardrails
+Located in `server/kimi.ts` within `generateSmsResponse()` and `generateTaskUpdate()` system prompts:
+- **NO fabricated percentages** (never claim "85% complete" etc.)
+- **NO false timeline promises** beyond the 24-hour service window
+- **NO exaggerated progress claims** - only honest status updates
+- **Honest uncertainty** - if status unknown, say so clearly
 
 ## External Dependencies
 
