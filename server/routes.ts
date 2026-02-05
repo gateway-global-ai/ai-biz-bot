@@ -2140,6 +2140,92 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       
       console.log(`[SMS Webhook] From: ${From}, To: ${To}, Body: ${Body?.substring(0, 50)}...`);
       
+      // ========== ADMIN COMMANDS (Health Check & Repair Agent) ==========
+      const bodyLower = (Body || '').toLowerCase().trim();
+      const adminCommands = ['health check', 'run health', 'check health', 'sms health', 'fix sms', 'repair sms', 'auto fix', 'autofix', 'repair webhooks', 'fix webhooks'];
+      const isAdminCommand = adminCommands.some(cmd => bodyLower.includes(cmd));
+      
+      if (isAdminCommand) {
+        const twilioClient = await getTwilioClient();
+        const protocol = req.headers['x-forwarded-proto'] || 'https';
+        const host = req.headers['host'];
+        const baseUrl = `${protocol}://${host}`;
+        
+        // Check if this is a fix/repair command
+        const isRepairCommand = ['fix', 'repair', 'autofix'].some(cmd => bodyLower.includes(cmd));
+        
+        if (isRepairCommand) {
+          // Run auto-fix
+          console.log(`[SMS Health Agent] Running auto-fix for: ${From}`);
+          const services = await twilioClient.messaging.v1.services.list({ limit: 20 });
+          let fixedCount = 0;
+          const fixResults: string[] = [];
+          
+          for (const svc of services) {
+            if (!svc.inboundRequestUrl && !svc.useInboundWebhookOnNumber) {
+              try {
+                await twilioClient.messaging.v1.services(svc.sid).update({
+                  inboundRequestUrl: `${baseUrl}/webhook/sms`,
+                  inboundMethod: 'POST',
+                  fallbackUrl: `${baseUrl}/webhook/sms`,
+                  fallbackMethod: 'POST'
+                });
+                fixedCount++;
+                fixResults.push(`✅ Fixed: ${svc.friendlyName}`);
+              } catch (err: any) {
+                fixResults.push(`❌ Failed: ${svc.friendlyName}`);
+              }
+            }
+          }
+          
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>🔧 Repair Agent Complete!\n\nFixed ${fixedCount} messaging service(s).\n\n${fixResults.slice(0, 3).join('\n')}${fixResults.length > 3 ? `\n...and ${fixResults.length - 3} more` : ''}\n\nReply "health check" to verify.</Message></Response>`;
+          res.type('text/xml').send(twiml);
+          return;
+        } else {
+          // Run health check
+          console.log(`[SMS Health Agent] Running health check for: ${From}`);
+          const services = await twilioClient.messaging.v1.services.list({ limit: 20 });
+          
+          let criticalCount = 0;
+          let warningCount = 0;
+          let healthyCount = 0;
+          const issues: string[] = [];
+          
+          for (const svc of services) {
+            const hasCritical = !svc.inboundRequestUrl && !svc.useInboundWebhookOnNumber;
+            const hasWarning = !svc.fallbackUrl || !svc.statusCallback;
+            
+            if (hasCritical) {
+              criticalCount++;
+              issues.push(`❌ ${svc.friendlyName}: No webhook!`);
+            } else if (hasWarning) {
+              warningCount++;
+            } else {
+              healthyCount++;
+            }
+          }
+          
+          let statusEmoji = criticalCount > 0 ? '🚨' : warningCount > 0 ? '⚠️' : '✅';
+          let statusText = criticalCount > 0 ? 'ISSUES FOUND' : warningCount > 0 ? 'WARNINGS' : 'ALL HEALTHY';
+          
+          let response = `${statusEmoji} SMS Health Check\n\n` +
+            `Services: ${services.length}\n` +
+            `✅ Healthy: ${healthyCount}\n` +
+            `⚠️ Warnings: ${warningCount}\n` +
+            `❌ Critical: ${criticalCount}\n\n`;
+          
+          if (criticalCount > 0) {
+            response += issues.slice(0, 2).join('\n') + '\n\nReply "fix sms" to repair automatically.';
+          } else {
+            response += 'All messaging services are operational!';
+          }
+          
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${response}</Message></Response>`;
+          res.type('text/xml').send(twiml);
+          return;
+        }
+      }
+      
       // ========== CALLER ID LOOKUP ==========
       // Look up caller in customer database to personalize the response
       const customer = await storage.getCustomerByPhone(From);
