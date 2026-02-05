@@ -3532,6 +3532,133 @@ Keep responses concise and engaging. If asked personal questions, you can share 
     }
   });
 
+  // A2P Compliance payment - Create checkout session for brand registration
+  app.post("/api/a2p/brands/:id/pay", async (req, res) => {
+    try {
+      const brand = await storage.getA2pBrand(req.params.id);
+      if (!brand) {
+        return res.status(404).json({ error: "Brand not found" });
+      }
+
+      if (brand.stripePaymentId) {
+        return res.status(400).json({ error: "Payment already processed for this brand" });
+      }
+
+      const { getUncachableStripeClient, getStripePublishableKey } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      const { vettingType = 'standard' } = req.body;
+
+      const lineItems: any[] = [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: 'A2P Brand Registration',
+              description: `Brand registration for ${brand.companyName}`,
+            },
+            unit_amount: 4900, // $49.00
+          },
+          quantity: 1,
+        }
+      ];
+
+      if (vettingType === 'expedited') {
+        lineItems.push({
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: 'Expedited Vetting',
+              description: 'Priority vetting (24-48 hours)',
+            },
+            unit_amount: 8500, // $85.00
+          },
+          quantity: 1,
+        });
+      } else {
+        lineItems.push({
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: 'Standard Vetting',
+              description: 'Standard vetting (3-5 business days)',
+            },
+            unit_amount: 4000, // $40.00
+          },
+          quantity: 1,
+        });
+      }
+
+      const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0] || req.get('host')}`;
+
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: lineItems,
+        mode: 'payment',
+        success_url: `${baseUrl}/agent/${req.query.agentId || ''}/telephony?a2p_payment=success&brand_id=${brand.id}`,
+        cancel_url: `${baseUrl}/agent/${req.query.agentId || ''}/telephony?a2p_payment=cancelled`,
+        metadata: {
+          brandId: brand.id,
+          type: 'a2p_brand_registration',
+          vettingType,
+        },
+      });
+
+      res.json({
+        sessionId: session.id,
+        url: session.url,
+        publishableKey: await getStripePublishableKey(),
+      });
+    } catch (error: any) {
+      console.error('A2P payment error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Handle A2P payment success callback
+  app.post("/api/a2p/brands/:id/payment-complete", async (req, res) => {
+    try {
+      const brand = await storage.getA2pBrand(req.params.id);
+      if (!brand) {
+        return res.status(404).json({ error: "Brand not found" });
+      }
+
+      const { sessionId, vettingType = 'standard' } = req.body;
+
+      const { getUncachableStripeClient } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.payment_status !== 'paid') {
+        return res.status(400).json({ error: "Payment not completed" });
+      }
+
+      if (session.metadata?.brandId !== brand.id) {
+        return res.status(400).json({ error: "Payment session mismatch" });
+      }
+
+      const totalAmount = vettingType === 'expedited' ? 13400 : 8900;
+
+      const updated = await storage.updateA2pBrand(brand.id, {
+        stripePaymentId: session.payment_intent as string,
+        amountPaid: totalAmount,
+        vettingStatus: 'pending',
+        vettingProvider: 'campaign-verify',
+        brandStatus: 'pending',
+      });
+
+      res.json({
+        success: true,
+        brand: updated,
+        message: "Payment received. Brand submitted for review."
+      });
+    } catch (error: any) {
+      console.error('A2P payment complete error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // A2P Compliance pricing info
   app.get("/api/a2p/pricing", async (req, res) => {
     res.json({

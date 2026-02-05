@@ -40,4 +40,4 @@ args = "npm run dev"
 waitForPort = 5000
 
 [agent]
-integrations = ["twilio:1.0.0"]
+integrations = ["twilio:1.0.0", "stripe:2.0.0"]

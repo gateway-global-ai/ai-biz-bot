@@ -21,7 +21,8 @@ import {
   ChevronRight,
   Loader2,
   Plus,
-  Send
+  Send,
+  CreditCard
 } from "lucide-react";
 import type { A2pBrand, A2pCampaign } from "@shared/schema";
 
@@ -196,6 +197,21 @@ export function A2PComplianceWizard() {
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const payBrandMutation = useMutation({
+    mutationFn: async ({ brandId, vettingType }: { brandId: string; vettingType: string }) => {
+      const response = await apiRequest('POST', `/api/a2p/brands/${brandId}/pay`, { vettingType });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Payment Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -463,11 +479,27 @@ export function A2PComplianceWizard() {
                           <div className="text-sm text-muted-foreground">
                             {brand.firstName} {brand.lastName} - {brand.email}
                           </div>
+                          {brand.amountPaid && (
+                            <div className="text-xs text-green-600">
+                              Paid: ${(brand.amountPaid / 100).toFixed(2)}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
                         {getStatusBadge(brand.brandStatus)}
-                        {brand.brandStatus === 'draft' && (
+                        {brand.brandStatus === 'draft' && !brand.stripePaymentId && (
+                          <Button 
+                            size="sm"
+                            variant="outline"
+                            onClick={() => payBrandMutation.mutate({ brandId: brand.id, vettingType: 'standard' })}
+                            disabled={payBrandMutation.isPending}
+                            data-testid={`button-pay-brand-${brand.id}`}
+                          >
+                            <CreditCard className="h-3 w-3 mr-1" /> Pay & Submit
+                          </Button>
+                        )}
+                        {brand.brandStatus === 'draft' && brand.stripePaymentId && (
                           <Button 
                             size="sm" 
                             onClick={() => submitBrandMutation.mutate(brand.id)}
