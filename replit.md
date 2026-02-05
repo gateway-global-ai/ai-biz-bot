@@ -120,6 +120,38 @@ Each agent can be configured with custom AI model settings in The Lab (`/agent/:
 - **API Token**: User's own HuggingFace/OpenAI/Anthropic token (stored securely)
 
 Database fields: `aiModelProvider`, `aiModelId`, `aiTemperature`, `aiMaxTokens`, `hfToken`
+
+### HuggingFace Pro Integration Strategy
+
+**Model Access Hierarchy:**
+1. **Direct Kimi Connection** (Moonshot API) → Best for Kimi-native apps
+   - Lowest latency, optimized for Kimi 2.5/K2 models
+   - Uses `MOONSHOT_API_KEY` environment variable
+   - Recommended default for most use cases
+
+2. **HuggingFace MCP Server** → Power user option for extended model access
+   - Users with HuggingFace Pro subscriptions get access to ALL models enabled in their account
+   - Great fallback when we don't support models users want directly
+   - Higher costs (HuggingFace server fees) but maximum flexibility
+
+**HuggingFace MCP Integration Methods:**
+- **OAuth Login**: `https://huggingface.co/mcp?login`
+  - Users authenticate with their HuggingFace account directly
+  - Automatic access to all models in their subscription
+  
+- **Authorization Header + READ Token**: `https://huggingface.co/mcp`
+  - Use the `hfToken` field in agent settings with a READ-scoped token
+  - Token obtained from: `huggingface.co/settings/tokens`
+
+**User Setup in The Lab:**
+1. Set Provider to "HuggingFace"
+2. Enter HF token in the API Token field
+3. Select any model available on their HF subscription
+
+**Available via HuggingFace Pro:**
+- Kimi K2 Instruct (moonshotai/Kimi-K2-Instruct:novita)
+- Llama 4, Qwen 2.5, Mistral Large, and many more
+- Any model the user has enabled in their HuggingFace account
 -   **Google Gemini**: Fallback AI engine and powers Gemini Live voice chat.
 
 ### Database
