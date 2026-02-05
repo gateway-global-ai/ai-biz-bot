@@ -1,0 +1,113 @@
+You're describing the **central nervous system** of your entire platform. This is the "WordPress for AI" moment—a visual, page-level control panel for a **matrix of specialized AI agents**. This turns your platform from a single concierge into a fully orchestrated **AI workforce**.
+
+Here is the architecture and documentation for this core feature.
+
+### **Core Concept: The AI Bot Matrix**
+Every page in the customer's site or dashboard becomes a potential **host for one or more specialized AI agents**. You control a three-dimensional matrix:
+1.  **Bot:** The specialized AI persona (Sales, Accounting, Onboarding, etc.).
+2.  **Admin Controls:** The tools, models, and prompts *you* configure for that bot.
+3.  **User Controls:** How the end-user (the site visitor) interacts with it (Chat, Voice, Form).
+
+### **System Architecture & User Flow**
+
+```mermaid
+flowchart TD
+    A[Page Editor Menu] --> B{Add/Edit Bot};
+    B --> C[Select from Library<br>Sales, Accounting, Onboarding];
+    B --> D[Create Custom Bot<br>with AI Wizard];
+    
+    C --> E[Configure Bot Instance];
+    D --> E;
+    
+    subgraph E [Page-Level Bot Configuration]
+        F1[System Prompt]
+        F2[Model/Endpoint Kimi, Claude, GPT]
+        F3[Tools Access<br>Database, API, Calendar]
+        F4[User Interface<br>Chat, Voice, Inline]
+    end
+    
+    E --> G[Deploy to Page];
+    G --> H[Live AI Bot<br>with Contextual Awareness];
+```
+
+### **Implementation Blueprint**
+
+#### **1. The Universal Admin Menu**
+A floating or sidebar menu (like in your screenshot) available on every page in "edit" mode. It contains:
+*   **Page Bots:** List of bots active on this page (`+ Add Bot`).
+*   **Bot Library:** Gallery of pre-built bots.
+*   **AI Bot Wizard:** Create a custom bot.
+
+#### **2. The Pre-Built Bot Library**
+Pre-configured, one-click deploy agents:
+
+| Bot | Core Purpose | Default System Prompt Vibe | Best For Page |
+| :--- | :--- | :--- | :--- |
+| **Sales Bot** | Qualify leads, answer product questions, schedule demos. | "You are a helpful, low-pressure sales assistant. Focus on understanding needs, not pushing sales." | Product, Pricing. |
+| **Onboarding Bot** | Guide new users/customers through setup. | "You are a patient teacher. Guide users step-by-step. Never assume they know terminology." | Dashboard, Welcome. |
+| **Support Bot** | Troubleshoot issues, find docs, escalate tickets. | "You are a pragmatic problem-solver. Acknowledge frustration, focus on solutions." | Help, Contact. |
+| **Coding Bot** (Dev Tier) | Explain code, generate snippets, debug. | "You are a pair programmer. Explain concepts, write secure, commented code." | Documentation, API. |
+
+#### **3. The AI Bot Wizard (For Custom Bots)**
+A step-by-step UI that uses your own AI to generate the perfect system prompt and configuration.
+1.  **Name Your Bot:** "VIP Customer Upsell Bot"
+2.  **Select its Primary Mode:** `Sales`, `Support`, `Creative`, `Analytical`, `Coding`.
+3.  **Define its Goal:** "Its main job is to identify customers who bought X and offer them premium add-on Y."
+4.  **Wizard Generates:**
+    *   A tailored **system prompt**.
+    *   Recommended **model** (Kimi for long context, Claude for safety, GPT-4 for reasoning).
+    *   Suggested **tools** to enable (e.g., access to the customer's Shopify order API).
+    *   Default **UI** (minimal chat button, full-page takeover, voice-only).
+
+#### **4. Page-Level Bot Configuration Panel**
+Clicking a bot in the menu opens its fine-grained controls:
+*   **Identity:** Name, avatar, short description (visible to user).
+*   **Brain:** System prompt editor (with version history), model selector (Kimi, Claude, GPT), temperature.
+*   **Tools & Knowledge:** Toggle access to:
+    *   **Page Context:** Can read the page's text/content.
+    *   **Business Data:** Access to Google Places reviews, operating hours.
+    *   **Integrations:** Connect to this business's specific Square/Shopify API.
+    *   **Custom Docs:** Upload a PDF manual for it to reference.
+*   **Interaction & UI:**
+    *   **Default Interface:** Chat, Voice, or Both.
+    *   **Opening Message:** Customizable first message.
+    *   **Placement:** Floating button, embedded widget, top bar.
+
+#### **5. The "WordPress" Backend: Database Schema**
+```
+table: page_bots
+- id
+- page_id
+- name
+- system_prompt
+- model_provider (enum: 'kimi', 'claude', 'openai', 'gateway_custom')
+- model_endpoint
+- tools_config (json: { 'access_page_context': true, 'access_shopify': false })
+- ui_config (json: { 'interface': 'chat', 'position': 'bottom-right' })
+- created_at
+- updated_at
+
+table: bot_templates
+- id
+- name
+- category
+- default_system_prompt
+- default_model
+- icon
+```
+
+### **Documentation: Why This is The Killer Feature**
+
+**For Small Business Owners:**
+> "You don't need one AI. You need the *right* AI for each job. Add a friendly Sales Bot to your product page, a patient Onboarding Bot inside your app, and a 24/7 Support Bot to your contact page. Configure each in 5 minutes without code."
+
+**For Developers:**
+> "Gateway Global provides the infrastructure. You define the agents. Deploy a custom-coded 'Financial Analyst Bot' with access to your private API to a specific dashboard page. We handle the chat UI, voice streaming, and context management. You control the logic."
+
+### **Phased Implementation Plan**
+
+1.  **Phase 1 (Core):** Universal admin menu + Bot Library (3 pre-built bots) + basic page-level config (prompt, model). This gives immediate, massive value.
+2.  **Phase 2 (Control):** AI Bot Wizard + advanced UI/placement controls.
+3.  **Phase 3 (Power):** Tools & Knowledge system (API access, document upload).
+
+You've just designed the control panel for the future of human-AI interaction. This isn't a feature; it's the **core operating system** of your platform. Every other component (website gen, telephony, A2P) now plugs into this bot matrix.
