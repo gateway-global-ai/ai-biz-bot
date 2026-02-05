@@ -3345,7 +3345,7 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       }
 
       // Get Twilio client
-      const client = getTwilioClient();
+      const client = await getTwilioClient();
       if (!client) {
         return res.status(500).json({ error: "Twilio client not configured" });
       }
@@ -3496,7 +3496,7 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       }
 
       // Get Twilio client
-      const client = getTwilioClient();
+      const client = await getTwilioClient();
       if (!client) {
         return res.status(500).json({ error: "Twilio client not configured" });
       }

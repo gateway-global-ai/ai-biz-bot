@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { Agent } from '@shared/schema';
 import { WebhookSettings } from '@/components/WebhookSettings';
+import { A2PComplianceWizard } from '@/components/A2PComplianceWizard';
 
 interface AvailableNumber {
   phoneNumber: string;
@@ -442,6 +443,8 @@ export default function AgentTelephony() {
         </Card>
 
         <WebhookSettings />
+        
+        <A2PComplianceWizard />
       </div>
     </div>
   );
