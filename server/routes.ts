@@ -729,6 +729,123 @@ export async function registerRoutes(
     }
   });
 
+  // TwiML Apps - List all
+  app.get("/api/twilio/twiml-apps", async (req, res) => {
+    try {
+      const client = await getTwilioClient();
+      const apps = await client.applications.list({ limit: 20 });
+      res.json({
+        apps: apps.map((app: any) => ({
+          sid: app.sid,
+          friendlyName: app.friendlyName,
+          voiceUrl: app.voiceUrl,
+          voiceMethod: app.voiceMethod,
+          voiceFallbackUrl: app.voiceFallbackUrl,
+          smsUrl: app.smsUrl,
+          smsMethod: app.smsMethod,
+          smsFallbackUrl: app.smsFallbackUrl,
+          statusCallback: app.statusCallback,
+          dateCreated: app.dateCreated,
+          dateUpdated: app.dateUpdated
+        }))
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // TwiML Apps - Update webhook URLs
+  app.patch("/api/twilio/twiml-apps/:sid", async (req, res) => {
+    try {
+      const { sid } = req.params;
+      const { voiceUrl, smsUrl, voiceFallbackUrl, smsFallbackUrl, statusCallback } = req.body;
+      const client = await getTwilioClient();
+      
+      const updateData: any = {};
+      if (voiceUrl !== undefined) updateData.voiceUrl = voiceUrl;
+      if (smsUrl !== undefined) updateData.smsUrl = smsUrl;
+      if (voiceFallbackUrl !== undefined) updateData.voiceFallbackUrl = voiceFallbackUrl;
+      if (smsFallbackUrl !== undefined) updateData.smsFallbackUrl = smsFallbackUrl;
+      if (statusCallback !== undefined) updateData.statusCallback = statusCallback;
+      
+      const app = await client.applications(sid).update(updateData);
+      
+      res.json({
+        success: true,
+        app: {
+          sid: app.sid,
+          friendlyName: app.friendlyName,
+          voiceUrl: app.voiceUrl,
+          smsUrl: app.smsUrl,
+          voiceFallbackUrl: app.voiceFallbackUrl,
+          smsFallbackUrl: app.smsFallbackUrl,
+          statusCallback: app.statusCallback
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // TwiML Apps - Auto-fix all apps to use current domain
+  app.post("/api/twilio/twiml-apps/auto-fix", async (req, res) => {
+    try {
+      const client = await getTwilioClient();
+      const apps = await client.applications.list({ limit: 20 });
+      
+      const currentDomain = process.env.REPLIT_DEV_DOMAIN || req.get('host');
+      const baseUrl = `https://${currentDomain}`;
+      
+      const results: any[] = [];
+      
+      for (const app of apps) {
+        const updates: any = {};
+        let needsUpdate = false;
+        
+        // Check if URLs are outdated (not pointing to current domain)
+        if (app.voiceUrl && !app.voiceUrl.includes(currentDomain)) {
+          // Preserve the path, just update the domain
+          const voicePath = new URL(app.voiceUrl).pathname;
+          updates.voiceUrl = `${baseUrl}${voicePath}`;
+          needsUpdate = true;
+        }
+        
+        if (app.smsUrl && !app.smsUrl.includes(currentDomain)) {
+          const smsPath = new URL(app.smsUrl).pathname;
+          updates.smsUrl = `${baseUrl}${smsPath}`;
+          needsUpdate = true;
+        }
+        
+        if (needsUpdate) {
+          await client.applications(app.sid).update(updates);
+          results.push({
+            sid: app.sid,
+            friendlyName: app.friendlyName,
+            fixed: true,
+            updates
+          });
+        } else {
+          results.push({
+            sid: app.sid,
+            friendlyName: app.friendlyName,
+            fixed: false,
+            reason: 'Already up to date'
+          });
+        }
+      }
+      
+      res.json({
+        success: true,
+        currentDomain,
+        baseUrl,
+        fixedCount: results.filter(r => r.fixed).length,
+        results
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Messaging Services Health Check
   app.get("/api/twilio/messaging-services/health", async (req, res) => {
     try {

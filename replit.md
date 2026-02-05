@@ -81,6 +81,13 @@ The platform features a clean, modern design with a purple gradient theme and an
 - **Messaging Service with empty inboundRequestUrl**: Messages have nowhere to go!
 - **useInboundWebhookOnNumber: false**: Won't fall back to phone number webhook
 - **Wrong webhook URL**: Check if pointing to non-existent domain
+- **TwiML App with empty URLs**: If phone number uses a TwiML App, check that app's webhook URLs!
+
+### CRITICAL: TwiML App Configuration
+If a phone number is configured with BOTH a Messaging Service AND a TwiML App, the TwiML App takes precedence!
+- **Gateway-Global-AI** TwiML App (`AP0f9639d8ea34f6d2a49809684953f5cb`)
+- Must have voiceUrl and smsUrl pointing to current Replit domain
+- Use `POST /api/twilio/twiml-apps/auto-fix` to update all apps automatically
 
 ### Key Messaging Services (as of Feb 2026)
 - `MGd16163508f2fcc1236a989f83664d9fb` - Customer Care A2P Messaging Service
@@ -88,6 +95,9 @@ The platform features a clean, modern design with a purple gradient theme and an
 
 ### Diagnostic Endpoints
 - `GET /api/twilio/numbers` - List all phone numbers with webhook configs
+- `GET /api/twilio/twiml-apps` - List all TwiML Apps with webhook configs
+- `PATCH /api/twilio/twiml-apps/:sid` - Update TwiML App webhook URLs
+- `POST /api/twilio/twiml-apps/auto-fix` - Auto-fix all TwiML Apps to current domain
 - `GET /api/telephony/messages` - Recent message logs from Twilio
 - `POST /api/telephony/simulate-webhook` - Test webhook locally
 -   **Moonshot API (Kimi 2.5)**: Primary AI reasoning engine for text.
