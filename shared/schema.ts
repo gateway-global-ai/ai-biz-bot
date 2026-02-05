@@ -280,6 +280,16 @@ export const DISC_STYLE_DESCRIPTIONS = {
   C: 'Analytical, precise, systematic, careful',
 };
 
+// AI Model Provider types
+export type AIModelProvider = "moonshot" | "huggingface" | "openai" | "anthropic";
+
+export interface AIModelSettings {
+  provider: AIModelProvider;
+  modelId: string;
+  temperature: number;
+  maxTokens: number;
+}
+
 // AI Agents table
 export const agents = pgTable("agents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -296,6 +306,12 @@ export const agents = pgTable("agents", {
   // Agent-specific telephony
   phoneNumber: text("phone_number"),
   phoneSid: text("phone_sid"),
+  // AI Model Configuration
+  aiModelProvider: text("ai_model_provider").default("moonshot"), // moonshot, huggingface, openai, anthropic
+  aiModelId: text("ai_model_id").default("moonshot-v1-128k"),
+  aiTemperature: integer("ai_temperature").default(60), // Stored as 0-100, divide by 100 for actual value
+  aiMaxTokens: integer("ai_max_tokens").default(4096),
+  hfToken: text("hf_token"), // User's HuggingFace token (encrypted)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

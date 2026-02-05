@@ -14,10 +14,37 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 
 import { 
   ChevronLeft, FlaskConical, Save, Bot,
   Server, Zap, Cpu, Radio, Eye, EyeOff,
-  Fingerprint, Heart, ShieldCheck, Database, Lock, Sparkles
+  Fingerprint, Heart, ShieldCheck, Database, Lock, Sparkles,
+  Brain, Key, Thermometer, Settings2
 } from 'lucide-react';
-import type { Agent } from '@shared/schema';
+import type { Agent, AIModelProvider } from '@shared/schema';
 import type { DiscScores, ArchProfile } from '@shared/schema';
+
+const AI_MODEL_PROVIDERS: { id: AIModelProvider; name: string; description: string }[] = [
+  { id: 'moonshot', name: 'Moonshot (Kimi 2.5)', description: '256K context, fast responses' },
+  { id: 'huggingface', name: 'HuggingFace (Kimi K2)', description: '1T parameter MoE, best for coding' },
+  { id: 'openai', name: 'OpenAI', description: 'GPT-4o, broad capabilities' },
+  { id: 'anthropic', name: 'Anthropic', description: 'Claude, nuanced reasoning' },
+];
+
+const AI_MODELS: Record<AIModelProvider, { id: string; name: string }[]> = {
+  moonshot: [
+    { id: 'moonshot-v1-128k', name: 'Kimi 2.5 128K' },
+    { id: 'moonshot-v1-32k', name: 'Kimi 2.5 32K' },
+    { id: 'moonshot-v1-8k', name: 'Kimi 2.5 8K' },
+  ],
+  huggingface: [
+    { id: 'moonshotai/Kimi-K2-Instruct:novita', name: 'Kimi K2 Instruct (1T MoE)' },
+  ],
+  openai: [
+    { id: 'gpt-4o', name: 'GPT-4o' },
+    { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+  ],
+  anthropic: [
+    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
+    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' },
+  ],
+};
 
 import avatar1 from '@assets/freepik__melissa-model-as-a-superhuman-metal-android-smooth__8_1770156432895.png';
 import avatar2 from '@assets/freepik__melissa-model-turned-into-a-futuristic-ai-robot-wi__8_1770156535941.png';
@@ -167,12 +194,21 @@ export default function TheLab() {
   const agentId = params?.agentId;
   
   const [showSystemPrompts, setShowSystemPrompts] = useState(true);
+  const [showApiToken, setShowApiToken] = useState(false);
   
   const [discScores, setDiscScores] = useState<DiscScores>({
     dominance: 50,
     influence: 50,
     steadiness: 50,
     conscientiousness: 50,
+  });
+  
+  const [aiSettings, setAiSettings] = useState({
+    provider: 'moonshot' as AIModelProvider,
+    modelId: 'moonshot-v1-128k',
+    temperature: 60,
+    maxTokens: 4096,
+    hfToken: '',
   });
   
   const [archScores, setArchScores] = useState<ArchProfile>({
@@ -206,6 +242,13 @@ export default function TheLab() {
         steadiness: agent.steadiness || 50,
         conscientiousness: agent.conscientiousness || 50,
       });
+      setAiSettings({
+        provider: (agent.aiModelProvider as AIModelProvider) || 'moonshot',
+        modelId: agent.aiModelId || 'moonshot-v1-128k',
+        temperature: agent.aiTemperature || 60,
+        maxTokens: agent.aiMaxTokens || 4096,
+        hfToken: agent.hfToken || '',
+      });
     }
   }, [agent]);
 
@@ -228,6 +271,11 @@ export default function TheLab() {
         influence: discScores.influence,
         steadiness: discScores.steadiness,
         conscientiousness: discScores.conscientiousness,
+        aiModelProvider: aiSettings.provider,
+        aiModelId: aiSettings.modelId,
+        aiTemperature: aiSettings.temperature,
+        aiMaxTokens: aiSettings.maxTokens,
+        hfToken: aiSettings.hfToken || null,
       }
     });
   };
@@ -450,6 +498,169 @@ export default function TheLab() {
               <ArchBreakdown data={archScores} />
             </CardContent>
           </Card>
+        </div>
+
+        <div className="mt-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Brain className="w-5 h-5 text-purple-400" />
+            AI Model Configuration
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="bg-slate-900 border-purple-500/30">
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-sm font-medium flex items-center gap-2 text-purple-400">
+                  <Settings2 className="w-4 h-4" />
+                  Provider
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <Select 
+                  value={aiSettings.provider} 
+                  onValueChange={(value: AIModelProvider) => {
+                    const models = AI_MODELS[value];
+                    setAiSettings(prev => ({
+                      ...prev,
+                      provider: value,
+                      modelId: models[0]?.id || prev.modelId,
+                    }));
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-ai-provider">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AI_MODEL_PROVIDERS.map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <div className="flex flex-col">
+                          <span>{p.name}</span>
+                          <span className="text-xs text-slate-400">{p.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-500 mt-2">
+                  {AI_MODEL_PROVIDERS.find(p => p.id === aiSettings.provider)?.description}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-900 border-blue-500/30">
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-sm font-medium flex items-center gap-2 text-blue-400">
+                  <Cpu className="w-4 h-4" />
+                  Model
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <Select 
+                  value={aiSettings.modelId} 
+                  onValueChange={(value) => setAiSettings(prev => ({ ...prev, modelId: value }))}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-ai-model">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AI_MODELS[aiSettings.provider]?.map(m => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-900 border-orange-500/30">
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-sm font-medium flex items-center gap-2 text-orange-400">
+                  <Thermometer className="w-4 h-4" />
+                  Temperature: {(aiSettings.temperature / 100).toFixed(2)}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <Slider
+                  value={[aiSettings.temperature]}
+                  onValueChange={(v) => setAiSettings(prev => ({ ...prev, temperature: v[0] }))}
+                  max={100}
+                  min={0}
+                  step={5}
+                  className="[&_[role=slider]]:bg-orange-500"
+                  data-testid="slider-temperature"
+                />
+                <p className="text-xs text-slate-500 mt-2">
+                  Lower = focused, Higher = creative. Recommended: 0.60 for Kimi K2
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-900 border-cyan-500/30">
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-sm font-medium flex items-center gap-2 text-cyan-400">
+                  <Zap className="w-4 h-4" />
+                  Max Tokens: {aiSettings.maxTokens.toLocaleString()}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <Select 
+                  value={String(aiSettings.maxTokens)} 
+                  onValueChange={(value) => setAiSettings(prev => ({ ...prev, maxTokens: parseInt(value) }))}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-max-tokens">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1024">1,024 (Short)</SelectItem>
+                    <SelectItem value="2048">2,048 (Medium)</SelectItem>
+                    <SelectItem value="4096">4,096 (Default)</SelectItem>
+                    <SelectItem value="8192">8,192 (Long)</SelectItem>
+                    <SelectItem value="16384">16,384 (Very Long)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-slate-500 mt-2">
+                  Max response length. Longer = more detailed but slower
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <Card className="bg-slate-900 border-emerald-500/30">
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-sm font-medium flex items-center gap-2 text-emerald-400">
+                  <Key className="w-4 h-4" />
+                  API Token
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-4">
+                <div className="relative">
+                  <Input
+                    type={showApiToken ? 'text' : 'password'}
+                    value={aiSettings.hfToken}
+                    onChange={(e) => setAiSettings(prev => ({ ...prev, hfToken: e.target.value }))}
+                    placeholder={aiSettings.provider === 'huggingface' ? 'hf_xxx...' : 'sk-xxx...'}
+                    className="bg-slate-800 border-slate-600 pr-10"
+                    data-testid="input-api-token"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full"
+                    onClick={() => setShowApiToken(!showApiToken)}
+                    data-testid="button-toggle-token"
+                  >
+                    {showApiToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">
+                  {aiSettings.provider === 'huggingface' 
+                    ? 'Get your HuggingFace token at huggingface.co/settings/tokens' 
+                    : 'Optional: Override default API key'}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {showSystemPrompts && (

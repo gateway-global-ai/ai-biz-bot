@@ -98,14 +98,28 @@ The platform features a clean, modern design with a purple gradient theme and an
     -   Features: ~300ms latency, audio-to-audio, multi-turn conversations
     -   Integration files: `server/kimiAudio.ts`, `server/voiceStream.ts`, `server/voiceSession.ts`, `server/audioCodec.ts`
 -   **Kimi K2 MCP Server (Coding Agent)**: 1T parameter MoE model for agentic coding tasks.
-    -   Uses `MOONSHOT_API_KEY` (same as Kimi 2.5)
-    -   Model: `kimi-k2-0711-preview` - 32B active / 1T total parameters
+    -   **Primary**: HuggingFace endpoint with `moonshotai/Kimi-K2-Instruct:novita` (requires `HF_TOKEN`)
+    -   **Fallback**: Moonshot API with `moonshot-v1-128k` (uses `MOONSHOT_API_KEY`)
+    -   Recommended temperature: 0.6 for Kimi K2
     -   Features: Code analysis, bug fixing, code generation, error diagnosis, PR review
     -   Integration file: `server/mcp/kimiK2Server.ts`
     -   API Endpoints:
         - `GET /api/mcp/tools` - List available coding tools
-        - `POST /api/mcp/tools/:toolName` - Execute specific tool
+        - `POST /api/mcp/tools/:toolName` - Execute specific tool (accepts `_hfToken`, `_temperature`, `_maxTokens`, `_modelId`)
         - `POST /api/mcp/code` - Auto-select best tool for task
+    -   **SMS Coding Agent**: Customers can text coding questions to their assigned agent's number for help
+        - Auto-detects: error messages, code blocks, debugging keywords
+        - Uses agent-specific AI model settings (provider, temperature, tokens, HF token)
+        
+### Agent AI Model Configuration
+Each agent can be configured with custom AI model settings in The Lab (`/agent/:id/lab`):
+- **Provider**: Moonshot, HuggingFace, OpenAI, or Anthropic
+- **Model**: Model-specific selection (e.g., Kimi 2.5 128K, Kimi K2 Instruct, GPT-4o, Claude 3.5 Sonnet)
+- **Temperature**: 0-1.0 scale (stored as 0-100, recommended 0.60 for Kimi K2)
+- **Max Tokens**: Response length limit (default 4096)
+- **API Token**: User's own HuggingFace/OpenAI/Anthropic token (stored securely)
+
+Database fields: `aiModelProvider`, `aiModelId`, `aiTemperature`, `aiMaxTokens`, `hfToken`
 -   **Google Gemini**: Fallback AI engine and powers Gemini Live voice chat.
 
 ### Database

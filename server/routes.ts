@@ -21,7 +21,7 @@ import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
-import { getMCPTools, handleMCPToolCall, KIMI_K2_MODEL } from "./mcp/kimiK2Server";
+import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -2189,8 +2189,32 @@ Keep responses concise and engaging. If asked personal questions, you can share 
             args = { code, language };
           }
           
+          // Get agent settings for AI model configuration
+          // First try to get assigned agent from customer, otherwise get any agent
+          let codingAgent = null;
+          const codingCustomer = await storage.getCustomerByPhone(From);
+          if (codingCustomer?.agentId) {
+            codingAgent = await storage.getAgent(codingCustomer.agentId);
+          }
+          // Fallback to first available agent if no assignment
+          if (!codingAgent) {
+            const allAgents = await storage.getAgents();
+            codingAgent = allAgents[0] || null;
+          }
+          
+          let modelOptions: ModelOptions = {};
+          if (codingAgent) {
+            modelOptions = {
+              hfToken: codingAgent.hfToken || undefined,
+              temperature: codingAgent.aiTemperature || 60,
+              maxTokens: codingAgent.aiMaxTokens || 4096,
+              modelId: codingAgent.aiModelId || undefined,
+            };
+            console.log(`[SMS Coding Agent] Using agent settings: provider=${codingAgent.aiModelProvider}, temp=${modelOptions.temperature}`);
+          }
+          
           console.log(`[SMS Coding Agent] Using tool: ${toolName}`);
-          const result = await handleMCPToolCall(toolName, args);
+          const result = await handleMCPToolCall(toolName, args, modelOptions);
           
           // Truncate for SMS (keep it readable)
           let smsResponse = result;
@@ -2715,8 +2739,10 @@ Keep responses concise and engaging. If asked personal questions, you can share 
   app.get("/api/mcp/tools", async (req, res) => {
     try {
       const tools = getMCPTools();
+      const useHuggingFace = !!process.env.HF_TOKEN;
       res.json({
-        model: KIMI_K2_MODEL,
+        model: useHuggingFace ? HUGGINGFACE_KIMI_K2_MODEL : MOONSHOT_MODEL,
+        provider: useHuggingFace ? "huggingface" : "moonshot",
         description: "Kimi K2 Coding Agent - 1T parameter MoE model for agentic coding tasks",
         tools,
       });
@@ -2729,16 +2755,25 @@ Keep responses concise and engaging. If asked personal questions, you can share 
   app.post("/api/mcp/tools/:toolName", async (req, res) => {
     try {
       const { toolName } = req.params;
-      const args = req.body;
+      const { _hfToken, _temperature, _maxTokens, _modelId, ...args } = req.body;
+      
+      const options: ModelOptions = {
+        hfToken: _hfToken,
+        temperature: _temperature,
+        maxTokens: _maxTokens,
+        modelId: _modelId,
+      };
       
       console.log(`[MCP] Executing tool: ${toolName}`, JSON.stringify(args).substring(0, 200));
       
-      const result = await handleMCPToolCall(toolName, args);
+      const result = await handleMCPToolCall(toolName, args, options);
+      const useHuggingFace = !!(_hfToken || process.env.HF_TOKEN);
       
       res.json({
         tool: toolName,
         result,
-        model: KIMI_K2_MODEL,
+        model: useHuggingFace ? HUGGINGFACE_KIMI_K2_MODEL : MOONSHOT_MODEL,
+        provider: useHuggingFace ? "huggingface" : "moonshot",
       });
     } catch (error: any) {
       console.error(`[MCP] Tool error: ${error.message}`);
@@ -2749,7 +2784,14 @@ Keep responses concise and engaging. If asked personal questions, you can share 
   // Quick coding task - auto-selects best tool
   app.post("/api/mcp/code", async (req, res) => {
     try {
-      const { task, code, language, error: errorMsg } = req.body;
+      const { task, code, language, error: errorMsg, _hfToken, _temperature, _maxTokens, _modelId } = req.body;
+      
+      const options: ModelOptions = {
+        hfToken: _hfToken,
+        temperature: _temperature,
+        maxTokens: _maxTokens,
+        modelId: _modelId,
+      };
       
       let toolName: string;
       let args: Record<string, any>;
@@ -2773,12 +2815,14 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       
       console.log(`[MCP] Auto-selected tool: ${toolName}`);
       
-      const result = await handleMCPToolCall(toolName, args);
+      const result = await handleMCPToolCall(toolName, args, options);
+      const useHuggingFace = !!(_hfToken || process.env.HF_TOKEN);
       
       res.json({
         tool: toolName,
         result,
-        model: KIMI_K2_MODEL,
+        model: useHuggingFace ? HUGGINGFACE_KIMI_K2_MODEL : MOONSHOT_MODEL,
+        provider: useHuggingFace ? "huggingface" : "moonshot",
       });
     } catch (error: any) {
       console.error(`[MCP] Code task error: ${error.message}`);
