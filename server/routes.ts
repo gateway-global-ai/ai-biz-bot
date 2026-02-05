@@ -965,8 +965,196 @@ export async function registerRoutes(
     }
   });
 
-  // Auto-fix all messaging services with current domain
+  // UNIFIED FIX: Update ALL Twilio webhooks to current domain
+  app.post("/api/twilio/fix-all-webhooks", async (req, res) => {
+    try {
+      const client = await getTwilioClient();
+      const currentDomain = process.env.REPLIT_DEV_DOMAIN || req.get('host');
+      const baseUrl = `https://${currentDomain}`;
+      
+      const smsWebhookUrl = `${baseUrl}/webhook/sms`;
+      const voiceWebhookUrl = `${baseUrl}/webhook/voice/kimi`;
+      const voiceFallbackUrl = `${baseUrl}/webhook/voice`;
+      
+      const results: any = {
+        domain: currentDomain,
+        baseUrl,
+        messagingServices: [],
+        twimlApps: [],
+        phoneNumbers: []
+      };
+      
+      // 1. Fix ALL Messaging Services using SDK properly
+      console.log('[Webhook Fix] Updating Messaging Services...');
+      const services = await client.messaging.v1.services.list({ limit: 20 });
+      for (const svc of services) {
+        try {
+          // Update using the Twilio SDK as documented
+          const updated = await client.messaging.v1.services(svc.sid).update({
+            inboundRequestUrl: smsWebhookUrl,
+            inboundMethod: 'POST',
+            fallbackUrl: smsWebhookUrl,
+            fallbackMethod: 'POST'
+          });
+          results.messagingServices.push({
+            sid: svc.sid,
+            friendlyName: svc.friendlyName,
+            fixed: true,
+            inboundRequestUrl: updated.inboundRequestUrl
+          });
+        } catch (err: any) {
+          results.messagingServices.push({
+            sid: svc.sid,
+            friendlyName: svc.friendlyName,
+            fixed: false,
+            error: err.message
+          });
+        }
+      }
+      
+      // 2. Fix ALL TwiML Apps
+      console.log('[Webhook Fix] Updating TwiML Apps...');
+      const apps = await client.applications.list({ limit: 20 });
+      for (const app of apps) {
+        try {
+          const updated = await client.applications(app.sid).update({
+            voiceUrl: voiceWebhookUrl,
+            voiceMethod: 'POST',
+            voiceFallbackUrl: voiceFallbackUrl,
+            voiceFallbackMethod: 'POST',
+            smsUrl: smsWebhookUrl,
+            smsMethod: 'POST',
+            smsFallbackUrl: smsWebhookUrl,
+            smsFallbackMethod: 'POST'
+          });
+          results.twimlApps.push({
+            sid: app.sid,
+            friendlyName: app.friendlyName,
+            fixed: true,
+            voiceUrl: updated.voiceUrl,
+            smsUrl: updated.smsUrl
+          });
+        } catch (err: any) {
+          results.twimlApps.push({
+            sid: app.sid,
+            friendlyName: app.friendlyName,
+            fixed: false,
+            error: err.message
+          });
+        }
+      }
+      
+      // 3. Fix ALL Phone Numbers
+      console.log('[Webhook Fix] Updating Phone Numbers...');
+      const numbers = await client.incomingPhoneNumbers.list({ limit: 50 });
+      for (const num of numbers) {
+        try {
+          const updated = await client.incomingPhoneNumbers(num.sid).update({
+            voiceUrl: voiceWebhookUrl,
+            voiceMethod: 'POST',
+            voiceFallbackUrl: voiceFallbackUrl,
+            voiceFallbackMethod: 'POST',
+            smsUrl: smsWebhookUrl,
+            smsMethod: 'POST',
+            smsFallbackUrl: smsWebhookUrl,
+            smsFallbackMethod: 'POST'
+          });
+          results.phoneNumbers.push({
+            sid: num.sid,
+            phoneNumber: num.phoneNumber,
+            fixed: true,
+            voiceUrl: updated.voiceUrl,
+            smsUrl: updated.smsUrl
+          });
+        } catch (err: any) {
+          results.phoneNumbers.push({
+            sid: num.sid,
+            phoneNumber: num.phoneNumber,
+            fixed: false,
+            error: err.message
+          });
+        }
+      }
+      
+      const totalFixed = 
+        results.messagingServices.filter((r: any) => r.fixed).length +
+        results.twimlApps.filter((r: any) => r.fixed).length +
+        results.phoneNumbers.filter((r: any) => r.fixed).length;
+      
+      console.log(`[Webhook Fix] Complete! Fixed ${totalFixed} configurations.`);
+      
+      res.json({
+        success: true,
+        summary: {
+          messagingServicesFixed: results.messagingServices.filter((r: any) => r.fixed).length,
+          twimlAppsFixed: results.twimlApps.filter((r: any) => r.fixed).length,
+          phoneNumbersFixed: results.phoneNumbers.filter((r: any) => r.fixed).length,
+          totalFixed
+        },
+        webhookUrls: {
+          sms: smsWebhookUrl,
+          voice: voiceWebhookUrl,
+          voiceFallback: voiceFallbackUrl
+        },
+        details: results
+      });
+    } catch (error: any) {
+      console.error('[Webhook Fix] Error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Auto-fix all messaging services with current domain (legacy)
   app.post("/api/twilio/messaging-services/auto-fix", async (req, res) => {
+    try {
+      const client = await getTwilioClient();
+      const services = await client.messaging.v1.services.list({ limit: 20 });
+      
+      // Get current domain from request
+      const protocol = req.headers['x-forwarded-proto'] || 'https';
+      const host = req.headers['host'];
+      const baseUrl = `${protocol}://${host}`;
+      
+      const results = [];
+      
+      for (const svc of services) {
+        // Fix ALL services, not just empty ones
+        try {
+          const updated = await client.messaging.v1.services(svc.sid).update({
+            inboundRequestUrl: `${baseUrl}/webhook/sms`,
+            inboundMethod: 'POST',
+            fallbackUrl: `${baseUrl}/webhook/sms`,
+            fallbackMethod: 'POST'
+          });
+          results.push({
+            sid: svc.sid,
+            friendlyName: svc.friendlyName,
+            fixed: true,
+            newInboundUrl: updated.inboundRequestUrl
+          });
+        } catch (err: any) {
+          results.push({
+            sid: svc.sid,
+            friendlyName: svc.friendlyName,
+            fixed: false,
+            error: err.message
+          });
+        }
+      }
+      
+      res.json({
+        success: true,
+        baseUrl,
+        fixedCount: results.filter(r => r.fixed).length,
+        results
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Legacy endpoint kept for backward compatibility
+  app.post("/api/twilio/messaging-services/auto-fix-legacy", async (req, res) => {
     try {
       const client = await getTwilioClient();
       const services = await client.messaging.v1.services.list({ limit: 20 });
