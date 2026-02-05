@@ -29,6 +29,12 @@ import {
   type InsertA2pBrand,
   type A2pCampaign,
   type InsertA2pCampaign,
+  type KnowledgeTopic,
+  type InsertKnowledgeTopic,
+  type LessonPlan,
+  type InsertLessonPlan,
+  type LessonSession,
+  type InsertLessonSession,
   telephonyConfigs,
   callLogs,
   users,
@@ -43,7 +49,10 @@ import {
   twilioSubAccounts,
   smsDeliveryStatus,
   a2pBrands,
-  a2pCampaigns
+  a2pCampaigns,
+  knowledgeTopics,
+  lessonPlans,
+  lessonSessions
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -521,6 +530,97 @@ export class DatabaseStorage implements IStorage {
       .where(eq(a2pCampaigns.id, id))
       .returning();
     return updated;
+  }
+
+  // Knowledge Topics methods
+  async getKnowledgeTopicByNormalized(normalizedTopic: string): Promise<KnowledgeTopic | undefined> {
+    const [topic] = await db.select().from(knowledgeTopics)
+      .where(eq(knowledgeTopics.normalizedTopic, normalizedTopic));
+    return topic;
+  }
+
+  async getKnowledgeTopicById(id: string): Promise<KnowledgeTopic | undefined> {
+    const [topic] = await db.select().from(knowledgeTopics)
+      .where(eq(knowledgeTopics.id, id));
+    return topic;
+  }
+
+  async createKnowledgeTopic(topic: InsertKnowledgeTopic): Promise<KnowledgeTopic> {
+    const [created] = await db.insert(knowledgeTopics).values(topic).returning();
+    return created;
+  }
+
+  async incrementTopicRequestCount(id: string): Promise<void> {
+    const topic = await this.getKnowledgeTopicById(id);
+    if (topic) {
+      await db.update(knowledgeTopics)
+        .set({ requestCount: (topic.requestCount || 0) + 1, updatedAt: new Date() })
+        .where(eq(knowledgeTopics.id, id));
+    }
+  }
+
+  async updateTopicBestLesson(id: string, lessonId: string): Promise<void> {
+    await db.update(knowledgeTopics)
+      .set({ bestLessonId: lessonId, updatedAt: new Date() })
+      .where(eq(knowledgeTopics.id, id));
+  }
+
+  async updateTopicVersion(id: string, version: number, lessonId: string): Promise<void> {
+    await db.update(knowledgeTopics)
+      .set({ currentVersion: version, bestLessonId: lessonId, updatedAt: new Date() })
+      .where(eq(knowledgeTopics.id, id));
+  }
+
+  async getPopularKnowledgeTopics(limit: number = 10): Promise<KnowledgeTopic[]> {
+    return await db.select().from(knowledgeTopics)
+      .orderBy(desc(knowledgeTopics.requestCount))
+      .limit(limit);
+  }
+
+  // Lesson Plans methods
+  async getLessonPlanById(id: string): Promise<LessonPlan | undefined> {
+    const [lesson] = await db.select().from(lessonPlans)
+      .where(eq(lessonPlans.id, id));
+    return lesson;
+  }
+
+  async createLessonPlan(lesson: InsertLessonPlan): Promise<LessonPlan> {
+    const [created] = await db.insert(lessonPlans).values(lesson).returning();
+    return created;
+  }
+
+  async incrementLessonCompletionCount(id: string): Promise<void> {
+    const lesson = await this.getLessonPlanById(id);
+    if (lesson) {
+      await db.update(lessonPlans)
+        .set({ completionCount: (lesson.completionCount || 0) + 1, updatedAt: new Date() })
+        .where(eq(lessonPlans.id, id));
+    }
+  }
+
+  async updateLessonQuizStats(id: string, newScore: number): Promise<void> {
+    const lesson = await this.getLessonPlanById(id);
+    if (lesson) {
+      const totalAttempts = (lesson.totalQuizAttempts || 0) + 1;
+      const currentAvg = lesson.avgQuizScore || 0;
+      const newAvg = Math.round(((currentAvg * (totalAttempts - 1)) + newScore) / totalAttempts);
+      
+      await db.update(lessonPlans)
+        .set({ avgQuizScore: newAvg, totalQuizAttempts: totalAttempts, updatedAt: new Date() })
+        .where(eq(lessonPlans.id, id));
+    }
+  }
+
+  // Lesson Sessions methods
+  async createLessonSession(session: InsertLessonSession): Promise<LessonSession> {
+    const [created] = await db.insert(lessonSessions).values(session).returning();
+    return created;
+  }
+
+  async getLessonSessionsByLessonId(lessonId: string): Promise<LessonSession[]> {
+    return await db.select().from(lessonSessions)
+      .where(eq(lessonSessions.lessonPlanId, lessonId))
+      .orderBy(desc(lessonSessions.startedAt));
   }
 }
 

@@ -4,6 +4,26 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startTaskScheduler } from "./taskScheduler";
 import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
+import { storage } from "./storage";
+
+// Seed default admin user on startup (ensures admin exists in production)
+async function seedDefaultAdmin() {
+  const defaultAdminPhone = "+17025405471";
+  try {
+    const existing = await storage.getAdminUserByPhone(defaultAdminPhone);
+    if (!existing) {
+      await storage.createAdminUser({
+        phone: defaultAdminPhone,
+        name: "Admin",
+        role: "superadmin",
+        isActive: true,
+      });
+      console.log("[Seed] Created default admin user");
+    }
+  } catch (error) {
+    console.error("[Seed] Failed to create admin user:", error);
+  }
+}
 
 const app = express();
 const httpServer = createServer(app);
@@ -98,6 +118,9 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
+  // Seed default admin before starting server
+  await seedDefaultAdmin();
+
   httpServer.listen(
     {
       port,

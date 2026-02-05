@@ -562,6 +562,81 @@ export const insertA2pCampaignSchema = createInsertSchema(a2pCampaigns).omit({
 export type InsertA2pCampaign = z.infer<typeof insertA2pCampaignSchema>;
 export type A2pCampaign = typeof a2pCampaigns.$inferSelect;
 
+// Knowledge Topics - Tracks what people want to learn about (defined first for references)
+export const knowledgeTopics = pgTable("knowledge_topics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  normalizedTopic: text("normalized_topic").notNull().unique(), // Lowercase, trimmed for matching
+  displayTopic: text("display_topic").notNull(), // Original user input
+  requestCount: integer("request_count").default(1),
+  currentVersion: integer("current_version").default(1),
+  bestLessonId: varchar("best_lesson_id"), // Reference to best performing lesson
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`), // For topic clustering
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertKnowledgeTopicSchema = createInsertSchema(knowledgeTopics).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertKnowledgeTopic = z.infer<typeof insertKnowledgeTopicSchema>;
+export type KnowledgeTopic = typeof knowledgeTopics.$inferSelect;
+
+// Micro-Learning Lesson Plans - Self-Improving Knowledge Base
+export const lessonPlans = pgTable("lesson_plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  topicId: varchar("topic_id").references(() => knowledgeTopics.id),
+  version: integer("version").default(1),
+  topic: text("topic").notNull(),
+  title: text("title").notNull(),
+  syllabus: jsonb("syllabus"), // Array of {id, title, description}
+  initialContent: jsonb("initial_content"), // BoardContent object
+  quiz: jsonb("quiz"), // Array of QuizQuestion
+  environmentDescription: text("environment_description"),
+  instructorDescription: text("instructor_description"),
+  backgroundImageUrl: text("background_image_url"),
+  instructorImageUrl: text("instructor_image_url"),
+  completionCount: integer("completion_count").default(0),
+  avgQuizScore: integer("avg_quiz_score"), // Stored as 0-100
+  totalQuizAttempts: integer("total_quiz_attempts").default(0),
+  feedback: jsonb("feedback"), // Array of user feedback strings
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertLessonPlanSchema = createInsertSchema(lessonPlans).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertLessonPlan = z.infer<typeof insertLessonPlanSchema>;
+export type LessonPlan = typeof lessonPlans.$inferSelect;
+
+// Lesson Sessions - Tracks each learning session for improvement data
+export const lessonSessions = pgTable("lesson_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  lessonPlanId: varchar("lesson_plan_id").references(() => lessonPlans.id),
+  userPhone: text("user_phone"), // Optional - for SMS-triggered lessons
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+  quizScore: integer("quiz_score"), // 0-100
+  slidesViewed: integer("slides_viewed").default(0),
+  totalSlides: integer("total_slides"),
+  feedback: text("feedback"),
+  rating: integer("rating"), // 1-5 stars
+});
+
+export const insertLessonSessionSchema = createInsertSchema(lessonSessions).omit({
+  id: true,
+  startedAt: true,
+});
+
+export type InsertLessonSession = z.infer<typeof insertLessonSessionSchema>;
+export type LessonSession = typeof lessonSessions.$inferSelect;
+
 // A2P Use Case definitions (from TCR matrix)
 export const A2P_USE_CASES = [
   { value: 'CUSTOMER_CARE', label: 'Customer Care', description: 'Support and service messages' },

@@ -25,7 +25,12 @@ The platform features a clean, modern design with a purple gradient theme and an
 ### Feature Specifications
 - **Task Submission**: Users submit tasks via a landing page, select an agent personality (Achiever, Collaborator, Supporter, Analyst), and provide a phone number for SMS updates.
 - **Agent Personalization**: DISC profile and ARCH communication model sliders allow fine-tuning agent personalities, supported by a 6-section System Identity Prompts editor.
-- **Interactive Environments**: "The Vibe" for relaxed conversation, "The Office" for collaboration, "The Lab" for agent fine-tuning, and "The Classroom" for AI-generated lessons.
+- **Interactive Environments**: "The Vibe" for relaxed conversation, "The Office" for collaboration, "The Lab" for agent fine-tuning, and "The Classroom" for self-improving AI lessons.
+- **Self-Improving Classroom System**: "The Classroom" uses Kimi K2.5 to generate micro-lessons with a "WHY" pedagogical framework (Why→Who→What→Where→When→Conclusion). Lessons improve automatically based on quiz performance and user feedback.
+  - Database tables: `knowledge_topics` (tracks popular topics), `lesson_plans` (versioned lessons with quiz stats), `lesson_sessions` (user progress/feedback)
+  - Token limits prevent runaway costs (LESSON_GENERATION: 4000, LESSON_IMPROVEMENT: 6000, SLIDE_CONTENT: 1500)
+  - Auto-improvement triggers: 5+ completions AND (avg quiz score < 70% OR 3+ feedback submissions)
+  - API endpoints: `/api/classroom/lesson` (create/retrieve), `/api/classroom/complete` (record progress), `/api/classroom/improve/:topicId` (manual improve)
 - **Twilio Account Management**: Interface to manage Twilio credentials, sub-accounts, phone numbers, and billing.
 - **Customer Relationship Management**: A Customer Manager page for lead capture, status tracking, and notes.
 - **DISC Assessment**: An interactive 24-question assessment with API integration for bots.

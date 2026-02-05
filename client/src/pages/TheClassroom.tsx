@@ -8,12 +8,14 @@ import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { 
   ChevronLeft, ChevronRight, Send, BookOpen, GraduationCap, 
   Presentation, Video, FileText, Lightbulb, Play, Pause,
   SkipBack, SkipForward, Maximize2, Clock, CheckCircle2,
-  Loader2, Sparkles, Brain, Target
+  Loader2, Sparkles, Brain, Target, TrendingUp, Star, ThumbsUp
 } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
 import type { Agent, DiscScores } from '@shared/schema';
 
 interface Slide {
@@ -60,10 +62,18 @@ export default function TheClassroom() {
   const [lessonHistory, setLessonHistory] = useState<Lesson[]>([]);
   const [selectedQuizAnswer, setSelectedQuizAnswer] = useState<number | null>(null);
   const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [lessonVersion, setLessonVersion] = useState(1);
+  const [isNewLesson, setIsNewLesson] = useState(true);
+  const [quizScores, setQuizScores] = useState<number[]>([]);
+  const [feedback, setFeedback] = useState('');
 
   const { data: agent, isLoading } = useQuery<Agent>({
     queryKey: ['/api/agents', agentId],
     enabled: !!agentId,
+  });
+
+  const { data: popularTopics } = useQuery<any[]>({
+    queryKey: ['/api/classroom/popular-topics'],
   });
 
   useEffect(() => {
@@ -92,88 +102,82 @@ export default function TheClassroom() {
     };
     
     setCurrentLesson(newLesson);
-    
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const generatedSlides: Slide[] = [
-      {
-        id: 1,
-        title: `Welcome to ${topic}`,
-        content: `In this lesson, we'll explore the fundamentals of ${topic}. Get ready for an interactive learning experience!`,
-        type: 'intro',
-        bulletPoints: [
-          'Core concepts and definitions',
-          'Real-world applications',
-          'Hands-on examples',
-          'Knowledge check'
-        ]
-      },
-      {
-        id: 2,
-        title: 'Key Concepts',
-        content: `Let's dive into the essential building blocks of ${topic}.`,
-        type: 'content',
-        bulletPoints: [
-          `The foundation of ${topic} lies in understanding its core principles`,
-          'These concepts connect to form a comprehensive framework',
-          'Each element plays a crucial role in the bigger picture',
-          'Mastering these basics opens doors to advanced applications'
-        ]
-      },
-      {
-        id: 3,
-        title: 'Visual Learning',
-        content: `Watch this brief explanation to reinforce your understanding of ${topic}.`,
-        type: 'video',
-        videoUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ'
-      },
-      {
-        id: 4,
-        title: 'Deep Dive',
-        content: `Now that you have the basics, let's explore ${topic} in more detail.`,
-        type: 'content',
-        bulletPoints: [
-          'Advanced techniques build upon foundational knowledge',
-          'Real practitioners use these methods daily',
-          'Understanding nuances makes all the difference',
-          'Practice transforms knowledge into skill'
-        ]
-      },
-      {
-        id: 5,
-        title: 'Knowledge Check',
-        content: 'Let\'s test your understanding with a quick question.',
-        type: 'quiz',
-        quizQuestion: `Which of the following best describes a key principle of ${topic}?`,
-        quizOptions: [
-          'A surface-level understanding is sufficient',
-          'Deep comprehension leads to practical application',
-          'Memorization is more important than understanding',
-          'Concepts exist in isolation'
-        ],
-        quizAnswer: 1
-      },
-      {
-        id: 6,
-        title: 'Lesson Summary',
-        content: `Congratulations! You've completed the lesson on ${topic}.`,
-        type: 'summary',
-        bulletPoints: [
-          'You learned the core concepts and definitions',
-          'You explored real-world applications',
-          'You tested your knowledge',
-          `Continue exploring ${topic} to deepen your expertise`
-        ]
+
+    try {
+      const response = await apiRequest('POST', '/api/classroom/lesson', { topic });
+      const data = await response.json();
+      
+      if (!data.lesson) {
+        throw new Error('Failed to generate lesson');
       }
-    ];
-    
-    newLesson.slides = generatedSlides;
-    newLesson.status = 'ready';
-    
-    setCurrentLesson({ ...newLesson });
-    setLessonHistory(prev => [newLesson, ...prev]);
-    setIsGenerating(false);
-    setCurrentSlideIndex(0);
+
+      const lessonData = data.lesson;
+      const syllabus = lessonData.syllabus || [];
+      const initialContent = lessonData.initialContent || {};
+      const quiz = lessonData.quiz || [];
+
+      const generatedSlides: Slide[] = [
+        {
+          id: 1,
+          title: initialContent.title || `Welcome to ${topic}`,
+          content: initialContent.content || `In this lesson, we'll explore ${topic}.`,
+          type: 'intro',
+          bulletPoints: initialContent.bulletPoints || syllabus.map((s: any) => s.title)
+        },
+        ...syllabus.slice(0, 5).map((item: any, index: number) => ({
+          id: index + 2,
+          title: item.title,
+          content: item.description,
+          type: 'content' as const,
+          bulletPoints: []
+        })),
+        ...quiz.slice(0, 3).map((q: any, index: number) => ({
+          id: syllabus.length + index + 2,
+          title: `Knowledge Check ${index + 1}`,
+          content: 'Test your understanding with this question.',
+          type: 'quiz' as const,
+          quizQuestion: q.question,
+          quizOptions: q.options,
+          quizAnswer: q.correctAnswerIndex
+        })),
+        {
+          id: syllabus.length + quiz.length + 2,
+          title: 'Lesson Complete',
+          content: `Congratulations! You've completed the lesson on ${topic}.`,
+          type: 'summary',
+          bulletPoints: [
+            'You learned the core concepts using the WHY framework',
+            'You explored real-world applications',
+            'You tested your knowledge',
+            `This lesson will improve based on your feedback!`
+          ]
+        }
+      ];
+      
+      newLesson.id = lessonData.id;
+      newLesson.slides = generatedSlides;
+      newLesson.status = 'ready';
+      newLesson.title = lessonData.title || `Understanding ${topic}`;
+      
+      setCurrentLesson({ ...newLesson });
+      setLessonHistory(prev => [newLesson, ...prev]);
+      setCurrentSlideIndex(0);
+      setLessonVersion(data.version || 1);
+      setIsNewLesson(data.isNew);
+    } catch (error: any) {
+      console.error('Lesson generation error:', error);
+      newLesson.status = 'ready';
+      newLesson.slides = [{
+        id: 1,
+        title: 'Generation Error',
+        content: `Unable to generate lesson: ${error.message}. Please try again.`,
+        type: 'intro',
+        bulletPoints: []
+      }];
+      setCurrentLesson({ ...newLesson });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleStartLesson = () => {
@@ -200,10 +204,46 @@ export default function TheClassroom() {
 
   const handleQuizSubmit = () => {
     setQuizSubmitted(true);
+    if (currentSlide && selectedQuizAnswer !== null) {
+      const isCorrect = selectedQuizAnswer === currentSlide.quizAnswer;
+      setQuizScores(prev => [...prev, isCorrect ? 100 : 0]);
+    }
+  };
+
+  const handleLessonComplete = async () => {
+    if (!currentLesson) return;
+    
+    const avgScore = quizScores.length > 0 
+      ? Math.round(quizScores.reduce((a, b) => a + b, 0) / quizScores.length)
+      : null;
+    
+    try {
+      const response = await apiRequest('POST', '/api/classroom/complete', {
+        lessonPlanId: currentLesson.id,
+        quizScore: avgScore,
+        slidesViewed: currentSlideIndex + 1,
+        totalSlides: currentLesson.slides.length,
+        feedback: feedback || undefined,
+      });
+      
+      const result = await response.json();
+      
+      setCurrentLesson(prev => prev ? { ...prev, status: 'completed', progress: 100 } : null);
+      setQuizScores([]);
+      setFeedback('');
+      
+      if (result.improved) {
+        setLessonVersion(result.newVersion || lessonVersion + 1);
+        alert(`Great news! Based on feedback from you and others, this lesson has been automatically improved to version ${result.newVersion}. Future learners will benefit from an enhanced experience!`);
+      }
+    } catch (error) {
+      console.error('Failed to record completion:', error);
+    }
   };
 
   const currentSlide = currentLesson?.slides[currentSlideIndex];
   const progress = currentLesson ? ((currentSlideIndex + 1) / currentLesson.slides.length) * 100 : 0;
+  const isLastSlide = currentLesson && currentSlideIndex === currentLesson.slides.length - 1;
 
   if (isLoading) {
     return (
@@ -467,6 +507,54 @@ export default function TheClassroom() {
                                   : 'Not quite. The correct answer is highlighted above.'}
                               </div>
                             )}
+                          </div>
+                        )}
+                        
+                        {currentSlide.type === 'summary' && (
+                          <div className="mt-6 max-w-md mx-auto space-y-4">
+                            <div className="flex items-center justify-center gap-2 mb-4">
+                              <Badge variant="outline" className="border-amber-500/50 text-amber-400">
+                                <TrendingUp className="w-3 h-3 mr-1" />
+                                v{lessonVersion}
+                              </Badge>
+                              {!isNewLesson && (
+                                <Badge variant="outline" className="border-green-500/50 text-green-400">
+                                  <Star className="w-3 h-3 mr-1" />
+                                  Improved Lesson
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            {quizScores.length > 0 && (
+                              <div className="text-center p-3 rounded-lg bg-amber-500/10">
+                                <p className="text-sm text-muted-foreground">Your Quiz Score</p>
+                                <p className="text-2xl font-bold text-amber-400">
+                                  {Math.round(quizScores.reduce((a, b) => a + b, 0) / quizScores.length)}%
+                                </p>
+                              </div>
+                            )}
+                            
+                            <div className="space-y-2">
+                              <Label className="text-sm text-muted-foreground">
+                                Help improve this lesson (optional)
+                              </Label>
+                              <Input
+                                placeholder="What could be better?"
+                                value={feedback}
+                                onChange={(e) => setFeedback(e.target.value)}
+                                className="border-amber-500/30"
+                                data-testid="input-feedback"
+                              />
+                            </div>
+                            
+                            <Button
+                              onClick={handleLessonComplete}
+                              className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500"
+                              data-testid="button-complete-lesson"
+                            >
+                              <ThumbsUp className="w-4 h-4 mr-2" />
+                              Complete Lesson
+                            </Button>
                           </div>
                         )}
                       </div>

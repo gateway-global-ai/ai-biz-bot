@@ -3905,5 +3905,82 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
+  // Classroom / Micro-Learning API Routes
+  const { getOrCreateLessonForTopic, generateSlideContent, recordLessonCompletion, improveLessonPlan, getPopularTopics, getLessonById } = await import("./classroom");
+
+  app.post("/api/classroom/lesson", async (req, res) => {
+    try {
+      const { topic } = req.body;
+      if (!topic || typeof topic !== 'string') {
+        return res.status(400).json({ error: "Topic is required" });
+      }
+      const result = await getOrCreateLessonForTopic(topic);
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Classroom] Lesson generation error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/classroom/lesson/:id", async (req, res) => {
+    try {
+      const lesson = await getLessonById(req.params.id);
+      if (!lesson) {
+        return res.status(404).json({ error: "Lesson not found" });
+      }
+      res.json(lesson);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/classroom/slide-content", async (req, res) => {
+    try {
+      const { topic, slideTitle, slideDescription } = req.body;
+      if (!topic || !slideTitle || !slideDescription) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      const content = await generateSlideContent(topic, slideTitle, slideDescription);
+      res.json(content);
+    } catch (error: any) {
+      console.error("[Classroom] Slide content error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/classroom/complete", async (req, res) => {
+    try {
+      const { lessonPlanId, quizScore, slidesViewed, totalSlides, feedback, rating, userPhone } = req.body;
+      if (!lessonPlanId) {
+        return res.status(400).json({ error: "Lesson plan ID required" });
+      }
+      const result = await recordLessonCompletion(lessonPlanId, quizScore, slidesViewed, totalSlides, feedback, rating, userPhone);
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      console.error("[Classroom] Completion recording error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/classroom/improve/:topicId", async (req, res) => {
+    try {
+      const improved = await improveLessonPlan(req.params.topicId);
+      res.json(improved);
+    } catch (error: any) {
+      console.error("[Classroom] Lesson improvement error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/classroom/popular-topics", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const topics = await getPopularTopics(limit);
+      res.json(topics);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
