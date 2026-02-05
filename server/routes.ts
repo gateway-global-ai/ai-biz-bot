@@ -2143,6 +2143,73 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       
       // ========== ADMIN COMMANDS (Health Check & Repair Agent) ==========
       const bodyLower = (Body || '').toLowerCase().trim();
+      
+      // ========== CODING AGENT (Kimi K2) ==========
+      const codingKeywords = ['error:', 'exception', 'traceback', 'syntaxerror', 'typeerror', 'referenceerror', 
+        'undefined is not', 'cannot read property', 'is not defined', 'unexpected token',
+        'fix this code', 'debug this', 'why is this error', 'code help', 'coding help',
+        'fix my code', 'analyze this code', 'explain this code', 'review my code',
+        '```', 'function(', 'const ', 'let ', 'var ', 'import ', 'def ', 'class '];
+      const isCodingRequest = codingKeywords.some(kw => bodyLower.includes(kw)) || 
+        (Body && Body.includes('```'));
+      
+      if (isCodingRequest) {
+        console.log(`[SMS Coding Agent] Detected coding request from: ${From}`);
+        
+        try {
+          // Determine if it's an error, code to fix, or code to explain
+          const hasError = bodyLower.includes('error') || bodyLower.includes('exception') || 
+            bodyLower.includes('traceback') || bodyLower.includes('undefined');
+          const wantsFix = bodyLower.includes('fix') || bodyLower.includes('debug') || 
+            bodyLower.includes('help') || bodyLower.includes('wrong');
+          const wantsExplanation = bodyLower.includes('explain') || bodyLower.includes('what does');
+          
+          let toolName: string;
+          let args: Record<string, any>;
+          
+          // Extract code block if present
+          const codeMatch = Body.match(/```[\w]*\n?([\s\S]*?)```/);
+          const code = codeMatch ? codeMatch[1].trim() : Body;
+          
+          // Detect language
+          const langMatch = Body.match(/```(\w+)/);
+          const language = langMatch ? langMatch[1] : 'javascript';
+          
+          if (hasError) {
+            toolName = 'diagnose_error';
+            args = { error: code, language };
+          } else if (wantsFix) {
+            toolName = 'fix_code';
+            args = { code, language, issue: 'Fix the issues in this code' };
+          } else if (wantsExplanation) {
+            toolName = 'explain_code';
+            args = { code, language, audience: 'beginner' };
+          } else {
+            toolName = 'analyze_code';
+            args = { code, language };
+          }
+          
+          console.log(`[SMS Coding Agent] Using tool: ${toolName}`);
+          const result = await handleMCPToolCall(toolName, args);
+          
+          // Truncate for SMS (keep it readable)
+          let smsResponse = result;
+          if (smsResponse.length > 1400) {
+            smsResponse = smsResponse.substring(0, 1397) + '...';
+          }
+          
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>🤖 Coding Agent (Kimi K2)\n\n${smsResponse}</Message></Response>`;
+          res.type('text/xml').send(twiml);
+          return;
+        } catch (error: any) {
+          console.error('[SMS Coding Agent] Error:', error.message);
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>🤖 Coding Agent couldn't process that. Try sending your code in a code block:\n\n\`\`\`javascript\nyour code here\n\`\`\`</Message></Response>`;
+          res.type('text/xml').send(twiml);
+          return;
+        }
+      }
+      
+      // ========== ADMIN COMMANDS (Health Check & Repair) ==========
       const adminCommands = ['health check', 'run health', 'check health', 'sms health', 'fix sms', 'repair sms', 'auto fix', 'autofix', 'repair webhooks', 'fix webhooks'];
       const isAdminCommand = adminCommands.some(cmd => bodyLower.includes(cmd));
       

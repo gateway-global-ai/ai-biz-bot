@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-const KIMI_K2_MODEL = "kimi-k2-0711-preview";
+const KIMI_K2_MODEL = "moonshot-v1-128k";
 
 interface MCPTool {
   name: string;
@@ -33,7 +33,7 @@ interface MCPResponse {
 
 const kimiK2Client = new OpenAI({
   apiKey: process.env.MOONSHOT_API_KEY,
-  baseURL: "https://api.moonshot.cn/v1",
+  baseURL: "https://api.moonshot.ai/v1",
 });
 
 const MCP_TOOLS: MCPTool[] = [
