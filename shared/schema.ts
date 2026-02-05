@@ -482,3 +482,109 @@ export const insertTwilioSubAccountSchema = createInsertSchema(twilioSubAccounts
 
 export type InsertTwilioSubAccount = z.infer<typeof insertTwilioSubAccountSchema>;
 export type TwilioSubAccount = typeof twilioSubAccounts.$inferSelect;
+
+// A2P 10-DLC Compliance - Brand Registration
+export const a2pBrands = pgTable("a2p_brands", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerId: varchar("customer_id").references(() => customers.id),
+  // Twilio Brand Registration SID
+  brandSid: text("brand_sid"),
+  brandStatus: text("brand_status").default("pending"), // pending, approved, rejected, failed
+  // Company Information
+  companyName: text("company_name").notNull(),
+  country: text("country").default("US"),
+  taxId: text("tax_id"), // EIN for US companies
+  website: text("website"),
+  vertical: text("vertical"), // TECHNOLOGY, HEALTHCARE, RETAIL, etc.
+  stockExchange: text("stock_exchange"),
+  stockSymbol: text("stock_symbol"),
+  // Authorized Signer
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone").notNull(),
+  // Vetting
+  vettingStatus: text("vetting_status"), // null, pending, passed, failed
+  vettingProvider: text("vetting_provider"), // campaign-verify, aegis
+  vettingScore: integer("vetting_score"),
+  // Payment
+  stripePaymentId: text("stripe_payment_id"),
+  amountPaid: integer("amount_paid"), // in cents
+  // Documents (stored as JSON with document SIDs)
+  documents: jsonb("documents"),
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertA2pBrandSchema = createInsertSchema(a2pBrands).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertA2pBrand = z.infer<typeof insertA2pBrandSchema>;
+export type A2pBrand = typeof a2pBrands.$inferSelect;
+
+// A2P 10-DLC Compliance - Campaign Registration
+export const a2pCampaigns = pgTable("a2p_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  brandId: varchar("brand_id").references(() => a2pBrands.id).notNull(),
+  // Twilio Campaign SID
+  campaignSid: text("campaign_sid"),
+  campaignStatus: text("campaign_status").default("pending"), // pending, approved, rejected, failed
+  // Campaign Details
+  useCase: text("use_case").notNull(), // STANDARD, MARKETING, CUSTOMER_CARE, etc.
+  description: text("description").notNull(),
+  messageFlow: text("message_flow"), // How users opt-in
+  sampleMessages: jsonb("sample_messages"), // Array of sample messages
+  // Compliance Details
+  optInDescription: text("opt_in_description"),
+  optOutDescription: text("opt_out_description"),
+  helpDescription: text("help_description"),
+  hasDirectLending: boolean("has_direct_lending").default(false),
+  // Links
+  privacyPolicyUrl: text("privacy_policy_url"),
+  termsOfServiceUrl: text("terms_of_service_url"),
+  // Messaging Service
+  messagingServiceSid: text("messaging_service_sid"),
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertA2pCampaignSchema = createInsertSchema(a2pCampaigns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertA2pCampaign = z.infer<typeof insertA2pCampaignSchema>;
+export type A2pCampaign = typeof a2pCampaigns.$inferSelect;
+
+// A2P Use Case definitions (from TCR matrix)
+export const A2P_USE_CASES = [
+  { value: 'CUSTOMER_CARE', label: 'Customer Care', description: 'Support and service messages' },
+  { value: 'MARKETING', label: 'Marketing', description: 'Promotional and marketing content' },
+  { value: 'ACCOUNT_NOTIFICATION', label: 'Account Notifications', description: 'Account updates and alerts' },
+  { value: 'DELIVERY_NOTIFICATION', label: 'Delivery Notifications', description: 'Shipping and delivery updates' },
+  { value: 'FRAUD_ALERT', label: 'Fraud Alerts', description: 'Security and fraud notifications' },
+  { value: '2FA', label: 'Two-Factor Authentication', description: 'Login verification codes' },
+  { value: 'POLLING_VOTING', label: 'Polling & Voting', description: 'Surveys and voting' },
+  { value: 'PUBLIC_SERVICE_ANNOUNCEMENT', label: 'Public Service', description: 'PSA messages' },
+  { value: 'MIXED', label: 'Mixed', description: 'Multiple use cases' },
+] as const;
+
+export const A2P_VERTICALS = [
+  'TECHNOLOGY',
+  'HEALTHCARE',
+  'RETAIL',
+  'FINANCIAL',
+  'EDUCATION',
+  'ENTERTAINMENT',
+  'REAL_ESTATE',
+  'HOSPITALITY',
+  'PROFESSIONAL_SERVICES',
+  'NON_PROFIT',
+  'OTHER',
+] as const;

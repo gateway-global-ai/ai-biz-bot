@@ -25,6 +25,10 @@ import {
   type InsertTwilioSubAccount,
   type SmsDeliveryStatus,
   type InsertSmsDeliveryStatus,
+  type A2pBrand,
+  type InsertA2pBrand,
+  type A2pCampaign,
+  type InsertA2pCampaign,
   telephonyConfigs,
   callLogs,
   users,
@@ -37,7 +41,9 @@ import {
   otpCodes,
   authSessions,
   twilioSubAccounts,
-  smsDeliveryStatus
+  smsDeliveryStatus,
+  a2pBrands,
+  a2pCampaigns
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -99,6 +105,18 @@ export interface IStorage {
   getFailedSmsDeliveries(limit?: number): Promise<SmsDeliveryStatus[]>;
   getRecentSmsDeliveries(limit?: number): Promise<SmsDeliveryStatus[]>;
   updateSmsDeliveryStatus(messageSid: string, updates: Partial<InsertSmsDeliveryStatus>): Promise<SmsDeliveryStatus | undefined>;
+  
+  // A2P Compliance operations
+  getA2pBrands(): Promise<A2pBrand[]>;
+  getA2pBrand(id: string): Promise<A2pBrand | undefined>;
+  getA2pBrandByCustomer(customerId: string): Promise<A2pBrand | undefined>;
+  createA2pBrand(brand: InsertA2pBrand): Promise<A2pBrand>;
+  updateA2pBrand(id: string, updates: Partial<InsertA2pBrand>): Promise<A2pBrand | undefined>;
+  
+  getA2pCampaigns(brandId?: string): Promise<A2pCampaign[]>;
+  getA2pCampaign(id: string): Promise<A2pCampaign | undefined>;
+  createA2pCampaign(campaign: InsertA2pCampaign): Promise<A2pCampaign>;
+  updateA2pCampaign(id: string, updates: Partial<InsertA2pCampaign>): Promise<A2pCampaign | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -443,6 +461,64 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(smsDeliveryStatus)
       .set(updates)
       .where(eq(smsDeliveryStatus.messageSid, messageSid))
+      .returning();
+    return updated;
+  }
+
+  // A2P Compliance operations
+  async getA2pBrands(): Promise<A2pBrand[]> {
+    return await db.select().from(a2pBrands).orderBy(desc(a2pBrands.createdAt));
+  }
+
+  async getA2pBrand(id: string): Promise<A2pBrand | undefined> {
+    const [brand] = await db.select().from(a2pBrands).where(eq(a2pBrands.id, id));
+    return brand;
+  }
+
+  async getA2pBrandByCustomer(customerId: string): Promise<A2pBrand | undefined> {
+    const [brand] = await db.select().from(a2pBrands)
+      .where(eq(a2pBrands.customerId, customerId))
+      .orderBy(desc(a2pBrands.createdAt))
+      .limit(1);
+    return brand;
+  }
+
+  async createA2pBrand(brand: InsertA2pBrand): Promise<A2pBrand> {
+    const [created] = await db.insert(a2pBrands).values(brand).returning();
+    return created;
+  }
+
+  async updateA2pBrand(id: string, updates: Partial<InsertA2pBrand>): Promise<A2pBrand | undefined> {
+    const [updated] = await db.update(a2pBrands)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(a2pBrands.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getA2pCampaigns(brandId?: string): Promise<A2pCampaign[]> {
+    if (brandId) {
+      return await db.select().from(a2pCampaigns)
+        .where(eq(a2pCampaigns.brandId, brandId))
+        .orderBy(desc(a2pCampaigns.createdAt));
+    }
+    return await db.select().from(a2pCampaigns).orderBy(desc(a2pCampaigns.createdAt));
+  }
+
+  async getA2pCampaign(id: string): Promise<A2pCampaign | undefined> {
+    const [campaign] = await db.select().from(a2pCampaigns).where(eq(a2pCampaigns.id, id));
+    return campaign;
+  }
+
+  async createA2pCampaign(campaign: InsertA2pCampaign): Promise<A2pCampaign> {
+    const [created] = await db.insert(a2pCampaigns).values(campaign).returning();
+    return created;
+  }
+
+  async updateA2pCampaign(id: string, updates: Partial<InsertA2pCampaign>): Promise<A2pCampaign | undefined> {
+    const [updated] = await db.update(a2pCampaigns)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(a2pCampaigns.id, id))
       .returning();
     return updated;
   }
