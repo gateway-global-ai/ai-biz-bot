@@ -25,6 +25,7 @@ import TheClassroom from "@/pages/TheClassroom";
 import CustomerManager from "@/pages/CustomerManager";
 import TwilioAccountManager from "@/pages/TwilioAccountManager";
 import MvpLanding from "@/pages/MvpLanding";
+import LandingV2 from "@/pages/LandingV2";
 import KimiAudioDemo from "@/pages/KimiAudioDemo";
 import TwilioHealthCheck from "@/pages/TwilioHealthCheck";
 import Login from "@/pages/Login";
@@ -318,6 +319,7 @@ function App() {
           <Switch>
             {/* Public routes */}
             <Route path="/" component={MvpLanding} />
+            <Route path="/v2" component={LandingV2} />
             <Route path="/login" component={Login} />
             <Route path="/kimi-audio" component={KimiAudioDemo} />
             <Route path="/chat/:agentId" component={AgentChat} />
