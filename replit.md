@@ -152,6 +152,23 @@ Database fields: `aiModelProvider`, `aiModelId`, `aiTemperature`, `aiMaxTokens`,
 - Kimi K2 Instruct (moonshotai/Kimi-K2-Instruct:novita)
 - Llama 4, Qwen 2.5, Mistral Large, and many more
 - Any model the user has enabled in their HuggingFace account
+
+**GitHub Repository Integration:**
+- HuggingFace MCP can connect to users' GitHub repositories
+- Enables AI-powered code analysis, PR reviews, and development assistance
+- Perfect for the Developer account tier
+
+### Account Types
+
+**Developer Account** (Planned):
+- Target audience: Software developers, technical users
+- Access to Developer Ecosystem (isolated section of the site)
+- Features:
+  - MCP coding agent via SMS
+  - HuggingFace Pro integration for advanced models
+  - GitHub repository connections through HuggingFace
+  - Custom AI model configuration in The Lab
+  - API access for automation
 -   **Google Gemini**: Fallback AI engine and powers Gemini Live voice chat.
 
 ### Database
