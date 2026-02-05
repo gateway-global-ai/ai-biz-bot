@@ -131,18 +131,24 @@ Service: `server/mcp/googleWorkspace.ts`
 | `schedule` | Calendar integration status |
 | `add task [description]` | Create new task |
 | `my tasks` | View current tasks |
-| `report [business name]` | Area business insights report |
-| `competitors` | Competition analysis |
+| `report [business name]` | Owner area report (3mi default) |
+| `report [business name] [miles]` | Owner report with custom radius |
+| `search [category] near [location]` | Marketing search by category |
+| `search [category] near [location] [miles]mi [min]-[max] stars` | Filtered market search |
+| `competitors` | Competition analysis (uses CUSTOMER_PLACE) |
 
 ### Places Aggregate API Integration
 Service: `server/mcp/placesAggregate.ts`
 - Uses Google Places Aggregate API (`areainsights.googleapis.com/v1:computeInsights`)
 - Authenticated via `X-Goog-Api-Key` header using `GOOGLE_CLOUD_API_KEY` secret
-- Place lookup via Places API Text Search (`places.googleapis.com/v1/places:searchText`)
-- API endpoints: `/api/reports/compute-insights` (raw), `/api/reports/business-report` (formatted), `/api/reports/lookup-place` (name to coordinates)
+- Place lookup via Places API Text Search (`places.googleapis.com/v1/places:searchText`) - returns primaryType for business category detection
+- API endpoints: `/api/reports/compute-insights` (raw), `/api/reports/business-report` (formatted, supports both modes), `/api/reports/lookup-place` (name to coordinates + category)
+- **Two search modes:**
+  - **Owner Report** (`mode: 'owner'`): Looks up business by name, detects its Google category, searches all nearby categories within radius. Default 3 miles.
+  - **Marketing Search** (`mode: 'marketing'`): User specifies address, category, radius, optional min/max rating, and price level filters. For targeted market research.
 - Report includes: business density by category, rating breakdown (high/mid/low), price level distribution
-- Available in both Admin Panel chat (via Gemini function calling with business name) and SMS ("report [business name]", "competitors")
-- SMS format: condensed text report; Chat format: markdown with detail
+- Available in both Admin Panel chat (via Gemini function calling) and SMS
+- Default search radius: 3 miles (configurable per request)
 - Env vars: `CUSTOMER_PHONE` (owner phone), `CUSTOMER_PLACE` (default business name for reports)
 
 ### Integration with Gateway Task System

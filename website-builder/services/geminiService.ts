@@ -333,13 +333,16 @@ const listTasksTool: FunctionDeclaration = {
 
 const generateBusinessReportTool: FunctionDeclaration = {
   name: "generateBusinessReport",
-  description: "Generate an area insights report for a business by name. Looks up the business on Google Maps, then shows nearby business density by category, average ratings, and price level distribution within a given radius.",
+  description: "Generate an area insights report. Two modes: 'owner' (default) looks up a business and reports on all nearby categories using the business's own type. 'marketing' searches for a specific category near a location with optional rating/price filters. Default radius is 3 miles.",
   parameters: {
     type: Type.OBJECT,
     properties: {
-      businessName: { type: Type.STRING, description: "The name and location of the business (e.g., 'Boardwalk Suites Lafayette')" },
-      businessType: { type: Type.STRING, description: "Optional business type to focus the report on (e.g., restaurant, cafe, lodging, store)" },
-      radiusMeters: { type: Type.NUMBER, description: "Search radius in meters (default 5000)" }
+      mode: { type: Type.STRING, description: "Search mode: 'owner' for business area report, 'marketing' for targeted market search. Default: 'owner'" },
+      businessName: { type: Type.STRING, description: "For owner mode: the business name (e.g., 'Boardwalk Suites Lafayette'). For marketing mode: the address or location to search near." },
+      category: { type: Type.STRING, description: "For marketing mode: the business category to search (e.g., restaurant, cafe, lodging, store, bar). Required for marketing mode." },
+      radiusMiles: { type: Type.NUMBER, description: "Search radius in miles (default 3)" },
+      minRating: { type: Type.NUMBER, description: "For marketing mode: minimum review rating filter (1.0-5.0)" },
+      maxRating: { type: Type.NUMBER, description: "For marketing mode: maximum review rating filter (1.0-5.0)" }
     },
     required: ["businessName"]
   }
@@ -391,7 +394,9 @@ export const createSupportChatSession = (hasGoogleWorkspace: boolean = false) =>
     - When user asks to track data/create a list → Use createSpreadsheet
     - When user asks about their schedule → Use listCalendarEvents
     - When user asks about their to-do list → Use listTasks
-    - When user asks about competitors, area report, business insights, or nearby businesses → Use generateBusinessReport with the business name
+    - When user asks about competitors, area report, business insights, or nearby businesses → Use generateBusinessReport with mode='owner' and the business name
+    - When user wants to search for specific business types in an area (market research) → Use generateBusinessReport with mode='marketing', the category, and the location
+    - Default search radius is 3 miles. User can specify a different radius in miles.
     
     For other integrations (Square, Shopify, etc.), explain how you can help generate API keys or webhooks.
     Be helpful, proactive, and enthusiastic about automation. Take action when the user requests it.

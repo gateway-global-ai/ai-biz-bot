@@ -159,13 +159,17 @@ const AdminPanel: React.FC<Props> = ({
           // Handle Google Workspace tool calls
           else if (call.name === 'generateBusinessReport') {
             try {
-              const reportResponse = await fetch(`${backendUrl}/api/reports/business-report`, {
+              const reportResponse = await fetch(`${BACKEND_API_URL}/api/reports/business-report`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  businessName: args.businessName || args.placeId,
-                  businessTypes: args.businessType ? [args.businessType] : undefined,
-                  radiusMeters: args.radiusMeters || 5000
+                  mode: args.mode || 'owner',
+                  businessName: args.businessName,
+                  address: args.businessName,
+                  category: args.category,
+                  radiusMiles: args.radiusMiles,
+                  minRating: args.minRating,
+                  maxRating: args.maxRating
                 })
               });
               const reportData = await reportResponse.json();

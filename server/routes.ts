@@ -23,7 +23,7 @@ import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
-import { computeInsights, generateBusinessReport, formatReportForSms, formatReportForChat, lookupPlaceByName, type ComputeInsightsRequest, type BusinessReportRequest } from "./mcp/placesAggregate";
+import { computeInsights, generateBusinessReport, generateOwnerReport, generateMarketingSearch, formatReportForSms, formatReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type BusinessReportRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -203,47 +203,49 @@ export async function registerRoutes(
 
   app.post("/api/reports/business-report", async (req, res) => {
     try {
-      const { businessName, latitude, longitude, radiusMeters, businessTypes } = req.body;
+      const { mode, businessName, latitude, longitude, radiusMiles, radiusMeters, businessTypes, address, category, minRating, maxRating, priceLevels, excludedTypes } = req.body;
 
-      if (latitude === undefined || longitude === undefined) {
-        if (!businessName) {
-          return res.status(400).json({ success: false, error: "Either latitude/longitude or businessName is required" });
+      let report;
+
+      if (mode === 'marketing') {
+        if (!category) {
+          return res.status(400).json({ success: false, error: "category is required for marketing search" });
         }
-        try {
-          const place = await lookupPlaceByName(businessName);
-          if (!place) {
-            return res.status(404).json({ success: false, error: `Could not find location for "${businessName}"` });
-          }
-          const report = await generateBusinessReport({
-            latitude: place.latitude,
-            longitude: place.longitude,
-            radiusMeters: radiusMeters || 5000,
-            businessTypes,
-            businessName: businessName
-          });
+        report = await generateMarketingSearch({
+          mode: 'marketing',
+          address: address || businessName,
+          latitude,
+          longitude,
+          category,
+          radiusMiles: radiusMiles || (radiusMeters ? radiusMeters / 1609.34 : undefined),
+          minRating,
+          maxRating,
+          priceLevels,
+          excludedTypes
+        });
+      } else {
+        const name = businessName || address;
+        if (!name && latitude === undefined) {
+          return res.status(400).json({ success: false, error: "businessName or latitude/longitude is required" });
+        }
 
-          res.json({
-            success: true,
-            lookedUpPlace: place,
-            report,
-            formatted: {
-              chat: formatReportForChat(report),
-              sms: formatReportForSms(report)
-            }
+        if (name && (latitude === undefined || longitude === undefined)) {
+          report = await generateOwnerReport({
+            mode: 'owner',
+            businessName: name,
+            radiusMiles: radiusMiles || (radiusMeters ? radiusMeters / 1609.34 : undefined)
           });
-          return;
-        } catch (lookupErr: any) {
-          return res.status(500).json({ success: false, error: `Place lookup failed: ${lookupErr.message}` });
+        } else {
+          report = await generateBusinessReport({
+            latitude,
+            longitude,
+            radiusMeters: radiusMeters || (radiusMiles ? milesToMeters(radiusMiles) : undefined),
+            businessTypes,
+            businessName: name || 'Business',
+            mode: 'owner'
+          });
         }
       }
-
-      const report = await generateBusinessReport({
-        latitude,
-        longitude,
-        radiusMeters: radiusMeters || 5000,
-        businessTypes,
-        businessName: businessName || 'Business'
-      });
 
       res.json({
         success: true,
@@ -2741,7 +2743,8 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       const bizBotKeywords = ['visitors', 'how many visitors', 'traffic', 'reviews', 'bad reviews', 'update hours', 
         'change hours', 'my website', 'website stats', 'check website', 'new reviews', 'schedule', 'calendar',
         'add task', 'create task', 'my tasks', 'create event', 'schedule meeting',
-        'report', 'area report', 'business report', 'competitors', 'competition', 'nearby businesses'];
+        'report', 'area report', 'business report', 'competitors', 'competition', 'nearby businesses',
+        'search ', 'market '];
       const isBizBotCommand = bizBotKeywords.some(kw => bodyLower.includes(kw));
       
       if (isBizBotCommand) {
@@ -2807,33 +2810,95 @@ Keep responses concise and engaging. If asked personal questions, you can share 
                 responseText = '📋 Add Task\n\nReply with "add task [description]"\n\nExample: "add task Call supplier about delivery"';
               }
             }
-          } else if (bodyLower.includes('report') || bodyLower.includes('competitors') || bodyLower.includes('competition') || bodyLower.includes('nearby businesses')) {
+          } else if (bodyLower.includes('report') || bodyLower.includes('competitors') || bodyLower.includes('competition') || bodyLower.includes('nearby businesses') || bodyLower.startsWith('search ') || bodyLower.startsWith('market ')) {
             if (!process.env.GOOGLE_CLOUD_API_KEY) {
               responseText = 'Area Reports are not available yet. API key needs to be configured by an administrator.';
             } else {
               const customerPlace = process.env.CUSTOMER_PLACE;
-              const bodyAfterReport = Body.replace(/^(report|competitors|competition|nearby businesses)\s*/i, '').trim();
-              const searchName = bodyAfterReport || customerPlace;
+              const isMarketingSearch = bodyLower.startsWith('search ') || bodyLower.startsWith('market ');
 
-              if (!searchName) {
-                responseText = 'Area Report\n\nTo generate a report, text:\n"report [business name or location]"\n\nExample: "report Boardwalk Suites Lafayette"';
-              } else {
-                try {
-                  const place = await lookupPlaceByName(searchName);
-                  if (!place) {
-                    responseText = `Could not find "${searchName}" on Google Maps. Try a more specific name.`;
-                  } else {
-                    const report = await generateBusinessReport({
-                      latitude: place.latitude,
-                      longitude: place.longitude,
-                      radiusMeters: 5000,
-                      businessName: searchName
+              if (isMarketingSearch) {
+                const searchBody = Body.replace(/^(search|market)\s*/i, '').trim();
+                const categoryMatch = searchBody.match(/^(\w[\w\s]*?)\s+(?:near|in|at|around)\s+(.+?)(?:\s+(\d+(?:\.\d+)?)\s*(?:mi(?:les?)?|km))?(?:\s+(\d(?:\.\d)?)-(\d(?:\.\d)?)\s*stars?)?$/i);
+                const simpleMatch = searchBody.match(/^(\w[\w\s]*?)\s+(\d+(?:\.\d+)?)\s*(?:mi(?:les?)?)?$/i);
+
+                if (categoryMatch) {
+                  const [, cat, location, radiusStr, minR, maxR] = categoryMatch;
+                  const category = cat.trim().replace(/\s+/g, '_').toLowerCase();
+                  try {
+                    const report = await generateMarketingSearch({
+                      mode: 'marketing',
+                      address: location.trim(),
+                      category,
+                      radiusMiles: radiusStr ? parseFloat(radiusStr) : undefined,
+                      minRating: minR ? parseFloat(minR) : undefined,
+                      maxRating: maxR ? parseFloat(maxR) : undefined
                     });
                     responseText = formatReportForSms(report);
+                  } catch (searchErr: any) {
+                    console.error('[SMS Biz Bot] Marketing search error:', searchErr.message);
+                    responseText = `Search failed: ${searchErr.message}`;
                   }
-                } catch (reportError: any) {
-                  console.error('[SMS Biz Bot] Report generation error:', reportError.message);
-                  responseText = 'Could not generate report. Please try again or check the business name.';
+                } else if (simpleMatch) {
+                  const [, cat, radiusStr] = simpleMatch;
+                  const category = cat.trim().replace(/\s+/g, '_').toLowerCase();
+                  if (!customerPlace) {
+                    responseText = 'No default business set. Use:\n"search [category] near [location]"\n\nExample: "search restaurant near Lafayette LA"';
+                  } else {
+                    try {
+                      const report = await generateMarketingSearch({
+                        mode: 'marketing',
+                        address: customerPlace,
+                        category,
+                        radiusMiles: parseFloat(radiusStr)
+                      });
+                      responseText = formatReportForSms(report);
+                    } catch (searchErr: any) {
+                      responseText = `Search failed: ${searchErr.message}`;
+                    }
+                  }
+                } else {
+                  responseText = 'Marketing Search\n\nFormats:\n' +
+                    '"search [category] near [location]"\n' +
+                    '"search [category] near [location] [miles]mi"\n' +
+                    '"search [category] near [location] [miles]mi [min]-[max] stars"\n\n' +
+                    'Examples:\n' +
+                    '"search restaurant near Lafayette LA"\n' +
+                    '"search cafe near 123 Main St 5mi"\n' +
+                    '"search lodging near Lafayette LA 2mi 4-5 stars"';
+                }
+              } else {
+                const bodyAfterReport = Body.replace(/^(report|competitors|competition|nearby businesses)\s*/i, '').trim();
+                const radiusMatch = bodyAfterReport.match(/(.+?)\s+(\d+(?:\.\d+)?)\s*(?:mi(?:les?)?|km)?$/i);
+                let searchName: string | undefined;
+                let radiusMiles: number | undefined;
+
+                if (radiusMatch) {
+                  searchName = radiusMatch[1].trim();
+                  radiusMiles = parseFloat(radiusMatch[2]);
+                } else {
+                  searchName = bodyAfterReport || customerPlace;
+                }
+
+                if (!searchName) {
+                  responseText = 'Area Report\n\nFormats:\n' +
+                    '"report [business name]"\n' +
+                    '"report [business name] [miles]"\n\n' +
+                    'Examples:\n' +
+                    '"report Boardwalk Suites Lafayette"\n' +
+                    '"report Boardwalk Suites Lafayette 5"';
+                } else {
+                  try {
+                    const report = await generateOwnerReport({
+                      mode: 'owner',
+                      businessName: searchName,
+                      radiusMiles
+                    });
+                    responseText = formatReportForSms(report);
+                  } catch (reportError: any) {
+                    console.error('[SMS Biz Bot] Report generation error:', reportError.message);
+                    responseText = `Could not generate report: ${reportError.message}`;
+                  }
                 }
               }
             }
@@ -2844,7 +2909,10 @@ Keep responses concise and engaging. If asked personal questions, you can share 
               '- "update hours" - Change business hours\n' +
               '- "schedule" - Calendar & events\n' +
               '- "add task" - Create reminders\n' +
-              '- "report [business name]" - Area business report\n\n' +
+              '- "report [name]" - Owner area report (3mi default)\n' +
+              '- "report [name] [miles]" - Custom radius\n' +
+              '- "search [category] near [location]" - Market search\n' +
+              '- "competitors" - Your business competition\n\n' +
               'What would you like to do?';
           }
           
