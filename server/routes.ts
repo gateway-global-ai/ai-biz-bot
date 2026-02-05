@@ -517,7 +517,7 @@ export async function registerRoutes(
   // Buy a number (E.164 or 10-digit US)
   app.post("/api/twilio/numbers", async (req, res) => {
     try {
-      const { phoneNumber, friendlyName } = req.body;
+      const { phoneNumber, friendlyName, messagingServiceSid } = req.body;
       
       if (!phoneNumber) {
         return res.status(400).json({ error: "phoneNumber is required" });
@@ -529,23 +529,55 @@ export async function registerRoutes(
         normalizedNumber = '+1' + phoneNumber.replace(/\D/g, '');
       }
       
-      // Default webhook URLs for Gateway Global AI
-      const baseUrl = 'https://twilio.gatewayglobal.ai';
+      // Use current domain for webhook URLs (auto-detected)
+      const currentDomain = process.env.REPLIT_DEV_DOMAIN || req.get('host');
+      const baseUrl = `https://${currentDomain}`;
+      
       const result = await provisionPhoneNumber(
         normalizedNumber,
-        `${baseUrl}/webhook/voice`,
+        `${baseUrl}/webhook/voice/kimi`,
         `${baseUrl}/webhook/sms`
       );
+      
+      // Auto-configure ALL webhook URLs including status callbacks
+      const client = await getTwilioClient();
+      await client.incomingPhoneNumbers(result.sid).update({
+        voiceUrl: `${baseUrl}/webhook/voice/kimi`,
+        voiceMethod: 'POST',
+        voiceFallbackUrl: `${baseUrl}/webhook/voice`,
+        voiceFallbackMethod: 'POST',
+        smsUrl: `${baseUrl}/webhook/sms`,
+        smsMethod: 'POST',
+        smsFallbackUrl: `${baseUrl}/webhook/sms`,
+        smsFallbackMethod: 'POST',
+        statusCallback: `${baseUrl}/webhook/voice/status`,
+        statusCallbackMethod: 'POST',
+        smsStatusCallback: `${baseUrl}/webhook/sms/status`
+      });
       
       // Update with friendlyName if provided
       if (friendlyName) {
         await updateCallerIdName(result.sid, friendlyName);
       }
       
+      // Add to Customer Care Messaging Service if specified or use default
+      const targetMsgService = messagingServiceSid || 'MGd16163508f2fcc1236a989f83664d9fb';
+      try {
+        await client.messaging.v1.services(targetMsgService)
+          .phoneNumbers
+          .create({ phoneNumberSid: result.sid });
+        console.log(`[Phone Setup] Added ${normalizedNumber} to Messaging Service ${targetMsgService}`);
+      } catch (msErr: any) {
+        console.warn(`[Phone Setup] Could not add to Messaging Service: ${msErr.message}`);
+      }
+      
       res.json({
         sid: result.sid,
         phoneNumber: result.phoneNumber,
-        friendlyName: friendlyName || 'AI Agent Trunk'
+        friendlyName: friendlyName || 'AI Agent Trunk',
+        webhooksConfigured: true,
+        baseUrl,
+        messagingServiceSid: targetMsgService
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -973,8 +1005,10 @@ export async function registerRoutes(
       const baseUrl = `https://${currentDomain}`;
       
       const smsWebhookUrl = `${baseUrl}/webhook/sms`;
+      const smsStatusCallbackUrl = `${baseUrl}/webhook/sms/status`;
       const voiceWebhookUrl = `${baseUrl}/webhook/voice/kimi`;
       const voiceFallbackUrl = `${baseUrl}/webhook/voice`;
+      const voiceStatusCallbackUrl = `${baseUrl}/webhook/voice/status`;
       
       const results: any = {
         domain: currentDomain,
@@ -994,7 +1028,8 @@ export async function registerRoutes(
             inboundRequestUrl: smsWebhookUrl,
             inboundMethod: 'POST',
             fallbackUrl: smsWebhookUrl,
-            fallbackMethod: 'POST'
+            fallbackMethod: 'POST',
+            statusCallback: smsStatusCallbackUrl
           });
           results.messagingServices.push({
             sid: svc.sid,
@@ -1054,6 +1089,8 @@ export async function registerRoutes(
             voiceMethod: 'POST',
             voiceFallbackUrl: voiceFallbackUrl,
             voiceFallbackMethod: 'POST',
+            statusCallback: voiceStatusCallbackUrl,
+            statusCallbackMethod: 'POST',
             smsUrl: smsWebhookUrl,
             smsMethod: 'POST',
             smsFallbackUrl: smsWebhookUrl,
@@ -3013,6 +3050,51 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       res.sendStatus(200);
     } catch (error: any) {
       console.error('[Voice Status] Error:', error);
+      res.sendStatus(500);
+    }
+  });
+
+  // SMS Status Callback - for delivery status and error debugging
+  app.post("/webhook/sms/status", validateTwilioSignature, async (req, res) => {
+    try {
+      const { 
+        MessageSid, 
+        MessageStatus, 
+        To, 
+        From,
+        ErrorCode, 
+        ErrorMessage 
+      } = req.body;
+      
+      // Log all status updates
+      console.log(`[SMS Status] MessageSid: ${MessageSid}, Status: ${MessageStatus}, From: ${From}, To: ${To}`);
+      
+      // Log errors for debugging
+      if (ErrorCode || ErrorMessage) {
+        console.error(`[SMS Error] Code: ${ErrorCode}, Message: ${ErrorMessage}`);
+        console.error(`[SMS Error] Details: MessageSid=${MessageSid}, From=${From}, To=${To}`);
+        
+        // Common error codes reference:
+        // 30001 - Queue overflow
+        // 30002 - Account suspended
+        // 30003 - Unreachable destination
+        // 30004 - Message blocked
+        // 30005 - Unknown destination
+        // 30006 - Landline or unreachable carrier
+        // 30007 - Carrier violation
+        // 30008 - Unknown error
+      }
+      
+      // Track delivery status
+      if (MessageStatus === 'delivered') {
+        console.log(`[SMS Delivered] Message ${MessageSid} delivered to ${To}`);
+      } else if (MessageStatus === 'failed' || MessageStatus === 'undelivered') {
+        console.error(`[SMS Failed] Message ${MessageSid} to ${To} - ${ErrorCode}: ${ErrorMessage}`);
+      }
+      
+      res.sendStatus(200);
+    } catch (error: any) {
+      console.error('[SMS Status] Error:', error);
       res.sendStatus(500);
     }
   });

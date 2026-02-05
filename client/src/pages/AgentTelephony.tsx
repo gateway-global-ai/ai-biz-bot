@@ -13,6 +13,7 @@ import {
   Search, Plus, X, Settings, Zap, Mic, ExternalLink
 } from 'lucide-react';
 import type { Agent } from '@shared/schema';
+import { WebhookSettings } from '@/components/WebhookSettings';
 
 interface AvailableNumber {
   phoneNumber: string;
@@ -439,6 +440,8 @@ export default function AgentTelephony() {
             </div>
           </CardContent>
         </Card>
+
+        <WebhookSettings />
       </div>
     </div>
   );

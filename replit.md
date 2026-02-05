@@ -98,8 +98,21 @@ If a phone number is configured with BOTH a Messaging Service AND a TwiML App, t
 - `GET /api/twilio/twiml-apps` - List all TwiML Apps with webhook configs
 - `PATCH /api/twilio/twiml-apps/:sid` - Update TwiML App webhook URLs
 - `POST /api/twilio/twiml-apps/auto-fix` - Auto-fix all TwiML Apps to current domain
+- `POST /api/twilio/fix-all-webhooks` - **MASTER FIX**: Updates ALL Messaging Services, TwiML Apps, and Phone Numbers at once
+- `GET /api/twilio/messaging-services/health` - Check health status of all messaging service webhooks
 - `GET /api/telephony/messages` - Recent message logs from Twilio
 - `POST /api/telephony/simulate-webhook` - Test webhook locally
+
+### Status Callback Endpoints
+- `/webhook/sms/status` - SMS delivery status and error tracking (ErrorCode 30001-30008)
+- `/webhook/voice/status` - Call completion and duration tracking
+
+### Phone Number Auto-Setup
+When purchasing a new number via `POST /api/twilio/numbers`:
+1. All webhook URLs are auto-configured to current domain
+2. Status callbacks are set for both SMS and Voice
+3. Number is automatically added to Customer Care Messaging Service
+4. Supports optional `messagingServiceSid` parameter to specify alternate service
 -   **Moonshot API (Kimi 2.5)**: Primary AI reasoning engine for text.
     -   Requires `MOONSHOT_API_KEY`.
 -   **Kimi-Audio (via Replicate)**: Real-time voice AI for phone conversations.
