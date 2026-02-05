@@ -23,7 +23,7 @@ import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
-import { computeInsights, generateBusinessReport, generateOwnerReport, generateMarketingSearch, formatReportForSms, formatReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type BusinessReportRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
+import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -203,58 +203,50 @@ export async function registerRoutes(
 
   app.post("/api/reports/business-report", async (req, res) => {
     try {
-      const { mode, businessName, latitude, longitude, radiusMiles, radiusMeters, businessTypes, address, category, minRating, maxRating, priceLevels, excludedTypes } = req.body;
-
-      let report;
+      const { mode, businessName, address, category, radiusMiles, latitude, longitude, minRating, maxRating, priceLevels } = req.body;
 
       if (mode === 'marketing') {
         if (!category) {
           return res.status(400).json({ success: false, error: "category is required for marketing search" });
         }
-        report = await generateMarketingSearch({
+        const report = await generateMarketingSearch({
           mode: 'marketing',
           address: address || businessName,
           latitude,
           longitude,
           category,
-          radiusMiles: radiusMiles || (radiusMeters ? radiusMeters / 1609.34 : undefined),
+          radiusMiles,
           minRating,
           maxRating,
-          priceLevels,
-          excludedTypes
+          priceLevels
+        });
+        res.json({
+          success: true,
+          report,
+          formatted: {
+            chat: formatMarketingReportForChat(report),
+            sms: formatMarketingReportForSms(report)
+          }
         });
       } else {
         const name = businessName || address;
-        if (!name && latitude === undefined) {
-          return res.status(400).json({ success: false, error: "businessName or latitude/longitude is required" });
+        if (!name) {
+          return res.status(400).json({ success: false, error: "businessName is required" });
         }
-
-        if (name && (latitude === undefined || longitude === undefined)) {
-          report = await generateOwnerReport({
-            mode: 'owner',
-            businessName: name,
-            radiusMiles: radiusMiles || (radiusMeters ? radiusMeters / 1609.34 : undefined)
-          });
-        } else {
-          report = await generateBusinessReport({
-            latitude,
-            longitude,
-            radiusMeters: radiusMeters || (radiusMiles ? milesToMeters(radiusMiles) : undefined),
-            businessTypes,
-            businessName: name || 'Business',
-            mode: 'owner'
-          });
-        }
+        const report = await generateOwnerReport({
+          mode: 'owner',
+          businessName: name,
+          radiusMiles
+        });
+        res.json({
+          success: true,
+          report,
+          formatted: {
+            chat: formatOwnerReportForChat(report),
+            sms: formatOwnerReportForSms(report)
+          }
+        });
       }
-
-      res.json({
-        success: true,
-        report,
-        formatted: {
-          chat: formatReportForChat(report),
-          sms: formatReportForSms(report)
-        }
-      });
     } catch (error: any) {
       console.error("[Business Report] Error:", error.message);
       res.status(500).json({ success: false, error: error.message });
@@ -2834,7 +2826,7 @@ Keep responses concise and engaging. If asked personal questions, you can share 
                       minRating: minR ? parseFloat(minR) : undefined,
                       maxRating: maxR ? parseFloat(maxR) : undefined
                     });
-                    responseText = formatReportForSms(report);
+                    responseText = formatMarketingReportForSms(report);
                   } catch (searchErr: any) {
                     console.error('[SMS Biz Bot] Marketing search error:', searchErr.message);
                     responseText = `Search failed: ${searchErr.message}`;
@@ -2852,7 +2844,7 @@ Keep responses concise and engaging. If asked personal questions, you can share 
                         category,
                         radiusMiles: parseFloat(radiusStr)
                       });
-                      responseText = formatReportForSms(report);
+                      responseText = formatMarketingReportForSms(report);
                     } catch (searchErr: any) {
                       responseText = `Search failed: ${searchErr.message}`;
                     }
@@ -2894,7 +2886,7 @@ Keep responses concise and engaging. If asked personal questions, you can share 
                       businessName: searchName,
                       radiusMiles
                     });
-                    responseText = formatReportForSms(report);
+                    responseText = formatOwnerReportForSms(report);
                   } catch (reportError: any) {
                     console.error('[SMS Biz Bot] Report generation error:', reportError.message);
                     responseText = `Could not generate report: ${reportError.message}`;
