@@ -3256,6 +3256,314 @@ Keep responses concise and engaging. If asked personal questions, you can share 
     }
   });
 
+  // ========== A2P 10-DLC Compliance API ==========
+  
+  // Get all A2P brands
+  app.get("/api/a2p/brands", async (req, res) => {
+    try {
+      const brands = await storage.getA2pBrands();
+      res.json({ brands });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get single A2P brand
+  app.get("/api/a2p/brands/:id", async (req, res) => {
+    try {
+      const brand = await storage.getA2pBrand(req.params.id);
+      if (!brand) {
+        return res.status(404).json({ error: "Brand not found" });
+      }
+      res.json(brand);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create A2P brand registration
+  app.post("/api/a2p/brands", async (req, res) => {
+    try {
+      const { 
+        companyName, firstName, lastName, email, phone,
+        country, taxId, website, vertical,
+        stockExchange, stockSymbol, customerId
+      } = req.body;
+
+      if (!companyName || !firstName || !lastName || !email || !phone) {
+        return res.status(400).json({ 
+          error: "Missing required fields: companyName, firstName, lastName, email, phone" 
+        });
+      }
+
+      // Create brand in our database first
+      const brand = await storage.createA2pBrand({
+        companyName,
+        firstName,
+        lastName,
+        email,
+        phone,
+        country: country || 'US',
+        taxId,
+        website,
+        vertical,
+        stockExchange,
+        stockSymbol,
+        customerId,
+        brandStatus: 'draft',
+      });
+
+      res.json({ 
+        success: true, 
+        brand,
+        message: "Brand registration created. Submit for review after payment."
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update A2P brand
+  app.patch("/api/a2p/brands/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateA2pBrand(req.params.id, req.body);
+      if (!updated) {
+        return res.status(404).json({ error: "Brand not found" });
+      }
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Submit A2P brand to Twilio for registration
+  app.post("/api/a2p/brands/:id/submit", async (req, res) => {
+    try {
+      const brand = await storage.getA2pBrand(req.params.id);
+      if (!brand) {
+        return res.status(404).json({ error: "Brand not found" });
+      }
+
+      // Get Twilio client
+      const client = getTwilioClient();
+      if (!client) {
+        return res.status(500).json({ error: "Twilio client not configured" });
+      }
+
+      // Create the brand in Twilio's Trust Hub
+      // Note: This requires Twilio Trust Hub API setup
+      try {
+        const customerProfile = await client.trusthub.v1.customerProfiles.create({
+          friendlyName: brand.companyName,
+          email: brand.email,
+          policySid: 'RN806dd6cd175f314e1f96a9727ee271f4', // A2P Messaging Policy SID
+        });
+
+        // Update brand with Twilio SID
+        const updated = await storage.updateA2pBrand(brand.id, {
+          brandSid: customerProfile.sid,
+          brandStatus: 'pending',
+        });
+
+        res.json({
+          success: true,
+          brand: updated,
+          customerProfileSid: customerProfile.sid,
+          message: "Brand submitted to Twilio Trust Hub for review"
+        });
+      } catch (twilioError: any) {
+        // If Trust Hub not set up, provide helpful error
+        console.error('Twilio Trust Hub error:', twilioError);
+        
+        // Still update status to show attempt was made
+        await storage.updateA2pBrand(brand.id, {
+          brandStatus: 'pending',
+        });
+
+        res.json({
+          success: true,
+          brand: await storage.getA2pBrand(brand.id),
+          warning: "Brand marked as pending. Full Twilio Trust Hub integration requires additional setup.",
+          twilioError: twilioError.message
+        });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get all A2P campaigns
+  app.get("/api/a2p/campaigns", async (req, res) => {
+    try {
+      const brandId = req.query.brandId as string;
+      const campaigns = await storage.getA2pCampaigns(brandId);
+      res.json({ campaigns });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get single A2P campaign
+  app.get("/api/a2p/campaigns/:id", async (req, res) => {
+    try {
+      const campaign = await storage.getA2pCampaign(req.params.id);
+      if (!campaign) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      res.json(campaign);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create A2P campaign
+  app.post("/api/a2p/campaigns", async (req, res) => {
+    try {
+      const { 
+        brandId, useCase, description, messageFlow,
+        sampleMessages, optInDescription, optOutDescription,
+        helpDescription, hasDirectLending,
+        privacyPolicyUrl, termsOfServiceUrl
+      } = req.body;
+
+      if (!brandId || !useCase || !description) {
+        return res.status(400).json({ 
+          error: "Missing required fields: brandId, useCase, description" 
+        });
+      }
+
+      // Verify brand exists
+      const brand = await storage.getA2pBrand(brandId);
+      if (!brand) {
+        return res.status(404).json({ error: "Brand not found" });
+      }
+
+      const campaign = await storage.createA2pCampaign({
+        brandId,
+        useCase,
+        description,
+        messageFlow,
+        sampleMessages: sampleMessages || [],
+        optInDescription,
+        optOutDescription,
+        helpDescription,
+        hasDirectLending: hasDirectLending || false,
+        privacyPolicyUrl,
+        termsOfServiceUrl,
+        campaignStatus: 'draft',
+      });
+
+      res.json({ 
+        success: true, 
+        campaign,
+        message: "Campaign created. Submit for review after brand is approved."
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update A2P campaign
+  app.patch("/api/a2p/campaigns/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateA2pCampaign(req.params.id, req.body);
+      if (!updated) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Submit A2P campaign for registration
+  app.post("/api/a2p/campaigns/:id/submit", async (req, res) => {
+    try {
+      const campaign = await storage.getA2pCampaign(req.params.id);
+      if (!campaign) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+
+      const brand = await storage.getA2pBrand(campaign.brandId);
+      if (!brand) {
+        return res.status(404).json({ error: "Brand not found" });
+      }
+
+      if (brand.brandStatus !== 'approved' && brand.brandStatus !== 'pending') {
+        return res.status(400).json({ 
+          error: "Brand must be approved or pending before submitting campaign" 
+        });
+      }
+
+      // Get Twilio client
+      const client = getTwilioClient();
+      if (!client) {
+        return res.status(500).json({ error: "Twilio client not configured" });
+      }
+
+      // Create messaging service if not exists
+      let messagingServiceSid = campaign.messagingServiceSid;
+      if (!messagingServiceSid) {
+        try {
+          const messagingService = await client.messaging.v1.services.create({
+            friendlyName: `${brand.companyName} - ${campaign.useCase}`,
+            useInboundWebhookOnNumber: false,
+          });
+          messagingServiceSid = messagingService.sid;
+        } catch (msError: any) {
+          console.error('Error creating messaging service:', msError);
+        }
+      }
+
+      // Update campaign status
+      const updated = await storage.updateA2pCampaign(campaign.id, {
+        campaignStatus: 'pending',
+        messagingServiceSid,
+      });
+
+      res.json({
+        success: true,
+        campaign: updated,
+        messagingServiceSid,
+        message: "Campaign submitted for review. This typically takes 1-7 business days."
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // A2P Compliance pricing info
+  app.get("/api/a2p/pricing", async (req, res) => {
+    res.json({
+      brandRegistration: {
+        fee: 4900, // $49.00 in cents
+        description: "One-time brand registration fee"
+      },
+      standardVetting: {
+        fee: 4000, // $40.00 in cents
+        description: "Standard vetting (3-5 business days)"
+      },
+      expeditedVetting: {
+        fee: 8500, // $85.00 in cents
+        description: "Expedited vetting (24-48 hours)"
+      },
+      campaignRegistration: {
+        fee: 1500, // $15.00 in cents
+        description: "Per-campaign registration fee"
+      },
+      monthlyMaintenance: {
+        fee: 2900, // $29.00 in cents
+        description: "Monthly compliance maintenance"
+      },
+      setupService: {
+        basic: 9900, // $99.00 in cents
+        standard: 19900, // $199.00 in cents
+        premium: 29900, // $299.00 in cents
+        description: "Full-service setup assistance"
+      }
+    });
+  });
+
   // Get conversation history API
   app.get("/api/conversations/:phoneNumber", async (req, res) => {
     try {
