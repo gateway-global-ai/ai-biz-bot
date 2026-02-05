@@ -23,7 +23,7 @@ import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
-import { aggregateSearch, generateBusinessReport, formatReportForSms, formatReportForChat, lookupPlaceByName, type AggregateSearchRequest, type BusinessReportRequest } from "./mcp/placesAggregate";
+import { computeInsights, generateBusinessReport, formatReportForSms, formatReportForChat, lookupPlaceByName, type ComputeInsightsRequest, type BusinessReportRequest } from "./mcp/placesAggregate";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -185,15 +185,15 @@ export async function registerRoutes(
 
   // ============ Places Aggregate API - Business Reports ============
 
-  app.post("/api/reports/aggregate-search", async (req, res) => {
+  app.post("/api/reports/compute-insights", async (req, res) => {
     try {
-      const { request: searchRequest } = req.body;
+      const { request: insightRequest } = req.body;
 
-      if (!searchRequest || !searchRequest.locationRestriction) {
-        return res.status(400).json({ success: false, error: "request with locationRestriction is required" });
+      if (!insightRequest || !insightRequest.filter) {
+        return res.status(400).json({ success: false, error: "request with filter is required" });
       }
 
-      const result = await aggregateSearch(searchRequest);
+      const result = await computeInsights(insightRequest);
       res.json({ success: true, data: result });
     } catch (error: any) {
       console.error("[Places Aggregate] Error:", error.message);

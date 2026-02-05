@@ -1,38 +1,45 @@
-const PLACES_AGGREGATE_URL = 'https://places.googleapis.com/places/v1:aggregateSearch';
+const AREA_INSIGHTS_URL = 'https://areainsights.googleapis.com/v1:computeInsights';
 
-export interface AggregateSearchRequest {
-  locationRestriction: {
-    circle: {
-      center: { latitude: number; longitude: number };
-      radius: number;
+export interface ComputeInsightsRequest {
+  insights: ('INSIGHT_COUNT' | 'INSIGHT_PLACES')[];
+  filter: {
+    locationFilter: LocationFilter;
+    typeFilter: TypeFilter;
+    operatingStatus?: string[];
+    priceLevels?: string[];
+    ratingFilter?: {
+      minRating?: number;
+      maxRating?: number;
     };
   };
-  includedTypes?: string[];
-  priceLevels?: PriceLevel[];
-  openNow?: boolean;
 }
 
-export type PriceLevel =
-  | 'PRICE_LEVEL_INEXPENSIVE'
-  | 'PRICE_LEVEL_MODERATE'
-  | 'PRICE_LEVEL_EXPENSIVE'
-  | 'PRICE_LEVEL_VERY_EXPENSIVE';
-
-export interface AggregateSearchResponse {
-  places: AggregatePlace[];
-  aggregationInfo?: {
-    aggregationInterval?: string;
-    placeCount?: number;
+interface LocationFilter {
+  circle?: {
+    latLng?: { latitude: number; longitude: number };
+    place?: string;
+    radius: number;
+  };
+  region?: {
+    place: string;
+  };
+  customArea?: {
+    polygon: {
+      coordinates: { latitude: number; longitude: number }[];
+    };
   };
 }
 
-export interface AggregatePlace {
-  displayName?: { text: string };
-  placeTypeCount?: number;
-  averageRating?: number;
-  ratingCount?: number;
-  priceLevelHistogram?: Record<string, number>;
-  accessibilityOptions?: Record<string, number>;
+interface TypeFilter {
+  includedTypes?: string[];
+  excludedTypes?: string[];
+  includedPrimaryTypes?: string[];
+  excludedPrimaryTypes?: string[];
+}
+
+export interface ComputeInsightsResponse {
+  count?: string;
+  placeInsights?: { place: string }[];
 }
 
 export interface BusinessReportRequest {
@@ -55,14 +62,13 @@ export interface BusinessReport {
 export interface CategoryResult {
   type: string;
   placeCount: number;
-  averageRating: number | null;
-  ratingCount: number;
-  priceLevelHistogram: Record<string, number>;
+  highRatedCount: number;
+  midRatedCount: number;
+  lowRatedCount: number;
 }
 
 export interface ReportSummary {
   totalBusinesses: number;
-  overallAverageRating: number | null;
   topCategory: string;
   priceLevelBreakdown: Record<string, number>;
 }
@@ -75,15 +81,15 @@ function getApiKey(): string {
   return key;
 }
 
-export async function aggregateSearch(
-  request: AggregateSearchRequest,
+export async function computeInsights(
+  request: ComputeInsightsRequest,
   apiKey?: string
-): Promise<AggregateSearchResponse> {
+): Promise<ComputeInsightsResponse> {
   const key = apiKey || getApiKey();
 
-  console.log('[Places Aggregate] Request:', JSON.stringify(request, null, 2));
+  console.log('[Places Aggregate] computeInsights request:', JSON.stringify(request, null, 2));
 
-  const response = await fetch(PLACES_AGGREGATE_URL, {
+  const response = await fetch(AREA_INSIGHTS_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -99,7 +105,7 @@ export async function aggregateSearch(
   }
 
   const data = await response.json();
-  console.log('[Places Aggregate] Response:', JSON.stringify(data, null, 2));
+  console.log('[Places Aggregate] Response:', JSON.stringify(data));
   return data;
 }
 
@@ -115,56 +121,98 @@ export async function generateBusinessReport(
     businessName = 'Business'
   } = params;
 
+  const locationFilter: LocationFilter = {
+    circle: {
+      latLng: { latitude, longitude },
+      radius: radiusMeters
+    }
+  };
+
   const results: CategoryResult[] = [];
 
   for (const type of businessTypes) {
+    let placeCount = 0;
+    let highRatedCount = 0;
+    let midRatedCount = 0;
+    let lowRatedCount = 0;
+
     try {
-      const response = await aggregateSearch({
-        locationRestriction: {
-          circle: {
-            center: { latitude, longitude },
-            radius: radiusMeters
-          }
-        },
-        includedTypes: [type]
+      const countResult = await computeInsights({
+        insights: ['INSIGHT_COUNT'],
+        filter: {
+          locationFilter,
+          typeFilter: { includedTypes: [type] },
+          operatingStatus: ['OPERATING_STATUS_OPERATIONAL']
+        }
       }, apiKey);
-
-      const place = response.places?.[0];
-      const placeCount = place?.placeTypeCount ?? response.aggregationInfo?.placeCount ?? 0;
-
-      results.push({
-        type,
-        placeCount,
-        averageRating: place?.averageRating ?? null,
-        ratingCount: place?.ratingCount ?? 0,
-        priceLevelHistogram: place?.priceLevelHistogram ?? {}
-      });
+      placeCount = parseInt(countResult.count || '0', 10);
     } catch (error: any) {
-      console.warn(`[Places Aggregate] Failed for type "${type}":`, error.message);
-      results.push({
-        type,
-        placeCount: 0,
-        averageRating: null,
-        ratingCount: 0,
-        priceLevelHistogram: {}
-      });
+      console.warn(`[Places Aggregate] Count failed for "${type}":`, error.message);
     }
+
+    if (placeCount > 0) {
+      try {
+        const highResult = await computeInsights({
+          insights: ['INSIGHT_COUNT'],
+          filter: {
+            locationFilter,
+            typeFilter: { includedTypes: [type] },
+            operatingStatus: ['OPERATING_STATUS_OPERATIONAL'],
+            ratingFilter: { minRating: 4.0, maxRating: 5.0 }
+          }
+        }, apiKey);
+        highRatedCount = parseInt(highResult.count || '0', 10);
+      } catch {}
+
+      try {
+        const midResult = await computeInsights({
+          insights: ['INSIGHT_COUNT'],
+          filter: {
+            locationFilter,
+            typeFilter: { includedTypes: [type] },
+            operatingStatus: ['OPERATING_STATUS_OPERATIONAL'],
+            ratingFilter: { minRating: 3.0, maxRating: 3.99 }
+          }
+        }, apiKey);
+        midRatedCount = parseInt(midResult.count || '0', 10);
+      } catch {}
+
+      try {
+        const lowResult = await computeInsights({
+          insights: ['INSIGHT_COUNT'],
+          filter: {
+            locationFilter,
+            typeFilter: { includedTypes: [type] },
+            operatingStatus: ['OPERATING_STATUS_OPERATIONAL'],
+            ratingFilter: { minRating: 1.0, maxRating: 2.99 }
+          }
+        }, apiKey);
+        lowRatedCount = parseInt(lowResult.count || '0', 10);
+      } catch {}
+    }
+
+    results.push({ type, placeCount, highRatedCount, midRatedCount, lowRatedCount });
   }
 
   const totalBusinesses = results.reduce((sum, r) => sum + r.placeCount, 0);
-
-  const ratedResults = results.filter(r => r.averageRating !== null);
-  const overallAverageRating = ratedResults.length > 0
-    ? Math.round((ratedResults.reduce((sum, r) => sum + (r.averageRating ?? 0), 0) / ratedResults.length) * 10) / 10
-    : null;
-
   const topCategory = results.reduce((top, r) => r.placeCount > (top?.placeCount ?? 0) ? r : top, results[0]);
 
   const priceLevelBreakdown: Record<string, number> = {};
-  for (const r of results) {
-    for (const [level, count] of Object.entries(r.priceLevelHistogram)) {
-      priceLevelBreakdown[level] = (priceLevelBreakdown[level] || 0) + count;
-    }
+  const priceLevels = ['PRICE_LEVEL_INEXPENSIVE', 'PRICE_LEVEL_MODERATE', 'PRICE_LEVEL_EXPENSIVE', 'PRICE_LEVEL_VERY_EXPENSIVE'];
+  for (const level of priceLevels) {
+    try {
+      const priceResult = await computeInsights({
+        insights: ['INSIGHT_COUNT'],
+        filter: {
+          locationFilter,
+          typeFilter: { includedTypes: businessTypes },
+          operatingStatus: ['OPERATING_STATUS_OPERATIONAL'],
+          priceLevels: [level]
+        }
+      }, apiKey);
+      const count = parseInt(priceResult.count || '0', 10);
+      if (count > 0) priceLevelBreakdown[level] = count;
+    } catch {}
   }
 
   return {
@@ -175,7 +223,6 @@ export async function generateBusinessReport(
     results,
     summary: {
       totalBusinesses,
-      overallAverageRating,
       topCategory: topCategory?.type || 'unknown',
       priceLevelBreakdown
     }
@@ -187,19 +234,14 @@ export function formatReportForSms(report: BusinessReport): string {
   lines.push(`Area Report: ${report.businessName}`);
   lines.push(`Radius: ${(report.radiusMeters / 1000).toFixed(1)}km`);
   lines.push('');
-
-  lines.push(`Total nearby businesses: ${report.summary.totalBusinesses}`);
-  if (report.summary.overallAverageRating !== null) {
-    lines.push(`Avg rating: ${report.summary.overallAverageRating}/5`);
-  }
+  lines.push(`Total nearby: ${report.summary.totalBusinesses}`);
   lines.push('');
 
   lines.push('By category:');
   for (const r of report.results) {
     if (r.placeCount > 0) {
       const label = r.type.replace(/_/g, ' ');
-      const rating = r.averageRating !== null ? ` (${r.averageRating}/5)` : '';
-      lines.push(`  ${label}: ${r.placeCount}${rating}`);
+      lines.push(`  ${label}: ${r.placeCount} (${r.highRatedCount} highly rated)`);
     }
   }
 
@@ -209,7 +251,6 @@ export function formatReportForSms(report: BusinessReport): string {
     'PRICE_LEVEL_EXPENSIVE': '$$$',
     'PRICE_LEVEL_VERY_EXPENSIVE': '$$$$'
   };
-
   const priceEntries = Object.entries(report.summary.priceLevelBreakdown).filter(([, v]) => v > 0);
   if (priceEntries.length > 0) {
     lines.push('');
@@ -229,21 +270,19 @@ export function formatReportForChat(report: BusinessReport): string {
   sections.push(`Generated: ${new Date(report.generatedAt).toLocaleString()}`);
   sections.push(`Search radius: ${(report.radiusMeters / 1000).toFixed(1)} km`);
   sections.push('');
-
   sections.push(`**Summary**`);
   sections.push(`- Total businesses found: **${report.summary.totalBusinesses}**`);
-  if (report.summary.overallAverageRating !== null) {
-    sections.push(`- Overall average rating: **${report.summary.overallAverageRating}/5**`);
-  }
   sections.push(`- Most common category: **${report.summary.topCategory.replace(/_/g, ' ')}**`);
   sections.push('');
 
   sections.push(`**Business Density by Category**`);
   for (const r of report.results) {
     const label = r.type.charAt(0).toUpperCase() + r.type.slice(1).replace(/_/g, ' ');
-    const rating = r.averageRating !== null ? ` | Avg rating: ${r.averageRating}/5` : '';
-    const ratingCount = r.ratingCount > 0 ? ` (${r.ratingCount} reviews)` : '';
-    sections.push(`- ${label}: ${r.placeCount} places${rating}${ratingCount}`);
+    if (r.placeCount > 0) {
+      sections.push(`- ${label}: ${r.placeCount} places (4-5 stars: ${r.highRatedCount}, 3-4 stars: ${r.midRatedCount}, below 3: ${r.lowRatedCount})`);
+    } else {
+      sections.push(`- ${label}: 0 places`);
+    }
   }
 
   const priceLabels: Record<string, string> = {
@@ -252,7 +291,6 @@ export function formatReportForChat(report: BusinessReport): string {
     'PRICE_LEVEL_EXPENSIVE': 'Expensive ($$$)',
     'PRICE_LEVEL_VERY_EXPENSIVE': 'Premium ($$$$)'
   };
-
   const priceEntries = Object.entries(report.summary.priceLevelBreakdown).filter(([, v]) => v > 0);
   if (priceEntries.length > 0) {
     sections.push('');
