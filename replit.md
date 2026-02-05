@@ -9,7 +9,14 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### UI/UX Decisions
-The platform features a clean, modern design with a purple gradient theme and animated backgrounds. It includes an MVP landing page for task submission, a carousel-style onboarding flow, and a card-based Agent Dashboard. Dedicated environment views (The Vibe, The Office, The Lab, The Classroom) offer distinct functionalities and themes. Interactive visualizers are used for DISC profiles and ARCH communication models.
+The platform features a clean, modern design with a purple gradient theme and immersive 3D animated backgrounds. It includes an MVP landing page for task submission, a carousel-style onboarding flow with Vanta.js 3D effects, and a card-based Agent Dashboard. Dedicated environment views (The Vibe, The Office, The Lab, The Classroom) offer distinct functionalities and themes. Interactive visualizers are used for DISC profiles and ARCH communication models.
+
+**3D Animated Backgrounds (Vanta.js)**:
+- Component: `client/src/components/VantaBackground.tsx`
+- Uses Three.js and Vanta.js for immersive 3D animated effects
+- Available effects: 'net' (connecting nodes), 'waves' (animated waves), 'halo', 'cells'
+- OnboardingFlow uses 'net' effect (awakening variant) and 'waves' effect (proof variant)
+- Gateway Global AI logo displayed in top-left corner on onboarding pages
 
 ### Technical Implementations
 - **Frontend**: React 18+, TypeScript, shadcn/ui (Radix UI), Tailwind CSS, Vite, TanStack React Query.

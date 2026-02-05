@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Mic, Play, Pause, ArrowRight, ArrowLeft, Zap, Volume2, MessageSquare, Phone, CheckCircle2, Users, Bot, Heart, Brain, Shield, Target, Menu, X, Home, LayoutDashboard, Sparkles, Loader2 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import { Link } from 'wouter';
+import VantaBackground from '@/components/VantaBackground';
+import gatewayLogo from '@assets/gatewayglobal_logo_dk_bg(_1770158396213.png';
 
 type Variant = 'awakening' | 'proof';
 type Step = 'name' | 'voice' | 'finetune' | 'meet';
@@ -567,10 +569,18 @@ export default function OnboardingFlow() {
   );
 
   const renderAwakeningVariant = () => (
-    <div className="min-h-screen h-screen bg-slate-950 text-white relative overflow-hidden overflow-x-hidden fixed inset-0">
-      <StarField />
+    <VantaBackground effect="net" className="text-white relative overflow-hidden fixed inset-0">
       <FloatingMenu />
       <ParticleField active={isAwakening} color="#818cf8" />
+      
+      {/* Logo and Header */}
+      <div className="absolute top-4 left-4 z-50 flex items-center gap-3">
+        <img 
+          src={gatewayLogo} 
+          alt="Gateway Global AI" 
+          className="h-10 md:h-12 w-auto drop-shadow-lg"
+        />
+      </div>
       
       {/* Fixed Header with Step Progress Indicator - 8% of viewport */}
       <div className="absolute top-0 left-0 right-0 h-[8vh] z-40 flex items-center justify-center pointer-events-none">
@@ -641,14 +651,22 @@ export default function OnboardingFlow() {
         {/* Bottom spacer matching header */}
         <div />
       </div>
-    </div>
+    </VantaBackground>
   );
 
   const renderProofVariant = () => (
-    <div className="min-h-screen h-screen bg-black text-white relative overflow-hidden overflow-x-hidden fixed inset-0">
-      <StarField />
+    <VantaBackground effect="waves" className="text-white relative overflow-hidden fixed inset-0">
       <FloatingMenu />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:60px_60px]" />
+      
+      {/* Logo and Header */}
+      <div className="absolute top-4 left-4 z-50 flex items-center gap-3">
+        <img 
+          src={gatewayLogo} 
+          alt="Gateway Global AI" 
+          className="h-10 md:h-12 w-auto drop-shadow-lg"
+        />
+      </div>
       
       {/* Fixed Header with Step Progress Indicator - 8% of viewport */}
       <div className="absolute top-0 left-0 right-0 h-[8vh] z-40 flex items-center justify-center pointer-events-none">
@@ -723,7 +741,7 @@ export default function OnboardingFlow() {
         {/* Bottom spacer matching header */}
         <div />
       </div>
-    </div>
+    </VantaBackground>
   );
 
   const renderVoiceStep = () => {
