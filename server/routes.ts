@@ -728,6 +728,182 @@ export async function registerRoutes(
     }
   });
 
+  // Messaging Services Health Check
+  app.get("/api/twilio/messaging-services/health", async (req, res) => {
+    try {
+      const client = await getTwilioClient();
+      const services = await client.messaging.v1.services.list({ limit: 20 });
+      
+      const results = await Promise.all(services.map(async (svc: any) => {
+        const issues: string[] = [];
+        const warnings: string[] = [];
+        
+        // Check inbound webhook
+        if (!svc.inboundRequestUrl && !svc.useInboundWebhookOnNumber) {
+          issues.push('No inbound webhook URL and useInboundWebhookOnNumber is false');
+        } else if (!svc.inboundRequestUrl && svc.useInboundWebhookOnNumber) {
+          warnings.push('No service-level inbound URL, using phone number webhooks');
+        }
+        
+        // Check fallback
+        if (!svc.fallbackUrl) {
+          warnings.push('No fallback URL configured');
+        }
+        
+        // Check status callback
+        if (!svc.statusCallback) {
+          warnings.push('No status callback configured');
+        }
+        
+        // Test webhook reachability if URL exists
+        let webhookStatus = null;
+        if (svc.inboundRequestUrl) {
+          try {
+            const response = await fetch(svc.inboundRequestUrl, {
+              method: svc.inboundMethod || 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: 'From=%2B15551234567&To=%2B15559876543&Body=HealthCheck&MessageSid=SMtest123'
+            });
+            webhookStatus = { reachable: true, status: response.status };
+            if (response.status === 404) {
+              issues.push('Webhook returns 404 Not Found');
+            } else if (response.status >= 400) {
+              issues.push(`Webhook returns error status ${response.status}`);
+            }
+          } catch (err: any) {
+            webhookStatus = { reachable: false, error: err.message };
+            issues.push(`Webhook unreachable: ${err.message}`);
+          }
+        }
+        
+        // Get phone numbers in service
+        let phoneNumbers: string[] = [];
+        try {
+          const pns = await client.messaging.v1.services(svc.sid).phoneNumbers.list({ limit: 10 });
+          phoneNumbers = pns.map((pn: any) => pn.phoneNumber);
+        } catch (e) {}
+        
+        return {
+          sid: svc.sid,
+          friendlyName: svc.friendlyName,
+          inboundRequestUrl: svc.inboundRequestUrl,
+          inboundMethod: svc.inboundMethod,
+          fallbackUrl: svc.fallbackUrl,
+          fallbackMethod: svc.fallbackMethod,
+          statusCallback: svc.statusCallback,
+          useInboundWebhookOnNumber: svc.useInboundWebhookOnNumber,
+          phoneNumbers,
+          webhookStatus,
+          issues,
+          warnings,
+          healthy: issues.length === 0
+        };
+      }));
+      
+      const totalIssues = results.reduce((sum, r) => sum + r.issues.length, 0);
+      const totalWarnings = results.reduce((sum, r) => sum + r.warnings.length, 0);
+      
+      res.json({
+        timestamp: new Date().toISOString(),
+        servicesCount: services.length,
+        totalIssues,
+        totalWarnings,
+        allHealthy: totalIssues === 0,
+        services: results
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update Messaging Service webhooks (auto-fix)
+  app.patch("/api/twilio/messaging-services/:sid", async (req, res) => {
+    try {
+      const { sid } = req.params;
+      const { inboundRequestUrl, inboundMethod, fallbackUrl, fallbackMethod, statusCallback, useInboundWebhookOnNumber } = req.body;
+      
+      const client = await getTwilioClient();
+      
+      const updateData: any = {};
+      if (inboundRequestUrl !== undefined) updateData.inboundRequestUrl = inboundRequestUrl;
+      if (inboundMethod !== undefined) updateData.inboundMethod = inboundMethod;
+      if (fallbackUrl !== undefined) updateData.fallbackUrl = fallbackUrl;
+      if (fallbackMethod !== undefined) updateData.fallbackMethod = fallbackMethod;
+      if (statusCallback !== undefined) updateData.statusCallback = statusCallback;
+      if (useInboundWebhookOnNumber !== undefined) updateData.useInboundWebhookOnNumber = useInboundWebhookOnNumber;
+      
+      const updated = await client.messaging.v1.services(sid).update(updateData);
+      
+      res.json({
+        success: true,
+        sid: updated.sid,
+        friendlyName: updated.friendlyName,
+        inboundRequestUrl: updated.inboundRequestUrl,
+        fallbackUrl: updated.fallbackUrl,
+        statusCallback: updated.statusCallback
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Auto-fix all messaging services with current domain
+  app.post("/api/twilio/messaging-services/auto-fix", async (req, res) => {
+    try {
+      const client = await getTwilioClient();
+      const services = await client.messaging.v1.services.list({ limit: 20 });
+      
+      // Get current domain from request
+      const protocol = req.headers['x-forwarded-proto'] || 'https';
+      const host = req.headers['host'];
+      const baseUrl = `${protocol}://${host}`;
+      
+      const results = [];
+      
+      for (const svc of services) {
+        // Only fix services that have no inbound URL and useInboundWebhookOnNumber is false
+        if (!svc.inboundRequestUrl && !svc.useInboundWebhookOnNumber) {
+          try {
+            const updated = await client.messaging.v1.services(svc.sid).update({
+              inboundRequestUrl: `${baseUrl}/webhook/sms`,
+              inboundMethod: 'POST',
+              fallbackUrl: `${baseUrl}/webhook/sms`,
+              fallbackMethod: 'POST'
+            });
+            results.push({
+              sid: svc.sid,
+              friendlyName: svc.friendlyName,
+              fixed: true,
+              newInboundUrl: updated.inboundRequestUrl
+            });
+          } catch (err: any) {
+            results.push({
+              sid: svc.sid,
+              friendlyName: svc.friendlyName,
+              fixed: false,
+              error: err.message
+            });
+          }
+        } else {
+          results.push({
+            sid: svc.sid,
+            friendlyName: svc.friendlyName,
+            fixed: false,
+            reason: 'Already configured or using phone number webhooks'
+          });
+        }
+      }
+      
+      res.json({
+        baseUrl,
+        results,
+        fixedCount: results.filter(r => r.fixed).length
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Send SMS
   app.post("/api/telephony/sms/send", async (req, res) => {
     try {
