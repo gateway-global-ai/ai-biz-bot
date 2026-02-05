@@ -21,6 +21,7 @@ import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
+import { getMCPTools, handleMCPToolCall, KIMI_K2_MODEL } from "./mcp/kimiK2Server";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -2637,6 +2638,83 @@ Keep responses concise and engaging. If asked personal questions, you can share 
         messages: messages.reverse(), // Oldest first
       });
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ========== MCP (Model Context Protocol) - Kimi K2 Coding Agent ==========
+  
+  // List available MCP tools
+  app.get("/api/mcp/tools", async (req, res) => {
+    try {
+      const tools = getMCPTools();
+      res.json({
+        model: KIMI_K2_MODEL,
+        description: "Kimi K2 Coding Agent - 1T parameter MoE model for agentic coding tasks",
+        tools,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Execute an MCP tool
+  app.post("/api/mcp/tools/:toolName", async (req, res) => {
+    try {
+      const { toolName } = req.params;
+      const args = req.body;
+      
+      console.log(`[MCP] Executing tool: ${toolName}`, JSON.stringify(args).substring(0, 200));
+      
+      const result = await handleMCPToolCall(toolName, args);
+      
+      res.json({
+        tool: toolName,
+        result,
+        model: KIMI_K2_MODEL,
+      });
+    } catch (error: any) {
+      console.error(`[MCP] Tool error: ${error.message}`);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Quick coding task - auto-selects best tool
+  app.post("/api/mcp/code", async (req, res) => {
+    try {
+      const { task, code, language, error: errorMsg } = req.body;
+      
+      let toolName: string;
+      let args: Record<string, any>;
+      
+      if (errorMsg) {
+        toolName = "diagnose_error";
+        args = { error: errorMsg, context: code, language };
+      } else if (code && task?.toLowerCase().includes("fix")) {
+        toolName = "fix_code";
+        args = { code, language, issue: task };
+      } else if (code && task?.toLowerCase().includes("explain")) {
+        toolName = "explain_code";
+        args = { code, language };
+      } else if (code) {
+        toolName = "analyze_code";
+        args = { code, language, focus: task };
+      } else {
+        toolName = "generate_code";
+        args = { task, language: language || "typescript" };
+      }
+      
+      console.log(`[MCP] Auto-selected tool: ${toolName}`);
+      
+      const result = await handleMCPToolCall(toolName, args);
+      
+      res.json({
+        tool: toolName,
+        result,
+        model: KIMI_K2_MODEL,
+      });
+    } catch (error: any) {
+      console.error(`[MCP] Code task error: ${error.message}`);
       res.status(500).json({ error: error.message });
     }
   });

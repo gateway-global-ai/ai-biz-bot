@@ -97,6 +97,15 @@ The platform features a clean, modern design with a purple gradient theme and an
     -   Model: `zsxkib/kimi-audio-7b-instruct` on Replicate
     -   Features: ~300ms latency, audio-to-audio, multi-turn conversations
     -   Integration files: `server/kimiAudio.ts`, `server/voiceStream.ts`, `server/voiceSession.ts`, `server/audioCodec.ts`
+-   **Kimi K2 MCP Server (Coding Agent)**: 1T parameter MoE model for agentic coding tasks.
+    -   Uses `MOONSHOT_API_KEY` (same as Kimi 2.5)
+    -   Model: `kimi-k2-0711-preview` - 32B active / 1T total parameters
+    -   Features: Code analysis, bug fixing, code generation, error diagnosis, PR review
+    -   Integration file: `server/mcp/kimiK2Server.ts`
+    -   API Endpoints:
+        - `GET /api/mcp/tools` - List available coding tools
+        - `POST /api/mcp/tools/:toolName` - Execute specific tool
+        - `POST /api/mcp/code` - Auto-select best tool for task
 -   **Google Gemini**: Fallback AI engine and powers Gemini Live voice chat.
 
 ### Database
