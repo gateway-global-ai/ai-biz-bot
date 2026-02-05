@@ -24,6 +24,7 @@ import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
+import { getAvailableApis, calculateCosts, analyzeWithKimi, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -266,6 +267,92 @@ export async function registerRoutes(
       res.json({ success: true, place });
     } catch (error: any) {
       console.error("[Place Lookup] Error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Google API Analyst routes
+  app.get("/api/google-analyst/apis", async (_req, res) => {
+    res.json({ success: true, apis: getAvailableApis() });
+  });
+
+  app.post("/api/google-analyst/calculate-costs", async (req, res) => {
+    try {
+      const { scenarios } = req.body as { scenarios: ApiUsageScenario[] };
+      if (!scenarios || !Array.isArray(scenarios)) {
+        return res.status(400).json({ success: false, error: "scenarios array is required" });
+      }
+      const result = calculateCosts(scenarios);
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google-analyst/analyze", async (req, res) => {
+    try {
+      const { question, scenarios, conversationHistory } = req.body;
+      if (!question) {
+        return res.status(400).json({ success: false, error: "question is required" });
+      }
+
+      let context = question;
+      if (scenarios && Array.isArray(scenarios)) {
+        const costs = calculateCosts(scenarios);
+        context += `\n\nCurrent usage data:\n${JSON.stringify(costs, null, 2)}`;
+      }
+
+      const analysis = await analyzeWithKimi({
+        type: 'general',
+        context,
+        conversationHistory: conversationHistory || []
+      });
+
+      res.json({ success: true, analysis });
+    } catch (error: any) {
+      console.error("[Google API Analyst] Analysis error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google-analyst/rate-limits", async (req, res) => {
+    try {
+      const { scenarios, monthlyBudget } = req.body;
+      if (!scenarios || !monthlyBudget) {
+        return res.status(400).json({ success: false, error: "scenarios and monthlyBudget are required" });
+      }
+      const recommendations = await generateRateLimits(scenarios, monthlyBudget);
+      res.json({ success: true, recommendations });
+    } catch (error: any) {
+      console.error("[Google API Analyst] Rate limits error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google-analyst/pricing-strategy", async (req, res) => {
+    try {
+      const { services, targetMargin } = req.body;
+      if (!services || !Array.isArray(services)) {
+        return res.status(400).json({ success: false, error: "services array is required" });
+      }
+      const strategy = await generatePricingStrategy(services, targetMargin || 60);
+      res.json({ success: true, strategy });
+    } catch (error: any) {
+      console.error("[Google API Analyst] Pricing strategy error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google-analyst/compare", async (req, res) => {
+    try {
+      const { useCase, apiIds } = req.body;
+      if (!useCase || !apiIds || !Array.isArray(apiIds)) {
+        return res.status(400).json({ success: false, error: "useCase and apiIds array are required" });
+      }
+      const comparison = await compareApis(useCase, apiIds);
+      res.json({ success: true, comparison });
+    } catch (error: any) {
+      console.error("[Google API Analyst] Compare error:", error.message);
       res.status(500).json({ success: false, error: error.message });
     }
   });

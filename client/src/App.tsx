@@ -13,6 +13,7 @@ import AgentChat from "@/pages/AgentChat";
 import DiscVisualizer from "@/pages/DiscVisualizer";
 import DeveloperPage from "@/pages/DeveloperPage";
 import BusinessPage from "@/pages/BusinessPage";
+import GoogleApiAnalyst from "@/pages/GoogleApiAnalyst";
 import OnboardingFlow from "@/pages/OnboardingFlow";
 import DiscAssessment from "@/pages/DiscAssessment";
 import MockConversation from "@/pages/MockConversation";
@@ -262,6 +263,7 @@ function AppRouter() {
       <Route path="/disc" component={DiscVisualizer} />
       <Route path="/developer" component={DeveloperPage} />
       <Route path="/business" component={BusinessPage} />
+      <Route path="/google-analyst" component={GoogleApiAnalyst} />
       <Route path="/assessment" component={DiscAssessment} />
       <Route path="/conversation" component={MockConversation} />
       <Route component={NotFound} />
