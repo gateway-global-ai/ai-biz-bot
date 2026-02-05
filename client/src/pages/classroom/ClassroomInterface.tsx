@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { LessonPlan, BoardContent } from '../types';
-import { ClassroomSession, generateSpeech, generateClassroomImage } from '../services/geminiService';
-import { decodeAudioData } from '../services/audioUtils';
+import { LessonPlan, BoardContent } from './types';
+import { ClassroomSession, generateSpeech, generateClassroomImage } from './geminiService';
+import { decodeAudioData } from './audioUtils';
 import AudioVisualizer from './AudioVisualizer';
 import QuizView from './QuizView';
 

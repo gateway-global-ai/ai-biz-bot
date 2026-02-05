@@ -22,6 +22,7 @@ import TheVibe from "@/pages/TheVibe";
 import TheOffice from "@/pages/TheOffice";
 import TheLab from "@/pages/TheLab";
 import TheClassroom from "@/pages/TheClassroom";
+import ImmersiveClassroom from "@/pages/classroom/ImmersiveClassroom";
 import CustomerManager from "@/pages/CustomerManager";
 import TwilioAccountManager from "@/pages/TwilioAccountManager";
 import MvpLanding from "@/pages/MvpLanding";
@@ -244,6 +245,7 @@ function AppRouter() {
       <Route path="/agent/:agentId/office" component={TheOffice} />
       <Route path="/agent/:agentId/lab" component={TheLab} />
       <Route path="/agent/:agentId/classroom" component={TheClassroom} />
+      <Route path="/nexus-classroom" component={ImmersiveClassroom} />
       <Route path="/agent/:agentId/telephony" component={AgentTelephony} />
       <Route path="/agent-manager" component={AgentManager} />
       <Route path="/customers" component={CustomerManager} />
