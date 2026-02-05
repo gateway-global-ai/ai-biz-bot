@@ -107,6 +107,15 @@ If a phone number is configured with BOTH a Messaging Service AND a TwiML App, t
 - `/webhook/sms/status` - SMS delivery status and error tracking (ErrorCode 30001-30008)
 - `/webhook/voice/status` - Call completion and duration tracking
 
+### SMS Health & Monitoring
+- `GET /api/sms/health` - Comprehensive SMS health check:
+  - Twilio credential validation
+  - Phone number availability
+  - Recent status callbacks (last 5 min)
+  - Failed deliveries (last 24h)
+- `GET /api/sms/failures` - List failed SMS deliveries (query: `?limit=50`)
+- `GET /api/sms/deliveries` - List recent delivery status updates
+
 ### Phone Number Auto-Setup
 When purchasing a new number via `POST /api/twilio/numbers`:
 1. All webhook URLs are auto-configured to current domain

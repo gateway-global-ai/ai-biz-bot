@@ -145,6 +145,28 @@ export const insertSmsMessageSchema = createInsertSchema(smsMessages).omit({
 export type InsertSmsMessage = z.infer<typeof insertSmsMessageSchema>;
 export type SmsMessage = typeof smsMessages.$inferSelect;
 
+// SMS Delivery Status tracking for failures and debugging
+export const smsDeliveryStatus = pgTable("sms_delivery_status", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  messageSid: text("message_sid").notNull(),
+  status: text("status").notNull(), // queued, sending, sent, delivered, undelivered, failed
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  fromNumber: text("from_number"),
+  toNumber: text("to_number"),
+  retryCount: integer("retry_count").default(0),
+  lastRetryAt: timestamp("last_retry_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSmsDeliveryStatusSchema = createInsertSchema(smsDeliveryStatus).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSmsDeliveryStatus = z.infer<typeof insertSmsDeliveryStatusSchema>;
+export type SmsDeliveryStatus = typeof smsDeliveryStatus.$inferSelect;
+
 // DISC Profile Types
 export interface DiscScores {
   dominance: number;

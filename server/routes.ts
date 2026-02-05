@@ -3069,6 +3069,29 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       // Log all status updates
       console.log(`[SMS Status] MessageSid: ${MessageSid}, Status: ${MessageStatus}, From: ${From}, To: ${To}`);
       
+      // Store delivery status in database
+      try {
+        const existing = await storage.getSmsDeliveryStatus(MessageSid);
+        if (existing) {
+          await storage.updateSmsDeliveryStatus(MessageSid, {
+            status: MessageStatus,
+            errorCode: ErrorCode || null,
+            errorMessage: ErrorMessage || null,
+          });
+        } else {
+          await storage.createSmsDeliveryStatus({
+            messageSid: MessageSid,
+            status: MessageStatus,
+            errorCode: ErrorCode || null,
+            errorMessage: ErrorMessage || null,
+            fromNumber: From || null,
+            toNumber: To || null,
+          });
+        }
+      } catch (dbError: any) {
+        console.error('[SMS Status] DB Error:', dbError.message);
+      }
+      
       // Log errors for debugging
       if (ErrorCode || ErrorMessage) {
         console.error(`[SMS Error] Code: ${ErrorCode}, Message: ${ErrorMessage}`);
@@ -3096,6 +3119,140 @@ Keep responses concise and engaging. If asked personal questions, you can share 
     } catch (error: any) {
       console.error('[SMS Status] Error:', error);
       res.sendStatus(500);
+    }
+  });
+
+  // SMS Health Check endpoint
+  app.get("/api/sms/health", async (req, res) => {
+    try {
+      const health: any = {
+        status: 'healthy',
+        checks: {},
+        timestamp: new Date().toISOString(),
+      };
+      
+      // 1. Check Twilio credentials
+      try {
+        const client = await getTwilioClient();
+        const account = await client.api.accounts(process.env.TWILIO_ACCOUNT_SID || '').fetch();
+        health.checks.twilioCredentials = {
+          status: 'ok',
+          accountStatus: account.status,
+          friendlyName: account.friendlyName,
+        };
+      } catch (twilioErr: any) {
+        health.checks.twilioCredentials = {
+          status: 'error',
+          error: twilioErr.message,
+        };
+        health.status = 'unhealthy';
+      }
+      
+      // 2. Check if at least one number is configured
+      try {
+        const client = await getTwilioClient();
+        const numbers = await client.incomingPhoneNumbers.list({ limit: 1 });
+        health.checks.phoneNumbers = {
+          status: numbers.length > 0 ? 'ok' : 'warning',
+          count: numbers.length,
+          message: numbers.length > 0 ? 'Phone numbers available' : 'No phone numbers configured',
+        };
+        if (numbers.length === 0) {
+          health.status = 'degraded';
+        }
+      } catch (numErr: any) {
+        health.checks.phoneNumbers = {
+          status: 'error',
+          error: numErr.message,
+        };
+      }
+      
+      // 3. Check recent status callbacks (last 5 minutes)
+      try {
+        const recentDeliveries = await storage.getRecentSmsDeliveries(10);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const recentCount = recentDeliveries.filter(d => 
+          d.createdAt && new Date(d.createdAt) > fiveMinutesAgo
+        ).length;
+        
+        health.checks.statusCallbacks = {
+          status: recentCount > 0 ? 'ok' : 'unknown',
+          recentCallbacks: recentCount,
+          message: recentCount > 0 
+            ? `${recentCount} status callbacks in last 5 minutes` 
+            : 'No recent status callbacks (normal if no SMS sent recently)',
+        };
+      } catch (cbErr: any) {
+        health.checks.statusCallbacks = {
+          status: 'error',
+          error: cbErr.message,
+        };
+      }
+      
+      // 4. Check failed deliveries in last 24 hours
+      try {
+        const failedDeliveries = await storage.getFailedSmsDeliveries(100);
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const recentFailures = failedDeliveries.filter(d => 
+          d.createdAt && new Date(d.createdAt) > oneDayAgo
+        );
+        
+        health.checks.deliveryFailures = {
+          status: recentFailures.length === 0 ? 'ok' : 'warning',
+          failedCount24h: recentFailures.length,
+          message: recentFailures.length === 0 
+            ? 'No delivery failures in last 24 hours' 
+            : `${recentFailures.length} failed deliveries in last 24 hours`,
+        };
+        
+        if (recentFailures.length > 10) {
+          health.status = 'degraded';
+        }
+      } catch (failErr: any) {
+        health.checks.deliveryFailures = {
+          status: 'error',
+          error: failErr.message,
+        };
+      }
+      
+      const httpStatus = health.status === 'healthy' ? 200 : 
+                        health.status === 'degraded' ? 200 : 503;
+      
+      res.status(httpStatus).json(health);
+    } catch (error: any) {
+      res.status(500).json({
+        status: 'error',
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  });
+
+  // Get failed SMS deliveries
+  app.get("/api/sms/failures", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const failures = await storage.getFailedSmsDeliveries(limit);
+      res.json({
+        count: failures.length,
+        failures,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get recent SMS delivery status
+  app.get("/api/sms/deliveries", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const deliveries = await storage.getRecentSmsDeliveries(limit);
+      res.json({
+        count: deliveries.length,
+        deliveries,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 

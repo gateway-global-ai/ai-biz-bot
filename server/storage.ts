@@ -23,6 +23,8 @@ import {
   type InsertAuthSession,
   type TwilioSubAccount,
   type InsertTwilioSubAccount,
+  type SmsDeliveryStatus,
+  type InsertSmsDeliveryStatus,
   telephonyConfigs,
   callLogs,
   users,
@@ -34,7 +36,8 @@ import {
   adminUsers,
   otpCodes,
   authSessions,
-  twilioSubAccounts
+  twilioSubAccounts,
+  smsDeliveryStatus
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -89,6 +92,13 @@ export interface IStorage {
   createTwilioSubAccount(account: InsertTwilioSubAccount): Promise<TwilioSubAccount>;
   updateTwilioSubAccount(id: string, updates: Partial<InsertTwilioSubAccount>): Promise<TwilioSubAccount | undefined>;
   deleteTwilioSubAccount(id: string): Promise<boolean>;
+  
+  // SMS Delivery Status operations
+  createSmsDeliveryStatus(status: InsertSmsDeliveryStatus): Promise<SmsDeliveryStatus>;
+  getSmsDeliveryStatus(messageSid: string): Promise<SmsDeliveryStatus | undefined>;
+  getFailedSmsDeliveries(limit?: number): Promise<SmsDeliveryStatus[]>;
+  getRecentSmsDeliveries(limit?: number): Promise<SmsDeliveryStatus[]>;
+  updateSmsDeliveryStatus(messageSid: string, updates: Partial<InsertSmsDeliveryStatus>): Promise<SmsDeliveryStatus | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -397,6 +407,44 @@ export class DatabaseStorage implements IStorage {
   async deleteTwilioSubAccount(id: string): Promise<boolean> {
     const result = await db.delete(twilioSubAccounts).where(eq(twilioSubAccounts.id, id));
     return true;
+  }
+
+  // SMS Delivery Status operations
+  async createSmsDeliveryStatus(status: InsertSmsDeliveryStatus): Promise<SmsDeliveryStatus> {
+    const [created] = await db.insert(smsDeliveryStatus).values(status).returning();
+    return created;
+  }
+
+  async getSmsDeliveryStatus(messageSid: string): Promise<SmsDeliveryStatus | undefined> {
+    const [status] = await db.select().from(smsDeliveryStatus)
+      .where(eq(smsDeliveryStatus.messageSid, messageSid))
+      .orderBy(desc(smsDeliveryStatus.createdAt))
+      .limit(1);
+    return status;
+  }
+
+  async getFailedSmsDeliveries(limit: number = 50): Promise<SmsDeliveryStatus[]> {
+    return await db.select().from(smsDeliveryStatus)
+      .where(or(
+        eq(smsDeliveryStatus.status, 'failed'),
+        eq(smsDeliveryStatus.status, 'undelivered')
+      ))
+      .orderBy(desc(smsDeliveryStatus.createdAt))
+      .limit(limit);
+  }
+
+  async getRecentSmsDeliveries(limit: number = 50): Promise<SmsDeliveryStatus[]> {
+    return await db.select().from(smsDeliveryStatus)
+      .orderBy(desc(smsDeliveryStatus.createdAt))
+      .limit(limit);
+  }
+
+  async updateSmsDeliveryStatus(messageSid: string, updates: Partial<InsertSmsDeliveryStatus>): Promise<SmsDeliveryStatus | undefined> {
+    const [updated] = await db.update(smsDeliveryStatus)
+      .set(updates)
+      .where(eq(smsDeliveryStatus.messageSid, messageSid))
+      .returning();
+    return updated;
   }
 }
 
