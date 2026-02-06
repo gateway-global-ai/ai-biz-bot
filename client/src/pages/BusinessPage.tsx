@@ -201,11 +201,11 @@ const VoiceVisualizer = () => {
   return (
     <div className="relative flex items-center justify-center mx-auto" style={{ marginTop: '-100px' }}>
       {showHelper && voiceState === 'idle' && (
-        <div className="absolute -left-4 top-1/2 -translate-y-1/2 -translate-x-full flex items-center gap-2 animate-pulse z-20" data-testid="helper-click-talk">
-          <span className="text-sm font-semibold text-blue-400 whitespace-nowrap bg-slate-900/80 px-3 py-1.5 rounded-full border border-blue-500/30">
-            Click, Let's Talk!
+        <div className="absolute -left-2 top-1/2 -translate-y-1/2 -translate-x-full flex items-center gap-1.5 animate-pulse z-20" data-testid="helper-click-talk">
+          <span className="text-sm font-semibold text-blue-400 text-center leading-tight bg-slate-900/80 px-3 py-1.5 rounded-full border border-blue-500/30">
+            Click,<br/>Let's Talk!
           </span>
-          <ArrowRight className="w-5 h-5 text-blue-400" />
+          <ArrowRight className="w-5 h-5 text-blue-400 shrink-0" />
         </div>
       )}
       
