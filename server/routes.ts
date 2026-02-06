@@ -3661,6 +3661,129 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   });
 
   // ============================================
+  // SITES & LEADS ADMIN API
+  // ============================================
+
+  app.get("/api/admin/sites/summary", async (_req, res) => {
+    try {
+      const sites = await storage.getSiteConfigs();
+      const summaries = await Promise.all(sites.map(async (site) => {
+        const logs = await storage.getChatLogs(site.id, 10000);
+        const uniqueVisitors = new Set(logs.filter(l => l.visitorId).map(l => l.visitorId));
+        const lastActivity = logs.length > 0 ? logs[0].createdAt : null;
+        const placeData = site.placeData as any;
+        return {
+          id: site.id,
+          name: site.name,
+          domain: site.domain,
+          placeId: site.placeId,
+          chatbotEnabled: site.chatbotEnabled,
+          voiceConciergeEnabled: site.voiceConciergeEnabled,
+          createdAt: site.createdAt,
+          updatedAt: site.updatedAt,
+          totalVisitors: uniqueVisitors.size,
+          totalMessages: logs.length,
+          lastActivity,
+          businessPhone: placeData?.phone || null,
+          businessAddress: placeData?.address || null,
+          industry: placeData?.industry || null,
+          rating: placeData?.rating || null,
+          reviewCount: placeData?.reviewCount || null,
+        };
+      }));
+      summaries.sort((a, b) => (b.totalMessages || 0) - (a.totalMessages || 0));
+      res.json(summaries);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/admin/sites/:id/visitors", async (req, res) => {
+    try {
+      const logs = await storage.getChatLogs(req.params.id, 10000);
+      const visitorMap = new Map<string, { visitorId: string; messageCount: number; firstSeen: Date | null; lastSeen: Date | null }>();
+      for (const log of logs) {
+        const vid = log.visitorId || "anonymous";
+        if (!visitorMap.has(vid)) {
+          visitorMap.set(vid, { visitorId: vid, messageCount: 0, firstSeen: log.createdAt, lastSeen: log.createdAt });
+        }
+        const v = visitorMap.get(vid)!;
+        v.messageCount++;
+        if (log.createdAt && (!v.firstSeen || log.createdAt < v.firstSeen)) v.firstSeen = log.createdAt;
+        if (log.createdAt && (!v.lastSeen || log.createdAt > v.lastSeen)) v.lastSeen = log.createdAt;
+      }
+      const visitors = Array.from(visitorMap.values()).sort((a, b) => (b.lastSeen?.getTime() || 0) - (a.lastSeen?.getTime() || 0));
+      res.json(visitors);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/admin/sites/:id/chat-history", async (req, res) => {
+    try {
+      const visitorId = req.query.visitorId as string | undefined;
+      const logs = await storage.getChatLogs(req.params.id, 10000);
+      const filtered = visitorId ? logs.filter(l => l.visitorId === visitorId) : logs;
+      filtered.sort((a, b) => (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0));
+      res.json(filtered);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/admin/sites/analytics", async (_req, res) => {
+    try {
+      const sites = await storage.getSiteConfigs();
+      let totalVisitors = 0;
+      let totalMessages = 0;
+      let activeSites = 0;
+      for (const site of sites) {
+        const logs = await storage.getChatLogs(site.id, 10000);
+        const uniqueVisitors = new Set(logs.filter(l => l.visitorId).map(l => l.visitorId));
+        totalVisitors += uniqueVisitors.size;
+        totalMessages += logs.length;
+        if (logs.length > 0) activeSites++;
+      }
+      res.json({ totalSites: sites.length, activeSites, totalVisitors, totalMessages });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/admin/sites/leads", async (_req, res) => {
+    try {
+      const sites = await storage.getSiteConfigs();
+      const prospects = await storage.getVlmProspects({ limit: 10000 });
+      const leads = sites.map(site => {
+        const placeData = site.placeData as any;
+        const matchedProspect = prospects.find(p => p.googlePlaceId && p.googlePlaceId === site.placeId);
+        return {
+          siteId: site.id,
+          siteName: site.name,
+          placeId: site.placeId,
+          domain: site.domain,
+          chatbotEnabled: site.chatbotEnabled,
+          voiceConciergeEnabled: site.voiceConciergeEnabled,
+          createdAt: site.createdAt,
+          businessPhone: placeData?.phone || matchedProspect?.phone || null,
+          businessAddress: placeData?.address || null,
+          industry: placeData?.industry || matchedProspect?.industry || null,
+          rating: placeData?.rating || null,
+          reviewCount: placeData?.reviewCount || null,
+          prospectId: matchedProspect?.id || null,
+          qualityScore: matchedProspect?.qualityScore || null,
+          prospectStatus: matchedProspect?.status || null,
+          smsSent: matchedProspect?.notes?.includes("SMS sent") || false,
+          siteGenerated: matchedProspect?.notes?.includes("Site generated") || false,
+        };
+      });
+      res.json(leads);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
   // PUBLIC AGENT CHAT API
   // ============================================
 

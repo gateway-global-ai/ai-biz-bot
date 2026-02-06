@@ -1,5 +1,5 @@
 import { useLocation, Link } from 'wouter';
-import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles, ClipboardCheck, AudioLines, Bot, Users, LayoutDashboard, Globe, Stethoscope, CreditCard, HardDrive, Calendar, ListTodo, Zap } from 'lucide-react';
+import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles, ClipboardCheck, AudioLines, Bot, Users, LayoutDashboard, Globe, Stethoscope, CreditCard, HardDrive, Calendar, ListTodo, Zap, Eye } from 'lucide-react';
 import gatewayLogoSm from '@assets/GatewayGlobalLogo_sm_1770154272626.png';
 import {
   Sidebar,
@@ -30,6 +30,7 @@ const OPERATIONS_ITEMS = [
   { id: 'google-calendar', label: 'Google Calendar', path: '/google-calendar', icon: Calendar },
   { id: 'google-tasks', label: 'Google Tasks', path: '/google-tasks', icon: ListTodo },
   { id: 'lead-machine', label: 'Lead Machine', path: '/lead-machine', icon: Zap },
+  { id: 'sites-leads', label: 'Sites & Leads', path: '/sites-leads', icon: Eye },
 ];
 
 const SYSTEM_ITEMS = [
