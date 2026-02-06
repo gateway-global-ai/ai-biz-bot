@@ -22,6 +22,8 @@ import OtpLoginModal from '@/components/OtpLoginModal';
 import ShareButton from '@/components/ShareButton';
 import { Code2 } from 'lucide-react';
 
+import Pidea_logo_header__7_ from "@assets/Pidea logo header (7).png";
+
 type VoiceState = 'idle' | 'loading' | 'greeting' | 'greeting_paused' | 'conversation' | 'processing' | 'responding' | 'error';
 
 type Sentiment = 'calm' | 'engaged' | 'helpful';
@@ -727,7 +729,7 @@ export default function BusinessPage() {
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
         <div className="w-24" />
-        <img src={gatewayLogo} alt="Gateway Global AI" className="h-14 w-auto opacity-90 relative z-10 drop-shadow-lg" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))', marginTop: '14px', marginBottom: '-20px' }} />
+        <img src={Pidea_logo_header__7_} alt="Gateway Global AI" className="h-14 w-auto opacity-90 relative z-10 drop-shadow-lg mt-[0px] mb-[0px]" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))', marginTop: '14px', marginBottom: '-20px' }} />
         <div className="flex items-center gap-2 justify-end">
           <ShareButton
             shareTitle="Gateway Global AI - AI-Powered Business Websites"
