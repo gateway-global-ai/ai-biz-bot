@@ -1,15 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRoute, useLocation } from 'wouter';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Slider } from '@/components/ui/slider';
-import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { 
-  ChevronLeft, Coffee, Send, Music, Moon, Sparkles,
+  ChevronLeft, Coffee, Send, Moon, Sparkles,
   Server, Zap, Cpu, Radio, Mic, MicOff, Volume2, VolumeX,
-  Phone, PhoneOff, AlertCircle
+  Phone, PhoneOff, AlertCircle, X
 } from 'lucide-react';
 import { GoogleGenAI, Modality, type LiveServerMessage } from '@google/genai';
 import type { Agent } from '@shared/schema';
@@ -125,7 +123,6 @@ const generateVibeResponse = (
   
   if (analysis.isGreeting) {
     const userName = input.match(/whats up\s+(\w+)|hey\s+(\w+)|hi\s+(\w+)|yo\s+(\w+)/i);
-    const name = userName?.[1] || userName?.[2] || userName?.[3] || userName?.[4] || '';
     
     if (analysis.tone === 'energetic' || analysis.tone === 'casual') {
       const casualGreetings = [
@@ -173,48 +170,6 @@ const generateVibeResponse = (
   };
   
   return standardResponses[mood][Math.floor(Math.random() * standardResponses[mood].length)];
-};
-
-const BotAvatar = ({ scores, mood }: { scores: DiscScores; mood: Mood }) => {
-  const { dominance: d, influence: i, steadiness: s, conscientiousness: c } = scores;
-  const dNorm = d / 100;
-  const iNorm = i / 100;
-  const sNorm = s / 100;
-  const cNorm = c / 100;
-  const moodConfig = MOOD_COLORS[mood];
-
-  return (
-    <div className="relative w-32 h-32 flex items-center justify-center mx-auto pointer-events-none">
-      <div 
-        className="absolute inset-0 border border-dashed rounded-full animate-spin pointer-events-none"
-        style={{ 
-          borderColor: `rgba(139, 92, 246, ${Math.max(cNorm, 0.2)})`, 
-          opacity: cNorm,
-          animationDuration: '25s'
-        }}
-      />
-      
-      <div 
-        className="absolute rounded-full blur-3xl transition-all duration-1000 animate-pulse pointer-events-none"
-        style={{ 
-          width: '200%',
-          height: '200%',
-          background: `radial-gradient(circle, ${moodConfig.primary} 0%, ${moodConfig.glow} 30%, transparent 70%)`,
-          opacity: 0.4
-        }}
-      />
-
-      <div 
-        className="absolute w-16 h-16 rounded-xl flex items-center justify-center bg-slate-900 border-2 z-10"
-        style={{
-          borderColor: moodConfig.primary,
-          boxShadow: `0 0 30px ${moodConfig.glow}`
-        }}
-      >
-        <Server className="w-8 h-8 text-slate-200" />
-      </div>
-    </div>
-  );
 };
 
 export default function TheVibe() {
@@ -266,7 +221,7 @@ export default function TheVibe() {
       sessionRef.current = null;
     }
     if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach(track => track.stop());
+      micStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       micStreamRef.current = null;
     }
     activeSourcesRef.current.forEach(source => source.stop());
@@ -279,8 +234,6 @@ export default function TheVibe() {
   const startVoiceSession = useCallback(async () => {
     setVoiceError(null);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || (window as any).GEMINI_API_KEY;
-      
       const res = await fetch('/api/gemini-key');
       const keyData = await res.json();
       
@@ -327,12 +280,12 @@ export default function TheVibe() {
         6. USER LEADS: The user always leads the conversation flow
         
         GOOD EXAMPLES:
-        - User: "Whats up vibe bot!" → You: "Hey hey! What's good!"
-        - User: "yo" → You: "Yo!"
-        - User: "this is cool" → You: "Right? I dig it."
+        - User: "Whats up vibe bot!" -> You: "Hey hey! What's good!"
+        - User: "yo" -> You: "Yo!"
+        - User: "this is cool" -> You: "Right? I dig it."
         
         BAD EXAMPLES (DON'T DO THIS):
-        - User: "Whats up!" → You: "I'm here with you. Take your time, there's no rush. What's on your mind?" (VIBE KILLER)
+        - User: "Whats up!" -> You: "I'm here with you. Take your time, there's no rush. What's on your mind?" (VIBE KILLER)
         
         Current Mood: ${mood.toUpperCase()}
         DISC Profile: D:${discScores.dominance}%, I:${discScores.influence}%, S:${discScores.steadiness}%, C:${discScores.conscientiousness}%
@@ -458,10 +411,9 @@ export default function TheVibe() {
     };
   }, [stopVoiceSession]);
 
-
   if (!agent) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="h-full bg-slate-950 flex items-center justify-center">
         <div className="text-center">
           <Coffee className="w-12 h-12 text-purple-400 mx-auto mb-4" />
           <p className="text-slate-400">Loading The Vibe...</p>
@@ -470,50 +422,205 @@ export default function TheVibe() {
     );
   }
 
+  const moodConfig = MOOD_COLORS[mood];
+
   return (
-    <div className={`min-h-screen bg-gradient-to-b ${MOOD_COLORS[mood].bg} to-slate-950`}>
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-6">
+    <div 
+      className={`flex flex-col bg-gradient-to-b ${moodConfig.bg} to-slate-950 overflow-hidden`}
+      style={{ height: '100dvh' }}
+    >
+      {/* ===== FIXED HEADER ===== */}
+      <div className="shrink-0 border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-sm z-10">
+        <div className="flex items-center gap-3 px-4 py-3">
           <Button 
             variant="ghost" 
+            size="icon"
             onClick={() => setLocation('/agents')}
-            className="text-slate-400 hover:text-white"
+            className="text-slate-400 shrink-0"
             data-testid="button-back"
           >
-            <ChevronLeft className="w-5 h-5 mr-1" />
-            Back to Dashboard
+            <ChevronLeft className="w-5 h-5" />
           </Button>
-          <div className="flex items-center gap-2">
-            <Coffee className="w-5 h-5 text-purple-400" />
-            <span className="text-purple-300 font-medium">The Vibe</span>
-          </div>
-        </div>
 
-        <div className="text-center mb-8">
-          <div className="relative w-24 h-24 mx-auto mb-4 rounded-xl overflow-hidden border-2 border-purple-500/50">
+          <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-purple-500/40 shrink-0">
             <img src={avatar.src} alt={agent.name} className="w-full h-full object-cover" />
+            <div 
+              className="absolute inset-0 rounded-lg"
+              style={{ boxShadow: `inset 0 0 12px ${moodConfig.glow}` }}
+            />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-1">{agent.name}</h1>
-          <p className="text-slate-400">Reflect & Relax</p>
-        </div>
 
-        <Card className="bg-slate-900/80 border-purple-500/30 mb-6">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm text-slate-400 flex items-center gap-2">
-              <Moon className="w-4 h-4 text-purple-400" />
-              Set the Mood
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-sm font-bold text-white truncate" data-testid="text-agent-name">{agent.name}</h1>
+            <p className="text-[11px] text-slate-400 truncate">Reflect & Relax</p>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              size="sm"
+              variant={chatMode === 'text' ? 'default' : 'ghost'}
+              onClick={() => setChatMode('text')}
+              className={`h-7 px-2 text-[11px] ${chatMode === 'text' ? 'bg-purple-600' : 'text-slate-400'}`}
+              data-testid="button-mode-text"
+            >
+              <Send className="w-3 h-3 mr-1" />
+              Text
+            </Button>
+            <Button
+              size="sm"
+              variant={chatMode === 'voice' ? 'default' : 'ghost'}
+              onClick={() => setChatMode('voice')}
+              className={`h-7 px-2 text-[11px] ${chatMode === 'voice' ? 'bg-purple-600' : 'text-slate-400'}`}
+              data-testid="button-mode-voice"
+            >
+              <Mic className="w-3 h-3 mr-1" />
+              Voice
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setVoiceEnabled(!voiceEnabled)}
+              className={`h-7 w-7 ${voiceEnabled ? 'text-purple-400' : 'text-slate-600'}`}
+              data-testid="button-toggle-speaker"
+            >
+              {voiceEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== SCROLLABLE CHAT BODY ===== */}
+      <div 
+        ref={chatContainerRef}
+        className="flex-1 overflow-y-auto overscroll-contain px-4 py-3"
+        style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as any}
+        data-testid="chat-messages-area"
+      >
+        <style>{`
+          [data-testid="chat-messages-area"]::-webkit-scrollbar { display: none; }
+          @media (max-width: 640px) {
+            [data-testid="chat-messages-area"] { -webkit-overflow-scrolling: touch; }
+          }
+        `}</style>
+        
+        {chatMode === 'text' ? (
+          <>
+            {messages.length === 0 ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center">
+                  <Sparkles className="w-8 h-8 text-purple-400 mx-auto mb-2" />
+                  <p className="text-slate-500 text-sm">
+                    Start a relaxed conversation with {agent.name}
+                  </p>
+                  <p className="text-xs text-slate-600 mt-1">
+                    ARCH Window Matching: AI mirrors your energy
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 max-w-2xl mx-auto">
+                {messages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    {msg.role === 'agent' && (
+                      <div className="w-6 h-6 rounded-md overflow-hidden border border-purple-500/30 mr-2 shrink-0 mt-1">
+                        <img src={avatar.src} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm ${
+                      msg.role === 'user' 
+                        ? 'bg-purple-600 text-white rounded-br-sm' 
+                        : 'bg-slate-800/80 text-slate-200 border border-slate-700/50 rounded-bl-sm'
+                    }`}>
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="h-full flex flex-col items-center justify-center gap-4">
+            {isVoiceCallActive ? (
+              <>
+                <div className="relative">
+                  <div 
+                    className="w-24 h-24 rounded-full flex items-center justify-center border-2 transition-all duration-300"
+                    style={{
+                      borderColor: isModelSpeaking ? moodConfig.primary : 'rgba(139, 92, 246, 0.3)',
+                      boxShadow: isModelSpeaking ? `0 0 40px ${moodConfig.glow}` : 'none'
+                    }}
+                  >
+                    <div className="w-20 h-20 rounded-full overflow-hidden">
+                      <img src={avatar.src} alt={agent.name} className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                  {isModelSpeaking && (
+                    <div className="absolute -inset-2 rounded-full border border-purple-400/30 animate-ping" />
+                  )}
+                </div>
+                <p className="text-sm text-slate-400">
+                  {isModelSpeaking ? `${agent.name} is speaking...` : isListening ? 'Listening...' : 'Connected'}
+                </p>
+                <Button
+                  variant="default"
+                  onClick={toggleVoiceCall}
+                  className="bg-red-600"
+                  data-testid="button-end-call"
+                >
+                  <PhoneOff className="w-4 h-4 mr-1" />
+                  End Call
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="w-20 h-20 rounded-full bg-slate-800 border border-purple-500/30 flex items-center justify-center">
+                  <Mic className="w-8 h-8 text-purple-400" />
+                </div>
+                <p className="text-sm text-slate-500">Tap below to start a voice conversation</p>
+                <Button
+                  variant="default"
+                  onClick={toggleVoiceCall}
+                  className="bg-emerald-600"
+                  data-testid="button-start-call"
+                >
+                  <Phone className="w-4 h-4 mr-1" />
+                  Start Call
+                </Button>
+              </>
+            )}
+            {voiceError && (
+              <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {voiceError}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ===== FIXED FOOTER (Mood + Input integrated, ~25% of viewport) ===== */}
+      <div 
+        className="shrink-0 border-t border-slate-800/60 bg-slate-950/90 backdrop-blur-sm z-10 flex flex-col justify-end"
+        style={{ minHeight: '25dvh', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        {/* Set the Mood row */}
+        <div className="px-4 pt-3 pb-2">
+          <div className="flex items-center gap-2 mb-2">
+            <Moon className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+            <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Set the Mood</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex gap-1.5">
               {(Object.keys(MOOD_COLORS) as Mood[]).map((m) => (
                 <Button
                   key={m}
+                  size="sm"
                   variant={mood === m ? 'default' : 'outline'}
-                  className={mood === m 
-                    ? 'bg-purple-600 hover:bg-purple-500' 
-                    : 'border-slate-600 text-slate-300'
-                  }
+                  className={`h-7 text-[11px] px-3 ${
+                    mood === m 
+                      ? 'bg-purple-600' 
+                      : 'border-slate-700 text-slate-400'
+                  }`}
                   onClick={() => setMood(m)}
                   data-testid={`button-mood-${m}`}
                 >
@@ -521,206 +628,76 @@ export default function TheVibe() {
                 </Button>
               ))}
             </div>
-            
-            <div className="mt-4 flex items-center gap-6">
-              <BotAvatar scores={discScores} mood={mood} />
-              <div className="flex-1 grid grid-cols-2 gap-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-3 h-3 text-pink-400" />
-                  <span className="text-slate-400">Dominance</span>
-                  <span className="text-white ml-auto">{discScores.dominance}%</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Radio className="w-3 h-3 text-yellow-400" />
-                  <span className="text-slate-400">Influence</span>
-                  <span className="text-white ml-auto">{discScores.influence}%</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Cpu className="w-3 h-3 text-green-400" />
-                  <span className="text-slate-400">Steadiness</span>
-                  <span className="text-white ml-auto">{discScores.steadiness}%</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Server className="w-3 h-3 text-blue-400" />
-                  <span className="text-slate-400">Conscientiousness</span>
-                  <span className="text-white ml-auto">{discScores.conscientiousness}%</span>
-                </div>
-              </div>
+            <div className="flex items-center gap-3 ml-auto text-[10px]">
+              <span className="text-pink-400 flex items-center gap-1">
+                <Zap className="w-2.5 h-2.5" /> D:{discScores.dominance}
+              </span>
+              <span className="text-yellow-400 flex items-center gap-1">
+                <Radio className="w-2.5 h-2.5" /> I:{discScores.influence}
+              </span>
+              <span className="text-green-400 flex items-center gap-1">
+                <Cpu className="w-2.5 h-2.5" /> S:{discScores.steadiness}
+              </span>
+              <span className="text-blue-400 flex items-center gap-1">
+                <Server className="w-2.5 h-2.5" /> C:{discScores.conscientiousness}
+              </span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card className="bg-slate-900/80 border-slate-700">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant={chatMode === 'text' ? 'default' : 'outline'}
-                  onClick={() => setChatMode('text')}
-                  className={chatMode === 'text' ? 'bg-purple-600' : 'border-slate-600'}
-                  data-testid="button-mode-text"
-                >
-                  <Send className="w-3 h-3 mr-1" />
-                  Text
-                </Button>
-                <Button
-                  size="sm"
-                  variant={chatMode === 'voice' ? 'default' : 'outline'}
-                  onClick={() => setChatMode('voice')}
-                  className={chatMode === 'voice' ? 'bg-purple-600' : 'border-slate-600'}
-                  data-testid="button-mode-voice"
-                >
-                  <Mic className="w-3 h-3 mr-1" />
-                  Voice
-                </Button>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => setVoiceEnabled(!voiceEnabled)}
-                  className={voiceEnabled ? 'text-purple-400' : 'text-slate-500'}
-                  data-testid="button-toggle-speaker"
-                  title={voiceEnabled ? 'Mute agent voice' : 'Unmute agent voice'}
-                >
-                  {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-                </Button>
-                <Button
-                  size="sm"
-                  variant={isVoiceCallActive ? 'destructive' : 'default'}
-                  onClick={toggleVoiceCall}
-                  className={isVoiceCallActive ? '' : 'bg-green-600 hover:bg-green-500'}
-                  data-testid="button-voice-call"
-                >
-                  {isVoiceCallActive ? (
-                    <><PhoneOff className="w-3 h-3 mr-1" /> End Call</>
-                  ) : (
-                    <><Phone className="w-3 h-3 mr-1" /> Call</>
-                  )}
-                </Button>
-              </div>
-            </div>
-            
-            <div 
-              ref={chatContainerRef}
-              className="h-64 overflow-y-auto mb-4 space-y-3"
+        {/* Text input row */}
+        {chatMode === 'text' && (
+          <div className="px-4 pb-3 pt-1">
+            <form 
+              onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} 
+              className="flex items-center gap-2"
             >
-              {messages.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-center">
-                  <div>
-                    <Sparkles className="w-8 h-8 text-purple-400 mx-auto mb-2" />
-                    <p className="text-slate-500">
-                      {chatMode === 'voice' 
-                        ? `Tap the mic to start vibing with ${agent.name}` 
-                        : `Start a relaxed conversation with ${agent.name}`
-                      }
-                    </p>
-                    <p className="text-xs text-slate-600 mt-2">
-                      ARCH Window Matching: AI mirrors your energy
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                messages.map((msg, idx) => (
-                  <div 
-                    key={idx} 
-                    className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div 
-                      className={`max-w-[80%] px-4 py-2 rounded-2xl ${
-                        msg.role === 'user' 
-                          ? 'bg-purple-600 text-white' 
-                          : 'bg-slate-800 text-slate-200'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span>{msg.text}</span>
-                        {msg.role === 'agent' && isSpeaking && idx === messages.length - 1 && (
-                          <div className="flex items-center gap-0.5">
-                            <div className="w-1 h-2 bg-purple-400 rounded-full animate-pulse" />
-                            <div className="w-1 h-3 bg-purple-300 rounded-full animate-pulse" style={{ animationDelay: '150ms' }} />
-                            <div className="w-1 h-2 bg-purple-400 rounded-full animate-pulse" style={{ animationDelay: '300ms' }} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            
-            {chatMode === 'text' && !isVoiceCallActive ? (
-              <div className="flex gap-2">
-                <Input
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="What's on your mind?"
-                  className="bg-slate-800 border-slate-600"
-                  data-testid="input-message"
-                />
-                <Button 
-                  onClick={() => handleSendMessage()}
-                  className="bg-purple-600 hover:bg-purple-500"
-                  data-testid="button-send"
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-4 py-4">
+              <Input
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder={`Message ${agent.name}...`}
+                className="bg-slate-800/80 border-slate-700 text-white flex-1 h-10 rounded-full px-4 text-sm"
+                data-testid="input-chat-message"
+              />
+              <Button 
+                type="submit" 
+                size="icon"
+                disabled={!message.trim()}
+                className="bg-purple-600 h-10 w-10 rounded-full shrink-0"
+                data-testid="button-send-message"
+              >
+                <Send className="w-4 h-4" />
+              </Button>
+            </form>
+          </div>
+        )}
+
+        {/* Voice controls row */}
+        {chatMode === 'voice' && (
+          <div className="px-4 pb-3 pt-1">
+            <div className="flex items-center justify-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={toggleVoiceCall}
+                className={isVoiceCallActive 
+                  ? 'border-red-500/50 text-red-400' 
+                  : 'border-emerald-500/50 text-emerald-400'
+                }
+                data-testid="button-voice-call"
+              >
                 {isVoiceCallActive ? (
-                  <>
-                    <div className="relative">
-                      <div className={`absolute inset-0 rounded-full blur-xl transition-all duration-500 ${
-                        isModelSpeaking ? 'bg-purple-500/50 scale-150' : 'bg-green-500/30 scale-100'
-                      }`} />
-                      <div className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 ${
-                        isModelSpeaking 
-                          ? 'bg-purple-600 scale-110' 
-                          : 'bg-green-600'
-                      }`}>
-                        {isModelSpeaking ? (
-                          <Volume2 className="w-8 h-8 text-white animate-pulse" />
-                        ) : (
-                          <Mic className="w-8 h-8 text-white" />
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm text-white font-medium">
-                        {isModelSpeaking ? `${agent?.name} is speaking...` : 'Listening to you...'}
-                      </p>
-                      <p className="text-xs text-green-400 flex items-center justify-center gap-1 mt-1">
-                        <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                        Gemini Live connected
-                      </p>
-                    </div>
-                  </>
+                  <><PhoneOff className="w-3.5 h-3.5 mr-1" /> End</>
                 ) : (
-                  <>
-                    <div className="w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center">
-                      <Phone className="w-8 h-8 text-slate-500" />
-                    </div>
-                    <p className="text-sm text-slate-400">Click "Call" to start voice chat</p>
-                  </>
+                  <><Phone className="w-3.5 h-3.5 mr-1" /> Call</>
                 )}
-                {voiceError && (
-                  <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/10 px-3 py-2 rounded-lg">
-                    <AlertCircle className="w-4 h-4" />
-                    {voiceError}
-                  </div>
-                )}
-                {!isVoiceCallActive && (
-                  <p className="text-xs text-slate-600 text-center max-w-xs">
-                    Voice chat uses Gemini Live for natural conversation with ARCH window matching
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </Button>
+              <p className="text-[10px] text-slate-600">
+                Voice chat uses Gemini Live with ARCH window matching
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
