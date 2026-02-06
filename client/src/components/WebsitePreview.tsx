@@ -67,11 +67,13 @@ interface ChatMessage {
 export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: `Hi there! I'm the AI assistant for ${place.name}. I can help you with hours, services, directions, or anything else. What would you like to know?` }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatMood, setChatMood] = useState<'professional' | 'friendly' | 'concise'>('friendly');
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const sendChatMessage = useCallback(async () => {
@@ -408,25 +410,132 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
       )}
 
       {isChatOpen && (
-        <div className="fixed bottom-24 right-6 w-96 max-w-[calc(100vw-3rem)] h-[500px] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 z-50">
-          <div className="bg-blue-600 p-4 flex justify-between items-center gap-2 text-white">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-blue-400 flex items-center justify-center text-sm font-bold shrink-0">AI</div>
-              <span className="font-semibold">AI Biz Bot</span>
+        <div className="fixed inset-0 z-50 flex flex-col bg-white" style={{ height: '100dvh' }} data-testid="chat-fullscreen">
+          <style>{`
+            [data-testid="chat-body"]::-webkit-scrollbar { display: none; }
+          `}</style>
+
+          {isSettingsOpen && (
+            <div className="fixed inset-0 z-[60] flex" data-testid="chat-settings-overlay">
+              <div 
+                className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                onClick={() => setIsSettingsOpen(false)}
+              />
+              <div className="relative w-72 max-w-[80vw] h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
+                <div className="p-4 bg-slate-900 text-white shrink-0">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <h3 className="font-bold text-sm">Chat Settings</h3>
+                    <button 
+                      onClick={() => setIsSettingsOpen(false)} 
+                      className="p-1 hover:bg-slate-800 rounded-full transition-colors"
+                      data-testid="button-chat-settings-close"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <p className="text-slate-400 text-xs">Adjust how the AI responds</p>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Response Style</label>
+                    <div className="space-y-1.5">
+                      {(['professional', 'friendly', 'concise'] as const).map((style) => (
+                        <button
+                          key={style}
+                          onClick={() => setChatMood(style)}
+                          className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                            chatMood === style
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'text-slate-600 hover:bg-slate-50 border border-transparent'
+                          }`}
+                          data-testid={`button-chat-style-${style}`}
+                        >
+                          <div className="capitalize">{style}</div>
+                          <div className="text-xs font-normal mt-0.5 text-slate-400">
+                            {style === 'professional' && 'Formal, detailed responses'}
+                            {style === 'friendly' && 'Warm, conversational tone'}
+                            {style === 'concise' && 'Short, direct answers'}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-100 pt-4">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Quick Actions</label>
+                    <div className="space-y-1.5">
+                      <button
+                        onClick={() => { setChatMessages([{ role: 'assistant', content: `Hi there! I'm the AI assistant for ${place.name}. I can help you with hours, services, directions, or anything else. What would you like to know?` }]); setIsSettingsOpen(false); }}
+                        className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                        data-testid="button-chat-clear"
+                      >
+                        Clear conversation
+                      </button>
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-100 pt-4">
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 block">Suggested Topics</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['Hours', 'Services', 'Directions', 'Contact', 'Reviews'].map((topic) => (
+                        <button
+                          key={topic}
+                          onClick={() => { setChatInput(`Tell me about your ${topic.toLowerCase()}`); setIsSettingsOpen(false); }}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium rounded-full transition-colors"
+                          data-testid={`button-chat-topic-${topic.toLowerCase()}`}
+                        >
+                          {topic}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <button onClick={() => setIsChatOpen(false)} className="hover:bg-blue-500 p-1 rounded-full shrink-0" data-testid="button-preview-chat-close">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+          )}
+
+          <div className="shrink-0 bg-blue-600 text-white z-10">
+            <div className="flex items-center gap-2 px-3 py-3">
+              <button 
+                onClick={() => setIsSettingsOpen(true)} 
+                className="p-1.5 hover:bg-blue-500 rounded-full transition-colors shrink-0"
+                data-testid="button-chat-menu"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+              </button>
+              <div className="w-8 h-8 rounded-full bg-blue-400 flex items-center justify-center text-xs font-bold shrink-0">AI</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm truncate" data-testid="text-chat-bot-name">AI Biz Bot</div>
+                <div className="text-blue-200 text-xs truncate">{place.name}</div>
+              </div>
+              <button 
+                onClick={() => setIsChatOpen(false)} 
+                className="p-1.5 hover:bg-blue-500 rounded-full transition-colors shrink-0"
+                data-testid="button-preview-chat-close"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+
+          <div 
+            className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50"
+            style={{ scrollbarWidth: 'none' } as any}
+            data-testid="chat-body"
+          >
             {chatMessages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${
+                {msg.role === 'assistant' && (
+                  <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold shrink-0 mt-1 mr-2">AI</div>
+                )}
+                <div className={`max-w-[75%] px-4 py-2.5 text-sm leading-relaxed ${
                   msg.role === 'user' 
-                    ? 'bg-blue-600 text-white rounded-br-none' 
-                    : 'bg-white text-slate-700 border border-slate-100 rounded-tl-none'
+                    ? 'bg-blue-600 text-white rounded-2xl rounded-br-sm' 
+                    : 'bg-white text-slate-700 border border-slate-200 rounded-2xl rounded-tl-sm shadow-sm'
                 }`}>
                   {msg.content}
                 </div>
@@ -434,7 +543,8 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
             ))}
             {chatLoading && (
               <div className="flex justify-start">
-                <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm bg-white text-slate-400 shadow-sm border border-slate-100 rounded-tl-none flex items-center gap-1">
+                <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold shrink-0 mt-1 mr-2">AI</div>
+                <div className="px-4 py-3 rounded-2xl rounded-tl-sm bg-white text-slate-400 shadow-sm border border-slate-200 flex items-center gap-1.5">
                   <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                   <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
@@ -443,21 +553,22 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
             )}
             <div ref={chatEndRef} />
           </div>
-          <div className="p-4 bg-white border-t border-slate-100">
-            <form onSubmit={(e) => { e.preventDefault(); sendChatMessage(); }} className="flex gap-2">
+
+          <div className="shrink-0 bg-white border-t border-slate-200 z-10" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+            <form onSubmit={(e) => { e.preventDefault(); sendChatMessage(); }} className="flex items-center gap-2 px-3 py-3">
               <input
                 type="text"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Type a message..."
-                className="flex-1 px-4 py-2 bg-slate-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
+                className="flex-1 px-4 py-2.5 bg-slate-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
                 data-testid="input-preview-chat"
                 disabled={chatLoading}
               />
               <button 
                 type="submit"
                 disabled={chatLoading || !chatInput.trim()} 
-                className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors" 
+                className="p-2.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0" 
                 data-testid="button-preview-chat-send"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
