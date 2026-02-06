@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import path from "path";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -504,6 +505,10 @@ app.use((req, res, next) => {
 
     return res.status(status).json({ message });
   });
+
+  // Serve SDK files statically at /sdk/*
+  const sdkPath = path.resolve(import.meta.dirname, '..', 'sdk', 'chat', 'src');
+  app.use('/sdk', express.static(sdkPath));
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route

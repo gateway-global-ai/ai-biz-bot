@@ -20,7 +20,6 @@ import { useCustomerAuth } from '@/lib/customerAuth';
 import { useToast } from '@/hooks/use-toast';
 import OtpLoginModal from '@/components/OtpLoginModal';
 import ShareButton from '@/components/ShareButton';
-import FloatingChatWidget from '@/components/FloatingChatWidget';
 import { Code2 } from 'lucide-react';
 
 import Pidea_logo_header__7_ from "@assets/Pidea logo header (7).png";
@@ -642,6 +641,40 @@ export default function BusinessPage() {
     }, 1000);
     return () => clearInterval(interval);
   }, [stage]);
+
+  useEffect(() => {
+    const existingScript = document.querySelector('script[data-gateway-sdk]');
+    if (existingScript) return;
+    const script = document.createElement('script');
+    script.src = '/sdk/gateway-chat.js';
+    script.setAttribute('data-gateway-sdk', 'true');
+    script.onload = () => {
+      if ((window as any).GatewayChat) {
+        (window as any).__gatewayChatWidget = (window as any).GatewayChat.init({
+          botId: 'platform-landing',
+          apiBase: '',
+          position: 'bottom-right',
+          botName: 'Gateway AI',
+          greetingMessage: 'Hi! I can help you learn about our free AI-powered websites, plans, and features. What would you like to know?',
+          placeholderText: 'Ask about our services...',
+          headerSubtitle: 'Online',
+          voice: { enabled: true },
+          theme: {
+            primaryColor: '#6366f1',
+          },
+        });
+      }
+    };
+    document.body.appendChild(script);
+    return () => {
+      if ((window as any).__gatewayChatWidget) {
+        (window as any).__gatewayChatWidget.destroy();
+        delete (window as any).__gatewayChatWidget;
+      }
+      const el = document.querySelector('script[data-gateway-sdk]');
+      if (el) el.remove();
+    };
+  }, []);
 
   const handleSendMagicLink = async () => {
     if (!phoneNumber.trim()) {
@@ -1291,12 +1324,6 @@ export default function BusinessPage() {
         subtitle="No account? One will be created automatically."
         accentColor="purple"
         testIdPrefix="customer"
-      />
-      <FloatingChatWidget
-        botName="Gateway AI"
-        greetingMessage="Hi! I can help you learn about our free AI-powered websites, plans, and features. What would you like to know?"
-        placeholderText="Ask about our services..."
-        primaryColor="#6366f1"
       />
     </div>
   );
