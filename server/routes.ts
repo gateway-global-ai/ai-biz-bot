@@ -5205,5 +5205,124 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
+  // ==================== BILLING / PAYMENT METHODS ====================
+
+  app.get("/api/billing/publishable-key", async (_req, res) => {
+    try {
+      const { getStripePublishableKey } = await import('./stripeClient');
+      const key = await getStripePublishableKey();
+      res.json({ publishableKey: key });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/billing/setup-intent", async (req, res) => {
+    try {
+      const { customerId } = req.body;
+      if (!customerId) return res.status(400).json({ error: "customerId is required" });
+
+      const customer = await storage.getCustomer(customerId);
+      if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+      const { getUncachableStripeClient } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      let stripeCustomerId = customer.stripeCustomerId;
+      if (!stripeCustomerId) {
+        const stripeCustomer = await stripe.customers.create({
+          name: customer.name,
+          email: customer.email || undefined,
+          phone: customer.phone || undefined,
+          metadata: { gatewayCustomerId: customer.id },
+        });
+        stripeCustomerId = stripeCustomer.id;
+        await storage.updateCustomer(customer.id, { stripeCustomerId: stripeCustomer.id });
+      }
+
+      const setupIntent = await stripe.setupIntents.create({
+        customer: stripeCustomerId,
+        payment_method_types: ['card'],
+      });
+
+      res.json({ clientSecret: setupIntent.client_secret, stripeCustomerId });
+    } catch (error: any) {
+      console.error("[Billing] Setup intent error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/billing/payment-methods/:customerId", async (req, res) => {
+    try {
+      const customer = await storage.getCustomer(req.params.customerId);
+      if (!customer) return res.status(404).json({ error: "Customer not found" });
+      if (!customer.stripeCustomerId) return res.json({ paymentMethods: [], defaultPaymentMethodId: null });
+
+      const { getUncachableStripeClient } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      const methods = await stripe.paymentMethods.list({
+        customer: customer.stripeCustomerId,
+        type: 'card',
+      });
+
+      const stripeCustomer = await stripe.customers.retrieve(customer.stripeCustomerId);
+      const defaultPmId = (stripeCustomer as any).invoice_settings?.default_payment_method || null;
+
+      res.json({
+        paymentMethods: methods.data.map((pm) => ({
+          id: pm.id,
+          brand: pm.card?.brand,
+          last4: pm.card?.last4,
+          expMonth: pm.card?.exp_month,
+          expYear: pm.card?.exp_year,
+          isDefault: pm.id === defaultPmId,
+        })),
+        defaultPaymentMethodId: defaultPmId,
+      });
+    } catch (error: any) {
+      console.error("[Billing] List methods error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/billing/payment-methods/:customerId/default", async (req, res) => {
+    try {
+      const { paymentMethodId } = req.body;
+      if (!paymentMethodId) return res.status(400).json({ error: "paymentMethodId is required" });
+
+      const customer = await storage.getCustomer(req.params.customerId);
+      if (!customer?.stripeCustomerId) return res.status(404).json({ error: "Customer or Stripe customer not found" });
+
+      const { getUncachableStripeClient } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      await stripe.customers.update(customer.stripeCustomerId, {
+        invoice_settings: { default_payment_method: paymentMethodId },
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[Billing] Set default error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/billing/payment-methods/:customerId/:paymentMethodId", async (req, res) => {
+    try {
+      const customer = await storage.getCustomer(req.params.customerId);
+      if (!customer?.stripeCustomerId) return res.status(404).json({ error: "Customer or Stripe customer not found" });
+
+      const { getUncachableStripeClient } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      await stripe.paymentMethods.detach(req.params.paymentMethodId);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[Billing] Remove method error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }

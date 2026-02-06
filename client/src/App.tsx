@@ -31,6 +31,7 @@ import LandingV2 from "@/pages/LandingV2";
 import KimiAudioDemo from "@/pages/KimiAudioDemo";
 import TwilioHealthCheck from "@/pages/TwilioHealthCheck";
 import TelephonyManager from "@/pages/TelephonyManager";
+import BillingPage from "@/pages/BillingPage";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
@@ -253,6 +254,7 @@ function AppRouter() {
       <Route path="/customers" component={CustomerManager} />
       <Route path="/gateway-admin" component={GatewayAdmin} />
       <Route path="/telephony" component={TelephonyManager} />
+      <Route path="/billing" component={BillingPage} />
       <Route path="/telephony-legacy" component={TelephonyPanel} />
       <Route path="/twilio-account" component={TwilioAccountManager} />
       <Route path="/twilio-health" component={TwilioHealthCheck} />

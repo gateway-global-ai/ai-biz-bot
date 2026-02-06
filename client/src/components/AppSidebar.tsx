@@ -1,5 +1,5 @@
 import { useLocation, Link } from 'wouter';
-import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles, ClipboardCheck, AudioLines, Bot, Users, LayoutDashboard, Globe, Stethoscope } from 'lucide-react';
+import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles, ClipboardCheck, AudioLines, Bot, Users, LayoutDashboard, Globe, Stethoscope, CreditCard } from 'lucide-react';
 import gatewayLogoSm from '@assets/GatewayGlobalLogo_sm_1770154272626.png';
 import {
   Sidebar,
@@ -23,6 +23,7 @@ const OPERATIONS_ITEMS = [
   { id: 'gateway-admin', label: 'Gateway Admin', path: '/gateway-admin', icon: Globe },
   { id: 'telephony', label: 'Telephony', path: '/telephony', icon: Phone },
   { id: 'customers', label: 'Customer Manager', path: '/customers', icon: Users },
+  { id: 'billing', label: 'Billing', path: '/billing', icon: CreditCard },
   { id: 'twilio-health', label: 'SMS Health Check', path: '/twilio-health', icon: Stethoscope },
 ];
 

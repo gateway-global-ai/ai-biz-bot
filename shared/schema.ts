@@ -371,6 +371,7 @@ export const customers = pgTable("customers", {
   source: text("source"), // where the lead came from
   status: text("status").notNull().default("new"), // new, contacted, qualified, converted, lost
   notes: text("notes"),
+  stripeCustomerId: text("stripe_customer_id"),
   agentId: varchar("agent_id").references(() => agents.id),
   lastContactAt: timestamp("last_contact_at"),
   followUpAt: timestamp("follow_up_at"),
