@@ -781,11 +781,11 @@ export default function BusinessPage() {
       )}
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex flex-col px-6 overflow-hidden pt-16 md:pt-24">
+      <section className="relative min-h-screen flex flex-col px-6 overflow-hidden pt-8 md:pt-12">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none" />
         <div className="max-w-5xl mx-auto text-center relative z-10 flex flex-col items-center flex-1 justify-between pb-16 md:pb-24">
-          <div className="flex-1 flex items-end pb-8 md:pb-12">
+          <div className="flex-1 flex items-end pb-6 md:pb-8">
             <VoiceVisualizer />
           </div>
           <div className="space-y-10 md:space-y-14">
