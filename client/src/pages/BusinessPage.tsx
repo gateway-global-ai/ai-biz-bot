@@ -19,6 +19,8 @@ import { useAuth } from '@/lib/auth';
 import { useCustomerAuth } from '@/lib/customerAuth';
 import { useToast } from '@/hooks/use-toast';
 import OtpLoginModal from '@/components/OtpLoginModal';
+import ShareButton from '@/components/ShareButton';
+import { Code2 } from 'lucide-react';
 
 type VoiceState = 'idle' | 'loading' | 'greeting' | 'greeting_paused' | 'conversation' | 'processing' | 'responding' | 'error';
 
@@ -726,7 +728,13 @@ export default function BusinessPage() {
       <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
         <div className="w-24" />
         <img src={gatewayLogo} alt="Gateway Global AI" className="h-14 w-auto opacity-90 relative z-10 drop-shadow-lg" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))', marginTop: '14px', marginBottom: '-20px' }} />
-        <div className="flex items-center gap-2 w-24 justify-end">
+        <div className="flex items-center gap-2 justify-end">
+          <ShareButton
+            shareTitle="Gateway Global AI - AI-Powered Business Websites"
+            shareText="Gateway Global AI creates professional AI-powered websites for businesses with voice concierge and chat support."
+            variant="dark"
+            testIdPrefix="main-share"
+          />
           {isCustomerAuth ? (
             <Button
               variant="ghost"
@@ -1175,13 +1183,13 @@ export default function BusinessPage() {
                     onValueChange={(value) => setFormState(prev => ({ ...prev, volume: value }))}
                   >
                     <SelectTrigger className="bg-slate-800 border-slate-700" data-testid="select-volume">
-                      <SelectValue placeholder="Expected Call Volume" />
+                      <SelectValue placeholder="Number of Locations" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="<100">&lt; 100 calls/month</SelectItem>
-                      <SelectItem value="100-500">100 - 500 calls/month</SelectItem>
-                      <SelectItem value="500-2000">500 - 2,000 calls/month</SelectItem>
-                      <SelectItem value=">2000">&gt; 2,000 calls/month</SelectItem>
+                      <SelectItem value="1">1 Location</SelectItem>
+                      <SelectItem value="2-5">2 - 5 Locations</SelectItem>
+                      <SelectItem value="6-20">6 - 20 Locations</SelectItem>
+                      <SelectItem value=">20">20+ Locations</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button 
@@ -1207,7 +1215,21 @@ export default function BusinessPage() {
           </Card>
         </div>
       </section>
-      <footer className="py-12 text-center text-sm border-t border-slate-900 space-y-3">
+      <footer className="py-12 text-center text-sm border-t border-slate-900 space-y-4">
+        <div className="flex items-center justify-center gap-4">
+          <Link href="/sdk">
+            <Button variant="ghost" size="sm" className="text-slate-500 text-xs" data-testid="button-developer-section">
+              <Code2 className="w-3 h-3 mr-1" />
+              Developers
+            </Button>
+          </Link>
+          <Link href="/sdk/google-places">
+            <Button variant="ghost" size="sm" className="text-slate-500 text-xs" data-testid="button-google-places-sdk">
+              <Globe className="w-3 h-3 mr-1" />
+              Google Places SDK
+            </Button>
+          </Link>
+        </div>
         <p className="text-slate-600">&copy; 2025 Gateway Global AI. Enterprise Division.</p>
         {isAuthenticated ? (
           <div className="flex items-center justify-center gap-3">
