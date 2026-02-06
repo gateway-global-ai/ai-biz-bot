@@ -187,6 +187,7 @@ export interface IStorage {
   createDemoLead(lead: InsertDemoLead): Promise<DemoLead>;
   getDemoLeadByToken(token: string): Promise<DemoLead | undefined>;
   getDemoLeadByPhone(phone: string): Promise<DemoLead | undefined>;
+  getAllDemoLeads(): Promise<DemoLead[]>;
   updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined>;
   
   // Bot Template operations
@@ -223,6 +224,7 @@ export interface IStorage {
 
   // Site Config by owner
   getSiteConfigsByOwner(ownerId: string): Promise<SiteConfig[]>;
+  claimUnlinkedSitesByPhone(phone: string, customerAccountId: string): Promise<number>;
 
   // VLM Prospect operations
   getVlmProspects(options?: { industry?: string; city?: string; status?: string; limit?: number }): Promise<VlmProspect[]>;
@@ -852,6 +854,10 @@ export class DatabaseStorage implements IStorage {
     return lead;
   }
 
+  async getAllDemoLeads(): Promise<DemoLead[]> {
+    return db.select().from(demoLeads).orderBy(desc(demoLeads.createdAt));
+  }
+
   async updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined> {
     const [updated] = await db.update(demoLeads).set(updates).where(eq(demoLeads.id, id)).returning();
     return updated;
@@ -986,6 +992,21 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(siteConfigs)
       .where(eq(siteConfigs.ownerId, ownerId))
       .orderBy(desc(siteConfigs.createdAt));
+  }
+
+  async claimUnlinkedSitesByPhone(phone: string, customerAccountId: string): Promise<number> {
+    const leads = await db.select().from(demoLeads).where(eq(demoLeads.phone, phone));
+    let claimed = 0;
+    for (const lead of leads) {
+      if (lead.placeId) {
+        const site = await this.getSiteConfigByPlaceId(lead.placeId);
+        if (site && !site.ownerId) {
+          await this.updateSiteConfig(site.id, { ownerId: customerAccountId } as any);
+          claimed++;
+        }
+      }
+    }
+    return claimed;
   }
 
   async getVlmProspects(options?: { industry?: string; city?: string; status?: string; limit?: number }): Promise<VlmProspect[]> {

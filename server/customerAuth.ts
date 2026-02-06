@@ -108,6 +108,15 @@ export async function customerVerifyOtp(req: Request, res: Response): Promise<vo
 
     await storage.updateCustomerAccountLastLogin(account.id);
 
+    try {
+      const claimed = await storage.claimUnlinkedSitesByPhone(account.phone, account.id);
+      if (claimed > 0) {
+        console.log(`[CustomerAuth] Auto-claimed ${claimed} site(s) for customer ${account.id} (phone: ${account.phone})`);
+      }
+    } catch (claimErr) {
+      console.error("[CustomerAuth] Auto-claim error (non-fatal):", claimErr);
+    }
+
     res.json({
       success: true,
       token,

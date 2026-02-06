@@ -132,6 +132,36 @@ export async function registerRoutes(
         name: null,
       });
 
+      let existingSite: any = null;
+      if (placeId) {
+        existingSite = await storage.getSiteConfigByPlaceId(placeId);
+      }
+      if (!existingSite) {
+        const customerAccount = await storage.getCustomerAccountByPhone(normalizedPhone);
+
+        const domain = businessName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 50);
+
+        const siteConfig = await storage.createSiteConfig({
+          name: businessName,
+          domain,
+          placeId: placeId || null,
+          placeData: placeData || null,
+          ownerId: customerAccount?.id || null,
+          chatbotEnabled: true,
+          voiceConciergeEnabled: true,
+          widgetPosition: "bottom-right",
+          widgetColor: "#2563eb",
+          greetingMessage: `Welcome to ${businessName}! How can we help you today?`,
+          placeholderText: "Type a message...",
+          modelProvider: "kimi",
+        });
+        console.log(`[Demo] Created site_config ${siteConfig.id} for "${businessName}"${customerAccount ? ` (linked to customer ${customerAccount.id})` : " (no customer account yet)"}`);
+      }
+
       const host = req.headers.host || "localhost:5000";
       const protocol = req.headers["x-forwarded-proto"] || "https";
       const magicLink = `${protocol}://${host}/demo?token=${magicToken}`;
@@ -192,6 +222,56 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("[Demo] Verify error:", error);
       res.status(500).json({ error: error.message || "Failed to verify link" });
+    }
+  });
+
+  app.post("/api/admin/backfill-sites", async (req, res) => {
+    try {
+      const adminSession = req.headers["x-admin-token"];
+      if (!adminSession) {
+        const sessionCookie = req.headers.cookie?.split(";").find(c => c.trim().startsWith("admin_session="));
+        if (!sessionCookie) {
+          return res.status(401).json({ error: "Admin authentication required" });
+        }
+      }
+      const allLeads = await storage.getAllDemoLeads();
+      let created = 0;
+      let skipped = 0;
+      for (const lead of allLeads) {
+        if (lead.placeId) {
+          const existing = await storage.getSiteConfigByPlaceId(lead.placeId);
+          if (existing) {
+            skipped++;
+            continue;
+          }
+        }
+        const customerAccount = lead.phone ? await storage.getCustomerAccountByPhone(lead.phone) : null;
+        const domain = lead.businessName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 50);
+
+        await storage.createSiteConfig({
+          name: lead.businessName,
+          domain,
+          placeId: lead.placeId || null,
+          placeData: lead.placeData || null,
+          ownerId: customerAccount?.id || null,
+          chatbotEnabled: true,
+          voiceConciergeEnabled: true,
+          widgetPosition: "bottom-right",
+          widgetColor: "#2563eb",
+          greetingMessage: `Welcome to ${lead.businessName}! How can we help you today?`,
+          placeholderText: "Type a message...",
+          modelProvider: "kimi",
+        });
+        created++;
+      }
+      res.json({ success: true, created, skipped, total: allLeads.length });
+    } catch (error: any) {
+      console.error("[Backfill] Error:", error);
+      res.status(500).json({ error: error.message || "Backfill failed" });
     }
   });
 
