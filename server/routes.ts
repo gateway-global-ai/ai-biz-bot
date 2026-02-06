@@ -2543,6 +2543,13 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   }
 
+  // Serve Google Maps API key to frontend (for Places Autocomplete)
+  app.get("/api/config/maps-key", (_req, res) => {
+    const key = process.env.GOOGLE_CLOUD_API_KEY;
+    if (!key) return res.status(404).json({ error: "Google Maps API key not configured" });
+    res.json({ key });
+  });
+
   // Update agent budget configuration
   app.patch("/api/agents/:id/budget", async (req, res) => {
     try {

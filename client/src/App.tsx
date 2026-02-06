@@ -262,7 +262,7 @@ function AppRouter() {
       <Route path="/security" component={SecurityDashboard} />
       <Route path="/disc" component={DiscVisualizer} />
       <Route path="/developer" component={DeveloperPage} />
-      <Route path="/business" component={BusinessPage} />
+      {/* BusinessPage moved to public routes */}
       <Route path="/google-analyst" component={GoogleApiAnalyst} />
       <Route path="/assessment" component={DiscAssessment} />
       <Route path="/conversation" component={MockConversation} />
@@ -326,6 +326,7 @@ function App() {
             <Route path="/login" component={Login} />
             <Route path="/kimi-audio" component={KimiAudioDemo} />
             <Route path="/chat/:agentId" component={AgentChat} />
+            <Route path="/business" component={BusinessPage} />
             {/* Protected routes with sidebar */}
             <Route component={AppWithSidebar} />
           </Switch>

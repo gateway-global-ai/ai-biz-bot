@@ -1,14 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Phone, Building2, Users, Globe, ShieldCheck, 
   ArrowLeft, CheckCircle2, MessageSquare, 
   Briefcase, Zap, PhoneCall, CreditCard, ChevronRight,
-  Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server
+  Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server,
+  Search, MapPin, Star, ExternalLink, Loader2, ArrowRight, Sparkles
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type Sentiment = 'calm' | 'engaged' | 'helpful';
@@ -98,6 +100,19 @@ const VoiceVisualizer = () => {
   );
 };
 
+interface SelectedPlace {
+  name: string;
+  formatted_address: string;
+  rating?: number;
+  user_ratings_total?: number;
+  formatted_phone_number?: string;
+  website?: string;
+  types?: string[];
+  photos?: any[];
+  opening_hours?: { weekday_text?: string[]; isOpen?: () => boolean };
+  place_id?: string;
+}
+
 export default function BusinessPage() {
   const [formState, setFormState] = useState({
     name: '',
@@ -107,6 +122,53 @@ export default function BusinessPage() {
     volume: '<100'
   });
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [mapsKey, setMapsKey] = useState<string | null>(null);
+  const [scriptLoaded, setScriptLoaded] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<SelectedPlace | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch('/api/config/maps-key')
+      .then(r => r.json())
+      .then(data => {
+        if (data.key) setMapsKey(data.key);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!mapsKey) return;
+    if ((window as any).google?.maps?.places) {
+      setScriptLoaded(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${mapsKey}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => setScriptLoaded(true);
+    document.head.appendChild(script);
+  }, [mapsKey]);
+
+  useEffect(() => {
+    if (!scriptLoaded || !inputRef.current || !(window as any).google) return;
+    const autocomplete = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
+      types: ['establishment'],
+      fields: [
+        'name', 'formatted_address', 'place_id', 'rating',
+        'user_ratings_total', 'website', 'opening_hours',
+        'photos', 'types', 'formatted_phone_number'
+      ],
+    });
+    autocomplete.addListener('place_changed', () => {
+      const place = autocomplete.getPlace();
+      if (place && place.name) {
+        setSelectedPlace(place);
+        setIsSearching(false);
+      }
+    });
+  }, [scriptLoaded]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,7 +177,7 @@ export default function BusinessPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-4 flex items-center justify-between">
+      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-4">
           <Link href="/">
             <Button variant="ghost" size="icon" data-testid="button-back">
@@ -128,26 +190,58 @@ export default function BusinessPage() {
           </span>
         </div>
         <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider">
-          <Phone className="w-3 h-3" /> Enterprise Solutions
+          <Sparkles className="w-3 h-3" /> AI Website Generator
         </div>
       </nav>
 
-      <section className="relative pt-16 pb-16 px-6 overflow-hidden">
+      {/* Hero Section */}
+      <section className="relative pt-16 pb-12 px-6 overflow-hidden">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none" />
         <div className="max-w-5xl mx-auto text-center relative z-10 space-y-6">
           <div className="mb-4">
             <VoiceVisualizer />
           </div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-medium text-emerald-400 mb-4">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Never Miss Another Call
-          </div>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-6">
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-6" data-testid="text-hero-heading">
             Give Your AI Agent a <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400">
               Real Phone Number
             </span>
           </h1>
+
+          {/* Google Places Autocomplete Search Bar */}
+          <div className="max-w-2xl mx-auto" data-testid="container-place-search">
+            <div className="relative group">
+              <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
+              <div className="relative flex items-center bg-slate-900 rounded-xl border border-slate-700 p-1.5">
+                <div className="pl-3 text-slate-500">
+                  <Search className="w-5 h-5" />
+                </div>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  disabled={!scriptLoaded}
+                  onFocus={() => setIsSearching(true)}
+                  onBlur={() => setTimeout(() => setIsSearching(false), 200)}
+                  placeholder={scriptLoaded ? "Search for your business (e.g. Boardwalk Suites Lafayette)" : mapsKey ? "Loading Google Maps..." : "Configuring search..."}
+                  className="w-full px-3 py-3.5 bg-transparent text-base md:text-lg focus:outline-none text-slate-100 placeholder:text-slate-500"
+                  data-testid="input-place-search"
+                />
+                {isSearching && (
+                  <div className="pr-3">
+                    <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                  </div>
+                )}
+                {!isSearching && scriptLoaded && (
+                  <div className="pr-3">
+                    <MapPin className="w-5 h-5 text-slate-600" />
+                  </div>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 mt-2">Powered by Google Places</p>
+          </div>
+
           <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
             Your Customers Can Now Call Your AI Assistant. <br/>
             <span className="text-white font-medium">24/7 AI Receptionist starting at $99/mo.</span>
@@ -155,6 +249,88 @@ export default function BusinessPage() {
         </div>
       </section>
 
+      {/* Selected Business Preview Card */}
+      {selectedPlace && (
+        <section className="px-6 pb-12 -mt-2">
+          <div className="max-w-3xl mx-auto">
+            <Card className="bg-slate-900/80 border-blue-500/30 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex flex-col md:flex-row md:items-start gap-5">
+                  {/* Business Photo */}
+                  {selectedPlace.photos && selectedPlace.photos.length > 0 ? (
+                    <div className="w-full md:w-40 h-28 rounded-lg overflow-hidden flex-shrink-0 bg-slate-800">
+                      <img
+                        src={selectedPlace.photos[0].getUrl({ maxWidth: 400 })}
+                        alt={selectedPlace.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full md:w-40 h-28 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0">
+                      <Building2 className="w-10 h-10 text-slate-600" />
+                    </div>
+                  )}
+
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div>
+                        <h3 className="text-xl font-bold text-white" data-testid="text-place-name">{selectedPlace.name}</h3>
+                        <p className="text-sm text-slate-400 flex items-center gap-1 mt-0.5">
+                          <MapPin className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">{selectedPlace.formatted_address}</span>
+                        </p>
+                      </div>
+                      {selectedPlace.rating && (
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                          <span className="text-white font-bold">{selectedPlace.rating}</span>
+                          {selectedPlace.user_ratings_total && (
+                            <span className="text-slate-500 text-sm">({selectedPlace.user_ratings_total.toLocaleString()})</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {selectedPlace.formatted_phone_number && (
+                        <Badge variant="secondary" className="bg-slate-800 text-slate-300 text-xs">
+                          <Phone className="w-3 h-3 mr-1" /> {selectedPlace.formatted_phone_number}
+                        </Badge>
+                      )}
+                      {selectedPlace.types?.slice(0, 3).map(t => (
+                        <Badge key={t} variant="secondary" className="bg-slate-800 text-slate-300 text-xs capitalize">
+                          {t.replace(/_/g, ' ')}
+                        </Badge>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 pt-3">
+                      <Button className="bg-gradient-to-r from-blue-600 to-indigo-600" data-testid="button-generate-site">
+                        <Sparkles className="w-4 h-4 mr-2" />
+                        Generate AI Website
+                      </Button>
+                      <Button variant="outline" className="border-slate-700 text-slate-300" data-testid="button-get-number">
+                        <Phone className="w-4 h-4 mr-2" />
+                        Get AI Phone Number
+                      </Button>
+                      {selectedPlace.website && (
+                        <Button variant="ghost" className="text-slate-400" asChild>
+                          <a href={selectedPlace.website} target="_blank" rel="noreferrer">
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Current Site
+                          </a>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
+
+      {/* Use Cases */}
       <section className="py-16 px-6 bg-slate-900/30 border-y border-slate-900">
         <div className="max-w-6xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -164,7 +340,7 @@ export default function BusinessPage() {
               { icon: Calendar, title: "Healthcare", quote: "HIPAA-compliant appointment scheduling.", color: "text-violet-400" },
               { icon: Headphones, title: "Call Centers", quote: "Reduce hold times by 80% with AI triage.", color: "text-amber-400" }
             ].map((item, i) => (
-              <Card key={i} className="bg-slate-900/50 border-slate-800 hover:border-slate-700 transition-colors">
+              <Card key={i} className="bg-slate-900/50 border-slate-800">
                 <CardContent className="p-6">
                   <item.icon className={`w-8 h-8 mb-4 ${item.color}`} />
                   <div className="font-bold text-white mb-2">{item.title}</div>
@@ -176,6 +352,7 @@ export default function BusinessPage() {
         </div>
       </section>
 
+      {/* Features */}
       <section className="py-16 px-6">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-12">Features</h2>
@@ -202,6 +379,7 @@ export default function BusinessPage() {
         </div>
       </section>
 
+      {/* Enterprise Form */}
       <section className="py-16 px-6 bg-slate-900/30 border-y border-slate-900">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
@@ -209,7 +387,7 @@ export default function BusinessPage() {
             <p className="text-slate-400">
               Our enterprise team will review your requirements and set up a dedicated AI phone system tailored to your business needs.
             </p>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2 text-sm text-slate-500">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                 Custom pricing
@@ -279,7 +457,7 @@ export default function BusinessPage() {
                   </Select>
                   <Button 
                     type="submit" 
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500"
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600"
                     data-testid="button-biz-submit"
                   >
                     Request Access <ChevronRight className="w-4 h-4 ml-1" />
@@ -302,7 +480,7 @@ export default function BusinessPage() {
       </section>
 
       <footer className="py-12 text-center text-slate-600 text-sm border-t border-slate-900">
-        <p>&copy; 2024 Gateway Global AI. Enterprise Division.</p>
+        <p>&copy; 2025 Gateway Global AI. Enterprise Division.</p>
       </footer>
     </div>
   );
