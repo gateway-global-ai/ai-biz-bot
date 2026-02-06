@@ -41,3 +41,12 @@ waitForPort = 5000
 
 [agent]
 integrations = ["twilio:1.0.0", "stripe:2.0.0"]
+
+[userenv]
+
+[userenv.shared]
+GOOGLE_CLIENT_ID = "818610640787-kdo0nlvpp63ijl1kshddjgcjb9j5f7ok.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = "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"
+GOOGLE_CLIENT_JSON = "{\"installed\":{\"client_id\":\"818610640787-kdo0nlvpp63ijl1kshddjgcjb9j5f7ok.apps.googleusercontent.com\",\"project_id\":\"ai-biz-bot\",\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"token_uri\":\"https://oauth2.googleapis.com/token\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\",\"client_secret\":\"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\",\"redirect_uris\":[\"http://localhost\"]}}"
+CUSTOMER_PHONE = "702-540-5471"
+CUSTOMER_PLACE = "Boardwalk Suites Lafayette"

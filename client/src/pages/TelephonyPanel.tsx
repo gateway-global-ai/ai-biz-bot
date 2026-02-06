@@ -149,7 +149,10 @@ export default function TelephonyPanel() {
   const searchNumbersMutation = useMutation({
     mutationFn: async (code: string) => {
       const res = await fetch(`/api/telephony/numbers/search?areaCode=${code}`);
-      if (!res.ok) throw new Error('Failed to search numbers');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to search numbers');
+      }
       return res.json();
     },
     onSuccess: (data) => {
@@ -157,7 +160,7 @@ export default function TelephonyPanel() {
       addLog(`Found ${data.length} available numbers in area code ${areaCode}`);
     },
     onError: (error: any) => {
-      toast({ title: 'Search Failed', description: error.message, variant: 'destructive' });
+      toast({ title: 'Subscription Required', description: error.message, variant: 'destructive' });
       addLog(`ERROR: Search failed - ${error.message}`);
     }
   });
@@ -179,7 +182,7 @@ export default function TelephonyPanel() {
       addLog('Number provisioned and webhooks configured');
     },
     onError: (error: any) => {
-      toast({ title: 'Provision Failed', description: error.message, variant: 'destructive' });
+      toast({ title: 'Subscription Required', description: error.message, variant: 'destructive' });
       addLog(`ERROR: Provision failed - ${error.message}`);
     }
   });

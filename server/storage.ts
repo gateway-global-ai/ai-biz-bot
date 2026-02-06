@@ -35,6 +35,18 @@ import {
   type InsertLessonPlan,
   type LessonSession,
   type InsertLessonSession,
+  type Organization,
+  type InsertOrganization,
+  type Project,
+  type InsertProject,
+  type ProjectTask,
+  type InsertProjectTask,
+  type DemoLead,
+  type InsertDemoLead,
+  type SiteConfig,
+  type InsertSiteConfig,
+  type ChatLog,
+  type InsertChatLog,
   telephonyConfigs,
   callLogs,
   users,
@@ -52,7 +64,13 @@ import {
   a2pCampaigns,
   knowledgeTopics,
   lessonPlans,
-  lessonSessions
+  lessonSessions,
+  organizations,
+  projects,
+  projectTasks,
+  demoLeads,
+  siteConfigs,
+  chatLogs
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -126,6 +144,45 @@ export interface IStorage {
   getA2pCampaign(id: string): Promise<A2pCampaign | undefined>;
   createA2pCampaign(campaign: InsertA2pCampaign): Promise<A2pCampaign>;
   updateA2pCampaign(id: string, updates: Partial<InsertA2pCampaign>): Promise<A2pCampaign | undefined>;
+  
+  // Organization operations
+  getOrganizations(): Promise<Organization[]>;
+  getOrganization(id: string): Promise<Organization | undefined>;
+  createOrganization(org: InsertOrganization): Promise<Organization>;
+  updateOrganization(id: string, updates: Partial<InsertOrganization>): Promise<Organization | undefined>;
+  deleteOrganization(id: string): Promise<boolean>;
+  
+  // Project operations
+  getProjects(orgId?: string): Promise<Project[]>;
+  getProject(id: string): Promise<Project | undefined>;
+  createProject(project: InsertProject): Promise<Project>;
+  updateProject(id: string, updates: Partial<InsertProject>): Promise<Project | undefined>;
+  deleteProject(id: string): Promise<boolean>;
+  
+  // Project Task operations
+  getProjectTasks(projectId: string): Promise<ProjectTask[]>;
+  getProjectTask(id: string): Promise<ProjectTask | undefined>;
+  createProjectTask(task: InsertProjectTask): Promise<ProjectTask>;
+  updateProjectTask(id: string, updates: Partial<InsertProjectTask>): Promise<ProjectTask | undefined>;
+  deleteProjectTask(id: string): Promise<boolean>;
+  
+  createDemoLead(lead: InsertDemoLead): Promise<DemoLead>;
+  getDemoLeadByToken(token: string): Promise<DemoLead | undefined>;
+  getDemoLeadByPhone(phone: string): Promise<DemoLead | undefined>;
+  updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined>;
+  
+  // Site Config operations
+  getSiteConfigs(): Promise<SiteConfig[]>;
+  getSiteConfig(id: string): Promise<SiteConfig | undefined>;
+  getSiteConfigByDomain(domain: string): Promise<SiteConfig | undefined>;
+  getSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined>;
+  createSiteConfig(config: InsertSiteConfig): Promise<SiteConfig>;
+  updateSiteConfig(id: string, updates: Partial<InsertSiteConfig>): Promise<SiteConfig | undefined>;
+  deleteSiteConfig(id: string): Promise<boolean>;
+  
+  // Chat Log operations
+  getChatLogs(siteConfigId: string, limit?: number): Promise<ChatLog[]>;
+  createChatLog(log: InsertChatLog): Promise<ChatLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -254,7 +311,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCustomerByPhone(phone: string): Promise<Customer | undefined> {
-    // Normalize phone number for comparison (remove spaces, dashes)
+    if (!phone) return undefined;
     const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
     const [customer] = await db.select().from(customers).where(
       ilike(customers.phone, `%${normalizedPhone.slice(-10)}%`)
@@ -621,6 +678,170 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(lessonSessions)
       .where(eq(lessonSessions.lessonPlanId, lessonId))
       .orderBy(desc(lessonSessions.startedAt));
+  }
+
+  // Organization operations
+  async getOrganizations(): Promise<Organization[]> {
+    return db.select().from(organizations).orderBy(desc(organizations.createdAt));
+  }
+
+  async getOrganization(id: string): Promise<Organization | undefined> {
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
+    return org;
+  }
+
+  async createOrganization(org: InsertOrganization): Promise<Organization> {
+    const [created] = await db.insert(organizations).values(org).returning();
+    return created;
+  }
+
+  async updateOrganization(id: string, updates: Partial<InsertOrganization>): Promise<Organization | undefined> {
+    const [updated] = await db.update(organizations)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(organizations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteOrganization(id: string): Promise<boolean> {
+    const result = await db.delete(organizations).where(eq(organizations.id, id));
+    return true;
+  }
+
+  // Project operations
+  async getProjects(orgId?: string): Promise<Project[]> {
+    if (orgId) {
+      return db.select().from(projects)
+        .where(eq(projects.orgId, orgId))
+        .orderBy(desc(projects.createdAt));
+    }
+    return db.select().from(projects).orderBy(desc(projects.createdAt));
+  }
+
+  async getProject(id: string): Promise<Project | undefined> {
+    const [project] = await db.select().from(projects).where(eq(projects.id, id));
+    return project;
+  }
+
+  async createProject(project: InsertProject): Promise<Project> {
+    const [created] = await db.insert(projects).values(project).returning();
+    return created;
+  }
+
+  async updateProject(id: string, updates: Partial<InsertProject>): Promise<Project | undefined> {
+    const [updated] = await db.update(projects)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(projects.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteProject(id: string): Promise<boolean> {
+    await db.delete(projectTasks).where(eq(projectTasks.projectId, id));
+    await db.delete(projects).where(eq(projects.id, id));
+    return true;
+  }
+
+  // Project Task operations
+  async getProjectTasks(projectId: string): Promise<ProjectTask[]> {
+    return db.select().from(projectTasks)
+      .where(eq(projectTasks.projectId, projectId))
+      .orderBy(desc(projectTasks.createdAt));
+  }
+
+  async getProjectTask(id: string): Promise<ProjectTask | undefined> {
+    const [task] = await db.select().from(projectTasks).where(eq(projectTasks.id, id));
+    return task;
+  }
+
+  async createProjectTask(task: InsertProjectTask): Promise<ProjectTask> {
+    const [created] = await db.insert(projectTasks).values(task).returning();
+    return created;
+  }
+
+  async updateProjectTask(id: string, updates: Partial<InsertProjectTask>): Promise<ProjectTask | undefined> {
+    const [updated] = await db.update(projectTasks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(projectTasks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteProjectTask(id: string): Promise<boolean> {
+    await db.delete(projectTasks).where(eq(projectTasks.id, id));
+    return true;
+  }
+
+  async createDemoLead(lead: InsertDemoLead): Promise<DemoLead> {
+    const [created] = await db.insert(demoLeads).values(lead).returning();
+    return created;
+  }
+
+  async getDemoLeadByToken(token: string): Promise<DemoLead | undefined> {
+    const [lead] = await db.select().from(demoLeads).where(eq(demoLeads.magicToken, token));
+    return lead;
+  }
+
+  async getDemoLeadByPhone(phone: string): Promise<DemoLead | undefined> {
+    const [lead] = await db.select().from(demoLeads)
+      .where(eq(demoLeads.phone, phone))
+      .orderBy(desc(demoLeads.createdAt))
+      .limit(1);
+    return lead;
+  }
+
+  async updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined> {
+    const [updated] = await db.update(demoLeads).set(updates).where(eq(demoLeads.id, id)).returning();
+    return updated;
+  }
+
+  async getSiteConfigs(): Promise<SiteConfig[]> {
+    return db.select().from(siteConfigs).orderBy(desc(siteConfigs.createdAt));
+  }
+
+  async getSiteConfig(id: string): Promise<SiteConfig | undefined> {
+    const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.id, id));
+    return config;
+  }
+
+  async getSiteConfigByDomain(domain: string): Promise<SiteConfig | undefined> {
+    const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.domain, domain));
+    return config;
+  }
+
+  async getSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined> {
+    const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.placeId, placeId));
+    return config;
+  }
+
+  async createSiteConfig(config: InsertSiteConfig): Promise<SiteConfig> {
+    const [created] = await db.insert(siteConfigs).values(config).returning();
+    return created;
+  }
+
+  async updateSiteConfig(id: string, updates: Partial<InsertSiteConfig>): Promise<SiteConfig | undefined> {
+    const [updated] = await db.update(siteConfigs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(siteConfigs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSiteConfig(id: string): Promise<boolean> {
+    await db.delete(siteConfigs).where(eq(siteConfigs.id, id));
+    return true;
+  }
+
+  async getChatLogs(siteConfigId: string, limit = 50): Promise<ChatLog[]> {
+    return db.select().from(chatLogs)
+      .where(eq(chatLogs.siteConfigId, siteConfigId))
+      .orderBy(desc(chatLogs.createdAt))
+      .limit(limit);
+  }
+
+  async createChatLog(log: InsertChatLog): Promise<ChatLog> {
+    const [created] = await db.insert(chatLogs).values(log).returning();
+    return created;
   }
 }
 

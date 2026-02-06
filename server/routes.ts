@@ -22,6 +22,10 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
+import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
+import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
+import { getAvailableApis, calculateCosts, analyzeWithKimi, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
+import crypto from "crypto";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -68,6 +72,130 @@ export async function registerRoutes(
   app.get("/api/auth/session", verifySession);
   app.post("/api/auth/logout", logout);
 
+  // ============ Demo Lead / Magic Link Onboarding ============
+
+  function normalizePhone(phone: string): string {
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length === 10) return `+1${digits}`;
+    if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+    return `+${digits}`;
+  }
+
+  const demoCreateSchema = z.object({
+    phone: z.string().min(7).max(20),
+    businessName: z.string().min(1).max(500),
+    businessAddress: z.string().max(500).optional().nullable(),
+    placeId: z.string().max(200).optional().nullable(),
+    placeData: z.any().optional().nullable(),
+  });
+
+  app.post("/api/demo/create", async (req, res) => {
+    try {
+      const parsed = demoCreateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Phone number and business name are required" });
+      }
+      const { phone, businessName, businessAddress, placeId, placeData } = parsed.data;
+
+      const normalizedPhone = normalizePhone(phone);
+      const magicToken = crypto.randomBytes(32).toString("hex");
+      const magicTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const lead = await storage.createDemoLead({
+        phone: normalizedPhone,
+        businessName,
+        businessAddress: businessAddress || null,
+        placeId: placeId || null,
+        placeData: placeData || null,
+        magicToken,
+        magicTokenExpiresAt,
+        magicTokenUsed: false,
+        demoStartedAt: new Date(),
+        demoReadyAt: null,
+        status: "preview",
+        name: null,
+      });
+
+      const host = req.headers.host || "localhost:5000";
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const magicLink = `${protocol}://${host}/demo?token=${magicToken}`;
+
+      const fromNumber = await getTwilioFromPhoneNumber();
+      if (fromNumber) {
+        await sendSms(
+          normalizedPhone,
+          `Welcome to Gateway Global AI!\n\nYour free AI-powered website for "${businessName}" is being built right now.\n\nClick here to access your site anytime:\n${magicLink}\n\nNo login needed - this link is your key.`,
+          fromNumber
+        );
+      }
+
+      res.json({
+        success: true,
+        leadId: lead.id,
+        magicToken,
+        magicLink,
+        smsSent: !!fromNumber,
+      });
+    } catch (error: any) {
+      console.error("[Demo] Create error:", error);
+      res.status(500).json({ error: error.message || "Failed to create demo" });
+    }
+  });
+
+  app.get("/api/demo/verify/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const lead = await storage.getDemoLeadByToken(token);
+
+      if (!lead) {
+        return res.status(404).json({ error: "Invalid or expired link" });
+      }
+
+      if (lead.magicTokenExpiresAt < new Date()) {
+        return res.status(410).json({ error: "This link has expired" });
+      }
+
+      if (!lead.magicTokenUsed) {
+        await storage.updateDemoLead(lead.id, { magicTokenUsed: true } as any);
+      }
+
+      res.json({
+        success: true,
+        lead: {
+          id: lead.id,
+          businessName: lead.businessName,
+          businessAddress: lead.businessAddress,
+          placeId: lead.placeId,
+          placeData: lead.placeData,
+          status: lead.status,
+          name: lead.name,
+          demoStartedAt: lead.demoStartedAt,
+          demoReadyAt: lead.demoReadyAt,
+        },
+      });
+    } catch (error: any) {
+      console.error("[Demo] Verify error:", error);
+      res.status(500).json({ error: error.message || "Failed to verify link" });
+    }
+  });
+
+  app.post("/api/demo/:id/update-name", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name } = req.body;
+      if (!name) {
+        return res.status(400).json({ error: "Name is required" });
+      }
+      const updated = await storage.updateDemoLead(id, { name, status: "ready" } as any);
+      if (!updated) {
+        return res.status(404).json({ error: "Demo not found" });
+      }
+      res.json({ success: true, lead: updated });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to update" });
+    }
+  });
+
   // Gemini API key endpoint (for client-side Gemini Live)
   app.get("/api/gemini-key", (req, res) => {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -76,7 +204,537 @@ export async function registerRoutes(
     }
     res.json({ apiKey });
   });
+
+  // ============ Google Places Details (for reviews) ============
+  app.get("/api/places/details/:placeId", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+      const { placeId } = req.params;
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=reviews,user_ratings_total,rating&key=${apiKey}`
+      );
+      const data = await response.json();
+      if (data.status !== 'OK') {
+        return res.status(400).json({ error: data.status, reviews: [] });
+      }
+      res.json({
+        reviews: data.result?.reviews || [],
+        user_ratings_total: data.result?.user_ratings_total || 0,
+        rating: data.result?.rating || 0,
+      });
+    } catch (error: any) {
+      console.error("[Places Details] Error:", error.message);
+      res.status(500).json({ error: error.message, reviews: [] });
+    }
+  });
+
+  // ============ Google Workspace Integration ============
   
+  // In-memory storage for Google Workspace credentials (per business)
+  const googleWorkspaceCredentials = new Map<string, GoogleWorkspaceCredentials>();
+  
+  // Check if Google Workspace is configured
+  app.get("/api/google/status", (req, res) => {
+    const hasClientId = !!process.env.GOOGLE_CLIENT_ID;
+    const hasClientSecret = !!process.env.GOOGLE_CLIENT_SECRET;
+    res.json({ 
+      configured: hasClientId && hasClientSecret,
+      hasClientId,
+      hasClientSecret
+    });
+  });
+
+  // Get Google Workspace OAuth URL
+  app.get("/api/google/auth-url", (req, res) => {
+    try {
+      const { businessId } = req.query;
+      if (!businessId || typeof businessId !== 'string') {
+        return res.status(400).json({ error: "businessId is required" });
+      }
+
+      const service = createGoogleWorkspaceService();
+      const authUrl = service.getAuthUrl(businessId);
+      res.json({ authUrl });
+    } catch (error: any) {
+      console.error("Google auth URL error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Google OAuth callback
+  app.get("/api/google/callback", async (req, res) => {
+    try {
+      const { code, state: businessId } = req.query;
+      
+      if (!code || typeof code !== 'string') {
+        return res.status(400).send("Authorization code not provided");
+      }
+      if (!businessId || typeof businessId !== 'string') {
+        return res.status(400).send("Business ID not provided");
+      }
+
+      const service = createGoogleWorkspaceService();
+      const credentials = await service.exchangeCode(code);
+      
+      // Store credentials for this business
+      googleWorkspaceCredentials.set(businessId, credentials);
+      
+      // Redirect back to the admin panel with success
+      res.redirect(`/website-builder?google_connected=true&businessId=${businessId}`);
+    } catch (error: any) {
+      console.error("Google OAuth callback error:", error);
+      res.redirect(`/website-builder?google_error=${encodeURIComponent(error.message)}`);
+    }
+  });
+
+  // Check if business has Google Workspace connected
+  app.get("/api/google/connection/:businessId", (req, res) => {
+    const { businessId } = req.params;
+    const hasCredentials = googleWorkspaceCredentials.has(businessId);
+    res.json({ connected: hasCredentials });
+  });
+
+  // Execute a Google Workspace tool
+  app.post("/api/google/execute-tool", async (req, res) => {
+    try {
+      const { businessId, toolName, args } = req.body;
+      
+      if (!businessId) {
+        return res.status(400).json({ success: false, error: "businessId is required" });
+      }
+      if (!toolName) {
+        return res.status(400).json({ success: false, error: "toolName is required" });
+      }
+
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ 
+          success: false, 
+          error: "Google Workspace not connected for this business",
+          requiresAuth: true
+        });
+      }
+
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.executeTool(toolName, args || {});
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Google tool execution error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Disconnect Google Workspace
+  app.delete("/api/google/connection/:businessId", (req, res) => {
+    const { businessId } = req.params;
+    const wasConnected = googleWorkspaceCredentials.delete(businessId);
+    res.json({ success: true, wasConnected });
+  });
+
+  // ============ Google Drive API ============
+
+  const multer = (await import('multer')).default;
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+  app.get("/api/google/drive/drives/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.listDrives();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/google/drive/files/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { folderId = 'root', pageToken, pageSize } = req.query;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.listDriveFiles(
+        folderId as string,
+        pageToken as string | undefined,
+        pageSize ? parseInt(pageSize as string) : undefined
+      );
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google/drive/folder/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { name, parentId } = req.body;
+      if (!name) return res.status(400).json({ success: false, error: "Folder name is required" });
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.createDriveFolder(name, parentId || 'root');
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google/drive/upload/:businessId", upload.single('file'), async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { parentId } = req.body;
+      const file = (req as any).file;
+      if (!file) return res.status(400).json({ success: false, error: "No file provided" });
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.uploadDriveFile(file.originalname, file.buffer, file.mimetype, parentId || 'root');
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/google/drive/files/:businessId/:fileId", async (req, res) => {
+    try {
+      const { businessId, fileId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.deleteDriveFile(fileId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ============ Google Calendar API ============
+
+  app.get("/api/google/calendar/events/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { maxResults, timeMin } = req.query;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.listCalendarEvents(
+        maxResults ? parseInt(maxResults as string) : 20,
+        timeMin as string | undefined
+      );
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google/calendar/events/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { summary, description, startTime, endTime, attendees } = req.body;
+      if (!summary || !startTime || !endTime) {
+        return res.status(400).json({ success: false, error: "summary, startTime, and endTime are required" });
+      }
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.createCalendarEvent({ summary, description, startTime, endTime, attendees });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.patch("/api/google/calendar/events/:businessId/:eventId", async (req, res) => {
+    try {
+      const { businessId, eventId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.updateCalendarEvent(eventId, req.body);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/google/calendar/events/:businessId/:eventId", async (req, res) => {
+    try {
+      const { businessId, eventId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.deleteCalendarEvent(eventId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ============ Google Tasks API ============
+
+  app.get("/api/google/tasks/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { maxResults } = req.query;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.listTasks(maxResults ? parseInt(maxResults as string) : 20);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google/tasks/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { title, notes, dueDate } = req.body;
+      if (!title) {
+        return res.status(400).json({ success: false, error: "title is required" });
+      }
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.createTask({ title, notes, dueDate });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.patch("/api/google/tasks/:businessId/:taskId", async (req, res) => {
+    try {
+      const { businessId, taskId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.updateTask(taskId, req.body);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/google/tasks/:businessId/:taskId", async (req, res) => {
+    try {
+      const { businessId, taskId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.deleteTask(taskId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ============ Places Aggregate API - Business Reports ============
+
+  app.post("/api/reports/compute-insights", async (req, res) => {
+    try {
+      const { request: insightRequest } = req.body;
+
+      if (!insightRequest || !insightRequest.filter) {
+        return res.status(400).json({ success: false, error: "request with filter is required" });
+      }
+
+      const result = await computeInsights(insightRequest);
+      res.json({ success: true, data: result });
+    } catch (error: any) {
+      console.error("[Places Aggregate] Error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/reports/business-report", async (req, res) => {
+    try {
+      const { mode, businessName, address, category, radiusMiles, latitude, longitude, minRating, maxRating, priceLevels } = req.body;
+
+      if (mode === 'marketing') {
+        if (!category) {
+          return res.status(400).json({ success: false, error: "category is required for marketing search" });
+        }
+        const report = await generateMarketingSearch({
+          mode: 'marketing',
+          address: address || businessName,
+          latitude,
+          longitude,
+          category,
+          radiusMiles,
+          minRating,
+          maxRating,
+          priceLevels
+        });
+        res.json({
+          success: true,
+          report,
+          formatted: {
+            chat: formatMarketingReportForChat(report),
+            sms: formatMarketingReportForSms(report)
+          }
+        });
+      } else {
+        const name = businessName || address;
+        if (!name) {
+          return res.status(400).json({ success: false, error: "businessName is required" });
+        }
+        const report = await generateOwnerReport({
+          mode: 'owner',
+          businessName: name,
+          radiusMiles
+        });
+        res.json({
+          success: true,
+          report,
+          formatted: {
+            chat: formatOwnerReportForChat(report),
+            sms: formatOwnerReportForSms(report)
+          }
+        });
+      }
+    } catch (error: any) {
+      console.error("[Business Report] Error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/reports/lookup-place", async (req, res) => {
+    try {
+      const { name } = req.body;
+      if (!name) {
+        return res.status(400).json({ success: false, error: "name is required" });
+      }
+      const place = await lookupPlaceByName(name);
+      if (!place) {
+        return res.status(404).json({ success: false, error: `No place found for "${name}"` });
+      }
+      res.json({ success: true, place });
+    } catch (error: any) {
+      console.error("[Place Lookup] Error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Google API Analyst routes
+  app.get("/api/google-analyst/apis", async (_req, res) => {
+    res.json({ success: true, apis: getAvailableApis() });
+  });
+
+  app.post("/api/google-analyst/calculate-costs", async (req, res) => {
+    try {
+      const { scenarios } = req.body as { scenarios: ApiUsageScenario[] };
+      if (!scenarios || !Array.isArray(scenarios)) {
+        return res.status(400).json({ success: false, error: "scenarios array is required" });
+      }
+      const result = calculateCosts(scenarios);
+      res.json({ success: true, ...result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google-analyst/analyze", async (req, res) => {
+    try {
+      const { question, scenarios, conversationHistory } = req.body;
+      if (!question) {
+        return res.status(400).json({ success: false, error: "question is required" });
+      }
+
+      let context = question;
+      if (scenarios && Array.isArray(scenarios)) {
+        const costs = calculateCosts(scenarios);
+        context += `\n\nCurrent usage data:\n${JSON.stringify(costs, null, 2)}`;
+      }
+
+      const analysis = await analyzeWithKimi({
+        type: 'general',
+        context,
+        conversationHistory: conversationHistory || []
+      });
+
+      res.json({ success: true, analysis });
+    } catch (error: any) {
+      console.error("[Google API Analyst] Analysis error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google-analyst/rate-limits", async (req, res) => {
+    try {
+      const { scenarios, monthlyBudget } = req.body;
+      if (!scenarios || !monthlyBudget) {
+        return res.status(400).json({ success: false, error: "scenarios and monthlyBudget are required" });
+      }
+      const recommendations = await generateRateLimits(scenarios, monthlyBudget);
+      res.json({ success: true, recommendations });
+    } catch (error: any) {
+      console.error("[Google API Analyst] Rate limits error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google-analyst/pricing-strategy", async (req, res) => {
+    try {
+      const { services, targetMargin } = req.body;
+      if (!services || !Array.isArray(services)) {
+        return res.status(400).json({ success: false, error: "services array is required" });
+      }
+      const strategy = await generatePricingStrategy(services, targetMargin || 60);
+      res.json({ success: true, strategy });
+    } catch (error: any) {
+      console.error("[Google API Analyst] Pricing strategy error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google-analyst/compare", async (req, res) => {
+    try {
+      const { useCase, apiIds } = req.body;
+      if (!useCase || !apiIds || !Array.isArray(apiIds)) {
+        return res.status(400).json({ success: false, error: "useCase and apiIds array are required" });
+      }
+      const comparison = await compareApis(useCase, apiIds);
+      res.json({ success: true, comparison });
+    } catch (error: any) {
+      console.error("[Google API Analyst] Compare error:", error.message);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Get telephony config
   app.get("/api/telephony/config", async (req, res) => {
     try {
@@ -151,9 +809,40 @@ export async function registerRoutes(
     }
   });
 
+  async function requireActiveSubscription(): Promise<{ allowed: boolean; error?: string }> {
+    try {
+      const { getUncachableStripeClient } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      const subscriptions = await stripe.subscriptions.list({
+        status: 'active',
+        limit: 1,
+      });
+
+      if (subscriptions.data.length > 0) {
+        return { allowed: true };
+      }
+
+      return {
+        allowed: false,
+        error: "A paid subscription is required to search for or provision phone numbers. Please subscribe to a plan first at the Billing page.",
+      };
+    } catch (err: any) {
+      return {
+        allowed: false,
+        error: "Unable to verify subscription status. Please ensure you have an active paid plan before requesting phone numbers.",
+      };
+    }
+  }
+
   // Search available phone numbers
   app.get("/api/telephony/numbers/search", async (req, res) => {
     try {
+      const subCheck = await requireActiveSubscription();
+      if (!subCheck.allowed) {
+        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
+      }
+
       const { areaCode, country = 'US' } = req.query;
       if (!areaCode || typeof areaCode !== 'string') {
         return res.status(400).json({ error: "Area code is required" });
@@ -168,6 +857,11 @@ export async function registerRoutes(
   // Provision a phone number
   app.post("/api/telephony/numbers/provision", async (req, res) => {
     try {
+      const subCheck = await requireActiveSubscription();
+      if (!subCheck.allowed) {
+        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
+      }
+
       const { phoneNumber, voiceUrl, smsUrl } = req.body;
       if (!phoneNumber) {
         return res.status(400).json({ error: "Phone number is required" });
@@ -503,6 +1197,11 @@ export async function registerRoutes(
   // Search available US numbers by area code
   app.get("/api/twilio/numbers/available", async (req, res) => {
     try {
+      const subCheck = await requireActiveSubscription();
+      if (!subCheck.allowed) {
+        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
+      }
+
       const areaCode = (req.query.areaCode as string || '').replace(/\D/g, '').slice(0, 3);
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
       
@@ -554,6 +1253,11 @@ export async function registerRoutes(
   // Buy a number (E.164 or 10-digit US)
   app.post("/api/twilio/numbers", async (req, res) => {
     try {
+      const subCheck = await requireActiveSubscription();
+      if (!subCheck.allowed) {
+        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
+      }
+
       const { phoneNumber, friendlyName, messagingServiceSid } = req.body;
       
       if (!phoneNumber) {
@@ -2225,8 +2929,596 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   });
 
   // ============================================
+  // AGENT BUDGET & STARTUP SCRIPT API
+  // ============================================
+
+  // Cost estimation: approximate USD per 1K tokens by model
+  const MODEL_COST_PER_1K_TOKENS: Record<string, { input: number; output: number }> = {
+    'kimi-k2.5': { input: 0.002, output: 0.006 },
+    'kimi-k2-turbo-preview': { input: 0.001, output: 0.003 },
+    'moonshot-v1-128k': { input: 0.0016, output: 0.0048 },
+    'moonshot-v1-32k': { input: 0.0008, output: 0.0024 },
+    'moonshot-v1-8k': { input: 0.0004, output: 0.0012 },
+    'Qwen/Kimi-K2-Instruct': { input: 0.002, output: 0.006 },
+    'default': { input: 0.002, output: 0.006 },
+  };
+
+  function estimateCostUsd(modelId: string, inputTokens: number, outputTokens: number): number {
+    const rates = MODEL_COST_PER_1K_TOKENS[modelId] || MODEL_COST_PER_1K_TOKENS['default'];
+    return (inputTokens / 1000) * rates.input + (outputTokens / 1000) * rates.output;
+  }
+
+  function estimateTokens(text: string): number {
+    return Math.ceil(text.length / 3.5);
+  }
+
+  function getNextResetDate(period: string): Date {
+    const now = new Date();
+    switch (period) {
+      case 'daily':
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      case 'weekly':
+        const dayOfWeek = now.getDay();
+        const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilMonday);
+      case 'monthly':
+      default:
+        return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    }
+  }
+
+  // Serve Google Maps JS API key to frontend (for Places Autocomplete)
+  // Uses dedicated GOOGLE_MAPS_JS_API key, falls back to GOOGLE_CLOUD_API_KEY
+  app.get("/api/config/maps-key", (_req, res) => {
+    const key = process.env.GOOGLE_MAPS_JS_API || process.env.GOOGLE_CLOUD_API_KEY;
+    if (!key) return res.status(404).json({ error: "Google Maps API key not configured" });
+    res.json({ key });
+  });
+
+  // Update agent budget configuration
+  app.patch("/api/agents/:id/budget", async (req, res) => {
+    try {
+      const schema = z.object({
+        budgetAmountUsd: z.string().refine(v => !isNaN(parseFloat(v)) && parseFloat(v) >= 0, { message: "Budget must be a non-negative number" }).optional(),
+        budgetPeriod: z.enum(["daily", "weekly", "monthly"]).optional(),
+        startupScript: z.string().max(10000).optional().nullable(),
+        startupBudgetUsd: z.string().refine(v => !isNaN(parseFloat(v)) && parseFloat(v) >= 0, { message: "Startup budget must be a non-negative number" }).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+      const updates: any = {};
+      if (parsed.data.budgetAmountUsd !== undefined) updates.budgetAmountUsd = parsed.data.budgetAmountUsd;
+      if (parsed.data.budgetPeriod !== undefined) {
+        updates.budgetPeriod = parsed.data.budgetPeriod;
+        updates.budgetResetAt = getNextResetDate(parsed.data.budgetPeriod);
+      }
+      if (parsed.data.startupScript !== undefined) updates.startupScript = parsed.data.startupScript;
+      if (parsed.data.startupBudgetUsd !== undefined) updates.startupBudgetUsd = parsed.data.startupBudgetUsd;
+
+      const agent = await storage.updateAgent(req.params.id, updates);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+      res.json(agent);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get agent budget summary
+  app.get("/api/agents/:id/budget", async (req, res) => {
+    try {
+      const agent = await storage.getAgent(req.params.id);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+
+      // Check if budget period has reset
+      const now = new Date();
+      let spentUsd = parseFloat(agent.budgetSpentUsd || '0');
+      let resetAt = agent.budgetResetAt;
+
+      if (resetAt && now > new Date(resetAt)) {
+        spentUsd = 0;
+        resetAt = getNextResetDate(agent.budgetPeriod || 'monthly');
+        await storage.updateAgent(agent.id, {
+          budgetSpentUsd: '0',
+          budgetResetAt: resetAt,
+        });
+      }
+
+      const budgetAmount = parseFloat(agent.budgetAmountUsd || '0');
+      const startupBudget = parseFloat(agent.startupBudgetUsd || '0');
+
+      res.json({
+        budgetAmountUsd: budgetAmount,
+        budgetPeriod: agent.budgetPeriod || 'monthly',
+        budgetSpentUsd: spentUsd,
+        budgetRemainingUsd: Math.max(0, budgetAmount - spentUsd),
+        budgetResetAt: resetAt,
+        startupScript: agent.startupScript,
+        startupBudgetUsd: startupBudget,
+        startupStatus: agent.startupStatus || 'pending',
+        startupResultSummary: agent.startupResultSummary,
+        startupLastRunAt: agent.startupLastRunAt,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Run agent startup script
+  app.post("/api/agents/:id/startup-run", async (req, res) => {
+    try {
+      const agent = await storage.getAgent(req.params.id);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+
+      if (!agent.startupScript || agent.startupScript.trim().length === 0) {
+        return res.status(400).json({ error: "No startup script configured for this agent" });
+      }
+
+      const startupBudget = parseFloat(agent.startupBudgetUsd || '0');
+      if (startupBudget <= 0) {
+        return res.status(400).json({ error: "Startup budget must be greater than $0" });
+      }
+
+      // Mark as running
+      await storage.updateAgent(agent.id, { startupStatus: 'running' });
+
+      const modelId = agent.aiModelId || 'moonshot-v1-128k';
+      const temperature = (agent.aiTemperature || 60) / 100;
+      const maxTokens = agent.aiMaxTokens || 4096;
+
+      // Build research prompt
+      const systemPrompt = agent.systemPrompt
+        ? `${agent.systemPrompt}\n\n--- STARTUP RESEARCH TASK ---\nYou have been allocated a startup budget of $${startupBudget.toFixed(2)} for initial research. Complete the research task below thoroughly. Provide actionable findings, data points, and recommendations. Be concise but comprehensive.`
+        : `You are ${agent.name}, an AI agent performing initial research. You have a budget of $${startupBudget.toFixed(2)}. Complete the research task thoroughly with actionable findings.`;
+
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        { role: 'user' as const, content: `STARTUP RESEARCH TASK:\n\n${agent.startupScript}\n\nProvide a thorough research report with findings, data, and actionable recommendations.` },
+      ];
+
+      // Estimate input tokens for cost tracking
+      const inputText = messages.map(m => m.content).join(' ');
+      const estimatedInputTokens = estimateTokens(inputText);
+
+      // Cap output tokens based on budget
+      const modelRates = MODEL_COST_PER_1K_TOKENS[modelId] || MODEL_COST_PER_1K_TOKENS['default'];
+      const inputCost = (estimatedInputTokens / 1000) * modelRates.input;
+      const remainingBudget = startupBudget - inputCost;
+      const maxOutputByBudget = Math.floor((remainingBudget / modelRates.output) * 1000);
+      const cappedMaxTokens = Math.min(maxTokens, Math.max(500, maxOutputByBudget));
+
+      try {
+        const response = await chat({
+          model: modelId as any,
+          messages,
+          temperature,
+          max_tokens: cappedMaxTokens,
+        });
+
+        // Estimate cost
+        const estimatedOutputTokens = estimateTokens(response);
+        const totalCost = estimateCostUsd(modelId, estimatedInputTokens, estimatedOutputTokens);
+
+        // Update agent with results
+        const currentSpent = parseFloat(agent.budgetSpentUsd || '0');
+        await storage.updateAgent(agent.id, {
+          startupStatus: 'completed',
+          startupResultSummary: response.slice(0, 10000),
+          startupLastRunAt: new Date(),
+          budgetSpentUsd: (currentSpent + totalCost).toFixed(2),
+        });
+
+        res.json({
+          success: true,
+          result: response,
+          estimatedCostUsd: totalCost,
+          tokensUsed: {
+            input: estimatedInputTokens,
+            output: estimatedOutputTokens,
+          },
+        });
+      } catch (aiError: any) {
+        await storage.updateAgent(agent.id, { startupStatus: 'failed' });
+        res.status(500).json({ error: `AI request failed: ${aiError.message}` });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reset agent budget spending
+  app.post("/api/agents/:id/budget-reset", async (req, res) => {
+    try {
+      const agent = await storage.getAgent(req.params.id);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+      
+      await storage.updateAgent(agent.id, {
+        budgetSpentUsd: '0',
+        budgetResetAt: getNextResetDate(agent.budgetPeriod || 'monthly'),
+      });
+      
+      res.json({ success: true, message: 'Budget reset successfully' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // ORGANIZATIONS, PROJECTS & TASKS API
+  // ============================================
+
+  // Organizations CRUD
+  app.get("/api/organizations", async (req, res) => {
+    try {
+      const orgs = await storage.getOrganizations();
+      res.json(orgs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/organizations/:id", async (req, res) => {
+    try {
+      const org = await storage.getOrganization(req.params.id);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+      res.json(org);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/organizations", async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(100),
+        description: z.string().max(500).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const org = await storage.createOrganization(parsed.data);
+      res.status(201).json(org);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/organizations/:id", async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(100).optional(),
+        description: z.string().max(500).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const org = await storage.updateOrganization(req.params.id, parsed.data);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+      res.json(org);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/organizations/:id", async (req, res) => {
+    try {
+      await storage.deleteOrganization(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Projects CRUD
+  app.get("/api/projects", async (req, res) => {
+    try {
+      const orgId = req.query.orgId as string | undefined;
+      const projectsList = await storage.getProjects(orgId);
+      res.json(projectsList);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/projects/:id", async (req, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      res.json(project);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/projects", async (req, res) => {
+    try {
+      const schema = z.object({
+        orgId: z.string().min(1),
+        name: z.string().min(1).max(200),
+        description: z.string().max(2000).optional(),
+        status: z.enum(["active", "completed", "archived"]).optional(),
+        leadAgentId: z.string().optional().nullable(),
+        agentIds: z.array(z.string()).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const project = await storage.createProject(parsed.data);
+      res.status(201).json(project);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/projects/:id", async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(200).optional(),
+        description: z.string().max(2000).optional(),
+        status: z.enum(["active", "completed", "archived"]).optional(),
+        leadAgentId: z.string().optional().nullable(),
+        agentIds: z.array(z.string()).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const project = await storage.updateProject(req.params.id, parsed.data);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      res.json(project);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/projects/:id", async (req, res) => {
+    try {
+      await storage.deleteProject(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Project Tasks CRUD
+  app.get("/api/projects/:projectId/tasks", async (req, res) => {
+    try {
+      const tasksList = await storage.getProjectTasks(req.params.projectId);
+      res.json(tasksList);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/projects/:projectId/tasks", async (req, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).max(500),
+        description: z.string().max(5000).optional(),
+        status: z.enum(["todo", "in_progress", "review", "done"]).optional(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+        assignedAgentId: z.string().optional().nullable(),
+        dueDate: z.string().optional().nullable(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const taskData = {
+        ...parsed.data,
+        projectId: req.params.projectId,
+        dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : undefined,
+      };
+      const task = await storage.createProjectTask(taskData);
+      res.status(201).json(task);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/project-tasks/:id", async (req, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).max(500).optional(),
+        description: z.string().max(5000).optional(),
+        status: z.enum(["todo", "in_progress", "review", "done"]).optional(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+        assignedAgentId: z.string().optional().nullable(),
+        dueDate: z.string().optional().nullable(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const updates: any = { ...parsed.data };
+      if (parsed.data.dueDate) updates.dueDate = new Date(parsed.data.dueDate);
+      if (parsed.data.status === 'done') updates.completedAt = new Date();
+      const task = await storage.updateProjectTask(req.params.id, updates);
+      if (!task) return res.status(404).json({ error: "Task not found" });
+      res.json(task);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/project-tasks/:id", async (req, res) => {
+    try {
+      await storage.deleteProjectTask(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Project context endpoint - assembles full context for chat
+  app.get("/api/projects/:id/context", async (req, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      const org = await storage.getOrganization(project.orgId);
+      const tasksList = await storage.getProjectTasks(project.id);
+      const allAgents = await storage.getAgents();
+      const assignedAgents = allAgents.filter(a => 
+        project.agentIds?.includes(a.id) || a.id === project.leadAgentId
+      );
+      res.json({
+        organization: org,
+        project,
+        tasks: tasksList,
+        agents: assignedAgents.map(a => ({ id: a.id, name: a.name })),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // SITE CONFIG (AI BIZ BOT ADMIN) API
+  // ============================================
+
+  app.get("/api/site-configs", async (_req, res) => {
+    try {
+      const configs = await storage.getSiteConfigs();
+      res.json(configs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/site-configs/:id", async (req, res) => {
+    try {
+      const config = await storage.getSiteConfig(req.params.id);
+      if (!config) return res.status(404).json({ error: "Site config not found" });
+      res.json(config);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/site-configs", async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(200),
+        domain: z.string().optional(),
+        placeId: z.string().optional(),
+        placeData: z.any().optional(),
+        assignedAgentId: z.string().nullable().optional(),
+        systemPromptOverride: z.string().optional(),
+        chatbotEnabled: z.boolean().optional(),
+        voiceConciergeEnabled: z.boolean().optional(),
+        widgetPosition: z.string().optional(),
+        widgetColor: z.string().optional(),
+        greetingMessage: z.string().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const config = await storage.createSiteConfig(parsed.data);
+      res.status(201).json(config);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/site-configs/:id", async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(200).optional(),
+        domain: z.string().nullable().optional(),
+        placeId: z.string().nullable().optional(),
+        placeData: z.any().optional(),
+        assignedAgentId: z.string().nullable().optional(),
+        systemPromptOverride: z.string().nullable().optional(),
+        chatbotEnabled: z.boolean().optional(),
+        voiceConciergeEnabled: z.boolean().optional(),
+        widgetPosition: z.string().optional(),
+        widgetColor: z.string().optional(),
+        greetingMessage: z.string().nullable().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const updated = await storage.updateSiteConfig(req.params.id, parsed.data);
+      if (!updated) return res.status(404).json({ error: "Site config not found" });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/site-configs/:id", async (req, res) => {
+    try {
+      await storage.deleteSiteConfig(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/site-configs/:id/chat-logs", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const logs = await storage.getChatLogs(req.params.id, limit);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
   // PUBLIC AGENT CHAT API
   // ============================================
+
+  // ============ Website Preview Chat (AI Biz Bot) ============
+  app.post("/api/website-chat", async (req, res) => {
+    try {
+      const schema = z.object({
+        message: z.string().min(1).max(4000),
+        businessName: z.string().optional(),
+        businessAddress: z.string().optional(),
+        businessPhone: z.string().optional(),
+        siteConfigId: z.string().optional(),
+        visitorId: z.string().optional(),
+        history: z.array(z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string(),
+        })).max(20).optional().default([]),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const { message, businessName, businessAddress, businessPhone, siteConfigId, visitorId, history } = parsed.data;
+
+      const systemPrompt = `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
+
+Business details:
+- Name: ${businessName || 'N/A'}
+- Address: ${businessAddress || 'N/A'}  
+- Phone: ${businessPhone || 'N/A'}
+
+You are helpful, concise, and conversational. Answer questions about the business, help with directions, hours, and services. If you don't know something specific, suggest the visitor call or visit. Keep responses brief since this is a chat widget.`;
+
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        ...history.map(h => ({ role: h.role as 'user' | 'assistant', content: h.content })),
+        { role: 'user' as const, content: message },
+      ];
+
+      const { chat, KIMI_MODELS } = await import('./kimi');
+      const response = await chat({
+        messages,
+        model: KIMI_MODELS.K2_TURBO,
+        temperature: 0.7,
+        max_tokens: 500,
+      });
+
+      if (siteConfigId) {
+        try {
+          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'user', content: message });
+          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'assistant', content: response });
+        } catch (logErr) {
+          console.error("[Website Chat] Failed to log chat:", logErr);
+        }
+      }
+
+      res.json({ response });
+    } catch (error: any) {
+      console.error("[Website Chat] Error:", error.message);
+      res.status(500).json({ error: "Failed to get response" });
+    }
+  });
 
   // Simple in-memory rate limiting for public chat
   const chatRateLimits = new Map<string, { count: number; resetTime: number }>();
@@ -2256,6 +3548,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       const chatSchema = z.object({
         agentId: z.string().min(1),
         message: z.string().min(1).max(4000),
+        projectId: z.string().optional(),
         history: z.array(z.object({
           role: z.enum(['user', 'assistant']),
           content: z.string(),
@@ -2267,7 +3560,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
         return res.status(400).json({ error: parsed.error.message });
       }
 
-      const { agentId, message, history } = parsed.data;
+      const { agentId, message, history, projectId } = parsed.data;
 
       const agent = await storage.getAgent(agentId);
       if (!agent) {
@@ -2276,9 +3569,43 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
       // Build system prompt based on agent personality
       const discProfile = `D:${agent.dominance} I:${agent.influence} S:${agent.steadiness} C:${agent.conscientiousness}`;
-      const systemPrompt = agent.systemPrompt || `You are ${agent.name}, a helpful AI assistant with the following DISC personality profile: ${discProfile}. 
+      let systemPrompt = agent.systemPrompt || `You are ${agent.name}, a helpful AI assistant with the following DISC personality profile: ${discProfile}. 
 Be conversational, helpful, and maintain a consistent personality. Your voice style is ${agent.voiceName}.
 Keep responses concise and engaging. If asked personal questions, you can share that you're an AI assistant named ${agent.name}.`;
+
+      // Inject project context if a projectId is provided
+      if (projectId) {
+        try {
+          const project = await storage.getProject(projectId);
+          if (project) {
+            const org = await storage.getOrganization(project.orgId);
+            const projectTasksList = await storage.getProjectTasks(project.id);
+            const todoTasks = projectTasksList.filter(t => t.status === 'todo');
+            const inProgressTasks = projectTasksList.filter(t => t.status === 'in_progress');
+            const reviewTasks = projectTasksList.filter(t => t.status === 'review');
+            const doneTasks = projectTasksList.filter(t => t.status === 'done');
+
+            let contextBlock = `\n\n--- PROJECT CONTEXT ---`;
+            if (org) contextBlock += `\nOrganization: ${org.name}${org.description ? ' - ' + org.description : ''}`;
+            contextBlock += `\nProject: ${project.name} (${project.status})`;
+            if (project.description) contextBlock += `\nDescription: ${project.description}`;
+            contextBlock += `\nTask Summary: ${todoTasks.length} to-do, ${inProgressTasks.length} in progress, ${reviewTasks.length} in review, ${doneTasks.length} done`;
+            
+            if (todoTasks.length > 0 || inProgressTasks.length > 0 || reviewTasks.length > 0) {
+              contextBlock += `\n\nActive Tasks:`;
+              [...inProgressTasks, ...reviewTasks, ...todoTasks].slice(0, 10).forEach(t => {
+                contextBlock += `\n- [${t.status.toUpperCase()}] ${t.title}${t.priority !== 'medium' ? ' (' + t.priority + ')' : ''}${t.description ? ': ' + t.description.slice(0, 100) : ''}`;
+              });
+            }
+            contextBlock += `\n--- END PROJECT CONTEXT ---`;
+            contextBlock += `\n\nYou are working on the "${project.name}" project. Reference the project tasks and context in your responses. Help the user manage, plan, and execute this project.`;
+            
+            systemPrompt += contextBlock;
+          }
+        } catch (err) {
+          console.warn('Failed to load project context for chat:', err);
+        }
+      }
 
       // Build conversation messages
       const messages = [
@@ -2290,12 +3617,41 @@ Keep responses concise and engaging. If asked personal questions, you can share 
         { role: 'user' as const, content: message },
       ];
 
-      const response = await chat({
-        model: KIMI_MODELS.K2_TURBO,
-        messages,
-        temperature: 0.7,
-        max_tokens: 1024,
-      });
+      // Use agent's configured model, falling back to K2_TURBO
+      const agentModel = agent.aiModelId || 'kimi-k2-turbo-preview';
+      const agentTemp = agent.aiTemperature ? agent.aiTemperature / 100 : 0.7;
+      const agentMaxTokens = agent.aiMaxTokens || 4096;
+
+      // Map model IDs to Kimi model constants
+      let modelToUse: string;
+      if (agentModel === 'kimi-k2.5' || agentModel === 'kimi-k2-5') {
+        modelToUse = KIMI_MODELS.K2_5;
+      } else if (agentModel === 'kimi-k2-thinking') {
+        modelToUse = KIMI_MODELS.K2_THINKING;
+      } else if (agentModel.startsWith('kimi-') || agentModel.startsWith('moonshot-')) {
+        modelToUse = agentModel;
+      } else {
+        modelToUse = KIMI_MODELS.K2_TURBO;
+      }
+
+      // Retry once on transient failures
+      let response: string;
+      try {
+        response = await chat({
+          model: modelToUse,
+          messages,
+          temperature: agentTemp,
+          max_tokens: agentMaxTokens,
+        });
+      } catch (firstError: any) {
+        console.warn('Chat first attempt failed, retrying:', firstError.message);
+        response = await chat({
+          model: modelToUse,
+          messages,
+          temperature: agentTemp,
+          max_tokens: agentMaxTokens,
+        });
+      }
 
       res.json({ response });
     } catch (error: any) {
@@ -2535,8 +3891,198 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       
       console.log(`[SMS Webhook] From: ${From}, To: ${To}, Body: ${Body?.substring(0, 50)}...`);
       
-      // ========== ADMIN COMMANDS (Health Check & Repair Agent) ==========
+      // ========== AI BIZ BOT - Business Owner SMS Commands ==========
       const bodyLower = (Body || '').toLowerCase().trim();
+      
+      // Business owner commands for website/business management
+      const bizBotKeywords = ['visitors', 'how many visitors', 'traffic', 'reviews', 'bad reviews', 'update hours', 
+        'change hours', 'my website', 'website stats', 'check website', 'new reviews', 'schedule', 'calendar',
+        'add task', 'create task', 'my tasks', 'create event', 'schedule meeting',
+        'report', 'area report', 'business report', 'competitors', 'competition', 'nearby businesses',
+        'search ', 'market '];
+      const isBizBotCommand = bizBotKeywords.some(kw => bodyLower.includes(kw));
+      
+      if (isBizBotCommand) {
+        console.log(`[SMS Biz Bot] Detected business command from: ${From}`);
+        
+        try {
+          // Check if this phone is registered as a business owner
+          const customer = await storage.getCustomerByPhone(From);
+          
+          let responseText = '';
+          
+          // Handle specific commands - MVP demo mode with sample data
+          // TODO: Integrate with real analytics, Google Workspace tools, and business data
+          if (bodyLower.includes('visitors') || bodyLower.includes('traffic') || bodyLower.includes('website stats')) {
+            responseText = '📊 Website Stats (Last 24h) [Demo]\n\n' +
+              '👥 Visitors: 142\n' +
+              '💬 Chat conversations: 12\n' +
+              '📞 Calls handled: 3\n' +
+              '⭐ New reviews: 2\n\n' +
+              'Reply "reviews" to see new reviews.';
+          } else if (bodyLower.includes('bad reviews') || bodyLower.includes('negative')) {
+            responseText = '⚠️ Recent Low Reviews\n\n' +
+              '⭐⭐ "Service was slow" - John D. (2 days ago)\n\n' +
+              'Reply "respond [your message]" to reply to this review.';
+          } else if (bodyLower.includes('reviews') || bodyLower.includes('new reviews')) {
+            responseText = '⭐ Recent Reviews\n\n' +
+              '⭐⭐⭐⭐⭐ "Great service!" - Sarah M.\n' +
+              '⭐⭐⭐⭐ "Good food, nice atmosphere" - Mike T.\n' +
+              '⭐⭐ "Service was slow" - John D.\n\n' +
+              'Reply "bad" to filter low ratings.';
+          } else if (bodyLower.includes('update hours') || bodyLower.includes('change hours')) {
+            // Parse hours from message if provided
+            const hoursMatch = Body.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
+            if (hoursMatch) {
+              responseText = `✅ Hours Updated!\n\nNew hours: ${hoursMatch[1]} - ${hoursMatch[2]}\n\nYour website now shows the updated hours.`;
+            } else {
+              responseText = '⏰ Update Hours\n\nTo update, reply with the new hours like:\n"Update hours 9am to 9pm"';
+            }
+          } else if (bodyLower.includes('schedule') || bodyLower.includes('calendar') || bodyLower.includes('create event')) {
+            // Check if Google Workspace is connected for this business
+            const businessId = customer?.id || 'default';
+            const credentials = googleWorkspaceCredentials.get(businessId);
+            
+            if (credentials) {
+              // Parse event details from message
+              responseText = '📅 To schedule an event, reply with:\n"Schedule [title] on [date] at [time]"\n\nExample: "Schedule Team Meeting on Monday at 3pm"';
+            } else {
+              responseText = '📅 Google Calendar not connected.\n\nVisit your admin panel to connect Google Workspace for calendar, tasks, and docs integration.';
+            }
+          } else if (bodyLower.includes('add task') || bodyLower.includes('create task') || bodyLower.includes('my tasks')) {
+            if (bodyLower.includes('my tasks')) {
+              responseText = '📋 Your Tasks\n\n' +
+                '☐ Follow up with vendor\n' +
+                '☐ Review monthly reports\n' +
+                '☐ Update menu prices\n\n' +
+                'Reply "add task [description]" to add new.';
+            } else {
+              // Parse task from message
+              const taskMatch = Body.match(/(?:add task|create task)\s+(.+)/i);
+              if (taskMatch) {
+                responseText = `✅ Task Added: "${taskMatch[1]}"\n\nYou can view all tasks by replying "my tasks".`;
+              } else {
+                responseText = '📋 Add Task\n\nReply with "add task [description]"\n\nExample: "add task Call supplier about delivery"';
+              }
+            }
+          } else if (bodyLower.includes('report') || bodyLower.includes('competitors') || bodyLower.includes('competition') || bodyLower.includes('nearby businesses') || bodyLower.startsWith('search ') || bodyLower.startsWith('market ')) {
+            if (!process.env.GOOGLE_CLOUD_API_KEY) {
+              responseText = 'Area Reports are not available yet. API key needs to be configured by an administrator.';
+            } else {
+              const customerPlace = process.env.CUSTOMER_PLACE;
+              const isMarketingSearch = bodyLower.startsWith('search ') || bodyLower.startsWith('market ');
+
+              if (isMarketingSearch) {
+                const searchBody = Body.replace(/^(search|market)\s*/i, '').trim();
+                const categoryMatch = searchBody.match(/^(\w[\w\s]*?)\s+(?:near|in|at|around)\s+(.+?)(?:\s+(\d+(?:\.\d+)?)\s*(?:mi(?:les?)?|km))?(?:\s+(\d(?:\.\d)?)-(\d(?:\.\d)?)\s*stars?)?$/i);
+                const simpleMatch = searchBody.match(/^(\w[\w\s]*?)\s+(\d+(?:\.\d+)?)\s*(?:mi(?:les?)?)?$/i);
+
+                if (categoryMatch) {
+                  const [, cat, location, radiusStr, minR, maxR] = categoryMatch;
+                  const category = cat.trim().replace(/\s+/g, '_').toLowerCase();
+                  try {
+                    const report = await generateMarketingSearch({
+                      mode: 'marketing',
+                      address: location.trim(),
+                      category,
+                      radiusMiles: radiusStr ? parseFloat(radiusStr) : undefined,
+                      minRating: minR ? parseFloat(minR) : undefined,
+                      maxRating: maxR ? parseFloat(maxR) : undefined
+                    });
+                    responseText = formatMarketingReportForSms(report);
+                  } catch (searchErr: any) {
+                    console.error('[SMS Biz Bot] Marketing search error:', searchErr.message);
+                    responseText = `Search failed: ${searchErr.message}`;
+                  }
+                } else if (simpleMatch) {
+                  const [, cat, radiusStr] = simpleMatch;
+                  const category = cat.trim().replace(/\s+/g, '_').toLowerCase();
+                  if (!customerPlace) {
+                    responseText = 'No default business set. Use:\n"search [category] near [location]"\n\nExample: "search restaurant near Lafayette LA"';
+                  } else {
+                    try {
+                      const report = await generateMarketingSearch({
+                        mode: 'marketing',
+                        address: customerPlace,
+                        category,
+                        radiusMiles: parseFloat(radiusStr)
+                      });
+                      responseText = formatMarketingReportForSms(report);
+                    } catch (searchErr: any) {
+                      responseText = `Search failed: ${searchErr.message}`;
+                    }
+                  }
+                } else {
+                  responseText = 'Marketing Search\n\nFormats:\n' +
+                    '"search [category] near [location]"\n' +
+                    '"search [category] near [location] [miles]mi"\n' +
+                    '"search [category] near [location] [miles]mi [min]-[max] stars"\n\n' +
+                    'Examples:\n' +
+                    '"search restaurant near Lafayette LA"\n' +
+                    '"search cafe near 123 Main St 5mi"\n' +
+                    '"search lodging near Lafayette LA 2mi 4-5 stars"';
+                }
+              } else {
+                const bodyAfterReport = Body.replace(/^(report|competitors|competition|nearby businesses)\s*/i, '').trim();
+                const radiusMatch = bodyAfterReport.match(/(.+?)\s+(\d+(?:\.\d+)?)\s*(?:mi(?:les?)?|km)?$/i);
+                let searchName: string | undefined;
+                let radiusMiles: number | undefined;
+
+                if (radiusMatch) {
+                  searchName = radiusMatch[1].trim();
+                  radiusMiles = parseFloat(radiusMatch[2]);
+                } else {
+                  searchName = bodyAfterReport || customerPlace;
+                }
+
+                if (!searchName) {
+                  responseText = 'Area Report\n\nFormats:\n' +
+                    '"report [business name]"\n' +
+                    '"report [business name] [miles]"\n\n' +
+                    'Examples:\n' +
+                    '"report Boardwalk Suites Lafayette"\n' +
+                    '"report Boardwalk Suites Lafayette 5"';
+                } else {
+                  try {
+                    const report = await generateOwnerReport({
+                      mode: 'owner',
+                      businessName: searchName,
+                      radiusMiles
+                    });
+                    responseText = formatOwnerReportForSms(report);
+                  } catch (reportError: any) {
+                    console.error('[SMS Biz Bot] Report generation error:', reportError.message);
+                    responseText = `Could not generate report: ${reportError.message}`;
+                  }
+                }
+              }
+            }
+          } else {
+            responseText = 'AI Biz Bot\n\nI can help with:\n' +
+              '- "visitors" - Website traffic stats\n' +
+              '- "reviews" - Recent customer reviews\n' +
+              '- "update hours" - Change business hours\n' +
+              '- "schedule" - Calendar & events\n' +
+              '- "add task" - Create reminders\n' +
+              '- "report [name]" - Owner area report (3mi default)\n' +
+              '- "report [name] [miles]" - Custom radius\n' +
+              '- "search [category] near [location]" - Market search\n' +
+              '- "competitors" - Your business competition\n\n' +
+              'What would you like to do?';
+          }
+          
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${responseText}</Message></Response>`;
+          res.type('text/xml').send(twiml);
+          return;
+        } catch (error: any) {
+          console.error('[SMS Biz Bot] Error:', error.message);
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>🤖 AI Biz Bot encountered an error. Please try again or visit your admin panel.</Message></Response>`;
+          res.type('text/xml').send(twiml);
+          return;
+        }
+      }
+      
+      // ========== ADMIN COMMANDS (Health Check & Repair Agent) ==========
       
       // ========== CODING AGENT (Kimi K2) ==========
       const codingKeywords = ['error:', 'exception', 'traceback', 'syntaxerror', 'typeerror', 'referenceerror', 
@@ -4107,6 +5653,125 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       res.json({ audioUrl });
     } catch (error: any) {
       console.error("[Classroom] TTS error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== BILLING / PAYMENT METHODS ====================
+
+  app.get("/api/billing/publishable-key", async (_req, res) => {
+    try {
+      const { getStripePublishableKey } = await import('./stripeClient');
+      const key = await getStripePublishableKey();
+      res.json({ publishableKey: key });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/billing/setup-intent", async (req, res) => {
+    try {
+      const { customerId } = req.body;
+      if (!customerId) return res.status(400).json({ error: "customerId is required" });
+
+      const customer = await storage.getCustomer(customerId);
+      if (!customer) return res.status(404).json({ error: "Customer not found" });
+
+      const { getUncachableStripeClient } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      let stripeCustomerId = customer.stripeCustomerId;
+      if (!stripeCustomerId) {
+        const stripeCustomer = await stripe.customers.create({
+          name: customer.name,
+          email: customer.email || undefined,
+          phone: customer.phone || undefined,
+          metadata: { gatewayCustomerId: customer.id },
+        });
+        stripeCustomerId = stripeCustomer.id;
+        await storage.updateCustomer(customer.id, { stripeCustomerId: stripeCustomer.id });
+      }
+
+      const setupIntent = await stripe.setupIntents.create({
+        customer: stripeCustomerId,
+        payment_method_types: ['card'],
+      });
+
+      res.json({ clientSecret: setupIntent.client_secret, stripeCustomerId });
+    } catch (error: any) {
+      console.error("[Billing] Setup intent error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/billing/payment-methods/:customerId", async (req, res) => {
+    try {
+      const customer = await storage.getCustomer(req.params.customerId);
+      if (!customer) return res.status(404).json({ error: "Customer not found" });
+      if (!customer.stripeCustomerId) return res.json({ paymentMethods: [], defaultPaymentMethodId: null });
+
+      const { getUncachableStripeClient } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      const methods = await stripe.paymentMethods.list({
+        customer: customer.stripeCustomerId,
+        type: 'card',
+      });
+
+      const stripeCustomer = await stripe.customers.retrieve(customer.stripeCustomerId);
+      const defaultPmId = (stripeCustomer as any).invoice_settings?.default_payment_method || null;
+
+      res.json({
+        paymentMethods: methods.data.map((pm) => ({
+          id: pm.id,
+          brand: pm.card?.brand,
+          last4: pm.card?.last4,
+          expMonth: pm.card?.exp_month,
+          expYear: pm.card?.exp_year,
+          isDefault: pm.id === defaultPmId,
+        })),
+        defaultPaymentMethodId: defaultPmId,
+      });
+    } catch (error: any) {
+      console.error("[Billing] List methods error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/billing/payment-methods/:customerId/default", async (req, res) => {
+    try {
+      const { paymentMethodId } = req.body;
+      if (!paymentMethodId) return res.status(400).json({ error: "paymentMethodId is required" });
+
+      const customer = await storage.getCustomer(req.params.customerId);
+      if (!customer?.stripeCustomerId) return res.status(404).json({ error: "Customer or Stripe customer not found" });
+
+      const { getUncachableStripeClient } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      await stripe.customers.update(customer.stripeCustomerId, {
+        invoice_settings: { default_payment_method: paymentMethodId },
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[Billing] Set default error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/billing/payment-methods/:customerId/:paymentMethodId", async (req, res) => {
+    try {
+      const customer = await storage.getCustomer(req.params.customerId);
+      if (!customer?.stripeCustomerId) return res.status(404).json({ error: "Customer or Stripe customer not found" });
+
+      const { getUncachableStripeClient } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      await stripe.paymentMethods.detach(req.params.paymentMethodId);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[Billing] Remove method error:", error.message);
       res.status(500).json({ error: error.message });
     }
   });

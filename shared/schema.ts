@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -334,6 +334,17 @@ export const agents = pgTable("agents", {
   aiTemperature: integer("ai_temperature").default(60), // Stored as 0-100, divide by 100 for actual value
   aiMaxTokens: integer("ai_max_tokens").default(4096),
   hfToken: text("hf_token"), // User's HuggingFace token (encrypted)
+  // Budget Configuration
+  budgetAmountUsd: numeric("budget_amount_usd", { precision: 10, scale: 2 }).default("0"),
+  budgetPeriod: text("budget_period").default("monthly"), // daily, weekly, monthly
+  budgetSpentUsd: numeric("budget_spent_usd", { precision: 10, scale: 2 }).default("0"),
+  budgetResetAt: timestamp("budget_reset_at"),
+  // Startup Script
+  startupScript: text("startup_script"),
+  startupBudgetUsd: numeric("startup_budget_usd", { precision: 10, scale: 2 }).default("0"),
+  startupStatus: text("startup_status").default("pending"), // pending, running, completed, failed
+  startupResultSummary: text("startup_result_summary"),
+  startupLastRunAt: timestamp("startup_last_run_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -360,6 +371,9 @@ export const customers = pgTable("customers", {
   source: text("source"), // where the lead came from
   status: text("status").notNull().default("new"), // new, contacted, qualified, converted, lost
   notes: text("notes"),
+  stripeCustomerId: text("stripe_customer_id"),
+  subscriptionId: text("subscription_id"),
+  subscriptionStatus: text("subscription_status").default("none"),
   agentId: varchar("agent_id").references(() => agents.id),
   lastContactAt: timestamp("last_contact_at"),
   followUpAt: timestamp("follow_up_at"),
@@ -461,6 +475,32 @@ export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({
 
 export type InsertAuthSession = z.infer<typeof insertAuthSessionSchema>;
 export type AuthSession = typeof authSessions.$inferSelect;
+
+// Demo leads for business website onboarding flow
+export const demoLeads = pgTable("demo_leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phone: text("phone").notNull(),
+  name: text("name"),
+  businessName: text("business_name").notNull(),
+  businessAddress: text("business_address"),
+  placeId: text("place_id"),
+  placeData: jsonb("place_data"),
+  magicToken: text("magic_token").notNull().unique(),
+  magicTokenExpiresAt: timestamp("magic_token_expires_at").notNull(),
+  magicTokenUsed: boolean("magic_token_used").default(false),
+  demoStartedAt: timestamp("demo_started_at"),
+  demoReadyAt: timestamp("demo_ready_at"),
+  status: text("status").notNull().default("pending"), // pending, preview, training, ready, expired
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDemoLeadSchema = createInsertSchema(demoLeads).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDemoLead = z.infer<typeof insertDemoLeadSchema>;
+export type DemoLead = typeof demoLeads.$inferSelect;
 
 // Twilio Sub-Accounts for multi-tenant phone number management
 export const twilioSubAccounts = pgTable("twilio_sub_accounts", {
@@ -636,6 +676,117 @@ export const insertLessonSessionSchema = createInsertSchema(lessonSessions).omit
 
 export type InsertLessonSession = z.infer<typeof insertLessonSessionSchema>;
 export type LessonSession = typeof lessonSessions.$inferSelect;
+
+// Organizations - Top-level grouping for projects (like GitHub orgs)
+export const organizations = pgTable("organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  avatarUrl: text("avatar_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+export type Organization = typeof organizations.$inferSelect;
+
+// Projects - Belong to an organization, have assigned agents
+export const projects = pgTable("projects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").references(() => organizations.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("active"), // active, completed, archived
+  leadAgentId: varchar("lead_agent_id").references(() => agents.id),
+  agentIds: text("agent_ids").array().default(sql`ARRAY[]::text[]`),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertProjectSchema = createInsertSchema(projects).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertProject = z.infer<typeof insertProjectSchema>;
+export type Project = typeof projects.$inferSelect;
+
+// Project Tasks - Work items within a project
+export const projectTasks = pgTable("project_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").references(() => projects.id).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("todo"), // todo, in_progress, review, done
+  priority: text("priority").notNull().default("medium"), // low, medium, high, urgent
+  assignedAgentId: varchar("assigned_agent_id").references(() => agents.id),
+  dueDate: timestamp("due_date"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({
+  id: true,
+  completedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertProjectTask = z.infer<typeof insertProjectTaskSchema>;
+export type ProjectTask = typeof projectTasks.$inferSelect;
+
+// Site Configurations - maps businesses to agent configs for AI Biz Bot
+export const siteConfigs = pgTable("site_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  domain: text("domain"),
+  placeId: text("place_id"),
+  placeData: jsonb("place_data"),
+  assignedAgentId: varchar("assigned_agent_id"),
+  systemPromptOverride: text("system_prompt_override"),
+  chatbotEnabled: boolean("chatbot_enabled").default(true),
+  voiceConciergeEnabled: boolean("voice_concierge_enabled").default(true),
+  widgetPosition: text("widget_position").default("bottom-right"),
+  widgetColor: text("widget_color").default("#2563eb"),
+  greetingMessage: text("greeting_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSiteConfig = z.infer<typeof insertSiteConfigSchema>;
+export type SiteConfig = typeof siteConfigs.$inferSelect;
+
+// Chat logs for web-based AI Biz Bot conversations
+export const chatLogs = pgTable("chat_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id"),
+  visitorId: text("visitor_id"),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertChatLogSchema = createInsertSchema(chatLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertChatLog = z.infer<typeof insertChatLogSchema>;
+export type ChatLog = typeof chatLogs.$inferSelect;
 
 // A2P Use Case definitions (from TCR matrix)
 export const A2P_USE_CASES = [

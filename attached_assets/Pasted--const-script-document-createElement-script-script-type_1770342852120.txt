@@ -1,0 +1,46 @@
+   const script = document.createElement('script');
+    script.type = 'module';
+    script.src = 'https://ajax.googleapis.com/ajax/libs/@googlemaps/extended-component-library/0.6.11/index.min.js';
+    script.setAttribute('data-gmpx-lib', 'true');
+    script.onload = () => setLibLoaded(true);
+    script.onerror = () => setMapsError('Failed to load Google Maps library.');
+    document.head.appendChild(script);
+
+    (window as any).gm_authFailure = () => {
+      setMapsError('Google Maps API not activated. Enable "Maps JavaScript API" and "Places API" in Google Cloud Console.');
+    };
+  }, [mapsKey]);
+
+  useEffect(() => {
+    if (!libLoaded || !mapsKey || !pickerContainerRef.current) return;
+    const container = pickerContainerRef.current;
+    if (container.querySelector('gmpx-api-loader')) return;
+
+    const apiLoader = document.createElement('gmpx-api-loader');
+    apiLoader.setAttribute('key', mapsKey);
+    apiLoader.setAttribute('solution-channel', 'GMP_GE_mapsandplacesautocomplete_v2');
+    container.appendChild(apiLoader);
+
+    const placePicker = document.createElement('gmpx-place-picker') as any;
+    placePicker.setAttribute('placeholder', 'Search for your business (e.g. Boardwalk Suites Lafayette)');
+    placePicker.setAttribute('data-testid', 'input-place-search');
+    placePicker.style.cssText = 'width:100%;--gmpx-color-surface:transparent;--gmpx-color-on-surface:#e2e8f0;--gmpx-color-on-surface-variant:#64748b;--gmpx-color-primary:#818cf8;--gmpx-color-outline:transparent;--gmpx-font-family-base:inherit;--gmpx-font-size-base:1.1rem;border:none;outline:none;';
+
+    placePicker.addEventListener('gmpx-placechange', () => {
+      const place = placePicker.value;
+      if (place && (place.displayName || place.name)) {
+        setSelectedPlace({
+          name: place.displayName || place.name || '',
+          formatted_address: place.formattedAddress || place.formatted_address || '',
+          rating: place.rating ?? undefined,
+          user_ratings_total: place.userRatingCount ?? place.user_ratings_total ?? undefined,
+          formatted_phone_number: place.nationalPhoneNumber ?? place.formatted_phone_number ?? undefined,
+          website: place.websiteURI ?? place.website ?? undefined,
+          types: place.types || [],
+          place_id: place.id ?? place.place_id ?? undefined,
+          photos: place.photos || [],
+          opening_hours: place.regularOpeningHours ?? place.opening_hours ?? undefined,
+        });
+        setMapsError(null);
+      }
+    });

@@ -13,6 +13,7 @@ import AgentChat from "@/pages/AgentChat";
 import DiscVisualizer from "@/pages/DiscVisualizer";
 import DeveloperPage from "@/pages/DeveloperPage";
 import BusinessPage from "@/pages/BusinessPage";
+import GoogleApiAnalyst from "@/pages/GoogleApiAnalyst";
 import OnboardingFlow from "@/pages/OnboardingFlow";
 import DiscAssessment from "@/pages/DiscAssessment";
 import MockConversation from "@/pages/MockConversation";
@@ -29,6 +30,12 @@ import MvpLanding from "@/pages/MvpLanding";
 import LandingV2 from "@/pages/LandingV2";
 import KimiAudioDemo from "@/pages/KimiAudioDemo";
 import TwilioHealthCheck from "@/pages/TwilioHealthCheck";
+import TelephonyManager from "@/pages/TelephonyManager";
+import BillingPage from "@/pages/BillingPage";
+import GoogleDrivePage from "@/pages/GoogleDrivePage";
+import GoogleCalendarPage from "@/pages/GoogleCalendarPage";
+import GoogleTasksPage from "@/pages/GoogleTasksPage";
+import AiBizBotAdmin from "@/pages/AiBizBotAdmin";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
@@ -237,7 +244,7 @@ function TwilioHub() {
 function AppRouter() {
   return (
     <Switch>
-      <Route path="/" component={OnboardingFlow} />
+      <Route path="/">{() => <Redirect to="/dashboard" />}</Route>
       <Route path="/onboard" component={OnboardingFlow} />
       <Route path="/agents" component={AgentDashboard} />
       <Route path="/dashboard" component={AgentDashboard} />
@@ -250,7 +257,12 @@ function AppRouter() {
       <Route path="/agent-manager" component={AgentManager} />
       <Route path="/customers" component={CustomerManager} />
       <Route path="/gateway-admin" component={GatewayAdmin} />
-      <Route path="/telephony" component={TelephonyPanel} />
+      <Route path="/telephony" component={TelephonyManager} />
+      <Route path="/billing" component={BillingPage} />
+      <Route path="/google-drive" component={GoogleDrivePage} />
+      <Route path="/google-calendar" component={GoogleCalendarPage} />
+      <Route path="/google-tasks" component={GoogleTasksPage} />
+      <Route path="/telephony-legacy" component={TelephonyPanel} />
       <Route path="/twilio-account" component={TwilioAccountManager} />
       <Route path="/twilio-health" component={TwilioHealthCheck} />
       <Route path="/twilio" component={TwilioHub} />
@@ -261,7 +273,9 @@ function AppRouter() {
       <Route path="/security" component={SecurityDashboard} />
       <Route path="/disc" component={DiscVisualizer} />
       <Route path="/developer" component={DeveloperPage} />
-      <Route path="/business" component={BusinessPage} />
+      {/* BusinessPage moved to public routes */}
+      <Route path="/aibizbot" component={AiBizBotAdmin} />
+      <Route path="/google-analyst" component={GoogleApiAnalyst} />
       <Route path="/assessment" component={DiscAssessment} />
       <Route path="/conversation" component={MockConversation} />
       <Route component={NotFound} />
@@ -319,9 +333,11 @@ function App() {
         <AuthProvider>
           <Switch>
             {/* Public routes */}
-            <Route path="/" component={MvpLanding} />
-            <Route path="/v2" component={LandingV2} />
+            <Route path="/" component={BusinessPage} />
+            <Route path="/business" component={BusinessPage} />
+            <Route path="/demo" component={BusinessPage} />
             <Route path="/login" component={Login} />
+            <Route path="/v2" component={LandingV2} />
             <Route path="/kimi-audio" component={KimiAudioDemo} />
             <Route path="/chat/:agentId" component={AgentChat} />
             {/* Protected routes with sidebar */}
