@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import gatewayLogo from '@assets/gatewaylogo_header_left_1770354860467.png';
+import WebsitePreview from '@/components/WebsitePreview';
 import { 
   Phone, Building2, Users, Globe, ShieldCheck, 
   ArrowLeft, CheckCircle2, MessageSquare, 
@@ -880,113 +881,10 @@ export default function BusinessPage() {
           </div>
         )}
 
-        {/* Website Preview — renders actual website after generation */}
+        {/* Website Preview — renders the full website-builder template */}
         {(stage === 'preview' || stage === 'full-access') && selectedPlace && (
-          <div className="absolute inset-0 z-20 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto bg-white text-gray-900">
-              <div className="relative">
-                {selectedPlace.photos && selectedPlace.photos.length > 0 && (typeof selectedPlace.photos[0]?.getURI === 'function' || typeof selectedPlace.photos[0]?.getUrl === 'function') ? (
-                  <div className="w-full h-56 md:h-72 overflow-hidden relative">
-                    <img
-                      src={typeof selectedPlace.photos[0]?.getURI === 'function' ? selectedPlace.photos[0].getURI({ maxWidth: 1200 }) : selectedPlace.photos[0].getUrl({ maxWidth: 1200 })}
-                      alt={selectedPlace.name}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/70" />
-                    <div className="absolute bottom-0 left-0 right-0 p-6">
-                      <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">{selectedPlace.name}</h1>
-                      <p className="text-white/80 text-sm mt-1 flex items-center gap-1">
-                        <MapPin className="w-3 h-3" /> {selectedPlace.formatted_address}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="w-full h-56 md:h-72 bg-gradient-to-br from-blue-600 to-indigo-700 flex items-end relative">
-                    <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 25% 25%, white 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
-                    <div className="p-6 relative z-10">
-                      <h1 className="text-3xl md:text-4xl font-bold text-white">{selectedPlace.name}</h1>
-                      <p className="text-white/80 text-sm mt-1 flex items-center gap-1">
-                        <MapPin className="w-3 h-3" /> {selectedPlace.formatted_address}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-                <div className="flex flex-wrap gap-3">
-                  {selectedPlace.rating && (
-                    <div className="flex items-center gap-1.5 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-md text-sm font-medium">
-                      <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-                      {selectedPlace.rating} {selectedPlace.user_ratings_total && <span className="text-amber-600/70">({selectedPlace.user_ratings_total.toLocaleString()} reviews)</span>}
-                    </div>
-                  )}
-                  {selectedPlace.formatted_phone_number && (
-                    <a href={`tel:${selectedPlace.formatted_phone_number}`} className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md text-sm font-medium">
-                      <Phone className="w-4 h-4" />
-                      {selectedPlace.formatted_phone_number}
-                    </a>
-                  )}
-                  {selectedPlace.website && (
-                    <button onClick={() => window.open(selectedPlace.website, '_blank')} className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-3 py-1.5 rounded-md text-sm font-medium">
-                      <Globe className="w-4 h-4" />
-                      Visit Website
-                    </button>
-                  )}
-                </div>
-                {selectedPlace.types && selectedPlace.types.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {selectedPlace.types.slice(0, 5).map(t => (
-                      <span key={t} className="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-md text-xs capitalize">
-                        {t.replace(/_/g, ' ')}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div className="border-t border-gray-100 pt-6">
-                  <h2 className="text-lg font-bold text-gray-900 mb-3">About {selectedPlace.name}</h2>
-                  <p className="text-gray-600 text-sm leading-relaxed">
-                    Welcome to {selectedPlace.name}, located at {selectedPlace.formatted_address}.
-                    {selectedPlace.rating && ` Rated ${selectedPlace.rating} out of 5 by our customers.`}
-                    {selectedPlace.formatted_phone_number && ` Give us a call at ${selectedPlace.formatted_phone_number} or use our AI chat assistant below for instant answers.`}
-                  </p>
-                </div>
-                {selectedPlace.opening_hours?.weekday_text && selectedPlace.opening_hours.weekday_text.length > 0 && (
-                  <div className="border-t border-gray-100 pt-6">
-                    <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                      <Clock className="w-5 h-5 text-gray-400" /> Hours
-                    </h2>
-                    <div className="grid gap-1">
-                      {selectedPlace.opening_hours.weekday_text.map((day, i) => (
-                        <p key={i} className="text-sm text-gray-600">{day}</p>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="border-t border-gray-100 pt-6">
-                  <h2 className="text-lg font-bold text-gray-900 mb-3">AI-Powered Services</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="bg-blue-50 rounded-md p-4">
-                      <Phone className="w-6 h-6 text-blue-600 mb-2" />
-                      <h3 className="font-semibold text-gray-900 text-sm">Voice Concierge</h3>
-                      <p className="text-xs text-gray-500 mt-1">24/7 AI phone support</p>
-                    </div>
-                    <div className="bg-indigo-50 rounded-md p-4">
-                      <MessageSquare className="w-6 h-6 text-indigo-600 mb-2" />
-                      <h3 className="font-semibold text-gray-900 text-sm">Chat Widget</h3>
-                      <p className="text-xs text-gray-500 mt-1">Instant answers for visitors</p>
-                    </div>
-                    <div className="bg-violet-50 rounded-md p-4">
-                      <Globe className="w-6 h-6 text-violet-600 mb-2" />
-                      <h3 className="font-semibold text-gray-900 text-sm">Custom Website</h3>
-                      <p className="text-xs text-gray-500 mt-1">Professional online presence</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-gray-50 rounded-md p-4 text-center text-xs text-gray-400">
-                  Powered by Gateway Global AI
-                </div>
-              </div>
-            </div>
+          <div className="absolute inset-0 z-20 overflow-y-auto">
+            <WebsitePreview place={selectedPlace} onBack={() => { setStage('landing'); setSelectedPlace(null); }} />
           </div>
         )}
       </section>
