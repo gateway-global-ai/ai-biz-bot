@@ -781,46 +781,49 @@ export default function BusinessPage() {
       )}
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex flex-col justify-center px-6 overflow-hidden -mt-8">
+      <section className="relative min-h-screen flex flex-col px-6 overflow-hidden pt-16 md:pt-24">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none" />
-        <div className="max-w-5xl mx-auto text-center relative z-10 space-y-10">
-          <div>
+        <div className="max-w-5xl mx-auto text-center relative z-10 flex flex-col items-center flex-1 justify-between pb-16 md:pb-24">
+          <div className="flex-1 flex items-end pb-8 md:pb-12">
             <VoiceVisualizer />
           </div>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white" data-testid="text-hero-heading">
-            Free Custom Websites<br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400">
-              AI Voice and Chat Enabled
-            </span>
-          </h1>
+          <div className="space-y-10 md:space-y-14">
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white" data-testid="text-hero-heading">
+              Free Custom Websites<br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400">
+                AI Voice and Chat Enabled
+              </span>
+            </h1>
 
-          {/* Google Places Autocomplete - Extended Component Library */}
-          <div className="max-w-2xl mx-auto" data-testid="container-place-search">
-            <div className="relative group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-              <div className="relative bg-slate-900 rounded-xl border-0 p-2 flex items-center gap-2">
-                <div ref={pickerContainerRef} className="flex-1 min-w-0" />
-                {!libLoaded && mapsKey && (
-                  <div className="pr-3">
-                    <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-                  </div>
-                )}
+            {/* Google Places Autocomplete - Extended Component Library */}
+            <div className="max-w-2xl mx-auto" data-testid="container-place-search">
+              <div className="relative group">
+                <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
+                <div className="relative bg-slate-900 rounded-xl border-0 p-2 flex items-center gap-2">
+                  <div ref={pickerContainerRef} className="flex-1 min-w-0" />
+                  {!libLoaded && mapsKey && (
+                    <div className="pr-3">
+                      <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                    </div>
+                  )}
+                </div>
               </div>
+              {mapsError && (
+                <p className="text-xs text-amber-400 mt-3 flex items-center gap-1" data-testid="text-maps-error">
+                  <ShieldCheck className="w-3 h-3 flex-shrink-0" />
+                  {mapsError}
+                </p>
+              )}
+              {!mapsError && <p className="text-xs text-slate-600 mt-3">Powered by Google Places</p>}
             </div>
-            {mapsError && (
-              <p className="text-xs text-amber-400 mt-3 flex items-center gap-1" data-testid="text-maps-error">
-                <ShieldCheck className="w-3 h-3 flex-shrink-0" />
-                {mapsError}
-              </p>
-            )}
-            {!mapsError && <p className="text-xs text-slate-600 mt-3">Powered by Google Places</p>}
           </div>
-
-          <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
-            Fully Developed Web Site In 1 Hour!<br/>
-            <span className="text-white font-medium">No Credit Card Required.</span>
-          </p>
+          <div className="flex-1 flex items-end">
+            <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
+              Fully Developed Web Site In 1 Hour!<br/>
+              <span className="text-white font-medium">No Credit Card Required.</span>
+            </p>
+          </div>
         </div>
       </section>
 
