@@ -810,7 +810,7 @@ export default function BusinessPage() {
                   {mapsError}
                 </p>
               )}
-              {!mapsError && <p className="text-xs text-slate-600 mt-3">Powered by Google Places</p>}
+              {!mapsError && <p className="text-xs text-slate-600 mt-3 pl-[4px] pr-[4px] pt-[4px] pb-[4px]">Powered by Google Places</p>}
             </div>
           </div>
           <div className="flex-1 flex items-end">
