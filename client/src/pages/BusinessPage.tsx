@@ -367,7 +367,7 @@ export default function BusinessPage() {
         </section>
       )}
 
-      {/* Features */}
+      {/* Features - commented out for now
       <section className="py-16 px-6">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-12">Features</h2>
@@ -393,6 +393,7 @@ export default function BusinessPage() {
           </div>
         </div>
       </section>
+      */}
 
       {/* Enterprise Form */}
       <section className="py-16 px-6 bg-slate-900/30 border-y border-slate-900">
