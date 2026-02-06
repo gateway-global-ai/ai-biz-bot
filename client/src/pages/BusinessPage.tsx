@@ -243,7 +243,6 @@ export default function BusinessPage() {
       setLoginPhone('');
       setLoginOtp('');
       toast({ title: 'Welcome!', description: `Logged in as ${data.user.name || 'Admin'}` });
-      setLocation('/dashboard');
     },
     onError: (error: any) => {
       toast({ title: 'Verification Failed', description: error.message || 'Invalid or expired code', variant: 'destructive' });
@@ -415,7 +414,7 @@ export default function BusinessPage() {
 
   useEffect(() => {
     if (stage !== 'preview') return;
-    setPreviewTimer(60);
+    setPreviewTimer(30);
     const interval = setInterval(() => {
       setPreviewTimer(prev => {
         if (prev <= 1) {
@@ -556,30 +555,6 @@ export default function BusinessPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isAuthenticated ? (
-            <>
-              <Link href="/dashboard">
-                <Button variant="ghost" size="sm" className="text-slate-300" data-testid="button-dashboard">
-                  <ShieldCheck className="w-4 h-4 mr-1" />
-                  Dashboard
-                </Button>
-              </Link>
-              <Button variant="ghost" size="sm" className="text-slate-400" onClick={() => authLogout()} data-testid="button-logout">
-                <LogOut className="w-4 h-4" />
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-slate-300"
-              onClick={() => { setShowLoginModal(true); setLoginStep('phone'); setLoginPhone(''); setLoginOtp(''); }}
-              data-testid="button-admin-login"
-            >
-              <LogIn className="w-4 h-4 mr-1" />
-              Admin
-            </Button>
-          )}
         </div>
       </nav>
       {stage === 'generating' && (
@@ -908,72 +883,112 @@ export default function BusinessPage() {
           </div>
         )}
 
-        {/* Website Generated Overlay — replaces hero content after generation */}
-        {(stage === 'preview' || stage === 'full-access' || stage === 'phone-gate' || stage === 'sending-link' || stage === 'training' || stage === 'demo-ready' || stage === 'name-gate') && selectedPlace && (
-          <div className="absolute inset-0 z-20 bg-slate-950/95 backdrop-blur-sm flex items-center justify-center px-6">
-            <div className="max-w-lg w-full text-center">
-              <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 mb-4">
-                <CheckCircle2 className="w-3 h-3 mr-1" /> Website Generated
-              </Badge>
-              <h2 className="text-2xl font-bold text-white mb-1">{selectedPlace.name}</h2>
-              <p className="text-sm text-slate-400 mb-6">{selectedPlace.formatted_address}</p>
-              <div className="flex flex-col gap-3">
-                <Card className="bg-slate-900/60 border-slate-800">
-                  <CardContent className="p-4 flex items-center gap-4">
-                    <div className="w-10 h-10 bg-blue-500/10 rounded-md flex items-center justify-center flex-shrink-0">
-                      <Phone className="w-5 h-5 text-blue-400" />
+        {/* Website Preview — renders actual website after generation */}
+        {(stage === 'preview' || stage === 'full-access') && selectedPlace && (
+          <div className="absolute inset-0 z-20 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto bg-white text-gray-900">
+              <div className="relative">
+                {selectedPlace.photos && selectedPlace.photos.length > 0 && (typeof selectedPlace.photos[0]?.getURI === 'function' || typeof selectedPlace.photos[0]?.getUrl === 'function') ? (
+                  <div className="w-full h-56 md:h-72 overflow-hidden relative">
+                    <img
+                      src={typeof selectedPlace.photos[0]?.getURI === 'function' ? selectedPlace.photos[0].getURI({ maxWidth: 1200 }) : selectedPlace.photos[0].getUrl({ maxWidth: 1200 })}
+                      alt={selectedPlace.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/20 to-black/70" />
+                    <div className="absolute bottom-0 left-0 right-0 p-6">
+                      <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">{selectedPlace.name}</h1>
+                      <p className="text-white/80 text-sm mt-1 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" /> {selectedPlace.formatted_address}
+                      </p>
                     </div>
-                    <div className="text-left">
-                      <h3 className="font-bold text-white text-sm">AI Voice Concierge</h3>
-                      <p className="text-xs text-slate-400">24/7 phone support for your customers</p>
-                    </div>
-                    {stage === 'full-access' && (
-                      <Badge variant="secondary" className="ml-auto bg-emerald-500/10 text-emerald-400 text-xs flex-shrink-0">Active</Badge>
-                    )}
-                  </CardContent>
-                </Card>
-                <Card className="bg-slate-900/60 border-slate-800">
-                  <CardContent className="p-4 flex items-center gap-4">
-                    <div className="w-10 h-10 bg-indigo-500/10 rounded-md flex items-center justify-center flex-shrink-0">
-                      <MessageSquare className="w-5 h-5 text-indigo-400" />
-                    </div>
-                    <div className="text-left">
-                      <h3 className="font-bold text-white text-sm">AI Chat Widget</h3>
-                      <p className="text-xs text-slate-400">Smart chat trained on your business</p>
-                    </div>
-                    {stage === 'full-access' && (
-                      <Badge variant="secondary" className="ml-auto bg-emerald-500/10 text-emerald-400 text-xs flex-shrink-0">Active</Badge>
-                    )}
-                  </CardContent>
-                </Card>
-                <Card className="bg-slate-900/60 border-slate-800">
-                  <CardContent className="p-4 flex items-center gap-4">
-                    <div className="w-10 h-10 bg-violet-500/10 rounded-md flex items-center justify-center flex-shrink-0">
-                      <Globe className="w-5 h-5 text-violet-400" />
-                    </div>
-                    <div className="text-left">
-                      <h3 className="font-bold text-white text-sm">Custom Website</h3>
-                      <p className="text-xs text-slate-400">Professional site with your brand</p>
-                    </div>
-                    {stage === 'full-access' && (
-                      <Badge variant="secondary" className="ml-auto bg-emerald-500/10 text-emerald-400 text-xs flex-shrink-0">Live</Badge>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-              {stage === 'full-access' && (
-                <div className="mt-6 space-y-2">
-                  <div className="flex items-center justify-center gap-2 text-emerald-400">
-                    <CheckCircle2 className="w-5 h-5" />
-                    <span className="font-medium text-sm">
-                      {ownerName ? `Welcome, ${ownerName}!` : 'Welcome!'} Your demo is fully unlocked.
-                    </span>
                   </div>
-                  <p className="text-slate-400 text-xs">
-                    Check your phone for the magic link to access your website anytime.
+                ) : (
+                  <div className="w-full h-56 md:h-72 bg-gradient-to-br from-blue-600 to-indigo-700 flex items-end relative">
+                    <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 25% 25%, white 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+                    <div className="p-6 relative z-10">
+                      <h1 className="text-3xl md:text-4xl font-bold text-white">{selectedPlace.name}</h1>
+                      <p className="text-white/80 text-sm mt-1 flex items-center gap-1">
+                        <MapPin className="w-3 h-3" /> {selectedPlace.formatted_address}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+                <div className="flex flex-wrap gap-3">
+                  {selectedPlace.rating && (
+                    <div className="flex items-center gap-1.5 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-md text-sm font-medium">
+                      <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                      {selectedPlace.rating} {selectedPlace.user_ratings_total && <span className="text-amber-600/70">({selectedPlace.user_ratings_total.toLocaleString()} reviews)</span>}
+                    </div>
+                  )}
+                  {selectedPlace.formatted_phone_number && (
+                    <a href={`tel:${selectedPlace.formatted_phone_number}`} className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-md text-sm font-medium">
+                      <Phone className="w-4 h-4" />
+                      {selectedPlace.formatted_phone_number}
+                    </a>
+                  )}
+                  {selectedPlace.website && (
+                    <button onClick={() => window.open(selectedPlace.website, '_blank')} className="flex items-center gap-1.5 bg-gray-100 text-gray-700 px-3 py-1.5 rounded-md text-sm font-medium">
+                      <Globe className="w-4 h-4" />
+                      Visit Website
+                    </button>
+                  )}
+                </div>
+                {selectedPlace.types && selectedPlace.types.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedPlace.types.slice(0, 5).map(t => (
+                      <span key={t} className="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-md text-xs capitalize">
+                        {t.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="border-t border-gray-100 pt-6">
+                  <h2 className="text-lg font-bold text-gray-900 mb-3">About {selectedPlace.name}</h2>
+                  <p className="text-gray-600 text-sm leading-relaxed">
+                    Welcome to {selectedPlace.name}, located at {selectedPlace.formatted_address}.
+                    {selectedPlace.rating && ` Rated ${selectedPlace.rating} out of 5 by our customers.`}
+                    {selectedPlace.formatted_phone_number && ` Give us a call at ${selectedPlace.formatted_phone_number} or use our AI chat assistant below for instant answers.`}
                   </p>
                 </div>
-              )}
+                {selectedPlace.opening_hours?.weekday_text && selectedPlace.opening_hours.weekday_text.length > 0 && (
+                  <div className="border-t border-gray-100 pt-6">
+                    <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-gray-400" /> Hours
+                    </h2>
+                    <div className="grid gap-1">
+                      {selectedPlace.opening_hours.weekday_text.map((day, i) => (
+                        <p key={i} className="text-sm text-gray-600">{day}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="border-t border-gray-100 pt-6">
+                  <h2 className="text-lg font-bold text-gray-900 mb-3">AI-Powered Services</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="bg-blue-50 rounded-md p-4">
+                      <Phone className="w-6 h-6 text-blue-600 mb-2" />
+                      <h3 className="font-semibold text-gray-900 text-sm">Voice Concierge</h3>
+                      <p className="text-xs text-gray-500 mt-1">24/7 AI phone support</p>
+                    </div>
+                    <div className="bg-indigo-50 rounded-md p-4">
+                      <MessageSquare className="w-6 h-6 text-indigo-600 mb-2" />
+                      <h3 className="font-semibold text-gray-900 text-sm">Chat Widget</h3>
+                      <p className="text-xs text-gray-500 mt-1">Instant answers for visitors</p>
+                    </div>
+                    <div className="bg-violet-50 rounded-md p-4">
+                      <Globe className="w-6 h-6 text-violet-600 mb-2" />
+                      <h3 className="font-semibold text-gray-900 text-sm">Custom Website</h3>
+                      <p className="text-xs text-gray-500 mt-1">Professional online presence</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-gray-50 rounded-md p-4 text-center text-xs text-gray-400">
+                  Powered by Gateway Global AI
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -1104,8 +1119,33 @@ export default function BusinessPage() {
           </Card>
         </div>
       </section>
-      <footer className="py-12 text-center text-slate-600 text-sm border-t border-slate-900">
-        <p>&copy; 2025 Gateway Global AI. Enterprise Division.</p>
+      <footer className="py-12 text-center text-sm border-t border-slate-900 space-y-3">
+        <p className="text-slate-600">&copy; 2025 Gateway Global AI. Enterprise Division.</p>
+        {isAuthenticated ? (
+          <div className="flex items-center justify-center gap-3">
+            <Link href="/dashboard">
+              <Button variant="ghost" size="sm" className="text-slate-600 text-xs" data-testid="button-admin-dashboard">
+                <ShieldCheck className="w-3 h-3 mr-1" />
+                Admin Dashboard
+              </Button>
+            </Link>
+            <Button variant="ghost" size="sm" className="text-slate-600 text-xs" onClick={() => authLogout()} data-testid="button-logout">
+              <LogOut className="w-3 h-3 mr-1" />
+              Logout
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-slate-600 text-xs"
+            onClick={() => { setShowLoginModal(true); setLoginStep('phone'); setLoginPhone(''); setLoginOtp(''); }}
+            data-testid="button-admin-login"
+          >
+            <LogIn className="w-3 h-3 mr-1" />
+            Admin Login
+          </Button>
+        )}
       </footer>
       {showLoginModal && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4" onClick={() => setShowLoginModal(false)}>
