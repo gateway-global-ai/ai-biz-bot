@@ -367,28 +367,6 @@ export default function BusinessPage() {
         </section>
       )}
 
-      {/* Use Cases */}
-      <section className="py-16 px-6 bg-slate-900/30 border-y border-slate-900">
-        <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { icon: Store, title: "Small Business", quote: "AI receptionist for $99 vs human for $3000/mo.", color: "text-emerald-400" },
-              { icon: ShoppingCart, title: "E-Commerce", quote: "Handle order status questions via SMS 24/7.", color: "text-blue-400" },
-              { icon: Calendar, title: "Healthcare", quote: "HIPAA-compliant appointment scheduling.", color: "text-violet-400" },
-              { icon: Headphones, title: "Call Centers", quote: "Reduce hold times by 80% with AI triage.", color: "text-amber-400" }
-            ].map((item, i) => (
-              <Card key={i} className="bg-slate-900/50 border-slate-800">
-                <CardContent className="p-6">
-                  <item.icon className={`w-8 h-8 mb-4 ${item.color}`} />
-                  <div className="font-bold text-white mb-2">{item.title}</div>
-                  <p className="text-sm text-slate-400 italic">"{item.quote}"</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Features */}
       <section className="py-16 px-6">
         <div className="max-w-6xl mx-auto">
