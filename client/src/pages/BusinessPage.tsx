@@ -258,8 +258,8 @@ export default function BusinessPage() {
           </div>
 
           <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
-            Your Customers Can Now Call Your AI Assistant. <br/>
-            <span className="text-white font-medium">24/7 AI Receptionist starting at $99/mo.</span>
+            Fully Developed Web Site In 1 Hour!<br/>
+            <span className="text-white font-medium">No Credit Card Required.</span>
           </p>
         </div>
       </section>
