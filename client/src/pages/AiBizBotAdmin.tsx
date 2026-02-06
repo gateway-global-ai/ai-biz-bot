@@ -12,16 +12,25 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Bot, Plus, Globe, MessageSquare, Settings, Trash2, Eye,
-  Send, Loader2, ArrowLeft, ExternalLink, ChevronRight,
-  Sparkles, Radio, Clock, Star, MapPin, Phone, RefreshCw
+  Bot, Plus, Globe, MessageSquare, Settings, Trash2,
+  Send, Loader2, ExternalLink, Code, Copy, Check,
+  Sparkles, Clock, Star, MapPin, Phone, Zap,
+  ShoppingCart, Headphones, Palette
 } from 'lucide-react';
-import type { Agent, SiteConfig } from '@shared/schema';
+import type { Agent, SiteConfig, BotTemplate } from '@shared/schema';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
 }
+
+const TEMPLATE_ICONS: Record<string, any> = {
+  ShoppingCart,
+  Headphones,
+  Sparkles,
+  Palette,
+  Bot,
+};
 
 function SiteList({
   sites,
@@ -82,6 +91,9 @@ function SiteList({
                       <Star className="w-2.5 h-2.5 fill-current" /> {placeData.rating}
                     </span>
                   )}
+                  {site.modelProvider && site.modelProvider !== 'kimi' && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-emerald-400 border-emerald-400/30">{site.modelProvider}</Badge>
+                  )}
                 </div>
               </div>
             </div>
@@ -95,27 +107,34 @@ function SiteList({
 function AdminPanel({
   site,
   agents,
+  templates,
   onUpdate,
   isUpdating,
 }: {
   site: SiteConfig;
   agents: Agent[];
+  templates: BotTemplate[];
   onUpdate: (updates: Partial<SiteConfig>) => void;
   isUpdating: boolean;
 }) {
   const placeData = site.placeData as any;
-  const [activeTab, setActiveTab] = useState<'settings' | 'agent' | 'chat' | 'logs'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'agent' | 'chat' | 'logs' | 'embed'>('settings');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: site.greetingMessage || `Hi! I'm the AI assistant for ${site.name}. How can I help you?` }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [embedCopied, setEmbedCopied] = useState(false);
 
   const { data: chatLogs = [], isLoading: logsLoading } = useQuery<any[]>({
     queryKey: ['/api/site-configs', site.id, 'chat-logs'],
     queryFn: () => fetch(`/api/site-configs/${site.id}/chat-logs`).then(r => r.json()),
     enabled: activeTab === 'logs',
+  });
+
+  const { data: providers = [] } = useQuery<{ provider: string; model: string }[]>({
+    queryKey: ['/api/gateway/providers'],
   });
 
   const sendTestChat = useCallback(async () => {
@@ -145,7 +164,7 @@ function AdminPanel({
     }
     setChatLoading(false);
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-  }, [chatInput, chatLoading, chatMessages, placeData, site.name]);
+  }, [chatInput, chatLoading, chatMessages, placeData, site.name, site.id]);
 
   useEffect(() => {
     setChatMessages([
@@ -153,11 +172,37 @@ function AdminPanel({
     ]);
   }, [site.id, site.greetingMessage, site.name]);
 
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const embedCode = `<script src="${baseUrl}/embed.js" data-bot-id="${site.id}" defer></script>`;
+
+  const copyEmbedCode = () => {
+    navigator.clipboard.writeText(embedCode);
+    setEmbedCopied(true);
+    setTimeout(() => setEmbedCopied(false), 2000);
+  };
+
+  const applyTemplate = (template: BotTemplate) => {
+    const uiConfig = template.defaultUiConfig as any;
+    const knownProviders = ['kimi', 'gemini', 'openai', 'anthropic'];
+    const model = template.defaultModel || 'kimi';
+    const isProvider = knownProviders.includes(model);
+    onUpdate({
+      botTemplateId: template.id,
+      systemPromptOverride: template.defaultSystemPrompt,
+      modelProvider: isProvider ? model : 'kimi',
+      modelName: isProvider ? null : model,
+      widgetColor: uiConfig?.primaryColor || site.widgetColor,
+      greetingMessage: uiConfig?.greetingMessage || site.greetingMessage,
+      placeholderText: uiConfig?.placeholderText || site.placeholderText,
+    });
+  };
+
   const tabs = [
     { id: 'settings' as const, label: 'Settings', icon: Settings },
     { id: 'agent' as const, label: 'Agent', icon: Bot },
     { id: 'chat' as const, label: 'Test Chat', icon: MessageSquare },
-    { id: 'logs' as const, label: 'Chat Logs', icon: Clock },
+    { id: 'logs' as const, label: 'Logs', icon: Clock },
+    { id: 'embed' as const, label: 'Embed', icon: Code },
   ];
 
   return (
@@ -171,7 +216,7 @@ function AdminPanel({
             <h2 className="text-lg font-bold text-white truncate">{site.name}</h2>
             {site.domain && (
               <p className="text-xs text-slate-400 flex items-center gap-1">
-                <ExternalLink className="w-3 h-3" /> {site.domain}/aibizbot
+                <ExternalLink className="w-3 h-3" /> {site.domain}
               </p>
             )}
           </div>
@@ -219,7 +264,6 @@ function AdminPanel({
                 className="bg-slate-800 border-slate-700 text-white"
                 data-testid="input-site-domain"
               />
-              <p className="text-[10px] text-slate-500 mt-1">The domain where this site will be hosted. Add /aibizbot to access admin.</p>
             </div>
             <div className="flex items-center justify-between gap-4">
               <div>
@@ -242,6 +286,35 @@ function AdminPanel({
                 onCheckedChange={(checked) => onUpdate({ voiceConciergeEnabled: checked })}
                 data-testid="switch-voice-enabled"
               />
+            </div>
+            <div>
+              <Label className="text-slate-300 text-xs mb-1.5 block">AI Model Provider</Label>
+              <Select
+                value={site.modelProvider || 'kimi'}
+                onValueChange={(val) => onUpdate({ modelProvider: val })}
+              >
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-white" data-testid="select-model-provider">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="kimi">Kimi (Moonshot)</SelectItem>
+                  <SelectItem value="gemini">Gemini (Google)</SelectItem>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="anthropic">Anthropic</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-slate-500 mt-1">Select the AI provider. Automatic fallback to other providers if primary fails.</p>
+            </div>
+            <div>
+              <Label className="text-slate-300 text-xs mb-1.5 block">Model Name (optional)</Label>
+              <Input
+                value={site.modelName || ''}
+                onChange={(e) => onUpdate({ modelName: e.target.value || null })}
+                placeholder="Leave empty for default model"
+                className="bg-slate-800 border-slate-700 text-white"
+                data-testid="input-model-name"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">Override the default model. e.g. kimi-k2.5, gemini-2.0-flash</p>
             </div>
             <div>
               <Label className="text-slate-300 text-xs mb-1.5 block">Greeting Message</Label>
@@ -292,6 +365,40 @@ function AdminPanel({
 
         {activeTab === 'agent' && (
           <div className="space-y-5">
+            {templates.length > 0 && (
+              <div>
+                <Label className="text-slate-300 text-xs mb-2 block">Bot Templates</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {templates.map((template) => {
+                    const IconComp = TEMPLATE_ICONS[template.icon || 'Bot'] || Bot;
+                    const isSelected = site.botTemplateId === template.id;
+                    return (
+                      <button
+                        key={template.id}
+                        onClick={() => applyTemplate(template)}
+                        className={`p-3 rounded-lg border text-left transition-colors ${
+                          isSelected
+                            ? 'bg-indigo-500/10 border-indigo-500/30'
+                            : 'bg-slate-800/50 border-slate-700 hover:bg-slate-800'
+                        }`}
+                        data-testid={`button-template-${template.id}`}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <IconComp className={`w-4 h-4 ${isSelected ? 'text-indigo-400' : 'text-slate-400'}`} />
+                          <span className={`text-xs font-medium ${isSelected ? 'text-indigo-300' : 'text-slate-300'}`}>{template.name}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 line-clamp-2">{template.description}</p>
+                        {isSelected && (
+                          <Badge variant="secondary" className="text-[10px] mt-1.5">Active</Badge>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1.5">Click a template to apply its system prompt, model, and widget settings.</p>
+              </div>
+            )}
+
             <div>
               <Label className="text-slate-300 text-xs mb-1.5 block">Assigned Agent</Label>
               <Select
@@ -310,7 +417,7 @@ function AdminPanel({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-[10px] text-slate-500 mt-1">Assign an agent to control the AI personality and DISC profile for this site's chatbot.</p>
+              <p className="text-[10px] text-slate-500 mt-1">Assign an agent to control the AI personality and DISC profile.</p>
             </div>
 
             {site.assignedAgentId && agents.find(a => a.id === site.assignedAgentId) && (() => {
@@ -364,7 +471,7 @@ function AdminPanel({
                 rows={6}
                 data-testid="input-system-prompt"
               />
-              <p className="text-[10px] text-slate-500 mt-1">Custom instructions for the AI on this site. Overrides the agent's default prompt if set.</p>
+              <p className="text-[10px] text-slate-500 mt-1">Custom instructions for the AI on this site.</p>
             </div>
           </div>
         )}
@@ -408,7 +515,9 @@ function AdminPanel({
                   <Send className="w-4 h-4" />
                 </Button>
               </form>
-              <p className="text-[10px] text-slate-500 mt-1.5 text-center">Test how the AI responds to customers on this site</p>
+              <p className="text-[10px] text-slate-500 mt-1.5 text-center">
+                Using {site.modelProvider || 'kimi'} {site.modelName ? `(${site.modelName})` : ''} with auto-fallback
+              </p>
             </div>
           </div>
         )}
@@ -446,6 +555,112 @@ function AdminPanel({
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {activeTab === 'embed' && (
+          <div className="space-y-5">
+            {!site.chatbotEnabled && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex items-start gap-2">
+                <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs text-amber-300 font-medium">Chatbot is disabled</p>
+                  <p className="text-[10px] text-amber-400/70">Enable the chatbot in Settings for the embed script to work. The widget will not load until the chatbot is enabled.</p>
+                </div>
+              </div>
+            )}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+                  <Code className="w-4 h-4 text-emerald-400" />
+                  Embed Script
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-slate-400">
+                  Add this script to any website to deploy the AI chat widget. Place it before the closing {'</body>'} tag.
+                </p>
+                <div className="relative">
+                  <pre className="bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs text-emerald-400 font-mono overflow-x-auto whitespace-pre-wrap break-all">
+                    {embedCode}
+                  </pre>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={copyEmbedCode}
+                    className="absolute top-2 right-2"
+                    data-testid="button-copy-embed"
+                  >
+                    {embedCopied ? <Check className="w-3 h-3 mr-1" /> : <Copy className="w-3 h-3 mr-1" />}
+                    {embedCopied ? 'Copied' : 'Copy'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  Widget Preview
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg border border-slate-700">
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg shrink-0"
+                    style={{ backgroundColor: site.widgetColor || '#2563eb' }}
+                  >
+                    <MessageSquare className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-white text-sm font-medium">Chat Widget Button</p>
+                    <p className="text-[10px] text-slate-400">Position: {site.widgetPosition || 'bottom-right'}</p>
+                    <p className="text-[10px] text-slate-400">Color: {site.widgetColor || '#2563eb'}</p>
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <div className="p-3 flex items-center gap-2" style={{ backgroundColor: site.widgetColor || '#2563eb' }}>
+                    <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white text-sm font-bold">
+                      {site.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-white text-sm font-semibold">{site.name}</p>
+                      <p className="text-white/70 text-[10px]">Online</p>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-slate-50">
+                    <div className="bg-white rounded-lg px-3 py-2 text-xs text-slate-700 border border-slate-100 inline-block">
+                      {site.greetingMessage || 'Hello! How can I help you today?'}
+                    </div>
+                  </div>
+                  <div className="p-2 border-t border-slate-200 flex gap-2">
+                    <div className="flex-1 bg-slate-100 rounded-full px-3 py-1.5 text-[10px] text-slate-400">
+                      {site.placeholderText || 'Type a message...'}
+                    </div>
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: site.widgetColor || '#2563eb' }}>
+                      <Send className="w-3 h-3 text-white" />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-3 space-y-2">
+              <p className="text-xs font-medium text-slate-300">Configuration Summary</p>
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="text-slate-400">Bot ID</div>
+                <div className="text-slate-300 font-mono">{site.id.slice(0, 12)}...</div>
+                <div className="text-slate-400">Provider</div>
+                <div className="text-slate-300">{site.modelProvider || 'kimi'}</div>
+                <div className="text-slate-400">Chatbot</div>
+                <div className={site.chatbotEnabled ? 'text-emerald-400' : 'text-red-400'}>
+                  {site.chatbotEnabled ? 'Enabled' : 'Disabled'}
+                </div>
+                <div className="text-slate-400">Widget Position</div>
+                <div className="text-slate-300">{site.widgetPosition || 'bottom-right'}</div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -523,13 +738,9 @@ export default function AiBizBotAdmin() {
     queryKey: ['/api/agents'],
   });
 
-  const selectedSite = sites.find(s => s.id === selectedSiteId);
-
-  useEffect(() => {
-    if (sites.length > 0 && !selectedSiteId) {
-      setSelectedSiteId(sites[0].id);
-    }
-  }, [sites, selectedSiteId]);
+  const { data: templates = [] } = useQuery<BotTemplate[]>({
+    queryKey: ['/api/bot-templates'],
+  });
 
   const createMutation = useMutation({
     mutationFn: (data: { name: string; domain?: string; placeId?: string }) =>
@@ -572,16 +783,16 @@ export default function AiBizBotAdmin() {
     <div className="flex h-full bg-slate-950">
       <div className="w-72 border-r border-slate-800 bg-slate-900 flex flex-col shrink-0">
         <div className="p-4 border-b border-slate-800">
-          <div className="flex items-center gap-2">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
             <Bot className="w-5 h-5 text-indigo-400" />
-            <h1 className="text-lg font-bold text-white">AI Biz Bot</h1>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">Manage AI chatbots on your customer websites</p>
+            AI Biz Bot
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">Manage chatbots on customer websites</p>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
           {sitesLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 bg-slate-800" />)}
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 bg-slate-800" />)}
             </div>
           ) : isCreating ? (
             <CreateSiteDialog
@@ -599,60 +810,39 @@ export default function AiBizBotAdmin() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0">
-        {selectedSite ? (
-          <div className="flex-1 flex flex-col relative">
-            <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800 bg-slate-900 shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <h2 className="text-white font-semibold truncate">{selectedSite.name}</h2>
-                {selectedSite.chatbotEnabled ? (
-                  <Badge variant="secondary" className="shrink-0">
-                    <Radio className="w-3 h-3 mr-1 text-green-400" /> Live
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="shrink-0 text-slate-500">Disabled</Badge>
-                )}
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (confirm('Are you sure you want to delete this site configuration?')) {
-                      deleteMutation.mutate(selectedSite.id);
-                    }
-                  }}
-                  className="text-red-400 hover:text-red-300"
-                  data-testid="button-delete-site"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <AdminPanel
-                site={selectedSite}
-                agents={agents}
-                onUpdate={handleUpdate}
-                isUpdating={updateMutation.isPending}
-              />
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <Bot className="w-16 h-16 mx-auto mb-4 text-slate-700" />
-              <h2 className="text-xl font-bold text-white mb-2">AI Biz Bot Admin</h2>
-              <p className="text-slate-400 max-w-md">
-                Select a site from the left panel to configure its AI chatbot, or create a new one.
-              </p>
+      <div className="flex-1 relative">
+        {selectedSiteId && sites.find(s => s.id === selectedSiteId) ? (
+          <>
+            <AdminPanel
+              site={sites.find(s => s.id === selectedSiteId)!}
+              agents={agents}
+              templates={templates}
+              onUpdate={handleUpdate}
+              isUpdating={updateMutation.isPending}
+            />
+            <div className="absolute top-4 right-4 z-20">
               <Button
-                className="mt-6"
-                onClick={() => setIsCreating(true)}
-                data-testid="button-create-first-site"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (confirm('Delete this site configuration?')) {
+                    deleteMutation.mutate(selectedSiteId);
+                  }
+                }}
+                className="text-red-400 border-red-400/30 hover:bg-red-500/10"
+                data-testid="button-delete-site"
               >
-                <Plus className="w-4 h-4 mr-2" /> Add Your First Site
+                <Trash2 className="w-3 h-3 mr-1" /> Delete
               </Button>
+            </div>
+          </>
+        ) : (
+          <div className="h-full flex items-center justify-center">
+            <div className="text-center text-slate-500">
+              <Bot className="w-16 h-16 mx-auto mb-4 text-slate-700" />
+              <h3 className="text-lg font-medium text-slate-400 mb-1">AI Biz Bot Admin</h3>
+              <p className="text-sm">Select a site to manage its chatbot configuration</p>
+              <p className="text-xs text-slate-600 mt-2">or create a new site from the sidebar</p>
             </div>
           </div>
         )}

@@ -3364,6 +3364,163 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   });
 
   // ============================================
+  // BOT TEMPLATES API
+  // ============================================
+
+  app.get("/api/bot-templates", async (_req, res) => {
+    try {
+      const templates = await storage.getBotTemplates();
+      res.json(templates);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/bot-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.getBotTemplate(req.params.id);
+      if (!template) return res.status(404).json({ error: "Template not found" });
+      res.json(template);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/bot-templates", async (req, res) => {
+    try {
+      const { insertBotTemplateSchema } = await import("@shared/schema");
+      const parsed = insertBotTemplateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const template = await storage.createBotTemplate(parsed.data);
+      res.status(201).json(template);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/bot-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.updateBotTemplate(req.params.id, req.body);
+      if (!template) return res.status(404).json({ error: "Template not found" });
+      res.json(template);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/bot-templates/:id", async (req, res) => {
+    try {
+      await storage.deleteBotTemplate(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // AI GATEWAY INFO API
+  // ============================================
+
+  app.get("/api/gateway/providers", async (_req, res) => {
+    try {
+      const { getAvailableProviders } = await import('./ai-gateway');
+      res.json(getAvailableProviders());
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // PUBLIC BOT CONFIG & EMBED SCRIPT
+  // ============================================
+
+  app.get("/api/bots/:siteConfigId/public", async (req, res) => {
+    try {
+      const config = await storage.getSiteConfig(req.params.siteConfigId);
+      if (!config || !config.chatbotEnabled) {
+        return res.status(404).json({ error: "Bot not found or disabled" });
+      }
+      res.json({
+        id: config.id,
+        name: config.name,
+        ui_config: {
+          position: config.widgetPosition || 'bottom-right',
+          primaryColor: config.widgetColor || '#2563eb',
+          greetingMessage: config.greetingMessage || `Hi! How can I help you today?`,
+          placeholderText: config.placeholderText || 'Type a message...',
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/embed.js", (_req, res) => {
+    const baseUrl = `${_req.protocol}://${_req.get('host')}`;
+    const script = `(function(){
+  'use strict';
+  var API=window.GATEWAY_API_URL||'${baseUrl}';
+  var s=document.currentScript;
+  var botId=s&&s.dataset.botId;
+  if(!botId){console.error('[Gateway Bot] No bot-id');return;}
+  var config=null,isOpen=false,msgs=[],loading=false;
+  function esc(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+  function createHost(){
+    var h=document.createElement('div');h.id='gateway-bot-'+botId;document.body.appendChild(h);
+    var sh=h.attachShadow({mode:'open'});
+    var st=document.createElement('style');
+    st.textContent=':host{all:initial;font-family:system-ui,-apple-system,sans-serif}*{box-sizing:border-box;margin:0;padding:0}.gw{position:fixed;z-index:2147483647}.gw.br{bottom:16px;right:16px}.gw.bl{bottom:16px;left:16px}.gw.tr{top:16px;right:16px}.gw.tl{top:16px;left:16px}.gw-btn{width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.15);transition:transform .2s}.gw-btn:hover{transform:scale(1.05)}.gw-chat{position:absolute;bottom:72px;right:0;width:360px;max-width:calc(100vw - 32px);max-height:calc(100vh - 100px);background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.2);display:flex;flex-direction:column;overflow:hidden;animation:gw-in .2s ease-out}@keyframes gw-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}.gw-hdr{padding:16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #e5e7eb}.gw-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:16px}.gw-nm{font-weight:600;font-size:14px;color:#111827}.gw-st{font-size:12px;color:#10b981;display:flex;align-items:center;gap:4px}.gw-st::before{content:"";width:6px;height:6px;background:#10b981;border-radius:50%}.gw-cl{width:32px;height:32px;border:none;background:transparent;cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#6b7280}.gw-cl:hover{background:#f3f4f6}.gw-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:300px;max-height:400px}.gw-msg{display:flex;gap:8px;max-width:85%}.gw-msg.u{align-self:flex-end}.gw-bbl{padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.5;word-break:break-word}.gw-msg.a .gw-bbl{background:#f3f4f6;color:#111827;border-bottom-left-radius:4px}.gw-msg.u .gw-bbl{color:#fff;border-bottom-right-radius:4px}.gw-typ{display:flex;gap:4px;padding:12px 14px;background:#f3f4f6;border-radius:16px;border-bottom-left-radius:4px;width:fit-content}.gw-dot{width:6px;height:6px;background:#9ca3af;border-radius:50%;animation:gw-b 1.4s infinite ease-in-out both}.gw-dot:nth-child(1){animation-delay:-.32s}.gw-dot:nth-child(2){animation-delay:-.16s}@keyframes gw-b{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}.gw-inp{padding:12px 16px;border-top:1px solid #e5e7eb;display:flex;gap:8px}.gw-inp input{flex:1;padding:10px 14px;border:1px solid #e5e7eb;border-radius:24px;font-size:14px;outline:none}.gw-inp button{width:40px;height:40px;border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center}.gw-inp button:disabled{opacity:.5;cursor:not-allowed}.gw-empty{text-align:center;padding:32px 16px;color:#9ca3af}@media(max-width:480px){.gw-chat{position:fixed;bottom:80px!important;right:16px!important;left:16px!important;width:auto!important}}';
+    sh.appendChild(st);return{host:h,shadow:sh};
+  }
+  async function fetchCfg(){
+    try{var r=await fetch(API+'/api/bots/'+botId+'/public');if(!r.ok)throw 0;config=await r.json();}
+    catch(e){config={name:'Bot',ui_config:{position:'bottom-right',primaryColor:'#2563eb',greetingMessage:'Hello! How can I help?',placeholderText:'Type a message...'}};}
+  }
+  async function send(txt,shadow){
+    if(!txt.trim()||loading)return;
+    msgs.push({role:'user',content:txt});loading=true;render(shadow);
+    try{
+      var r=await fetch(API+'/api/website-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:txt,siteConfigId:botId,visitorId:'embed-'+Date.now(),history:msgs.filter(function(m){return m.role!=='system';}).slice(-10)})});
+      var d=await r.json();msgs.push({role:'assistant',content:d.response||'Sorry, I could not respond.'});
+    }catch(e){msgs.push({role:'assistant',content:'Sorry, something went wrong.'});}
+    loading=false;render(shadow);
+  }
+  function render(shadow){
+    var w=shadow.querySelector('.gw')||document.createElement('div');
+    var pos=config&&config.ui_config&&config.ui_config.position||'bottom-right';
+    var posClass=pos==='bottom-left'?'bl':pos==='top-right'?'tr':pos==='top-left'?'tl':'br';
+    w.className='gw '+posClass;w.innerHTML='';
+    var pc=config&&config.ui_config&&config.ui_config.primaryColor||'#2563eb';
+    if(!isOpen){
+      w.innerHTML='<button class="gw-btn" style="background:'+pc+'"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>';
+      w.querySelector('.gw-btn').onclick=function(){isOpen=true;render(shadow);};
+    }else{
+      var gm=config&&config.ui_config&&config.ui_config.greetingMessage||'Hello!';
+      var ph=config&&config.ui_config&&config.ui_config.placeholderText||'Type a message...';
+      var nm=config&&config.name||'Bot';
+      var html='<div class="gw-chat"><div class="gw-hdr"><div class="gw-av" style="background:'+pc+'">'+nm[0].toUpperCase()+'</div><div style="flex:1"><div class="gw-nm">'+esc(nm)+'</div><div class="gw-st">Online</div></div><button class="gw-cl"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div><div class="gw-msgs">';
+      if(msgs.length===0){html+='<div class="gw-empty"><p>'+esc(gm)+'</p></div>';}
+      else{msgs.forEach(function(m){html+='<div class="gw-msg '+(m.role==='user'?'u':'a')+'"><div class="gw-bbl" style="'+(m.role==='user'?'background:'+pc:'')+'">'+ esc(m.content)+'</div></div>';});}
+      if(loading){html+='<div class="gw-msg a"><div class="gw-typ"><span class="gw-dot"></span><span class="gw-dot"></span><span class="gw-dot"></span></div></div>';}
+      html+='</div><div class="gw-inp"><input type="text" placeholder="'+esc(ph)+'"/><button style="background:'+pc+'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button></div></div>';
+      w.innerHTML=html;
+      w.querySelector('.gw-cl').onclick=function(){isOpen=false;render(shadow);};
+      var inp=w.querySelector('.gw-inp input');var btn=w.querySelector('.gw-inp button');
+      btn.onclick=function(){var v=inp.value.trim();if(v){inp.value='';send(v,shadow);}};
+      inp.onkeydown=function(e){if(e.key==='Enter')btn.click();};
+      var msgArea=w.querySelector('.gw-msgs');if(msgArea)msgArea.scrollTop=msgArea.scrollHeight;
+    }
+    if(!shadow.contains(w))shadow.appendChild(w);
+  }
+  async function init(){await fetchCfg();var c=createHost();render(c.shadow);}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();`;
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(script);
+  });
+
+  // ============================================
   // SITE CONFIG (AI BIZ BOT ADMIN) API
   // ============================================
 
@@ -3481,7 +3638,21 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
       const { message, businessName, businessAddress, businessPhone, siteConfigId, visitorId, history } = parsed.data;
 
-      const systemPrompt = `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
+      let siteConfig: any = null;
+      let resolvedProvider: any = 'kimi';
+      let resolvedModel: string | undefined;
+      let customSystemPrompt: string | undefined;
+
+      if (siteConfigId) {
+        siteConfig = await storage.getSiteConfig(siteConfigId);
+        if (siteConfig) {
+          resolvedProvider = siteConfig.modelProvider || 'kimi';
+          resolvedModel = siteConfig.modelName || undefined;
+          customSystemPrompt = siteConfig.systemPromptOverride || undefined;
+        }
+      }
+
+      const systemPrompt = customSystemPrompt || `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
 
 Business details:
 - Name: ${businessName || 'N/A'}
@@ -3490,16 +3661,17 @@ Business details:
 
 You are helpful, concise, and conversational. Answer questions about the business, help with directions, hours, and services. If you don't know something specific, suggest the visitor call or visit. Keep responses brief since this is a chat widget.`;
 
-      const messages = [
+      const gatewayMessages = [
         { role: 'system' as const, content: systemPrompt },
-        ...history.map(h => ({ role: h.role as 'user' | 'assistant', content: h.content })),
+        ...history.map(h => ({ role: h.role as 'user' | 'assistant' as const, content: h.content })),
         { role: 'user' as const, content: message },
       ];
 
-      const { chat, KIMI_MODELS } = await import('./kimi');
-      const response = await chat({
-        messages,
-        model: KIMI_MODELS.K2_TURBO,
+      const { gatewayChat } = await import('./ai-gateway');
+      const result = await gatewayChat({
+        messages: gatewayMessages,
+        provider: resolvedProvider,
+        model: resolvedModel,
         temperature: 0.7,
         max_tokens: 500,
       });
@@ -3507,13 +3679,13 @@ You are helpful, concise, and conversational. Answer questions about the busines
       if (siteConfigId) {
         try {
           await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'user', content: message });
-          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'assistant', content: response });
+          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'assistant', content: result.response });
         } catch (logErr) {
           console.error("[Website Chat] Failed to log chat:", logErr);
         }
       }
 
-      res.json({ response });
+      res.json({ response: result.response, provider: result.provider, model: result.model });
     } catch (error: any) {
       console.error("[Website Chat] Error:", error.message);
       res.status(500).json({ error: "Failed to get response" });

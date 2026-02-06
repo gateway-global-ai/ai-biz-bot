@@ -43,10 +43,13 @@ import {
   type InsertProjectTask,
   type DemoLead,
   type InsertDemoLead,
+  type BotTemplate,
+  type InsertBotTemplate,
   type SiteConfig,
   type InsertSiteConfig,
   type ChatLog,
   type InsertChatLog,
+  botTemplates,
   telephonyConfigs,
   callLogs,
   users,
@@ -170,6 +173,13 @@ export interface IStorage {
   getDemoLeadByToken(token: string): Promise<DemoLead | undefined>;
   getDemoLeadByPhone(phone: string): Promise<DemoLead | undefined>;
   updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined>;
+  
+  // Bot Template operations
+  getBotTemplates(): Promise<BotTemplate[]>;
+  getBotTemplate(id: string): Promise<BotTemplate | undefined>;
+  createBotTemplate(template: InsertBotTemplate): Promise<BotTemplate>;
+  updateBotTemplate(id: string, updates: Partial<InsertBotTemplate>): Promise<BotTemplate | undefined>;
+  deleteBotTemplate(id: string): Promise<boolean>;
   
   // Site Config operations
   getSiteConfigs(): Promise<SiteConfig[]>;
@@ -793,6 +803,33 @@ export class DatabaseStorage implements IStorage {
   async updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined> {
     const [updated] = await db.update(demoLeads).set(updates).where(eq(demoLeads.id, id)).returning();
     return updated;
+  }
+
+  async getBotTemplates(): Promise<BotTemplate[]> {
+    return db.select().from(botTemplates).orderBy(desc(botTemplates.createdAt));
+  }
+
+  async getBotTemplate(id: string): Promise<BotTemplate | undefined> {
+    const [template] = await db.select().from(botTemplates).where(eq(botTemplates.id, id));
+    return template;
+  }
+
+  async createBotTemplate(template: InsertBotTemplate): Promise<BotTemplate> {
+    const [created] = await db.insert(botTemplates).values(template).returning();
+    return created;
+  }
+
+  async updateBotTemplate(id: string, updates: Partial<InsertBotTemplate>): Promise<BotTemplate | undefined> {
+    const [updated] = await db.update(botTemplates)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(botTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteBotTemplate(id: string): Promise<boolean> {
+    await db.delete(botTemplates).where(eq(botTemplates.id, id));
+    return true;
   }
 
   async getSiteConfigs(): Promise<SiteConfig[]> {

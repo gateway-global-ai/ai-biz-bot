@@ -743,6 +743,31 @@ export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({
 export type InsertProjectTask = z.infer<typeof insertProjectTaskSchema>;
 export type ProjectTask = typeof projectTasks.$inferSelect;
 
+// Bot Templates - pre-configured bot personalities (from Gateway Bot Matrix)
+export const botTemplates = pgTable("bot_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category").default("custom"),
+  defaultSystemPrompt: text("default_system_prompt").notNull(),
+  defaultModel: text("default_model").default("kimi"),
+  defaultTools: jsonb("default_tools").default({}),
+  defaultUiConfig: jsonb("default_ui_config").default({}),
+  icon: text("icon").default("Bot"),
+  isPublic: boolean("is_public").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertBotTemplateSchema = createInsertSchema(botTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertBotTemplate = z.infer<typeof insertBotTemplateSchema>;
+export type BotTemplate = typeof botTemplates.$inferSelect;
+
 // Site Configurations - maps businesses to agent configs for AI Biz Bot
 export const siteConfigs = pgTable("site_configs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -751,12 +776,16 @@ export const siteConfigs = pgTable("site_configs", {
   placeId: text("place_id"),
   placeData: jsonb("place_data"),
   assignedAgentId: varchar("assigned_agent_id"),
+  botTemplateId: varchar("bot_template_id"),
   systemPromptOverride: text("system_prompt_override"),
+  modelProvider: text("model_provider").default("kimi"),
+  modelName: text("model_name"),
   chatbotEnabled: boolean("chatbot_enabled").default(true),
   voiceConciergeEnabled: boolean("voice_concierge_enabled").default(true),
   widgetPosition: text("widget_position").default("bottom-right"),
   widgetColor: text("widget_color").default("#2563eb"),
   greetingMessage: text("greeting_message"),
+  placeholderText: text("placeholder_text").default("Type a message..."),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
