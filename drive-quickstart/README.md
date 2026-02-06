@@ -31,23 +31,21 @@ This quickstart follows Google's official documentation for building a client-si
 
 ### 2. Configure OAuth Consent Screen
 
-1. In the Google Cloud console, go to **Menu > Google Auth platform > Branding**
-2. If setting up for the first time, click **Get Started**
-3. Under **App Information**:
+1. In the Google Cloud console, go to **Menu > APIs & Services > OAuth consent screen**
+2. If setting up for the first time, select **External** or **Internal** user type
+3. Fill in the required **App Information**:
    - Enter an **App name**
    - Choose a **User support email**
-4. Click **Next**
-5. Under **Audience**, select **Internal** (for testing) or **External** (for production)
-6. Click **Next**
-7. Under **Contact Information**, enter an email address
-8. Click **Next**
-9. Review and agree to the Google API Services User Data Policy
-10. Click **Continue** and then **Create**
+   - Enter a **Developer contact email**
+4. Click **Save and Continue**
+5. On the **Scopes** page, click **Save and Continue** (scopes will be requested at runtime)
+6. If using External user type, add test users if needed
+7. Click **Save and Continue** and then **Back to Dashboard**
 
 ### 3. Create OAuth 2.0 Client ID
 
-1. Go to **Menu > Google Auth platform > Clients**
-2. Click **Create Client**
+1. Go to **Menu > APIs & Services > Credentials**
+2. Click **Create credentials > OAuth 2.0 Client ID**
 3. Select **Application type > Web application**
 4. In the **Name** field, enter a name (e.g., "Drive API Quickstart")
 5. Under **Authorized JavaScript origins**, click **Add URI**
