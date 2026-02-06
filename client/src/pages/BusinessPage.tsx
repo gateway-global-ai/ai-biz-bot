@@ -815,168 +815,169 @@ export default function BusinessPage() {
           </div>
         </div>
         <div className="pb-8 md:pb-12" />
-      </section>
-      {/* Selected Business Preview Card */}
-      {selectedPlace && stage === 'landing' && (
-        <section className="px-6 pb-12 -mt-2">
-          <div className="max-w-3xl mx-auto">
-            <Card className="bg-slate-900/80 border-blue-500/30 backdrop-blur-sm">
-              <CardContent className="p-6">
-                <div className="flex flex-col md:flex-row md:items-start gap-5">
-                  {selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getURI === 'function' ? (
-                    <div className="w-full md:w-40 h-28 rounded-lg overflow-hidden flex-shrink-0 bg-slate-800">
-                      <img
-                        src={selectedPlace.photos[0].getURI({ maxWidth: 400 })}
-                        alt={selectedPlace.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ) : selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getUrl === 'function' ? (
-                    <div className="w-full md:w-40 h-28 rounded-lg overflow-hidden flex-shrink-0 bg-slate-800">
-                      <img
-                        src={selectedPlace.photos[0].getUrl({ maxWidth: 400 })}
-                        alt={selectedPlace.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-full md:w-40 h-28 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0">
-                      <Building2 className="w-10 h-10 text-slate-600" />
-                    </div>
-                  )}
 
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div>
-                        <h3 className="text-xl font-bold text-white" data-testid="text-place-name">{selectedPlace.name}</h3>
-                        <p className="text-sm text-slate-400 flex items-center gap-1 mt-0.5">
-                          <MapPin className="w-3 h-3 flex-shrink-0" />
-                          <span className="truncate">{selectedPlace.formatted_address}</span>
-                        </p>
+        {/* Business Preview Overlay — appears on top of hero when a place is selected */}
+        {selectedPlace && stage === 'landing' && (
+          <div className="absolute inset-0 z-20 bg-slate-950/95 backdrop-blur-sm flex items-center justify-center px-6">
+            <div className="max-w-lg w-full">
+              <Card className="bg-slate-900/90 border-blue-500/30 backdrop-blur-md">
+                <CardContent className="p-6">
+                  <div className="flex flex-col gap-4">
+                    {selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getURI === 'function' ? (
+                      <div className="w-full h-32 rounded-lg overflow-hidden bg-slate-800">
+                        <img
+                          src={selectedPlace.photos[0].getURI({ maxWidth: 400 })}
+                          alt={selectedPlace.name}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
-                      {selectedPlace.rating && (
-                        <div className="flex items-center gap-1.5 flex-shrink-0">
-                          <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                          <span className="text-white font-bold">{selectedPlace.rating}</span>
-                          {selectedPlace.user_ratings_total && (
-                            <span className="text-slate-500 text-sm">({selectedPlace.user_ratings_total.toLocaleString()})</span>
-                          )}
+                    ) : selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getUrl === 'function' ? (
+                      <div className="w-full h-32 rounded-lg overflow-hidden bg-slate-800">
+                        <img
+                          src={selectedPlace.photos[0].getUrl({ maxWidth: 400 })}
+                          alt={selectedPlace.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-full h-32 rounded-lg bg-slate-800 flex items-center justify-center">
+                        <Building2 className="w-10 h-10 text-slate-600" />
+                      </div>
+                    )}
+                    <div>
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="min-w-0">
+                          <h3 className="text-xl font-bold text-white" data-testid="text-place-name">{selectedPlace.name}</h3>
+                          <p className="text-sm text-slate-400 flex items-center gap-1 mt-0.5">
+                            <MapPin className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{selectedPlace.formatted_address}</span>
+                          </p>
                         </div>
-                      )}
+                        {selectedPlace.rating && (
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                            <span className="text-white font-bold">{selectedPlace.rating}</span>
+                            {selectedPlace.user_ratings_total && (
+                              <span className="text-slate-500 text-sm">({selectedPlace.user_ratings_total.toLocaleString()})</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {selectedPlace.formatted_phone_number && (
+                          <Badge variant="secondary" className="bg-slate-800 text-slate-300 text-xs">
+                            <Phone className="w-3 h-3 mr-1" /> {selectedPlace.formatted_phone_number}
+                          </Badge>
+                        )}
+                        {selectedPlace.types?.slice(0, 3).map(t => (
+                          <Badge key={t} variant="secondary" className="bg-slate-800 text-slate-300 text-xs capitalize">
+                            {t.replace(/_/g, ' ')}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {selectedPlace.formatted_phone_number && (
-                        <Badge variant="secondary" className="bg-slate-800 text-slate-300 text-xs">
-                          <Phone className="w-3 h-3 mr-1" /> {selectedPlace.formatted_phone_number}
-                        </Badge>
-                      )}
-                      {selectedPlace.types?.slice(0, 3).map(t => (
-                        <Badge key={t} variant="secondary" className="bg-slate-800 text-slate-300 text-xs capitalize">
-                          {t.replace(/_/g, ' ')}
-                        </Badge>
-                      ))}
-                    </div>
-
-                    <div className="flex flex-wrap gap-3 pt-3">
+                    <div className="flex flex-col gap-2 pt-2">
                       <Button 
-                        className="bg-gradient-to-r from-blue-600 to-indigo-600" 
+                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600" 
                         data-testid="button-generate-site"
                         onClick={handleGenerateWebsite}
                       >
                         <Sparkles className="w-4 h-4 mr-2" />
                         Generate AI Website
                       </Button>
-                      <Button variant="outline" className="border-slate-700 text-slate-300" data-testid="button-get-number">
-                        <Phone className="w-4 h-4 mr-2" />
-                        Get AI Phone Number
-                      </Button>
-                      {selectedPlace.website && (
-                        <Button variant="ghost" className="text-slate-400" asChild>
-                          <a href={selectedPlace.website} target="_blank" rel="noreferrer">
+                      <div className="flex gap-2">
+                        <Button variant="outline" className="flex-1 border-slate-700 text-slate-300" data-testid="button-get-number">
+                          <Phone className="w-4 h-4 mr-2" />
+                          AI Phone
+                        </Button>
+                        {selectedPlace.website && (
+                          <Button variant="outline" className="flex-1 border-slate-700 text-slate-300" onClick={() => window.open(selectedPlace.website, '_blank')} data-testid="button-current-site">
                             <ExternalLink className="w-4 h-4 mr-2" />
                             Current Site
-                          </a>
-                        </Button>
-                      )}
+                          </Button>
+                        )}
+                      </div>
+                      <Button variant="ghost" size="sm" className="text-slate-500" onClick={() => setSelectedPlace(null)} data-testid="button-clear-selection">
+                        Choose a different business
+                      </Button>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </section>
-      )}
-      {/* Website Preview (shown after generation) */}
-      {(stage === 'preview' || stage === 'full-access' || stage === 'phone-gate' || stage === 'sending-link' || stage === 'training' || stage === 'demo-ready' || stage === 'name-gate') && selectedPlace && (
-        <section className="px-6 pb-12">
-          <div className="max-w-5xl mx-auto space-y-8">
-            <div className="text-center">
+        )}
+
+        {/* Website Generated Overlay — replaces hero content after generation */}
+        {(stage === 'preview' || stage === 'full-access' || stage === 'phone-gate' || stage === 'sending-link' || stage === 'training' || stage === 'demo-ready' || stage === 'name-gate') && selectedPlace && (
+          <div className="absolute inset-0 z-20 bg-slate-950/95 backdrop-blur-sm flex items-center justify-center px-6">
+            <div className="max-w-lg w-full text-center">
               <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 mb-4">
                 <CheckCircle2 className="w-3 h-3 mr-1" /> Website Generated
               </Badge>
-              <h2 className="text-3xl font-bold text-white mb-2">{selectedPlace.name}</h2>
-              <p className="text-slate-400">{selectedPlace.formatted_address}</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card className="bg-slate-900/60 border-slate-800">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-blue-500/10 rounded-md flex items-center justify-center mx-auto mb-4">
-                    <Phone className="w-6 h-6 text-blue-400" />
-                  </div>
-                  <h3 className="font-bold text-white mb-1">AI Voice Concierge</h3>
-                  <p className="text-sm text-slate-400">24/7 phone support for your customers</p>
-                  {stage === 'full-access' && (
-                    <Badge variant="secondary" className="mt-3 bg-emerald-500/10 text-emerald-400 text-xs">Active</Badge>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="bg-slate-900/60 border-slate-800">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-indigo-500/10 rounded-md flex items-center justify-center mx-auto mb-4">
-                    <MessageSquare className="w-6 h-6 text-indigo-400" />
-                  </div>
-                  <h3 className="font-bold text-white mb-1">AI Chat Widget</h3>
-                  <p className="text-sm text-slate-400">Smart chat trained on your business</p>
-                  {stage === 'full-access' && (
-                    <Badge variant="secondary" className="mt-3 bg-emerald-500/10 text-emerald-400 text-xs">Active</Badge>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="bg-slate-900/60 border-slate-800">
-                <CardContent className="p-6 text-center">
-                  <div className="w-12 h-12 bg-violet-500/10 rounded-md flex items-center justify-center mx-auto mb-4">
-                    <Globe className="w-6 h-6 text-violet-400" />
-                  </div>
-                  <h3 className="font-bold text-white mb-1">Custom Website</h3>
-                  <p className="text-sm text-slate-400">Professional site with your brand</p>
-                  {stage === 'full-access' && (
-                    <Badge variant="secondary" className="mt-3 bg-emerald-500/10 text-emerald-400 text-xs">Live</Badge>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {stage === 'full-access' && (
-              <div className="text-center space-y-4">
-                <div className="flex items-center justify-center gap-2 text-emerald-400">
-                  <CheckCircle2 className="w-5 h-5" />
-                  <span className="font-medium">
-                    {ownerName ? `Welcome, ${ownerName}!` : 'Welcome!'} Your demo is fully unlocked.
-                  </span>
-                </div>
-                <p className="text-slate-400 text-sm">
-                  Check your phone for the magic link to access your website anytime. 
-                  Your AI agents are ready to serve your customers.
-                </p>
+              <h2 className="text-2xl font-bold text-white mb-1">{selectedPlace.name}</h2>
+              <p className="text-sm text-slate-400 mb-6">{selectedPlace.formatted_address}</p>
+              <div className="flex flex-col gap-3">
+                <Card className="bg-slate-900/60 border-slate-800">
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className="w-10 h-10 bg-blue-500/10 rounded-md flex items-center justify-center flex-shrink-0">
+                      <Phone className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div className="text-left">
+                      <h3 className="font-bold text-white text-sm">AI Voice Concierge</h3>
+                      <p className="text-xs text-slate-400">24/7 phone support for your customers</p>
+                    </div>
+                    {stage === 'full-access' && (
+                      <Badge variant="secondary" className="ml-auto bg-emerald-500/10 text-emerald-400 text-xs flex-shrink-0">Active</Badge>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card className="bg-slate-900/60 border-slate-800">
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className="w-10 h-10 bg-indigo-500/10 rounded-md flex items-center justify-center flex-shrink-0">
+                      <MessageSquare className="w-5 h-5 text-indigo-400" />
+                    </div>
+                    <div className="text-left">
+                      <h3 className="font-bold text-white text-sm">AI Chat Widget</h3>
+                      <p className="text-xs text-slate-400">Smart chat trained on your business</p>
+                    </div>
+                    {stage === 'full-access' && (
+                      <Badge variant="secondary" className="ml-auto bg-emerald-500/10 text-emerald-400 text-xs flex-shrink-0">Active</Badge>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card className="bg-slate-900/60 border-slate-800">
+                  <CardContent className="p-4 flex items-center gap-4">
+                    <div className="w-10 h-10 bg-violet-500/10 rounded-md flex items-center justify-center flex-shrink-0">
+                      <Globe className="w-5 h-5 text-violet-400" />
+                    </div>
+                    <div className="text-left">
+                      <h3 className="font-bold text-white text-sm">Custom Website</h3>
+                      <p className="text-xs text-slate-400">Professional site with your brand</p>
+                    </div>
+                    {stage === 'full-access' && (
+                      <Badge variant="secondary" className="ml-auto bg-emerald-500/10 text-emerald-400 text-xs flex-shrink-0">Live</Badge>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
-            )}
+              {stage === 'full-access' && (
+                <div className="mt-6 space-y-2">
+                  <div className="flex items-center justify-center gap-2 text-emerald-400">
+                    <CheckCircle2 className="w-5 h-5" />
+                    <span className="font-medium text-sm">
+                      {ownerName ? `Welcome, ${ownerName}!` : 'Welcome!'} Your demo is fully unlocked.
+                    </span>
+                  </div>
+                  <p className="text-slate-400 text-xs">
+                    Check your phone for the magic link to access your website anytime.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
-        </section>
-      )}
+        )}
+      </section>
       {/* Features - commented out for now
       <section className="py-16 px-6">
         <div className="max-w-6xl mx-auto">
