@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import gatewayLogo from '@assets/Pidea_logo_header_(5)_1770354228583.png';
 import { 
   Phone, Building2, Users, Globe, ShieldCheck, 
   ArrowLeft, CheckCircle2, MessageSquare, 
@@ -544,18 +545,14 @@ export default function BusinessPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-4 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-4">
-          <span className="font-bold text-lg tracking-tight flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-blue-500" />
-            Gateway<span className="text-slate-500">Global</span> AI
-          </span>
-          <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider">
+      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center gap-4">
+        <img src={gatewayLogo} alt="Gateway Global AI" className="h-10 w-auto flex-shrink-0" />
+        <div className="flex-1 flex justify-center">
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider">
             <Sparkles className="w-3 h-3" /> AI Website Generator
           </div>
         </div>
-        <div className="flex items-center gap-2">
-        </div>
+        <div className="w-10 flex-shrink-0" />
       </nav>
       {stage === 'generating' && (
         <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col items-center justify-center">
