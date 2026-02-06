@@ -1,5 +1,6 @@
 import type { AgentInstance, AgentSwarm, AgentTemplate } from './agent-types';
 import { DEFAULT_AGENT_TEMPLATES } from './default-templates';
+import { getAllSpecializedTemplates } from './specialized-agents';
 
 /**
  * Agent Swarm Manager
@@ -15,6 +16,7 @@ export class AgentSwarmManager {
   constructor() {
     // Load default templates
     this.loadDefaultTemplates();
+    this.loadSpecializedTemplates();
   }
 
   /**
@@ -22,6 +24,15 @@ export class AgentSwarmManager {
    */
   private loadDefaultTemplates() {
     Object.values(DEFAULT_AGENT_TEMPLATES).forEach(template => {
+      this.templates.set(template.id, template);
+    });
+  }
+
+  /**
+   * Load specialized agent templates into the manager
+   */
+  private loadSpecializedTemplates() {
+    getAllSpecializedTemplates().forEach(template => {
       this.templates.set(template.id, template);
     });
   }

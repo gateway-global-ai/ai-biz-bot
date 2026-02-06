@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { agentSwarmManager } from "./swarm-manager";
 import { businessResearchService } from "./business-research";
 import { getDefaultTemplate } from "./default-templates";
+import { agentTestingService } from "./agent-testing";
 import { z } from "zod";
 
 /**
@@ -431,6 +432,84 @@ export function registerAgentRoutes(app: Express) {
           sms: smsAgent,
         },
       });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==========================================
+  // Agent Testing
+  // ==========================================
+
+  /**
+   * Test all agent templates
+   */
+  app.get("/api/agents/test", async (req: Request, res: Response) => {
+    try {
+      const report = agentTestingService.testAllAgents();
+      res.json(report);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Test all agents and return markdown report
+   */
+  app.get("/api/agents/test/report", async (req: Request, res: Response) => {
+    try {
+      const report = agentTestingService.testAllAgents();
+      const markdown = agentTestingService.generateMarkdownReport(report);
+      res.setHeader('Content-Type', 'text/markdown');
+      res.send(markdown);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Test all agents and return text report
+   */
+  app.get("/api/agents/test/report/text", async (req: Request, res: Response) => {
+    try {
+      const report = agentTestingService.testAllAgents();
+      const text = agentTestingService.generateTextReport(report);
+      res.setHeader('Content-Type', 'text/plain');
+      res.send(text);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Test a specific agent template
+   */
+  app.get("/api/agents/test/:templateId", async (req: Request, res: Response) => {
+    try {
+      const template = agentSwarmManager.getTemplate(req.params.templateId);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+
+      const result = agentTestingService.testAgentTemplate(template);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Test a deployed agent instance
+   */
+  app.get("/api/agents/:id/test", async (req: Request, res: Response) => {
+    try {
+      const agent = agentSwarmManager.getAgent(req.params.id);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
+      const result = agentTestingService.testAgentInstance(agent);
+      res.json(result);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
