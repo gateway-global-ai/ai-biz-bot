@@ -360,9 +360,12 @@ function App() {
               <Route path="/kimi-audio" component={KimiAudioDemo} />
               <Route path="/sdk" component={SdkShowcase} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
-              <Route path="/chat/:agentId" component={AgentChat} />
               <Route path="/chat/customer" component={CustomerChatInterface} />
               <Route path="/chat-showcase" component={ChatEmbedShowcase} />
+              <Route path="/interface/customer" component={CustomerChatInterface} />
+              <Route path="/interface/owner" component={OwnerChatInterface} />
+              <Route path="/interface/developer" component={DeveloperChatInterface} />
+              <Route path="/chat/:agentId" component={AgentChat} />
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
               <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />

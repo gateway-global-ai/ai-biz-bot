@@ -412,19 +412,19 @@ function ChatWithModes() {
             <CardTitle className="text-white">Quick Links</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <a href="/chat/customer" className="block">
+            <a href="/interface/customer" className="block">
               <Button variant="outline" className="w-full">
                 <Code2 className="w-4 h-4 mr-2" />
                 Try Customer Chat
               </Button>
             </a>
-            <a href="/chat/owner" className="block">
+            <a href="/interface/owner" className="block">
               <Button variant="outline" className="w-full">
                 <Code2 className="w-4 h-4 mr-2" />
                 Try Owner Interface
               </Button>
             </a>
-            <a href="/chat/developer" className="block">
+            <a href="/interface/developer" className="block">
               <Button variant="outline" className="w-full">
                 <Code2 className="w-4 h-4 mr-2" />
                 Try Developer Interface
