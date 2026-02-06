@@ -20,6 +20,8 @@
       /* exported handleSignoutClick */
 
       // TODO(developer): Set to client ID from the Developer Console
+      // IMPORTANT: Replace <YOUR_CLIENT_ID> with your actual Client ID
+      // Note: In production apps, never commit credentials to version control
       const CLIENT_ID = '<YOUR_CLIENT_ID>';
 
       // Discovery doc URL for APIs used by the quickstart
@@ -129,7 +131,7 @@
           return;
         }
         const files = response.result.files;
-        if (!files || files.length === 0) {
+        if (!files?.length) {
           document.getElementById('content').innerText = 'No files found.';
           return;
         }
