@@ -547,7 +547,7 @@ export default function BusinessPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-center overflow-visible">
-        <img src={gatewayLogo} alt="Gateway Global AI" className="h-14 w-auto opacity-90 relative z-10 drop-shadow-lg" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))', marginTop: '4px', marginBottom: '-10px' }} />
+        <img src={gatewayLogo} alt="Gateway Global AI" className="h-14 w-auto opacity-90 relative z-10 drop-shadow-lg" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))', marginTop: '14px', marginBottom: '-20px' }} />
       </nav>
       {stage === 'generating' && (
         <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col items-center justify-center">
