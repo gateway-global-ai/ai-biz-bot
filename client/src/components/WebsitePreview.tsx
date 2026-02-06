@@ -74,36 +74,36 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-      <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <button onClick={onBack} className="text-slate-400 hover:text-slate-600 transition-colors" data-testid="button-preview-back">
+      <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-100 px-3 sm:px-6 py-3 flex justify-between items-center gap-2">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <button onClick={onBack} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0" data-testid="button-preview-back">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>
           </button>
-          <div className="font-bold text-xl tracking-tight text-slate-900">
+          <div className="font-bold text-base sm:text-xl tracking-tight text-slate-900 truncate max-w-[140px] sm:max-w-[300px] md:max-w-none" title={place.name}>
             {place.name}
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 shrink-0">
           <button
             onClick={() => setIsAdminOpen(true)}
-            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-2 border border-slate-200 rounded-full hover:bg-slate-50"
+            className="p-2 sm:px-4 sm:py-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-2 border border-slate-200 rounded-full hover:bg-slate-50"
             data-testid="button-preview-admin"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
             </svg>
-            Admin
+            <span className="hidden sm:inline">Admin</span>
           </button>
           <button
-            className="px-4 py-2 text-sm font-medium rounded-full transition-colors flex items-center gap-2 shadow-lg bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20"
+            className="p-2 sm:px-4 sm:py-2 text-sm font-medium rounded-full transition-colors flex items-center gap-2 shadow-lg bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20"
             data-testid="button-preview-concierge"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
             </svg>
-            Concierge
+            <span className="hidden sm:inline">Concierge</span>
           </button>
         </div>
       </nav>

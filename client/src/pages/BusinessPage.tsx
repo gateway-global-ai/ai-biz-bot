@@ -883,7 +883,7 @@ export default function BusinessPage() {
 
         {/* Website Preview — renders the full website-builder template */}
         {(stage === 'preview' || stage === 'full-access') && selectedPlace && (
-          <div className="absolute inset-0 z-20 overflow-y-auto">
+          <div className="fixed inset-0 z-[200] overflow-y-auto bg-slate-50">
             <WebsitePreview place={selectedPlace} onBack={() => { setStage('landing'); setSelectedPlace(null); }} />
           </div>
         )}
