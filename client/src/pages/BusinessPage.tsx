@@ -784,7 +784,7 @@ export default function BusinessPage() {
             <VoiceVisualizer />
           </div>
           <div className="space-y-10 md:space-y-14">
-            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white pl-[20px] pr-[20px] pt-[20px] pb-[20px]" data-testid="text-hero-heading">
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white" data-testid="text-hero-heading">
               Free Custom Websites<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-[48px]">
                 AI Voice and Chat Enabled
@@ -792,7 +792,7 @@ export default function BusinessPage() {
             </h1>
 
             {/* Google Places Autocomplete - Extended Component Library */}
-            <div className="max-w-2xl mx-auto -mt-[10px]" data-testid="container-place-search">
+            <div className="max-w-2xl mx-auto" data-testid="container-place-search">
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
                 <div className="relative bg-slate-900 rounded-xl border-0 p-2 flex items-center gap-2">
@@ -810,11 +810,11 @@ export default function BusinessPage() {
                   {mapsError}
                 </p>
               )}
-              {!mapsError && <p className="text-xs text-slate-600 mt-3 pl-[4px] pr-[4px] pt-[4px] pb-[4px]">Powered by Google Places</p>}
+              {!mapsError && <p className="text-xs text-slate-600 mt-3">Powered by Google Places</p>}
             </div>
           </div>
           <div className="flex-1 flex items-end">
-            <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light -mt-[25px]">
+            <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
               Fully Developed Web Site In 1 Hour!<br/>
               <span className="text-white font-medium">No Credit Card Required.</span>
             </p>
