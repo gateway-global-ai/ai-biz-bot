@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,6 +10,7 @@ export default function WidgetShowcasePage() {
   const [isRecording, setIsRecording] = useState(false);
   const [volume, setVolume] = useState(0);
   const [visualizerStyle, setVisualizerStyle] = useState<'bars' | 'orb' | 'waveform'>('bars');
+  const isRecordingRef = useRef(false);
 
   const startDemo = async () => {
     try {
@@ -22,13 +23,14 @@ export default function WidgetShowcasePage() {
       
       setAnalyser(analyserNode);
       setIsRecording(true);
+      isRecordingRef.current = true;
 
-      // Monitor volume
+      // Monitor volume using ref to avoid stale closure
       const bufferLength = analyserNode.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
       
       const updateVolume = () => {
-        if (isRecording) {
+        if (isRecordingRef.current) {
           analyserNode.getByteFrequencyData(dataArray);
           const average = dataArray.reduce((sum, val) => sum + val, 0) / bufferLength;
           setVolume(average / 255);
@@ -45,6 +47,7 @@ export default function WidgetShowcasePage() {
 
   const stopDemo = () => {
     setIsRecording(false);
+    isRecordingRef.current = false;
     setAnalyser(null);
     setVolume(0);
   };

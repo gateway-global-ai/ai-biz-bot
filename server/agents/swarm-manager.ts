@@ -244,14 +244,18 @@ export class AgentSwarmManager {
       throw new Error(`Agent ${agentId} not found`);
     }
 
-    const template = this.templates.get(agent.templateId);
-    if (!template) {
-      throw new Error(`Template ${agent.templateId} not found`);
+    // Store the custom system prompt in the agent's configuration
+    // rather than mutating the shared template
+    if (!agent.configuration) {
+      agent.configuration = {};
     }
-
-    // Create a modified template for this specific agent instance
-    // In a real implementation, this would be stored separately
-    template.systemPrompt = systemPrompt;
+    
+    // Store as a custom configuration property
+    (agent.configuration as any).customSystemPrompt = systemPrompt;
+    
+    if (agent.metadata) {
+      agent.metadata.lastActiveAt = new Date();
+    }
   }
 
   /**

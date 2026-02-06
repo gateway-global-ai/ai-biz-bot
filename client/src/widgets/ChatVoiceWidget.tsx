@@ -38,6 +38,7 @@ export const ChatVoiceWidget: React.FC<ChatVoiceWidgetProps> = ({
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const isRecordingRef = useRef(false);
 
   const startRecording = async () => {
     try {
@@ -73,12 +74,12 @@ export const ChatVoiceWidget: React.FC<ChatVoiceWidgetProps> = ({
         audioContext.close();
       };
 
-      // Monitor volume
+      // Monitor volume using ref to prevent stale closure
       const bufferLength = analyserNode.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
       
       const updateVolume = () => {
-        if (isRecording) {
+        if (isRecordingRef.current) {
           analyserNode.getByteFrequencyData(dataArray);
           const average = dataArray.reduce((sum, val) => sum + val, 0) / bufferLength;
           setVolume(average / 255);
@@ -88,6 +89,7 @@ export const ChatVoiceWidget: React.FC<ChatVoiceWidgetProps> = ({
 
       mediaRecorder.start();
       setIsRecording(true);
+      isRecordingRef.current = true;
       updateVolume();
       
       if (onVoiceStart) {
@@ -102,6 +104,7 @@ export const ChatVoiceWidget: React.FC<ChatVoiceWidgetProps> = ({
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      isRecordingRef.current = false;
       setAnalyser(null);
       
       if (onVoiceStop) {
