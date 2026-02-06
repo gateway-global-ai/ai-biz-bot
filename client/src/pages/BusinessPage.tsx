@@ -749,7 +749,7 @@ export default function BusinessPage() {
         <div className="flex-1 flex items-center relative z-10">
           <div className="w-full max-w-5xl mx-auto flex flex-col items-center gap-6 md:gap-8">
             <VoiceVisualizer />
-            <div style={{ marginTop: '50px' }} />
+            <div style={{ height: '50px' }} aria-hidden="true" />
             <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white text-center" data-testid="text-hero-heading">
               Free Custom Websites<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-3xl md:text-[48px]">
