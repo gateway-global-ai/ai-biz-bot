@@ -7,7 +7,7 @@ import {
   Briefcase, Zap, PhoneCall, CreditCard, ChevronRight,
   Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server,
   Search, MapPin, Star, ExternalLink, Loader2, ArrowRight, Sparkles,
-  Clock, Bot, Wand2, X, Eye, Send, User, LogIn, LogOut
+  Clock, Bot, Wand2, X, Eye, Send, User, LogIn, LogOut, KeyRound
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -1284,11 +1284,11 @@ export default function BusinessPage() {
         }}
         sendOtpEndpoint="/api/customer/send-otp"
         verifyOtpEndpoint="/api/customer/verify-otp"
-        icon={User}
+        icon={KeyRound}
         title="Sign In"
         phonePrompt="Enter your phone number to sign in or create an account"
         subtitle="No account? One will be created automatically."
-        accentColor="emerald"
+        accentColor="purple"
         testIdPrefix="customer"
       />
     </div>

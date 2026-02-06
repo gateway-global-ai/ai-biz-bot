@@ -17,7 +17,7 @@ interface OtpLoginModalProps {
   icon: LucideIcon;
   title: string;
   phonePrompt?: string;
-  accentColor: 'blue' | 'emerald';
+  accentColor: 'blue' | 'emerald' | 'purple';
   subtitle?: string;
   testIdPrefix: string;
 }
@@ -39,6 +39,15 @@ const accentMap = {
     button: 'bg-gradient-to-r from-emerald-600 to-teal-600',
     ring: 'ring-emerald-500/40',
     slotActive: 'border-emerald-500 ring-2 ring-emerald-500/30',
+    slotBorder: 'border-slate-600',
+  },
+  purple: {
+    iconBg: 'bg-purple-500/10',
+    iconText: 'text-purple-400',
+    phoneIcon: 'text-purple-400',
+    button: 'bg-gradient-to-r from-purple-600 to-indigo-600',
+    ring: 'ring-purple-500/40',
+    slotActive: 'border-purple-500 ring-2 ring-purple-500/30',
     slotBorder: 'border-slate-600',
   },
 };
