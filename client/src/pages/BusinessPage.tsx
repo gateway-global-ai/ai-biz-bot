@@ -792,7 +792,7 @@ export default function BusinessPage() {
             </h1>
 
             {/* Google Places Autocomplete - Extended Component Library */}
-            <div className="max-w-2xl mx-auto" data-testid="container-place-search">
+            <div className="max-w-2xl mx-auto -mt-[10px]" data-testid="container-place-search">
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
                 <div className="relative bg-slate-900 rounded-xl border-0 p-2 flex items-center gap-2">
