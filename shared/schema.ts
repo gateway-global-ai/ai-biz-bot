@@ -743,6 +743,51 @@ export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({
 export type InsertProjectTask = z.infer<typeof insertProjectTaskSchema>;
 export type ProjectTask = typeof projectTasks.$inferSelect;
 
+// Site Configurations - maps businesses to agent configs for AI Biz Bot
+export const siteConfigs = pgTable("site_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  domain: text("domain"),
+  placeId: text("place_id"),
+  placeData: jsonb("place_data"),
+  assignedAgentId: varchar("assigned_agent_id"),
+  systemPromptOverride: text("system_prompt_override"),
+  chatbotEnabled: boolean("chatbot_enabled").default(true),
+  voiceConciergeEnabled: boolean("voice_concierge_enabled").default(true),
+  widgetPosition: text("widget_position").default("bottom-right"),
+  widgetColor: text("widget_color").default("#2563eb"),
+  greetingMessage: text("greeting_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSiteConfig = z.infer<typeof insertSiteConfigSchema>;
+export type SiteConfig = typeof siteConfigs.$inferSelect;
+
+// Chat logs for web-based AI Biz Bot conversations
+export const chatLogs = pgTable("chat_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id"),
+  visitorId: text("visitor_id"),
+  role: text("role").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertChatLogSchema = createInsertSchema(chatLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertChatLog = z.infer<typeof insertChatLogSchema>;
+export type ChatLog = typeof chatLogs.$inferSelect;
+
 // A2P Use Case definitions (from TCR matrix)
 export const A2P_USE_CASES = [
   { value: 'CUSTOMER_CARE', label: 'Customer Care', description: 'Support and service messages' },

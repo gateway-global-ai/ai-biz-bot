@@ -35,6 +35,7 @@ import BillingPage from "@/pages/BillingPage";
 import GoogleDrivePage from "@/pages/GoogleDrivePage";
 import GoogleCalendarPage from "@/pages/GoogleCalendarPage";
 import GoogleTasksPage from "@/pages/GoogleTasksPage";
+import AiBizBotAdmin from "@/pages/AiBizBotAdmin";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
@@ -273,6 +274,7 @@ function AppRouter() {
       <Route path="/disc" component={DiscVisualizer} />
       <Route path="/developer" component={DeveloperPage} />
       {/* BusinessPage moved to public routes */}
+      <Route path="/aibizbot" component={AiBizBotAdmin} />
       <Route path="/google-analyst" component={GoogleApiAnalyst} />
       <Route path="/assessment" component={DiscAssessment} />
       <Route path="/conversation" component={MockConversation} />

@@ -43,6 +43,10 @@ import {
   type InsertProjectTask,
   type DemoLead,
   type InsertDemoLead,
+  type SiteConfig,
+  type InsertSiteConfig,
+  type ChatLog,
+  type InsertChatLog,
   telephonyConfigs,
   callLogs,
   users,
@@ -64,7 +68,9 @@ import {
   organizations,
   projects,
   projectTasks,
-  demoLeads
+  demoLeads,
+  siteConfigs,
+  chatLogs
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -164,6 +170,19 @@ export interface IStorage {
   getDemoLeadByToken(token: string): Promise<DemoLead | undefined>;
   getDemoLeadByPhone(phone: string): Promise<DemoLead | undefined>;
   updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined>;
+  
+  // Site Config operations
+  getSiteConfigs(): Promise<SiteConfig[]>;
+  getSiteConfig(id: string): Promise<SiteConfig | undefined>;
+  getSiteConfigByDomain(domain: string): Promise<SiteConfig | undefined>;
+  getSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined>;
+  createSiteConfig(config: InsertSiteConfig): Promise<SiteConfig>;
+  updateSiteConfig(id: string, updates: Partial<InsertSiteConfig>): Promise<SiteConfig | undefined>;
+  deleteSiteConfig(id: string): Promise<boolean>;
+  
+  // Chat Log operations
+  getChatLogs(siteConfigId: string, limit?: number): Promise<ChatLog[]>;
+  createChatLog(log: InsertChatLog): Promise<ChatLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -774,6 +793,55 @@ export class DatabaseStorage implements IStorage {
   async updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined> {
     const [updated] = await db.update(demoLeads).set(updates).where(eq(demoLeads.id, id)).returning();
     return updated;
+  }
+
+  async getSiteConfigs(): Promise<SiteConfig[]> {
+    return db.select().from(siteConfigs).orderBy(desc(siteConfigs.createdAt));
+  }
+
+  async getSiteConfig(id: string): Promise<SiteConfig | undefined> {
+    const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.id, id));
+    return config;
+  }
+
+  async getSiteConfigByDomain(domain: string): Promise<SiteConfig | undefined> {
+    const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.domain, domain));
+    return config;
+  }
+
+  async getSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined> {
+    const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.placeId, placeId));
+    return config;
+  }
+
+  async createSiteConfig(config: InsertSiteConfig): Promise<SiteConfig> {
+    const [created] = await db.insert(siteConfigs).values(config).returning();
+    return created;
+  }
+
+  async updateSiteConfig(id: string, updates: Partial<InsertSiteConfig>): Promise<SiteConfig | undefined> {
+    const [updated] = await db.update(siteConfigs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(siteConfigs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSiteConfig(id: string): Promise<boolean> {
+    await db.delete(siteConfigs).where(eq(siteConfigs.id, id));
+    return true;
+  }
+
+  async getChatLogs(siteConfigId: string, limit = 50): Promise<ChatLog[]> {
+    return db.select().from(chatLogs)
+      .where(eq(chatLogs.siteConfigId, siteConfigId))
+      .orderBy(desc(chatLogs.createdAt))
+      .limit(limit);
+  }
+
+  async createChatLog(log: InsertChatLog): Promise<ChatLog> {
+    const [created] = await db.insert(chatLogs).values(log).returning();
+    return created;
   }
 }
 

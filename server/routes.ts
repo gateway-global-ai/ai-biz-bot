@@ -3364,6 +3364,67 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   });
 
   // ============================================
+  // SITE CONFIG (AI BIZ BOT ADMIN) API
+  // ============================================
+
+  app.get("/api/site-configs", async (_req, res) => {
+    try {
+      const configs = await storage.getSiteConfigs();
+      res.json(configs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/site-configs/:id", async (req, res) => {
+    try {
+      const config = await storage.getSiteConfig(req.params.id);
+      if (!config) return res.status(404).json({ error: "Site config not found" });
+      res.json(config);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/site-configs", async (req, res) => {
+    try {
+      const config = await storage.createSiteConfig(req.body);
+      res.status(201).json(config);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/site-configs/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateSiteConfig(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ error: "Site config not found" });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/site-configs/:id", async (req, res) => {
+    try {
+      await storage.deleteSiteConfig(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/site-configs/:id/chat-logs", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const logs = await storage.getChatLogs(req.params.id, limit);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
   // PUBLIC AGENT CHAT API
   // ============================================
 
