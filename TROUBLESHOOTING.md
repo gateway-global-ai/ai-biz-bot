@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-## "How do I deal with this and fix it?"
+## Dealing with Repository Issues - Solutions Guide
 
 This guide answers common questions about repository issues and provides specific solutions.
 
@@ -240,8 +240,8 @@ className="duration-[2s]"
 // Use:
 className="duration-2000"
 
-// Or escape the brackets in content:
-className="duration-&lsqb;2s&rsqb;"
+// Or escape the brackets:
+className="duration-\[2s\]"
 ```
 
 ## Performance Issues
