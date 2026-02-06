@@ -45,6 +45,10 @@ import CustomerSiteManager from "@/pages/CustomerSiteManager";
 import VoiceLeadMachine from "@/pages/VoiceLeadMachine";
 import SitesAndLeads from "@/pages/SitesAndLeads";
 import CommandChat from "@/pages/CommandChat";
+import CustomerChatInterface from "@/pages/CustomerChatInterface";
+import OwnerChatInterface from "@/pages/OwnerChatInterface";
+import DeveloperChatInterface from "@/pages/DeveloperChatInterface";
+import ChatEmbedShowcase from "@/pages/ChatEmbedShowcase";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
@@ -281,6 +285,9 @@ function AppRouter() {
       <Route path="/security" component={SecurityDashboard} />
       <Route path="/disc" component={DiscVisualizer} />
       <Route path="/developer" component={DeveloperPage} />
+      {/* New Standardized Chat Interfaces */}
+      <Route path="/chat/owner" component={OwnerChatInterface} />
+      <Route path="/chat/developer" component={DeveloperChatInterface} />
       {/* BusinessPage moved to public routes */}
       <Route path="/lead-machine" component={VoiceLeadMachine} />
       <Route path="/sites-leads" component={SitesAndLeads} />
@@ -354,6 +361,8 @@ function App() {
               <Route path="/sdk" component={SdkShowcase} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
               <Route path="/chat/:agentId" component={AgentChat} />
+              <Route path="/chat/customer" component={CustomerChatInterface} />
+              <Route path="/chat-showcase" component={ChatEmbedShowcase} />
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
               <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />
