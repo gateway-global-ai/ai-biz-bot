@@ -6,35 +6,91 @@ The Gateway Chat SDK has been enhanced with powerful new features that transform
 
 ## New Features
 
-### 1. ⚙️ Runtime Configuration Panel
+### 1. ⚙️ In-Chat Configuration Panel with OTP
 
-**Config Icon with OTP Authorization**
-- Settings gear icon in chat header
-- Click to open configuration panel
-- OTP (One-Time Password) authorization required
-- Prevents unauthorized configuration changes
-- Allows runtime customization without code changes
+**Config Gear Icon in Chat Header**
+- Settings gear icon appears in the chat window header (next to close button)
+- Customer mode: Shows regular chat interface
+- Admin mode: After OTP, shows configuration settings
 
-**Configurable Settings:**
-- ✅ **Colors**: Primary color, header color, bubble colors
-- ✅ **Interface Size**: Width and height adjustment
-- ✅ **Position Mode**: Toggle between floating and fixed
+**OTP Mock Authentication**
+- Click gear icon → "Sending OTP to admin..." message
+- Mock delay (2 seconds) to simulate sending
+- Accept "000000" as valid OTP for development
+- Invalid code shows error message
+- Production: Will integrate with real OTP service
+
+**Admin Settings Panel**
+Once authenticated with OTP "000000", the chat interface switches to admin mode:
+- ✅ **Colors**: Primary color, header color, bubble colors (live preview)
+- ✅ **Interface Size**: Width and height adjustment (sliders)
+- ✅ **Position Mode**: Toggle between floating and fixed (with animation)
 - ✅ **Voice Settings**: Enable/disable voice, visualizer style
-- ✅ **Display Options**: Bot name, greeting message, avatar
+- ✅ **Display Options**: Bot name, greeting message, avatar URL
+- ✅ **Mode Switch**: Toggle between customer/admin views
 
-**Implementation:**
-```javascript
-// Config panel appears when user clicks settings icon
-// Requires OTP code sent to authorized email
-const widget = GatewayChat.init({
-  botId: 'your-bot-id',
-  enableConfig: true,  // Show config icon
-  configAuth: {
-    type: 'otp',
-    email: 'admin@example.com'
-  }
-});
+**Admin Panel UI Structure:**
 ```
+┌─────────────────────────────────────┐
+│ ⚙️ AI Assistant    [👤] [✕]        │  ← Header with gear icon
+├─────────────────────────────────────┤
+│                                     │
+│ [After clicking gear icon]          │
+│                                     │
+│ 🔐 Admin Access Required            │
+│                                     │
+│ An OTP code has been sent to:      │
+│ admin@example.com                   │
+│                                     │
+│ Enter Code:                         │
+│ ┌─────────────────────┐            │
+│ │     [●●●●●●]         │            │
+│ └─────────────────────┘            │
+│                                     │
+│ [Verify]          [Cancel]         │
+│                                     │
+│ Hint: Use 000000 for dev           │
+└─────────────────────────────────────┘
+
+[After successful OTP entry "000000"]
+
+┌─────────────────────────────────────┐
+│ ⚙️ Settings    [← Back to Chat]    │
+├─────────────────────────────────────┤
+│                                     │
+│ 🎨 Appearance                       │
+│  Primary Color:                     │
+│  [#6366f1] ⬤ [Color Picker]        │
+│  Preview: [Live chat preview]       │
+│                                     │
+│ 📏 Size                             │
+│  Width:  ────●──── 360px           │
+│  Height: ────●──── 500px           │
+│                                     │
+│ 📍 Position                         │
+│  ◉ Floating  ○ Fixed               │
+│  Location: [Bottom Right ▼]        │
+│                                     │
+│ 🎤 Voice                           │
+│  ☑ Enable Voice Input              │
+│  Style: [Bars ▼]                   │
+│                                     │
+│ 📝 Content                         │
+│  Bot Name: [AI Assistant]          │
+│  Greeting: [How can I help?]       │
+│  Avatar URL: [https://...]         │
+│                                     │
+│ [Reset to Defaults]  [Save & Apply]│
+└─────────────────────────────────────┘
+```
+
+**Key Behavior:**
+- Customer view: Regular chat interface
+- Click gear → OTP prompt (overlays chat)
+- Enter "000000" → Settings panel (replaces chat temporarily)
+- "Back to Chat" → Returns to customer view
+- Settings persist in localStorage
+- Live preview shows changes immediately
 
 ### 2. 🎯 New Account Onboarding
 
@@ -115,35 +171,204 @@ const widget = GatewayChat.init({
 
 ## Enhanced Configuration Interface
 
-### Config Panel UI Structure
+### In-Chat Config Flow
 
+**State Machine:**
 ```
-┌─────────────────────────────────────┐
-│ ⚙️  Chat Configuration              │
-├─────────────────────────────────────┤
-│                                     │
-│ 🔐 Enter OTP Code:                 │
-│ ┌───────────┐  [Verify]            │
-│ │  ●●●●●●   │                      │
-│ └───────────┘                       │
-│                                     │
-│ --- After OTP Verification ---     │
-│                                     │
-│ 🎨 Appearance                       │
-│  Primary Color:  [#6366f1] ⬤       │
-│  Size: ────●──── [360x500]         │
-│  Mode: ◉ Floating  ○ Fixed         │
-│                                     │
-│ 🎤 Voice                           │
-│  ☑ Enable Voice Input              │
-│  Style: [Bars ▼]                   │
-│                                     │
-│ 📝 Content                         │
-│  Bot Name: [AI Assistant]          │
-│  Greeting: [How can I help?]       │
-│                                     │
-│ [Reset to Defaults]  [Save]        │
-└─────────────────────────────────────┘
+Customer View (Default)
+       ↓ [Click Gear Icon]
+OTP Prompt Overlay
+       ↓ [Enter "000000"]
+Admin Settings Panel
+       ↓ [Back to Chat]
+Customer View (with applied settings)
+```
+
+### Config Panel Implementation
+
+**1. Customer View with Gear Icon**
+```javascript
+// Header structure in customer mode
+<div className="gw-header">
+  <div className="gw-avatar">...</div>
+  <div className="gw-header-info">...</div>
+  
+  {/* NEW: Config gear icon */}
+  {config.enableConfig && (
+    <button className="gw-config-btn" onClick={openConfigPanel}>
+      <SettingsIcon />
+    </button>
+  )}
+  
+  <button className="gw-close">...</button>
+</div>
+```
+
+**2. OTP Overlay**
+```javascript
+// OTP authentication overlay
+const OTPOverlay = () => (
+  <div className="gw-otp-overlay">
+    <div className="gw-otp-card">
+      <LockIcon />
+      <h3>Admin Access Required</h3>
+      <p>An OTP code has been sent to:<br/>admin@example.com</p>
+      
+      <input 
+        type="text" 
+        maxLength="6"
+        placeholder="000000"
+        className="gw-otp-input"
+        onChange={handleOTPInput}
+      />
+      
+      <div className="gw-otp-actions">
+        <button onClick={verifyOTP}>Verify</button>
+        <button onClick={cancelOTP}>Cancel</button>
+      </div>
+      
+      <p className="gw-hint">Dev: Use 000000</p>
+    </div>
+  </div>
+);
+
+// OTP verification
+const verifyOTP = (code) => {
+  // Development: Accept 000000
+  if (code === '000000') {
+    setIsAdmin(true);
+    setView('settings');
+    return;
+  }
+  
+  // Production: Verify with backend
+  // fetch('/api/chat/config/otp/verify', { code, botId })
+  //   .then(response => {
+  //     if (response.ok) {
+  //       setIsAdmin(true);
+  //       setView('settings');
+  //     }
+  //   });
+  
+  setOTPError('Invalid code');
+};
+```
+
+**3. Admin Settings Panel**
+```javascript
+const AdminSettingsPanel = ({ config, onChange }) => {
+  const [localConfig, setLocalConfig] = useState(config);
+  const [showPreview, setShowPreview] = useState(false);
+  
+  const handleSave = () => {
+    // Apply settings
+    onChange(localConfig);
+    
+    // Save to localStorage
+    localStorage.setItem('gw-admin-config', JSON.stringify(localConfig));
+    
+    // Return to customer view
+    setView('customer');
+    setIsAdmin(false);
+  };
+  
+  return (
+    <div className="gw-settings-panel">
+      <div className="gw-settings-header">
+        <h2>⚙️ Settings</h2>
+        <button onClick={() => setView('customer')}>
+          ← Back to Chat
+        </button>
+      </div>
+      
+      <div className="gw-settings-content">
+        {/* Appearance Section */}
+        <Section title="🎨 Appearance">
+          <ColorPicker 
+            label="Primary Color"
+            value={localConfig.theme.primaryColor}
+            onChange={(color) => updateConfig('theme.primaryColor', color)}
+          />
+          {showPreview && <LivePreview config={localConfig} />}
+        </Section>
+        
+        {/* Size Section */}
+        <Section title="📏 Size">
+          <Slider 
+            label="Width"
+            value={parseInt(localConfig.width)}
+            min={300}
+            max={600}
+            onChange={(w) => updateConfig('width', w + 'px')}
+          />
+          <Slider 
+            label="Height"
+            value={parseInt(localConfig.height)}
+            min={400}
+            max={800}
+            onChange={(h) => updateConfig('height', h + 'px')}
+          />
+        </Section>
+        
+        {/* Position Section */}
+        <Section title="📍 Position">
+          <Radio 
+            options={['floating', 'fixed']}
+            value={localConfig.mode}
+            onChange={(mode) => updateConfig('mode', mode)}
+          />
+          <Select
+            label="Location"
+            options={['bottom-right', 'bottom-left', 'top-right', 'top-left']}
+            value={localConfig.position}
+            onChange={(pos) => updateConfig('position', pos)}
+          />
+        </Section>
+        
+        {/* Voice Section */}
+        <Section title="🎤 Voice">
+          <Checkbox 
+            label="Enable Voice Input"
+            checked={localConfig.voice?.enabled}
+            onChange={(enabled) => updateConfig('voice.enabled', enabled)}
+          />
+          <Select
+            label="Visualizer Style"
+            options={['bars', 'orb', 'waveform']}
+            value={localConfig.voice?.visualizerStyle}
+            onChange={(style) => updateConfig('voice.visualizerStyle', style)}
+          />
+        </Section>
+        
+        {/* Content Section */}
+        <Section title="📝 Content">
+          <Input 
+            label="Bot Name"
+            value={localConfig.botName}
+            onChange={(name) => updateConfig('botName', name)}
+          />
+          <TextArea 
+            label="Greeting Message"
+            value={localConfig.greetingMessage}
+            onChange={(msg) => updateConfig('greetingMessage', msg)}
+          />
+          <Input 
+            label="Avatar URL"
+            value={localConfig.botAvatar}
+            onChange={(url) => updateConfig('botAvatar', url)}
+          />
+        </Section>
+      </div>
+      
+      <div className="gw-settings-footer">
+        <button onClick={resetDefaults}>Reset to Defaults</button>
+        <button onClick={handleSave} className="gw-btn-primary">
+          Save & Apply
+        </button>
+      </div>
+    </div>
+  );
+};
 ```
 
 ## Onboarding Flow
