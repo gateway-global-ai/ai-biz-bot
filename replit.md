@@ -143,7 +143,8 @@ Service: `server/mcp/googleWorkspace.ts`
 ### Places Aggregate API Integration
 Service: `server/mcp/placesAggregate.ts`
 - Uses Google Places Aggregate API (`areainsights.googleapis.com/v1:computeInsights`)
-- Authenticated via `X-Goog-Api-Key` header using `GOOGLE_CLOUD_API_KEY` secret
+- Authenticated via `X-Goog-Api-Key` header using `GOOGLE_CLOUD_API_KEY` secret (server-side API calls)
+- Frontend Maps JS uses dedicated `GOOGLE_MAPS_JS_API` key (served via `/api/config/maps-key`, falls back to `GOOGLE_CLOUD_API_KEY`)
 - Place lookup via Places API Text Search (`places.googleapis.com/v1/places:searchText`) - returns primaryType for business category detection
 - API endpoints: `/api/reports/compute-insights` (raw), `/api/reports/business-report` (formatted, supports both modes), `/api/reports/lookup-place` (name to coordinates + category)
 - **Two search modes:**

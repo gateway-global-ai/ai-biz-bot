@@ -2543,9 +2543,10 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   }
 
-  // Serve Google Maps API key to frontend (for Places Autocomplete)
+  // Serve Google Maps JS API key to frontend (for Places Autocomplete)
+  // Uses dedicated GOOGLE_MAPS_JS_API key, falls back to GOOGLE_CLOUD_API_KEY
   app.get("/api/config/maps-key", (_req, res) => {
-    const key = process.env.GOOGLE_CLOUD_API_KEY;
+    const key = process.env.GOOGLE_MAPS_JS_API || process.env.GOOGLE_CLOUD_API_KEY;
     if (!key) return res.status(404).json({ error: "Google Maps API key not configured" });
     res.json({ key });
   });
