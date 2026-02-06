@@ -144,7 +144,6 @@ Service: `server/mcp/googleWorkspace.ts`
 Service: `server/mcp/placesAggregate.ts`
 - Uses Google Places Aggregate API (`areainsights.googleapis.com/v1:computeInsights`)
 - Authenticated via `X-Goog-Api-Key` header using `GOOGLE_CLOUD_API_KEY` secret (server-side API calls)
-- Frontend Maps JS uses dedicated `GOOGLE_MAPS_JS_API` key (served via `/api/config/maps-key`, falls back to `GOOGLE_CLOUD_API_KEY`)
 - Place lookup via Places API Text Search (`places.googleapis.com/v1/places:searchText`) - returns primaryType for business category detection
 - API endpoints: `/api/reports/compute-insights` (raw), `/api/reports/business-report` (formatted, supports both modes), `/api/reports/lookup-place` (name to coordinates + category)
 - **Two search modes:**
@@ -154,6 +153,45 @@ Service: `server/mcp/placesAggregate.ts`
 - Available in both Admin Panel chat (via Gemini function calling) and SMS
 - Default search radius: 3 miles (configurable per request)
 - Env vars: `CUSTOMER_PHONE` (owner phone), `CUSTOMER_PLACE` (default business name for reports)
+
+### Google Maps API Keys
+Two separate API keys are used:
+
+**`GOOGLE_CLOUD_API_KEY`** - Server-side API calls (Places Aggregate, Text Search, etc.)
+
+**`GOOGLE_MAPS_JS_API`** - Frontend/client-side Maps JavaScript API. Served to frontend via `/api/config/maps-key` (falls back to `GOOGLE_CLOUD_API_KEY`). This key has the following enabled APIs:
+- Address Validation API
+- Aerial View API
+- Air Quality API
+- Directions API
+- Distance Matrix API
+- Geocoding API
+- Geolocation API
+- Map Tiles API
+- Maps 3D SDK for Android
+- Maps 3D SDK for iOS
+- Maps Elevation API
+- Maps Embed API
+- Maps Grounding Lite API
+- Maps JavaScript API
+- Maps Platform Datasets API
+- Maps SDK for Android
+- Maps SDK for iOS
+- Maps Static API
+- Navigation SDK
+- Places Aggregate API
+- Places API
+- Places API (New)
+- Places UI Kit
+- Pollen API
+- Roads API
+- Route Optimization API
+- Routes API
+- Solar API
+- Street View Publish API
+- Street View Static API
+- Time Zone API
+- Weather API
 
 ### Integration with Gateway Task System
 - Customer lookup via `storage.getCustomerByPhone()`
