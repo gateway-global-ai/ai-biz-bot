@@ -23,6 +23,7 @@ The user has spent 2+ years perfecting chat interfaces. These principles are non
 
 ### SDK & Component Library
 - **Public SDK showcase page**: Available at `/sdk` route (no auth required). Documents all chat interface patterns with interactive demos.
+- **Google Places SDK docs**: Available at `/sdk/google-places` route (no auth required). Comprehensive developer reference for Places API (New) integration — Autocomplete, Place Details, Photos, AI Summaries, field tiers, OAuth setup, and how our platform uses Google Places data.
 - **SDK directory**: `/sdk/chat/` contains the open-source frontend SDK (gateway-chat.js), TypeScript types, reference app sources, and README.
 - **Composable widgets**: TogglePanel, OverlayMenu, IconToolbar, VoiceVisualizer, SplitPanel, CategoryGrid, FloatingWidget - all demonstrated at `/sdk`.
 - **Frontend-only**: SDK makes API calls to Gateway platform (`/api/website-chat`, `/api/bots/:id/public`). No backend code in SDK.

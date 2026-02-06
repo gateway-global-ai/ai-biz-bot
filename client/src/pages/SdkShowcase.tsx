@@ -836,19 +836,25 @@ widget.destroy();`} />
               All widget patterns above are available as standalone, composable components. 
               Fork, customize, and embed them in any project.
             </p>
-            <div className="flex justify-center gap-3">
+            <div className="flex justify-center flex-wrap gap-3">
               <a href="https://github.com/gateway-global/chat-sdk" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-slate-900 rounded-lg text-xs font-bold" data-testid="link-github">
                 <Code2 className="w-4 h-4" /> View on GitHub
               </a>
               <a href="#floating" className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-xs font-bold" data-testid="link-examples">
                 <Eye className="w-4 h-4" /> View Examples
               </a>
+              <a href="/sdk/google-places" className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-lg text-xs font-bold" data-testid="link-google-places-sdk">
+                <Globe className="w-4 h-4" /> Google Places SDK
+              </a>
             </div>
           </div>
         </Section>
       </div>
 
-      <footer className="border-t border-slate-800 py-8 text-center">
+      <footer className="border-t border-slate-800 py-8 text-center space-y-2">
+        <div className="flex justify-center gap-4 text-xs">
+          <a href="/sdk/google-places" className="text-slate-500 hover:text-indigo-400 transition-colors" data-testid="link-footer-google-places">Google Places SDK</a>
+        </div>
         <p className="text-xs text-slate-600">Gateway Global AI - Chat SDK v1.0.0</p>
       </footer>
     </div>

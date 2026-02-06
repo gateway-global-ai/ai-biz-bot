@@ -39,6 +39,7 @@ import GoogleTasksPage from "@/pages/GoogleTasksPage";
 import AiBizBotAdmin from "@/pages/AiBizBotAdmin";
 import Login from "@/pages/Login";
 import SdkShowcase from "@/pages/SdkShowcase";
+import GooglePlacesSdk from "@/pages/GooglePlacesSdk";
 import MyAccount from "@/pages/MyAccount";
 import CustomerSiteManager from "@/pages/CustomerSiteManager";
 import NotFound from "@/pages/not-found";
@@ -345,6 +346,7 @@ function App() {
               <Route path="/v2" component={LandingV2} />
               <Route path="/kimi-audio" component={KimiAudioDemo} />
               <Route path="/sdk" component={SdkShowcase} />
+              <Route path="/sdk/google-places" component={GooglePlacesSdk} />
               <Route path="/chat/:agentId" component={AgentChat} />
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
