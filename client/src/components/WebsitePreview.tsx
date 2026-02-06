@@ -171,9 +171,16 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
         setIsShareOpen(false);
       }
     }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') setIsShareOpen(false);
+    }
     if (isShareOpen) {
       document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('keydown', handleEscape);
+      };
     }
   }, [isShareOpen]);
 
@@ -216,7 +223,11 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
       ),
-      action: () => { window.location.href = `sms:?body=${encodeURIComponent(shareText + ' ' + shareUrl)}`; },
+      action: () => {
+        const body = encodeURIComponent(shareText + ' ' + shareUrl);
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        window.location.href = isIOS ? `sms:&body=${body}` : `sms:?body=${body}`;
+      },
     },
     {
       label: 'Email',
@@ -234,10 +245,25 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
       ),
       action: () => {
-        navigator.clipboard.writeText(shareUrl).then(() => {
-          setLinkCopied(true);
-          setTimeout(() => setLinkCopied(false), 2000);
-        });
+        const copyToClipboard = async () => {
+          try {
+            if (navigator.clipboard) {
+              await navigator.clipboard.writeText(shareUrl);
+            } else {
+              const ta = document.createElement('textarea');
+              ta.value = shareUrl;
+              ta.style.position = 'fixed';
+              ta.style.opacity = '0';
+              document.body.appendChild(ta);
+              ta.select();
+              document.execCommand('copy');
+              document.body.removeChild(ta);
+            }
+            setLinkCopied(true);
+            setTimeout(() => setLinkCopied(false), 2000);
+          } catch { /* silently fail */ }
+        };
+        copyToClipboard();
       },
     },
   ] as const;
@@ -282,6 +308,9 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
           <div className="relative" ref={shareRef}>
             <button
               onClick={() => setIsShareOpen(!isShareOpen)}
+              aria-expanded={isShareOpen}
+              aria-haspopup="true"
+              aria-controls="share-menu"
               className="p-2 sm:px-4 sm:py-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-2 border border-slate-200 rounded-full hover:bg-slate-50"
               data-testid="button-preview-share"
             >
@@ -291,7 +320,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
               <span className="hidden sm:inline">Share</span>
             </button>
             {isShareOpen && (
-              <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200" data-testid="share-dropdown">
+              <div id="share-menu" role="menu" className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200" data-testid="share-dropdown">
                 {shareActions.map((item, i) => {
                   if ('type' in item && item.type === 'divider') {
                     return <div key={`div-${i}`} className="border-t border-slate-100 my-1" />;
@@ -300,6 +329,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                   return (
                     <button
                       key={i}
+                      role="menuitem"
                       onClick={() => { item.action(); if (item.label !== 'Copy Link' && item.label !== 'Link Copied') setIsShareOpen(false); }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                       data-testid={`button-share-${item.label.toLowerCase().replace(/[\s\/]/g, '-')}`}
