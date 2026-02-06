@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { registerVlmRoutes } from "./vlm-routes";
+import { registerAgentRoutes } from "./agents/agent-routes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -6475,6 +6476,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   });
 
   registerVlmRoutes(app);
+
+  // Register Agent System routes
+  registerAgentRoutes(app);
 
   return httpServer;
 }
