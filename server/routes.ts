@@ -205,6 +205,32 @@ export async function registerRoutes(
     res.json({ apiKey });
   });
 
+  // ============ Google Places Details (for reviews) ============
+  app.get("/api/places/details/:placeId", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+      const { placeId } = req.params;
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=reviews,user_ratings_total,rating&key=${apiKey}`
+      );
+      const data = await response.json();
+      if (data.status !== 'OK') {
+        return res.status(400).json({ error: data.status, reviews: [] });
+      }
+      res.json({
+        reviews: data.result?.reviews || [],
+        user_ratings_total: data.result?.user_ratings_total || 0,
+        rating: data.result?.rating || 0,
+      });
+    } catch (error: any) {
+      console.error("[Places Details] Error:", error.message);
+      res.status(500).json({ error: error.message, reviews: [] });
+    }
+  });
+
   // ============ Google Workspace Integration ============
   
   // In-memory storage for Google Workspace credentials (per business)
@@ -3340,6 +3366,57 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // ============================================
   // PUBLIC AGENT CHAT API
   // ============================================
+
+  // ============ Website Preview Chat (AI Biz Bot) ============
+  app.post("/api/website-chat", async (req, res) => {
+    try {
+      const schema = z.object({
+        message: z.string().min(1).max(4000),
+        businessName: z.string().optional(),
+        businessAddress: z.string().optional(),
+        businessPhone: z.string().optional(),
+        history: z.array(z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string(),
+        })).max(20).optional().default([]),
+      });
+
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const { message, businessName, businessAddress, businessPhone, history } = parsed.data;
+
+      const systemPrompt = `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
+
+Business details:
+- Name: ${businessName || 'N/A'}
+- Address: ${businessAddress || 'N/A'}  
+- Phone: ${businessPhone || 'N/A'}
+
+You are helpful, concise, and conversational. Answer questions about the business, help with directions, hours, and services. If you don't know something specific, suggest the visitor call or visit. Keep responses brief since this is a chat widget.`;
+
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        ...history.map(h => ({ role: h.role as 'user' | 'assistant', content: h.content })),
+        { role: 'user' as const, content: message },
+      ];
+
+      const { chat, KIMI_MODELS } = await import('./kimi');
+      const response = await chat({
+        messages,
+        model: KIMI_MODELS.K2_TURBO,
+        temperature: 0.7,
+        max_tokens: 500,
+      });
+
+      res.json({ response });
+    } catch (error: any) {
+      console.error("[Website Chat] Error:", error.message);
+      res.status(500).json({ error: "Failed to get response" });
+    }
+  });
 
   // Simple in-memory rate limiting for public chat
   const chatRateLimits = new Map<string, { count: number; resetTime: number }>();

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 
 interface PlaceData {
   name: string;
@@ -59,9 +59,48 @@ function generateDescription(place: PlaceData): string {
   return parts.join(' ');
 }
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { role: 'assistant', content: `Hi there! I'm the AI assistant for ${place.name}. I can help you with hours, services, directions, or anything else. What would you like to know?` }
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const sendChatMessage = useCallback(async () => {
+    const msg = chatInput.trim();
+    if (!msg || chatLoading) return;
+    setChatInput('');
+    const userMsg: ChatMessage = { role: 'user', content: msg };
+    setChatMessages(prev => [...prev, userMsg]);
+    setChatLoading(true);
+    try {
+      const res = await fetch('/api/website-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: msg,
+          businessName: place.name,
+          businessAddress: place.formatted_address,
+          businessPhone: place.formatted_phone_number,
+          history: chatMessages.slice(-10),
+        }),
+      });
+      const data = await res.json();
+      setChatMessages(prev => [...prev, { role: 'assistant', content: data.response || 'Sorry, I could not process that. Please try again.' }]);
+    } catch {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
+    }
+    setChatLoading(false);
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+  }, [chatInput, chatLoading, chatMessages, place]);
 
   const heroImage = place.photos && place.photos.length > 0 ? getPhotoUrl(place.photos[0]) : null;
   const galleryImages = (place.photos || []).slice(1, 4).map(p => getPhotoUrl(p, 600)).filter(Boolean) as string[];
@@ -369,39 +408,63 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
       )}
 
       {isChatOpen && (
-        <div className="fixed bottom-24 right-6 w-96 h-[500px] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 z-50">
-          <div className="bg-blue-600 p-4 flex justify-between items-center text-white">
+        <div className="fixed bottom-24 right-6 w-96 max-w-[calc(100vw-3rem)] h-[500px] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 z-50">
+          <div className="bg-blue-600 p-4 flex justify-between items-center gap-2 text-white">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-blue-400 flex items-center justify-center text-sm font-bold">AI</div>
-              <span className="font-semibold">Assistant</span>
+              <div className="w-8 h-8 rounded-full bg-blue-400 flex items-center justify-center text-sm font-bold shrink-0">AI</div>
+              <span className="font-semibold">AI Biz Bot</span>
             </div>
-            <button onClick={() => setIsChatOpen(false)} className="hover:bg-blue-500 p-1 rounded-full" data-testid="button-preview-chat-close">
+            <button onClick={() => setIsChatOpen(false)} className="hover:bg-blue-500 p-1 rounded-full shrink-0" data-testid="button-preview-chat-close">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
-            <div className="flex justify-start">
-              <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm bg-white text-slate-700 shadow-sm border border-slate-100 rounded-tl-none">
-                Hi there! I can help you with store hours, products, or directions. Ask me anything!
+            {chatMessages.map((msg, i) => (
+              <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${
+                  msg.role === 'user' 
+                    ? 'bg-blue-600 text-white rounded-br-none' 
+                    : 'bg-white text-slate-700 border border-slate-100 rounded-tl-none'
+                }`}>
+                  {msg.content}
+                </div>
               </div>
-            </div>
+            ))}
+            {chatLoading && (
+              <div className="flex justify-start">
+                <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm bg-white text-slate-400 shadow-sm border border-slate-100 rounded-tl-none flex items-center gap-1">
+                  <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
           </div>
           <div className="p-4 bg-white border-t border-slate-100">
-            <div className="flex gap-2">
+            <form onSubmit={(e) => { e.preventDefault(); sendChatMessage(); }} className="flex gap-2">
               <input
                 type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
                 placeholder="Type a message..."
                 className="flex-1 px-4 py-2 bg-slate-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
                 data-testid="input-preview-chat"
+                disabled={chatLoading}
               />
-              <button className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors" data-testid="button-preview-chat-send">
+              <button 
+                type="submit"
+                disabled={chatLoading || !chatInput.trim()} 
+                className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors" 
+                data-testid="button-preview-chat-send"
+              >
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
                 </svg>
               </button>
-            </div>
+            </form>
           </div>
         </div>
       )}

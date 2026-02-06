@@ -294,6 +294,7 @@ interface SelectedPlace {
   photos?: any[];
   opening_hours?: { weekday_text?: string[]; isOpen?: () => boolean };
   place_id?: string;
+  reviews?: any[];
 }
 
 const TrainingProgressBar = ({ progress }: { progress: number }) => (
@@ -540,10 +541,11 @@ export default function BusinessPage() {
     };
     requestAnimationFrame(removeBorder);
 
-    placePicker.addEventListener('gmpx-placechange', () => {
+    placePicker.addEventListener('gmpx-placechange', async () => {
       const place = placePicker.value;
       if (place && (place.displayName || place.name)) {
-        setSelectedPlace({
+        const placeId = place.id ?? place.place_id ?? undefined;
+        const placeData: SelectedPlace = {
           name: place.displayName || place.name || '',
           formatted_address: place.formattedAddress || place.formatted_address || '',
           rating: place.rating ?? undefined,
@@ -551,11 +553,30 @@ export default function BusinessPage() {
           formatted_phone_number: place.nationalPhoneNumber ?? place.formatted_phone_number ?? undefined,
           website: place.websiteURI ?? place.website ?? undefined,
           types: place.types || [],
-          place_id: place.id ?? place.place_id ?? undefined,
+          place_id: placeId,
           photos: place.photos || [],
           opening_hours: place.regularOpeningHours ?? place.opening_hours ?? undefined,
-        });
+          reviews: [],
+        };
+        setSelectedPlace(placeData);
         setMapsError(null);
+
+        if (placeId) {
+          try {
+            const detailsRes = await fetch(`/api/places/details/${encodeURIComponent(placeId)}`);
+            const details = await detailsRes.json();
+            if (details.reviews && details.reviews.length > 0) {
+              setSelectedPlace(prev => prev ? {
+                ...prev,
+                reviews: details.reviews,
+                user_ratings_total: details.user_ratings_total || prev.user_ratings_total,
+                rating: details.rating || prev.rating,
+              } : prev);
+            }
+          } catch (err) {
+            console.error('[Places] Failed to fetch reviews:', err);
+          }
+        }
       }
     });
 
