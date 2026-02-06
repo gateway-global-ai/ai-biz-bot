@@ -547,7 +547,7 @@ export default function BusinessPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center gap-4">
-        <img src={gatewayLogo} alt="Gateway Global AI" className="h-10 w-auto flex-shrink-0" />
+        <img src={gatewayLogo} alt="Gateway Global AI" className="h-7 w-auto flex-shrink-0 opacity-90" />
         <div className="flex-1 flex justify-center">
           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider">
             <Sparkles className="w-3 h-3" /> AI Website Generator
