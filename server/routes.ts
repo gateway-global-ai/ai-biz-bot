@@ -4150,7 +4150,9 @@ ${businessContext}`;
       let resolvedModel: string | undefined;
       let customSystemPrompt: string | undefined;
 
-      if (siteConfigId) {
+      const isPlatformChat = siteConfigId === 'platform-landing';
+
+      if (siteConfigId && !isPlatformChat) {
         siteConfig = await storage.getSiteConfig(siteConfigId);
         if (siteConfig) {
           resolvedProvider = siteConfig.modelProvider || 'kimi';
@@ -4159,7 +4161,23 @@ ${businessContext}`;
         }
       }
 
-      const systemPrompt = customSystemPrompt || `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
+      let systemPrompt: string;
+      if (isPlatformChat) {
+        systemPrompt = `You are Gateway AI, the helpful assistant for AI Biz Bot by Gateway Global AI. You help visitors understand the platform and its services.
+
+Key information about the platform:
+- We create FREE professional AI-powered websites for small businesses
+- Websites are generated from Google Maps/Places data automatically
+- Every website comes with an AI chat concierge and voice AI assistant
+- No credit card required for the free plan
+- Plans: Free (1 business, static site, shared SMS, 500 voice minutes), Business ($49/mo, 5 businesses, edit content, review management, SMS admin), Business Voice ($99/mo, dedicated phone, unlimited voice, custom voice persona), Enterprise (custom pricing, API access, white-label)
+- Websites are built using real Google Maps data: reviews, photos, hours, location
+- Business owners can manage their sites from the My Account dashboard
+- The platform uses Kimi 2.5 AI for intelligent responses
+
+Be friendly, concise, and helpful. Encourage visitors to try it out by searching for their business. Keep responses brief since this is a chat widget. If asked about technical details you don't know, suggest they contact us.`;
+      } else {
+        systemPrompt = customSystemPrompt || `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
 
 Business details:
 - Name: ${businessName || 'N/A'}
@@ -4167,6 +4185,7 @@ Business details:
 - Phone: ${businessPhone || 'N/A'}
 
 You are helpful, concise, and conversational. Answer questions about the business, help with directions, hours, and services. If you don't know something specific, suggest the visitor call or visit. Keep responses brief since this is a chat widget.`;
+      }
 
       const gatewayMessages = [
         { role: 'system' as const, content: systemPrompt },
@@ -4183,7 +4202,7 @@ You are helpful, concise, and conversational. Answer questions about the busines
         max_tokens: 500,
       });
 
-      if (siteConfigId) {
+      if (siteConfigId && !isPlatformChat) {
         try {
           await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'user', content: message });
           await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'assistant', content: result.response });

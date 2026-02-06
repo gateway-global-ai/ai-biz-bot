@@ -20,6 +20,7 @@ import { useCustomerAuth } from '@/lib/customerAuth';
 import { useToast } from '@/hooks/use-toast';
 import OtpLoginModal from '@/components/OtpLoginModal';
 import ShareButton from '@/components/ShareButton';
+import FloatingChatWidget from '@/components/FloatingChatWidget';
 import { Code2 } from 'lucide-react';
 
 import Pidea_logo_header__7_ from "@assets/Pidea logo header (7).png";
@@ -1265,6 +1266,7 @@ export default function BusinessPage() {
           authLogin(data.token, data.user);
           setShowLoginModal(false);
           toast({ title: 'Welcome!', description: `Logged in as ${data.user.name || 'Admin'}` });
+          window.location.href = "/dashboard";
         }}
         sendOtpEndpoint="/api/auth/send-otp"
         verifyOtpEndpoint="/api/auth/verify-otp"
@@ -1289,6 +1291,12 @@ export default function BusinessPage() {
         subtitle="No account? One will be created automatically."
         accentColor="purple"
         testIdPrefix="customer"
+      />
+      <FloatingChatWidget
+        botName="Gateway AI"
+        greetingMessage="Hi! I can help you learn about our free AI-powered websites, plans, and features. What would you like to know?"
+        placeholderText="Ask about our services..."
+        primaryColor="#6366f1"
       />
     </div>
   );
