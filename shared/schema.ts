@@ -768,9 +768,60 @@ export const insertBotTemplateSchema = createInsertSchema(botTemplates).omit({
 export type InsertBotTemplate = z.infer<typeof insertBotTemplateSchema>;
 export type BotTemplate = typeof botTemplates.$inferSelect;
 
+// Customer Accounts - separate from admin users, for business owners
+export const customerAccounts = pgTable("customer_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phone: text("phone").notNull().unique(),
+  name: text("name"),
+  email: text("email"),
+  plan: text("plan").notNull().default("free"),
+  planStartedAt: timestamp("plan_started_at").defaultNow(),
+  stripeCustomerId: text("stripe_customer_id"),
+  isActive: boolean("is_active").default(true),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCustomerAccountSchema = createInsertSchema(customerAccounts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastLoginAt: true,
+});
+
+export type InsertCustomerAccount = z.infer<typeof insertCustomerAccountSchema>;
+export type CustomerAccount = typeof customerAccounts.$inferSelect;
+
+// Customer Sessions - separate from admin auth sessions
+export const customerSessions = pgTable("customer_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerAccountId: varchar("customer_account_id").references(() => customerAccounts.id).notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCustomerSessionSchema = createInsertSchema(customerSessions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCustomerSession = z.infer<typeof insertCustomerSessionSchema>;
+export type CustomerSession = typeof customerSessions.$inferSelect;
+
+export const PLAN_LIMITS = {
+  free: { maxBusinesses: 1, label: "Free", price: 0 },
+  pro: { maxBusinesses: 5, label: "Pro", price: 49 },
+  enterprise: { maxBusinesses: 999, label: "Enterprise", price: 199 },
+} as const;
+
+export type PlanType = keyof typeof PLAN_LIMITS;
+
 // Site Configurations - maps businesses to agent configs for AI Biz Bot
 export const siteConfigs = pgTable("site_configs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id").references(() => customerAccounts.id),
   name: text("name").notNull(),
   domain: text("domain"),
   placeId: text("place_id"),

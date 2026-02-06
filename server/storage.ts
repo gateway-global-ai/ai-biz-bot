@@ -49,6 +49,10 @@ import {
   type InsertSiteConfig,
   type ChatLog,
   type InsertChatLog,
+  type CustomerAccount,
+  type InsertCustomerAccount,
+  type CustomerSession,
+  type InsertCustomerSession,
   botTemplates,
   telephonyConfigs,
   callLogs,
@@ -73,7 +77,9 @@ import {
   projectTasks,
   demoLeads,
   siteConfigs,
-  chatLogs
+  chatLogs,
+  customerAccounts,
+  customerSessions
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -193,6 +199,21 @@ export interface IStorage {
   // Chat Log operations
   getChatLogs(siteConfigId: string, limit?: number): Promise<ChatLog[]>;
   createChatLog(log: InsertChatLog): Promise<ChatLog>;
+
+  // Customer Account operations
+  getCustomerAccountByPhone(phone: string): Promise<CustomerAccount | undefined>;
+  getCustomerAccountById(id: string): Promise<CustomerAccount | undefined>;
+  createCustomerAccount(account: InsertCustomerAccount): Promise<CustomerAccount>;
+  updateCustomerAccount(id: string, updates: Partial<InsertCustomerAccount>): Promise<CustomerAccount | undefined>;
+  updateCustomerAccountLastLogin(id: string): Promise<void>;
+
+  // Customer Session operations
+  createCustomerSession(session: InsertCustomerSession): Promise<CustomerSession>;
+  getValidCustomerSession(token: string): Promise<CustomerSession | undefined>;
+  deleteCustomerSession(token: string): Promise<void>;
+
+  // Site Config by owner
+  getSiteConfigsByOwner(ownerId: string): Promise<SiteConfig[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -879,6 +900,61 @@ export class DatabaseStorage implements IStorage {
   async createChatLog(log: InsertChatLog): Promise<ChatLog> {
     const [created] = await db.insert(chatLogs).values(log).returning();
     return created;
+  }
+
+  async getCustomerAccountByPhone(phone: string): Promise<CustomerAccount | undefined> {
+    const [account] = await db.select().from(customerAccounts).where(eq(customerAccounts.phone, phone));
+    return account;
+  }
+
+  async getCustomerAccountById(id: string): Promise<CustomerAccount | undefined> {
+    const [account] = await db.select().from(customerAccounts).where(eq(customerAccounts.id, id));
+    return account;
+  }
+
+  async createCustomerAccount(account: InsertCustomerAccount): Promise<CustomerAccount> {
+    const [created] = await db.insert(customerAccounts).values(account).returning();
+    return created;
+  }
+
+  async updateCustomerAccount(id: string, updates: Partial<InsertCustomerAccount>): Promise<CustomerAccount | undefined> {
+    const [updated] = await db.update(customerAccounts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(customerAccounts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateCustomerAccountLastLogin(id: string): Promise<void> {
+    await db.update(customerAccounts)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(customerAccounts.id, id));
+  }
+
+  async createCustomerSession(session: InsertCustomerSession): Promise<CustomerSession> {
+    const [created] = await db.insert(customerSessions).values(session).returning();
+    return created;
+  }
+
+  async getValidCustomerSession(token: string): Promise<CustomerSession | undefined> {
+    const [session] = await db.select().from(customerSessions)
+      .where(
+        and(
+          eq(customerSessions.token, token),
+          gt(customerSessions.expiresAt, new Date())
+        )
+      );
+    return session;
+  }
+
+  async deleteCustomerSession(token: string): Promise<void> {
+    await db.delete(customerSessions).where(eq(customerSessions.token, token));
+  }
+
+  async getSiteConfigsByOwner(ownerId: string): Promise<SiteConfig[]> {
+    return db.select().from(siteConfigs)
+      .where(eq(siteConfigs.ownerId, ownerId))
+      .orderBy(desc(siteConfigs.createdAt));
   }
 }
 

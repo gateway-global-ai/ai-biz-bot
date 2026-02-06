@@ -17,6 +17,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/lib/auth';
+import { useCustomerAuth } from '@/lib/customerAuth';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -384,6 +385,7 @@ export default function BusinessPage() {
   const [tokenError, setTokenError] = useState<string | null>(null);
 
   const { user, isAuthenticated, login: authLogin, logout: authLogout } = useAuth();
+  const { user: customerUser, isAuthenticated: isCustomerAuth, login: customerLogin, logout: customerLogout } = useCustomerAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -391,6 +393,11 @@ export default function BusinessPage() {
   const [loginPhone, setLoginPhone] = useState('');
   const [loginOtp, setLoginOtp] = useState('');
   const [loginMaskedPhone, setLoginMaskedPhone] = useState('');
+  const [showCustomerLoginModal, setShowCustomerLoginModal] = useState(false);
+  const [custLoginStep, setCustLoginStep] = useState<'phone' | 'otp'>('phone');
+  const [custLoginPhone, setCustLoginPhone] = useState('');
+  const [custLoginOtp, setCustLoginOtp] = useState('');
+  const [custLoginMaskedPhone, setCustLoginMaskedPhone] = useState('');
 
   const formatLoginPhone = (value: string) => {
     const digits = value.replace(/\D/g, '');
@@ -432,6 +439,39 @@ export default function BusinessPage() {
     },
   });
 
+  const custSendOtpMutation = useMutation({
+    mutationFn: async (phoneNumber: string) => {
+      const response = await apiRequest('POST', '/api/customer/send-otp', { phone: phoneNumber });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setCustLoginMaskedPhone(data.phone);
+      setCustLoginStep('otp');
+      toast({ title: 'Code Sent', description: `Verification code sent to ***-***-${data.phone}` });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message || 'Failed to send code', variant: 'destructive' });
+    },
+  });
+
+  const custVerifyOtpMutation = useMutation({
+    mutationFn: async ({ phone, code }: { phone: string; code: string }) => {
+      const response = await apiRequest('POST', '/api/customer/verify-otp', { phone, code });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      customerLogin(data.token, data.user);
+      setShowCustomerLoginModal(false);
+      setCustLoginStep('phone');
+      setCustLoginPhone('');
+      setCustLoginOtp('');
+      toast({ title: 'Welcome!', description: `Signed in as ${data.user.name || 'Business Owner'}` });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Verification Failed', description: error.message || 'Invalid or expired code', variant: 'destructive' });
+    },
+  });
+
   const handleLoginPhoneSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const digits = loginPhone.replace(/\D/g, '');
@@ -449,6 +489,25 @@ export default function BusinessPage() {
       return;
     }
     verifyOtpMutation.mutate({ phone: loginPhone, code: loginOtp });
+  };
+
+  const handleCustLoginPhoneSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const digits = custLoginPhone.replace(/\D/g, '');
+    if (digits.length !== 10) {
+      toast({ title: 'Invalid Phone', description: 'Please enter a valid 10-digit phone number', variant: 'destructive' });
+      return;
+    }
+    custSendOtpMutation.mutate(custLoginPhone);
+  };
+
+  const handleCustLoginOtpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (custLoginOtp.length !== 6) {
+      toast({ title: 'Invalid Code', description: 'Please enter the 6-digit verification code', variant: 'destructive' });
+      return;
+    }
+    custVerifyOtpMutation.mutate({ phone: custLoginPhone, code: custLoginOtp });
   };
 
   useEffect(() => {
@@ -784,8 +843,34 @@ export default function BusinessPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-center overflow-visible">
+      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
+        <div className="w-24" />
         <img src={gatewayLogo} alt="Gateway Global AI" className="h-14 w-auto opacity-90 relative z-10 drop-shadow-lg" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))', marginTop: '14px', marginBottom: '-20px' }} />
+        <div className="flex items-center gap-2 w-24 justify-end">
+          {isCustomerAuth ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-300 text-xs"
+              onClick={() => setLocation('/my-account')}
+              data-testid="button-my-account"
+            >
+              <User className="w-4 h-4 mr-1" />
+              My Account
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-300 text-xs"
+              onClick={() => { setShowCustomerLoginModal(true); setCustLoginStep('phone'); setCustLoginPhone(''); setCustLoginOtp(''); }}
+              data-testid="button-customer-login"
+            >
+              <LogIn className="w-4 h-4 mr-1" />
+              Sign In
+            </Button>
+          )}
+        </div>
       </nav>
       {stage === 'generating' && (
         <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col items-center justify-center">
@@ -1356,6 +1441,103 @@ export default function BusinessPage() {
                   onClick={() => { setLoginStep('phone'); setLoginOtp(''); }}
                   disabled={verifyOtpMutation.isPending}
                   data-testid="button-admin-back"
+                >
+                  Use a different number
+                </Button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+      {showCustomerLoginModal && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4" onClick={() => setShowCustomerLoginModal(false)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-md w-full max-w-sm p-6 space-y-5 relative" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-3 right-3 text-slate-400"
+              onClick={() => setShowCustomerLoginModal(false)}
+              data-testid="button-close-customer-login"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+
+            <div className="text-center space-y-2">
+              <div className="mx-auto w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                <User className="w-6 h-6 text-emerald-400" />
+              </div>
+              <h3 className="text-lg font-bold text-white">Sign In</h3>
+              <p className="text-sm text-slate-400">
+                {custLoginStep === 'phone'
+                  ? 'Enter your phone number to sign in or create an account'
+                  : `Enter the 6-digit code sent to ***-***-${custLoginMaskedPhone}`}
+              </p>
+            </div>
+
+            {custLoginStep === 'phone' ? (
+              <form onSubmit={handleCustLoginPhoneSubmit} className="space-y-4">
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400" />
+                  <Input
+                    data-testid="input-customer-phone"
+                    type="tel"
+                    placeholder="(555) 123-4567"
+                    value={custLoginPhone}
+                    onChange={(e) => setCustLoginPhone(formatLoginPhone(e.target.value))}
+                    className="pl-10 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                    disabled={custSendOtpMutation.isPending}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-emerald-600 to-teal-600"
+                  disabled={custSendOtpMutation.isPending}
+                  data-testid="button-customer-send-code"
+                >
+                  {custSendOtpMutation.isPending ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending...</>
+                  ) : (
+                    'Send Verification Code'
+                  )}
+                </Button>
+                <p className="text-xs text-slate-500 text-center">
+                  No account? One will be created automatically.
+                </p>
+              </form>
+            ) : (
+              <form onSubmit={handleCustLoginOtpSubmit} className="space-y-4">
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400" />
+                  <Input
+                    data-testid="input-customer-otp"
+                    type="text"
+                    placeholder="123456"
+                    value={custLoginOtp}
+                    onChange={(e) => setCustLoginOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="pl-10 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 text-center text-xl tracking-widest"
+                    disabled={custVerifyOtpMutation.isPending}
+                    maxLength={6}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-emerald-600 to-teal-600"
+                  disabled={custVerifyOtpMutation.isPending}
+                  data-testid="button-customer-verify"
+                >
+                  {custVerifyOtpMutation.isPending ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
+                  ) : (
+                    'Verify & Sign In'
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full text-slate-400"
+                  onClick={() => { setCustLoginStep('phone'); setCustLoginOtp(''); }}
+                  disabled={custVerifyOtpMutation.isPending}
+                  data-testid="button-customer-back"
                 >
                   Use a different number
                 </Button>

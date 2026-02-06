@@ -21,6 +21,7 @@ import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
+import { customerSendOtp, customerVerifyOtp, customerVerifySession, customerLogout, customerUpdateProfile, customerGetBusinesses, customerClaimBusiness } from "./customerAuth";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
@@ -66,11 +67,20 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Auth routes
+  // Admin Auth routes
   app.post("/api/auth/send-otp", sendOtp);
   app.post("/api/auth/verify-otp", verifyOtp);
   app.get("/api/auth/session", verifySession);
   app.post("/api/auth/logout", logout);
+
+  // Customer Auth routes (separate from admin)
+  app.post("/api/customer/send-otp", customerSendOtp);
+  app.post("/api/customer/verify-otp", customerVerifyOtp);
+  app.get("/api/customer/session", customerVerifySession);
+  app.post("/api/customer/logout", customerLogout);
+  app.patch("/api/customer/profile", customerUpdateProfile);
+  app.get("/api/customer/businesses", customerGetBusinesses);
+  app.post("/api/customer/claim-business", customerClaimBusiness);
 
   // ============ Demo Lead / Magic Link Onboarding ============
 

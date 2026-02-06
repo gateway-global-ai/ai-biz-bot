@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { CustomerAuthProvider } from "@/lib/customerAuth";
 import TelephonyPanel from "@/pages/TelephonyPanel";
 import GatewayAdmin from "@/pages/GatewayAdmin";
 import AgentTelephony from "@/pages/AgentTelephony";
@@ -38,6 +39,8 @@ import GoogleTasksPage from "@/pages/GoogleTasksPage";
 import AiBizBotAdmin from "@/pages/AiBizBotAdmin";
 import Login from "@/pages/Login";
 import SdkShowcase from "@/pages/SdkShowcase";
+import MyAccount from "@/pages/MyAccount";
+import CustomerSiteManager from "@/pages/CustomerSiteManager";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
@@ -332,19 +335,24 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <Switch>
-            {/* Public routes */}
-            <Route path="/" component={BusinessPage} />
-            <Route path="/business" component={BusinessPage} />
-            <Route path="/demo" component={BusinessPage} />
-            <Route path="/login" component={Login} />
-            <Route path="/v2" component={LandingV2} />
-            <Route path="/kimi-audio" component={KimiAudioDemo} />
-            <Route path="/sdk" component={SdkShowcase} />
-            <Route path="/chat/:agentId" component={AgentChat} />
-            {/* Protected routes with sidebar */}
-            <Route component={AppWithSidebar} />
-          </Switch>
+          <CustomerAuthProvider>
+            <Switch>
+              {/* Public routes */}
+              <Route path="/" component={BusinessPage} />
+              <Route path="/business" component={BusinessPage} />
+              <Route path="/demo" component={BusinessPage} />
+              <Route path="/login" component={Login} />
+              <Route path="/v2" component={LandingV2} />
+              <Route path="/kimi-audio" component={KimiAudioDemo} />
+              <Route path="/sdk" component={SdkShowcase} />
+              <Route path="/chat/:agentId" component={AgentChat} />
+              {/* Customer account routes */}
+              <Route path="/my-account" component={MyAccount} />
+              <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />
+              {/* Protected admin routes with sidebar */}
+              <Route component={AppWithSidebar} />
+            </Switch>
+          </CustomerAuthProvider>
         </AuthProvider>
         <Toaster />
       </TooltipProvider>
