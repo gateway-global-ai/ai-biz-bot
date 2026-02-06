@@ -25,7 +25,7 @@ type VoiceState = 'idle' | 'loading' | 'greeting' | 'greeting_paused' | 'convers
 type Sentiment = 'calm' | 'engaged' | 'helpful';
 
 const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label: string }> = {
-  calm: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: 'READY' },
+  calm: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: "LET'S TALK" },
   engaged: { primary: 'rgba(16, 185, 129, 0.8)', glow: 'rgba(16, 185, 129, 0.4)', label: 'LISTENING' },
   helpful: { primary: 'rgba(139, 92, 246, 0.8)', glow: 'rgba(139, 92, 246, 0.4)', label: 'SPEAKING' },
 };
@@ -34,7 +34,7 @@ const VoiceVisualizer = () => {
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [sentiment, setSentiment] = useState<Sentiment>('calm');
   const [pulse, setPulse] = useState(0);
-  const [showHelper, setShowHelper] = useState(true);
+  const [showHelper, setShowHelper] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -200,14 +200,6 @@ const VoiceVisualizer = () => {
   
   return (
     <div className="relative flex items-center justify-center mx-auto" style={{ marginTop: '-100px' }}>
-      {showHelper && voiceState === 'idle' && (
-        <div className="absolute -left-2 top-1/2 -translate-y-1/2 -translate-x-full flex items-center gap-1.5 animate-pulse z-20" data-testid="helper-click-talk">
-          <span className="text-sm font-semibold text-blue-400 text-center leading-tight bg-slate-900/80 px-3 py-1.5 rounded-full border border-blue-500/30">
-            Click,<br/>Let's Talk!
-          </span>
-          <ArrowRight className="w-5 h-5 text-blue-400 shrink-0" />
-        </div>
-      )}
       
       <div 
         className="relative w-32 h-32 flex items-center justify-center cursor-pointer select-none"
