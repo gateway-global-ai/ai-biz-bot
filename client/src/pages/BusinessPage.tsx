@@ -728,8 +728,7 @@ export default function BusinessPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
-        <div className="w-24" />
-        <img src={Pidea_logo_header__7_} alt="Gateway Global AI" className="h-14 w-auto opacity-90 relative z-10 drop-shadow-lg mt-[0px] mb-[0px]" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))', marginTop: '14px', marginBottom: '-20px' }} />
+        <img src={Pidea_logo_header__7_} alt="Gateway Global AI" className="h-10 w-auto relative z-10" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' }} />
         <div className="flex items-center gap-2 justify-end">
           <ShareButton
             shareTitle="Gateway Global AI - AI-Powered Business Websites"
