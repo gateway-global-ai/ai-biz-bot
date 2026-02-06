@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Phone, Building2, Users, Globe, ShieldCheck, 
   ArrowLeft, CheckCircle2, MessageSquare, 
@@ -123,10 +123,10 @@ export default function BusinessPage() {
   });
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [mapsKey, setMapsKey] = useState<string | null>(null);
-  const [scriptLoaded, setScriptLoaded] = useState(false);
+  const [libLoaded, setLibLoaded] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<SelectedPlace | null>(null);
-  const [isSearching, setIsSearching] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [mapsError, setMapsError] = useState<string | null>(null);
+  const pickerContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch('/api/config/maps-key')
@@ -137,53 +137,61 @@ export default function BusinessPage() {
       .catch(() => {});
   }, []);
 
-  const [mapsError, setMapsError] = useState<string | null>(null);
-
   useEffect(() => {
     if (!mapsKey) return;
-    if ((window as any).google?.maps?.places) {
-      setScriptLoaded(true);
+    if (document.querySelector('script[data-gmpx-lib]')) {
+      setLibLoaded(true);
       return;
     }
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${mapsKey}&libraries=places&loading=async`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      setScriptLoaded(true);
-      setMapsError(null);
-    };
-    script.onerror = () => {
-      setMapsError('Failed to load Google Maps. Check API key and enabled APIs.');
-    };
+    script.type = 'module';
+    script.src = 'https://ajax.googleapis.com/ajax/libs/@googlemaps/extended-component-library/0.6.11/index.min.js';
+    script.setAttribute('data-gmpx-lib', 'true');
+    script.onload = () => setLibLoaded(true);
+    script.onerror = () => setMapsError('Failed to load Google Maps library.');
+    document.head.appendChild(script);
+
     (window as any).gm_authFailure = () => {
       setMapsError('Google Maps API not activated. Enable "Maps JavaScript API" and "Places API" in Google Cloud Console.');
     };
-    document.head.appendChild(script);
   }, [mapsKey]);
 
   useEffect(() => {
-    if (!scriptLoaded || !inputRef.current || !(window as any).google) return;
-    try {
-      const autocomplete = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
-        types: ['establishment'],
-        fields: [
-          'name', 'formatted_address', 'place_id', 'rating',
-          'user_ratings_total', 'website', 'opening_hours',
-          'photos', 'types', 'formatted_phone_number'
-        ],
-      });
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace();
-        if (place && place.name) {
-          setSelectedPlace(place);
-          setIsSearching(false);
-        }
-      });
-    } catch (err: any) {
-      setMapsError('Places Autocomplete unavailable. Enable "Places API" in Google Cloud Console.');
-    }
-  }, [scriptLoaded]);
+    if (!libLoaded || !mapsKey || !pickerContainerRef.current) return;
+    const container = pickerContainerRef.current;
+    if (container.querySelector('gmpx-api-loader')) return;
+
+    const apiLoader = document.createElement('gmpx-api-loader');
+    apiLoader.setAttribute('key', mapsKey);
+    apiLoader.setAttribute('solution-channel', 'GMP_GE_mapsandplacesautocomplete_v2');
+    container.appendChild(apiLoader);
+
+    const placePicker = document.createElement('gmpx-place-picker') as any;
+    placePicker.setAttribute('placeholder', 'Search for your business (e.g. Boardwalk Suites Lafayette)');
+    placePicker.setAttribute('data-testid', 'input-place-search');
+    placePicker.style.cssText = 'width:100%;--gmpx-color-surface:transparent;--gmpx-color-on-surface:#e2e8f0;--gmpx-color-on-surface-variant:#64748b;--gmpx-color-primary:#818cf8;--gmpx-font-family-base:inherit;--gmpx-font-size-base:1.1rem;';
+
+    placePicker.addEventListener('gmpx-placechange', () => {
+      const place = placePicker.value;
+      if (place && (place.displayName || place.name)) {
+        setSelectedPlace({
+          name: place.displayName || place.name || '',
+          formatted_address: place.formattedAddress || place.formatted_address || '',
+          rating: place.rating ?? undefined,
+          user_ratings_total: place.userRatingCount ?? place.user_ratings_total ?? undefined,
+          formatted_phone_number: place.nationalPhoneNumber ?? place.formatted_phone_number ?? undefined,
+          website: place.websiteURI ?? place.website ?? undefined,
+          types: place.types || [],
+          place_id: place.id ?? place.place_id ?? undefined,
+          photos: place.photos || [],
+          opening_hours: place.regularOpeningHours ?? place.opening_hours ?? undefined,
+        });
+        setMapsError(null);
+      }
+    });
+
+    container.appendChild(placePicker);
+  }, [libLoaded, mapsKey]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,32 +232,18 @@ export default function BusinessPage() {
             </span>
           </h1>
 
-          {/* Google Places Autocomplete Search Bar */}
+          {/* Google Places Autocomplete - Extended Component Library */}
           <div className="max-w-2xl mx-auto" data-testid="container-place-search">
             <div className="relative group">
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-              <div className="relative flex items-center bg-slate-900 rounded-xl border border-slate-700 p-1.5">
-                <div className="pl-3 text-slate-500">
+              <div className="relative bg-slate-900 rounded-xl border border-slate-700 p-2 flex items-center gap-2">
+                <div className="pl-2 text-slate-500">
                   <Search className="w-5 h-5" />
                 </div>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  disabled={!scriptLoaded}
-                  onFocus={() => setIsSearching(true)}
-                  onBlur={() => setTimeout(() => setIsSearching(false), 200)}
-                  placeholder={scriptLoaded ? "Search for your business (e.g. Boardwalk Suites Lafayette)" : mapsKey ? "Loading Google Maps..." : "Configuring search..."}
-                  className="w-full px-3 py-3.5 bg-transparent text-base md:text-lg focus:outline-none text-slate-100 placeholder:text-slate-500"
-                  data-testid="input-place-search"
-                />
-                {isSearching && (
+                <div ref={pickerContainerRef} className="flex-1 min-w-0" />
+                {!libLoaded && mapsKey && (
                   <div className="pr-3">
                     <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-                  </div>
-                )}
-                {!isSearching && scriptLoaded && (
-                  <div className="pr-3">
-                    <MapPin className="w-5 h-5 text-slate-600" />
                   </div>
                 )}
               </div>
@@ -278,7 +272,15 @@ export default function BusinessPage() {
               <CardContent className="p-6">
                 <div className="flex flex-col md:flex-row md:items-start gap-5">
                   {/* Business Photo */}
-                  {selectedPlace.photos && selectedPlace.photos.length > 0 ? (
+                  {selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getURI === 'function' ? (
+                    <div className="w-full md:w-40 h-28 rounded-lg overflow-hidden flex-shrink-0 bg-slate-800">
+                      <img
+                        src={selectedPlace.photos[0].getURI({ maxWidth: 400 })}
+                        alt={selectedPlace.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getUrl === 'function' ? (
                     <div className="w-full md:w-40 h-28 rounded-lg overflow-hidden flex-shrink-0 bg-slate-800">
                       <img
                         src={selectedPlace.photos[0].getUrl({ maxWidth: 400 })}
