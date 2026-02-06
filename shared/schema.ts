@@ -1150,3 +1150,125 @@ export const insertOgSettingsSchema = createInsertSchema(ogSettings).omit({
 
 export type InsertOgSettings = z.infer<typeof insertOgSettingsSchema>;
 export type OgSettings = typeof ogSettings.$inferSelect;
+
+// =========================================
+// Google Workspace Integration
+// =========================================
+
+export const workspaceConfigurations = pgTable("workspace_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
+  
+  // Setup Type
+  setupType: text("setup_type").notNull(), // 'hosted' | 'integrated'
+  
+  // Hosted Email Configuration (gatewayglobal.ai)
+  hostedEmail: text("hosted_email"), // user@gatewayglobal.ai
+  hostedUserId: text("hosted_user_id"), // Google Workspace user ID
+  workspacePlan: text("workspace_plan"), // 'starter' | 'standard'
+  
+  // Integrated Email Configuration (existing email)
+  integratedEmail: text("integrated_email"),
+  
+  // OAuth Credentials (encrypted)
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiry: timestamp("token_expiry"),
+  
+  // Workspace Structure IDs
+  driveFolderId: text("drive_folder_id"), // Root business folder
+  clientsFolderId: text("clients_folder_id"),
+  operationsFolderId: text("operations_folder_id"),
+  marketingFolderId: text("marketing_folder_id"),
+  
+  // Template IDs
+  leadTrackingSheetId: text("lead_tracking_sheet_id"),
+  taskListId: text("task_list_id"),
+  calendarId: text("calendar_id"),
+  
+  // Setup Status
+  setupStatus: text("setup_status").default("pending"), // 'pending' | 'in_progress' | 'completed' | 'failed'
+  setupStep: text("setup_step"), // Current step in setup process
+  setupError: text("setup_error"),
+  
+  // SWOT Analysis Link
+  swotAnalysisId: text("swot_analysis_id"),
+  swotCompletedAt: timestamp("swot_completed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWorkspaceConfigurationSchema = createInsertSchema(workspaceConfigurations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertWorkspaceConfiguration = z.infer<typeof insertWorkspaceConfigurationSchema>;
+export type WorkspaceConfiguration = typeof workspaceConfigurations.$inferSelect;
+
+// SWOT Analysis Results
+export const swotAnalyses = pgTable("swot_analyses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
+  
+  // Analysis Data (stored as JSON)
+  strengths: jsonb("strengths").notNull(),
+  weaknesses: jsonb("weaknesses").notNull(),
+  opportunities: jsonb("opportunities").notNull(),
+  threats: jsonb("threats").notNull(),
+  
+  // Recommendations
+  recommendations: jsonb("recommendations"),
+  agentTrainingData: jsonb("agent_training_data"),
+  
+  // Metadata
+  analysisSource: text("analysis_source"), // 'google_places' | 'manual' | 'ai_generated'
+  confidence: integer("confidence"), // 0-100
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSwotAnalysisSchema = createInsertSchema(swotAnalyses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSwotAnalysis = z.infer<typeof insertSwotAnalysisSchema>;
+export type SwotAnalysis = typeof swotAnalyses.$inferSelect;
+
+// AI Biz Bot Consultations
+export const consultations = pgTable("consultations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
+  workspaceConfigId: varchar("workspace_config_id").references(() => workspaceConfigurations.id),
+  swotAnalysisId: varchar("swot_analysis_id").references(() => swotAnalyses.id),
+  
+  // Consultation Data
+  conversationHistory: jsonb("conversation_history").notNull(), // Array of messages
+  consultationSummary: text("consultation_summary"),
+  insights: jsonb("insights"), // Extracted insights from conversation
+  
+  // Customization Results
+  customTools: jsonb("custom_tools"),
+  customizationApplied: boolean("customization_applied").default(false),
+  
+  // Status
+  status: text("status").default("in_progress"), // 'in_progress' | 'completed' | 'abandoned'
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertConsultationSchema = createInsertSchema(consultations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertConsultation = z.infer<typeof insertConsultationSchema>;
+export type Consultation = typeof consultations.$inferSelect;

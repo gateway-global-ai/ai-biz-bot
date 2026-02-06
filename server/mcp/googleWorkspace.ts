@@ -1,4 +1,4 @@
-import { google, calendar_v3, tasks_v1, docs_v1, sheets_v4, drive_v3 } from 'googleapis';
+import { google, calendar_v3, tasks_v1, docs_v1, sheets_v4, drive_v3, gmail_v1, admin_directory_v1 } from 'googleapis';
 import { Readable } from 'stream';
 
 export interface GoogleWorkspaceCredentials {
@@ -38,6 +38,35 @@ export interface ToolResult {
   error?: string;
 }
 
+export interface EmailParams {
+  to: string;
+  subject: string;
+  body: string;
+  from?: string;
+  cc?: string[];
+  bcc?: string[];
+}
+
+export interface DraftParams {
+  to: string;
+  subject: string;
+  body: string;
+  from?: string;
+}
+
+export interface UserInviteParams {
+  email: string;
+  firstName: string;
+  lastName: string;
+  password: string;
+  organizationUnit?: string;
+}
+
+export interface WorkspaceStructureParams {
+  businessName: string;
+  businessType: string;
+}
+
 export class GoogleWorkspaceService {
   private oauth2Client: any;
   private calendar: calendar_v3.Calendar | null = null;
@@ -45,6 +74,8 @@ export class GoogleWorkspaceService {
   private docs: docs_v1.Docs | null = null;
   private sheets: sheets_v4.Sheets | null = null;
   private drive: drive_v3.Drive | null = null;
+  private gmail: gmail_v1.Gmail | null = null;
+  private admin: admin_directory_v1.Admin | null = null;
 
   constructor(credentials?: GoogleWorkspaceCredentials) {
     this.oauth2Client = new google.auth.OAuth2(
@@ -70,6 +101,8 @@ export class GoogleWorkspaceService {
     this.docs = google.docs({ version: 'v1', auth: this.oauth2Client });
     this.sheets = google.sheets({ version: 'v4', auth: this.oauth2Client });
     this.drive = google.drive({ version: 'v3', auth: this.oauth2Client });
+    this.gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
+    this.admin = google.admin({ version: 'directory_v1', auth: this.oauth2Client });
   }
 
   getAuthUrl(state?: string): string {
@@ -79,6 +112,9 @@ export class GoogleWorkspaceService {
       'https://www.googleapis.com/auth/documents',
       'https://www.googleapis.com/auth/spreadsheets',
       'https://www.googleapis.com/auth/drive',
+      'https://www.googleapis.com/auth/gmail.modify',
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/admin.directory.user',
       'https://www.googleapis.com/auth/cloud-platform'
     ];
 
@@ -589,16 +625,353 @@ export class GoogleWorkspaceService {
     }
   }
 
+  // ==========================================
+  // Gmail Methods
+  // ==========================================
+
+  async sendEmail(params: EmailParams): Promise<ToolResult> {
+    if (!this.gmail) {
+      return { success: false, error: 'Gmail not connected' };
+    }
+
+    try {
+      const { to, subject, body, from, cc, bcc } = params;
+      
+      // Create email message
+      const lines = [
+        `To: ${to}`,
+        `Subject: ${subject}`,
+      ];
+      
+      if (from) lines.push(`From: ${from}`);
+      if (cc && cc.length > 0) lines.push(`Cc: ${cc.join(', ')}`);
+      if (bcc && bcc.length > 0) lines.push(`Bcc: ${bcc.join(', ')}`);
+      
+      lines.push('', body);
+      
+      const email = lines.join('\n');
+      const encodedMessage = Buffer.from(email)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      const response = await this.gmail.users.messages.send({
+        userId: 'me',
+        requestBody: {
+          raw: encodedMessage,
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          id: response.data.id,
+          threadId: response.data.threadId,
+        },
+      };
+    } catch (error: any) {
+      console.error('Email send error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createDraft(params: DraftParams): Promise<ToolResult> {
+    if (!this.gmail) {
+      return { success: false, error: 'Gmail not connected' };
+    }
+
+    try {
+      const { to, subject, body, from } = params;
+      
+      const lines = [
+        `To: ${to}`,
+        `Subject: ${subject}`,
+      ];
+      
+      if (from) lines.push(`From: ${from}`);
+      lines.push('', body);
+      
+      const email = lines.join('\n');
+      const encodedMessage = Buffer.from(email)
+        .toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+
+      const response = await this.gmail.users.drafts.create({
+        userId: 'me',
+        requestBody: {
+          message: {
+            raw: encodedMessage,
+          },
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          id: response.data.id,
+          message: response.data.message,
+        },
+      };
+    } catch (error: any) {
+      console.error('Draft creation error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async listEmails(maxResults: number = 10, query?: string): Promise<ToolResult> {
+    if (!this.gmail) {
+      return { success: false, error: 'Gmail not connected' };
+    }
+
+    try {
+      const response = await this.gmail.users.messages.list({
+        userId: 'me',
+        maxResults,
+        q: query,
+      });
+
+      const messages = response.data.messages || [];
+      const emails = [];
+
+      for (const message of messages.slice(0, maxResults)) {
+        const detail = await this.gmail.users.messages.get({
+          userId: 'me',
+          id: message.id!,
+          format: 'metadata',
+          metadataHeaders: ['From', 'To', 'Subject', 'Date'],
+        });
+
+        const headers = detail.data.payload?.headers || [];
+        emails.push({
+          id: detail.data.id,
+          threadId: detail.data.threadId,
+          snippet: detail.data.snippet,
+          from: headers.find(h => h.name === 'From')?.value,
+          to: headers.find(h => h.name === 'To')?.value,
+          subject: headers.find(h => h.name === 'Subject')?.value,
+          date: headers.find(h => h.name === 'Date')?.value,
+        });
+      }
+
+      return { success: true, data: { emails } };
+    } catch (error: any) {
+      console.error('Email list error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ==========================================
+  // Google Admin Directory Methods
+  // ==========================================
+
+  async createUser(params: UserInviteParams): Promise<ToolResult> {
+    if (!this.admin) {
+      return { success: false, error: 'Google Admin not connected' };
+    }
+
+    try {
+      const { email, firstName, lastName, password, organizationUnit } = params;
+      
+      const response = await this.admin.users.insert({
+        requestBody: {
+          primaryEmail: email,
+          name: {
+            givenName: firstName,
+            familyName: lastName,
+          },
+          password: password,
+          changePasswordAtNextLogin: true,
+          orgUnitPath: organizationUnit || '/',
+        },
+      });
+
+      return {
+        success: true,
+        data: {
+          id: response.data.id,
+          email: response.data.primaryEmail,
+          name: response.data.name,
+          orgUnitPath: response.data.orgUnitPath,
+        },
+      };
+    } catch (error: any) {
+      console.error('User creation error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async sendUserInvitation(email: string, firstName: string, lastName: string): Promise<ToolResult> {
+    if (!this.admin) {
+      return { success: false, error: 'Google Admin not connected' };
+    }
+
+    try {
+      // Generate a secure random password
+      const tempPassword = this.generateSecurePassword();
+      
+      // Create the user with temporary password
+      const userResult = await this.createUser({
+        email,
+        firstName,
+        lastName,
+        password: tempPassword,
+      });
+
+      if (!userResult.success) {
+        return userResult;
+      }
+
+      // Send welcome email with instructions
+      await this.sendEmail({
+        to: email,
+        subject: 'Welcome to Gateway Global AI - Your Workspace Account',
+        body: `Dear ${firstName},
+
+Welcome to Gateway Global AI! Your professional workspace account has been created.
+
+Email: ${email}
+Temporary Password: ${tempPassword}
+
+Please sign in at https://workspace.google.com and change your password when prompted.
+
+Your workspace includes:
+- Professional email (@gatewayglobal.ai)
+- Google Drive with 30GB-2TB storage
+- Calendar for appointment management
+- Tasks for project tracking
+- Docs and Sheets for business operations
+- AI-powered business tools
+
+Get started: https://workspace.google.com
+
+Best regards,
+Gateway Global AI Team`,
+      });
+
+      return {
+        success: true,
+        data: {
+          ...userResult.data,
+          invitationSent: true,
+        },
+      };
+    } catch (error: any) {
+      console.error('User invitation error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  private generateSecurePassword(): string {
+    const length = 16;
+    const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+    let password = '';
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length));
+    }
+    return password;
+  }
+
+  // ==========================================
+  // Workspace Structure Generation
+  // ==========================================
+
+  async createWorkspaceStructure(params: WorkspaceStructureParams): Promise<ToolResult> {
+    try {
+      const { businessName, businessType } = params;
+      const results: any = {
+        folders: {},
+        sheets: {},
+        tasks: {},
+        calendar: {},
+      };
+
+      // Create root business folder
+      const rootFolder = await this.createDriveFolder(`${businessName} - Business Files`);
+      if (!rootFolder.success) {
+        return rootFolder;
+      }
+      results.folders.root = rootFolder.data;
+
+      // Create sub-folders
+      const subFolders = ['Clients', 'Operations', 'Marketing', 'Reports'];
+      for (const folder of subFolders) {
+        const result = await this.createDriveFolder(folder, rootFolder.data.id);
+        if (result.success) {
+          results.folders[folder.toLowerCase()] = result.data;
+        }
+      }
+
+      // Create lead tracking spreadsheet
+      const leadSheet = await this.createSpreadsheet({
+        title: `${businessName} - Lead Tracker`,
+        headers: ['Date', 'Name', 'Email', 'Phone', 'Source', 'Status', 'Notes'],
+        data: [],
+      });
+      if (leadSheet.success) {
+        results.sheets.leadTracking = leadSheet.data;
+      }
+
+      // Create initial tasks
+      const initialTasks = [
+        { title: 'Complete business profile setup', notes: 'Add logo, description, and contact information' },
+        { title: 'Configure AI chatbot settings', notes: 'Customize greeting and responses' },
+        { title: 'Set up calendar for appointments', notes: 'Add availability and booking rules' },
+        { title: 'Review and customize email templates', notes: 'Personalize customer communication' },
+      ];
+
+      for (const taskData of initialTasks) {
+        await this.createTask(taskData);
+      }
+      results.tasks.initial = initialTasks.length;
+
+      // Create calendar template (sample appointment types)
+      const sampleEvents = [
+        {
+          summary: `${businessType} Consultation - Sample Event`,
+          description: 'This is a template event. Delete this and add your real appointments.',
+          startTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          endTime: new Date(Date.now() + 25 * 60 * 60 * 1000).toISOString(),
+        },
+      ];
+
+      for (const event of sampleEvents) {
+        const result = await this.createCalendarEvent(event);
+        if (result.success) {
+          results.calendar.sampleEvent = result.data;
+        }
+      }
+
+      return {
+        success: true,
+        data: results,
+      };
+    } catch (error: any) {
+      console.error('Workspace structure creation error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   async executeTool(toolName: string, args: any): Promise<ToolResult> {
     switch (toolName) {
       case 'createCalendarEvent':
         return this.createCalendarEvent(args);
       case 'listCalendarEvents':
         return this.listCalendarEvents(args.maxResults, args.timeMin);
+      case 'updateCalendarEvent':
+        return this.updateCalendarEvent(args.eventId, args);
+      case 'deleteCalendarEvent':
+        return this.deleteCalendarEvent(args.eventId);
       case 'createTask':
         return this.createTask(args);
       case 'listTasks':
         return this.listTasks(args.maxResults);
+      case 'updateTask':
+        return this.updateTask(args.taskId, args);
+      case 'deleteTask':
+        return this.deleteTask(args.taskId);
       case 'createDocument':
         return this.createDocument(args);
       case 'createSpreadsheet':
@@ -611,6 +984,18 @@ export class GoogleWorkspaceService {
         return this.createDriveFolder(args.name, args.parentId);
       case 'deleteDriveFile':
         return this.deleteDriveFile(args.fileId);
+      case 'sendEmail':
+        return this.sendEmail(args);
+      case 'createDraft':
+        return this.createDraft(args);
+      case 'listEmails':
+        return this.listEmails(args.maxResults, args.query);
+      case 'createUser':
+        return this.createUser(args);
+      case 'sendUserInvitation':
+        return this.sendUserInvitation(args.email, args.firstName, args.lastName);
+      case 'createWorkspaceStructure':
+        return this.createWorkspaceStructure(args);
       default:
         return { success: false, error: `Unknown tool: ${toolName}` };
     }
