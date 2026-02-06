@@ -786,7 +786,7 @@ export default function BusinessPage() {
           <div className="space-y-10 md:space-y-14">
             <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white" data-testid="text-hero-heading">
               Free Custom Websites<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-[48px]">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-3xl md:text-[48px]">
                 AI Voice and Chat Enabled
               </span>
             </h1>
