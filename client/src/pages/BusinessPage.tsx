@@ -52,7 +52,7 @@ const VoiceVisualizer = () => {
   const waveIntensity = Math.sin(pulse / 10) * 0.3 + 0.7;
   
   return (
-    <div className="relative w-32 h-32 flex items-center justify-center mx-auto" style={{ marginTop: '-30px' }}>
+    <div className="relative w-32 h-32 flex items-center justify-center mx-auto" style={{ marginTop: '-100px' }}>
       <div 
         className="absolute inset-0 border border-dashed rounded-full animate-spin"
         style={{ 
