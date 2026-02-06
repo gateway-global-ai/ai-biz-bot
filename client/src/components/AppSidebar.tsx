@@ -26,6 +26,7 @@ const AGENT_ITEMS = [
   { id: 'dashboard', label: 'Agent Dashboard', path: '/agents', icon: LayoutDashboard },
   { id: 'command-chat', label: 'Command Chat', path: '/command-chat', icon: MessageCircle },
   { id: 'agent-manager', label: 'Agent Manager', path: '/agent-manager', icon: Bot },
+  { id: 'agent-testing', label: 'Agent Testing', path: '/agent-testing', icon: ClipboardCheck },
   { id: 'assessment', label: 'DISC Assessment', path: '/assessment', icon: ClipboardCheck },
   { id: 'conversation', label: 'Character Tool', path: '/conversation', icon: AudioLines },
 ];
