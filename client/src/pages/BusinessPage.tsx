@@ -814,7 +814,7 @@ export default function BusinessPage() {
             </div>
           </div>
           <div className="flex-1 flex items-end">
-            <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
+            <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light -mt-[25px]">
               Fully Developed Web Site In 1 Hour!<br/>
               <span className="text-white font-medium">No Credit Card Required.</span>
             </p>
