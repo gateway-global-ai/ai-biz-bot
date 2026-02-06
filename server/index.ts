@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startTaskScheduler } from "./taskScheduler";
 import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
+import { setupBrowserVoiceRoutes, setupBrowserVoiceWebSocket, setupBrowserAudioTempRoute } from "./browserVoice";
 import { storage } from "./storage";
 
 // Seed default admin user on startup (ensures admin exists in production)
@@ -481,8 +482,15 @@ app.use((req, res, next) => {
   // Set up audio temp route for serving temporary audio files
   setupAudioTempRoute(app);
   
+  // Set up browser voice AI routes and temp audio serving
+  setupBrowserVoiceRoutes(app);
+  setupBrowserAudioTempRoute(app);
+  
   // Set up WebSocket for Twilio Media Streams (Kimi-Audio voice calls)
   setupVoiceStreamWebSocket(httpServer);
+  
+  // Set up WebSocket for browser-based voice AI
+  setupBrowserVoiceWebSocket(httpServer);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

@@ -7,7 +7,8 @@ import {
   Briefcase, Zap, PhoneCall, CreditCard, ChevronRight,
   Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server,
   Search, MapPin, Star, ExternalLink, Loader2, ArrowRight, Sparkles,
-  Clock, Bot, Wand2, X, Eye, Send, User, KeyRound, LogIn, LogOut
+  Clock, Bot, Wand2, X, Eye, Send, User, KeyRound, LogIn, LogOut,
+  Volume2, VolumeX, Mic, MicOff
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useMutation } from '@tanstack/react-query';
@@ -20,88 +21,266 @@ import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 
-type Sentiment = 'calm' | 'engaged' | 'helpful';
+type VoiceState = 'idle' | 'loading' | 'greeting' | 'greeting_paused' | 'conversation' | 'processing' | 'responding' | 'error';
 
-const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label: string }> = {
-  calm: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: 'READY' },
-  engaged: { primary: 'rgba(16, 185, 129, 0.8)', glow: 'rgba(16, 185, 129, 0.4)', label: 'LISTENING' },
-  helpful: { primary: 'rgba(139, 92, 246, 0.8)', glow: 'rgba(139, 92, 246, 0.4)', label: 'SPEAKING' },
+const VOICE_STATE_CONFIG: Record<VoiceState, { primary: string; glow: string; label: string; active: boolean }> = {
+  idle: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: 'READY', active: false },
+  loading: { primary: 'rgba(234, 179, 8, 0.8)', glow: 'rgba(234, 179, 8, 0.4)', label: 'LOADING', active: true },
+  greeting: { primary: 'rgba(139, 92, 246, 0.8)', glow: 'rgba(139, 92, 246, 0.4)', label: 'SPEAKING', active: true },
+  greeting_paused: { primary: 'rgba(100, 116, 139, 0.5)', glow: 'rgba(100, 116, 139, 0.2)', label: 'PAUSED', active: false },
+  conversation: { primary: 'rgba(16, 185, 129, 0.8)', glow: 'rgba(16, 185, 129, 0.4)', label: 'LISTENING', active: true },
+  processing: { primary: 'rgba(234, 179, 8, 0.8)', glow: 'rgba(234, 179, 8, 0.4)', label: 'THINKING', active: true },
+  responding: { primary: 'rgba(139, 92, 246, 0.8)', glow: 'rgba(139, 92, 246, 0.4)', label: 'SPEAKING', active: true },
+  error: { primary: 'rgba(239, 68, 68, 0.8)', glow: 'rgba(239, 68, 68, 0.4)', label: 'ERROR', active: false },
 };
 
 const VoiceVisualizer = () => {
-  const [sentiment, setSentiment] = useState<Sentiment>('calm');
+  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [pulse, setPulse] = useState(0);
+  const [showHelper, setShowHelper] = useState(true);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const voiceStateRef = useRef<VoiceState>('idle');
   
+  useEffect(() => { voiceStateRef.current = voiceState; }, [voiceState]);
+
   useEffect(() => {
-    const sentimentInterval = setInterval(() => {
-      const sentiments: Sentiment[] = ['calm', 'engaged', 'helpful'];
-      setSentiment(sentiments[Math.floor(Math.random() * sentiments.length)]);
-    }, 2500);
-    
     const pulseInterval = setInterval(() => {
       setPulse(prev => (prev + 1) % 100);
     }, 50);
-    
-    return () => {
-      clearInterval(sentimentInterval);
-      clearInterval(pulseInterval);
-    };
+    return () => clearInterval(pulseInterval);
   }, []);
-  
-  const sentimentConfig = SENTIMENT_COLORS[sentiment];
-  const waveIntensity = Math.sin(pulse / 10) * 0.3 + 0.7;
+
+  const cleanup = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'end' }));
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => cleanup(), [cleanup]);
+
+  const startGreeting = useCallback(async () => {
+    setShowHelper(false);
+    setVoiceState('loading');
+    try {
+      const res = await fetch('/api/voice/greeting', { method: 'POST' });
+      const data = await res.json();
+      if (!data.audioUrl) {
+        setVoiceState('error');
+        setTimeout(() => setVoiceState('idle'), 3000);
+        return;
+      }
+      const audio = new Audio(data.audioUrl);
+      audioRef.current = audio;
+      audio.onplay = () => setVoiceState('greeting');
+      audio.onended = () => startConversation();
+      audio.onerror = () => {
+        setVoiceState('error');
+        setTimeout(() => setVoiceState('idle'), 3000);
+      };
+      await audio.play();
+    } catch {
+      setVoiceState('error');
+      setTimeout(() => setVoiceState('idle'), 3000);
+    }
+  }, []);
+
+  const toggleGreetingPause = useCallback(() => {
+    if (!audioRef.current) return;
+    if (voiceState === 'greeting') {
+      audioRef.current.pause();
+      setVoiceState('greeting_paused');
+    } else if (voiceState === 'greeting_paused') {
+      audioRef.current.play();
+      setVoiceState('greeting');
+    }
+  }, [voiceState]);
+
+  const startConversation = useCallback(async () => {
+    setVoiceState('conversation');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/browser-voice`);
+      wsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'processing') {
+          setVoiceState('processing');
+        } else if (msg.type === 'response' && msg.audioUrl) {
+          setVoiceState('responding');
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.pause();
+          }
+          const responseAudio = new Audio(msg.audioUrl);
+          responseAudio.onended = () => {
+            setVoiceState('conversation');
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
+              mediaRecorderRef.current.resume();
+            }
+          };
+          responseAudio.play().catch(() => {
+            setVoiceState('conversation');
+          });
+        } else if (msg.type === 'error') {
+          console.error('[Voice] Server error:', msg.message);
+        }
+      };
+
+      ws.onopen = () => {
+        const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+        mediaRecorderRef.current = recorder;
+
+        recorder.ondataavailable = async (e) => {
+          if (e.data.size > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
+            const arrayBuffer = await e.data.arrayBuffer();
+            const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+            wsRef.current.send(JSON.stringify({ type: 'audio', audio: base64 }));
+          }
+        };
+
+        recorder.start(4000);
+      };
+
+      ws.onerror = () => {
+        setVoiceState('error');
+        setTimeout(() => { cleanup(); setVoiceState('idle'); }, 3000);
+      };
+      ws.onclose = () => {
+        const currentState = voiceStateRef.current;
+        if (currentState === 'conversation' || currentState === 'processing' || currentState === 'responding') {
+          cleanup();
+          setVoiceState('idle');
+        }
+      };
+    } catch {
+      setVoiceState('error');
+      setTimeout(() => { cleanup(); setVoiceState('idle'); }, 3000);
+    }
+  }, [cleanup]);
+
+  const handleClick = useCallback(() => {
+    if (voiceState === 'idle' || voiceState === 'error') {
+      startGreeting();
+    } else if (voiceState === 'greeting' || voiceState === 'greeting_paused') {
+      toggleGreetingPause();
+    } else if (voiceState === 'conversation' || voiceState === 'processing' || voiceState === 'responding') {
+      cleanup();
+      setVoiceState('idle');
+      setShowHelper(true);
+    }
+  }, [voiceState, startGreeting, toggleGreetingPause, cleanup]);
+
+  const config = VOICE_STATE_CONFIG[voiceState];
+  const waveIntensity = config.active ? (Math.sin(pulse / 10) * 0.3 + 0.7) : 0.3;
+
+  const getIcon = () => {
+    switch (voiceState) {
+      case 'greeting': return <Volume2 className="w-8 h-8 text-slate-200" />;
+      case 'greeting_paused': return <VolumeX className="w-8 h-8 text-slate-400" />;
+      case 'conversation': return <Mic className="w-8 h-8 text-emerald-300" />;
+      case 'processing': return <Loader2 className="w-8 h-8 text-yellow-300 animate-spin" />;
+      case 'responding': return <Volume2 className="w-8 h-8 text-violet-300" />;
+      case 'loading': return <Loader2 className="w-8 h-8 text-yellow-300 animate-spin" />;
+      case 'error': return <MicOff className="w-8 h-8 text-red-400" />;
+      default: return <Phone className="w-8 h-8 text-slate-200" />;
+    }
+  };
   
   return (
-    <div className="relative w-32 h-32 flex items-center justify-center mx-auto" style={{ marginTop: '-100px' }}>
-      <div 
-        className="absolute inset-0 border border-dashed rounded-full animate-spin"
-        style={{ 
-          borderColor: `rgba(59, 130, 246, 0.3)`, 
-          animationDuration: '20s'
-        }}
-      />
-      <div 
-        className="absolute inset-2 border border-dotted rounded-full animate-spin"
-        style={{ 
-          borderColor: `rgba(99, 102, 241, 0.25)`, 
-          animationDirection: 'reverse',
-          animationDuration: '15s'
-        }}
-      />
+    <div className="relative flex items-center justify-center mx-auto" style={{ marginTop: '-100px' }}>
+      {showHelper && voiceState === 'idle' && (
+        <div className="absolute -left-4 top-1/2 -translate-y-1/2 -translate-x-full flex items-center gap-2 animate-pulse z-20" data-testid="helper-click-talk">
+          <span className="text-sm font-semibold text-blue-400 whitespace-nowrap bg-slate-900/80 px-3 py-1.5 rounded-full border border-blue-500/30">
+            Click, Let's Talk!
+          </span>
+          <ArrowRight className="w-5 h-5 text-blue-400" />
+        </div>
+      )}
       
       <div 
-        className="absolute rounded-full blur-3xl transition-all duration-500 animate-pulse"
-        style={{ 
-          width: `${120 + waveIntensity * 40}%`,
-          height: `${120 + waveIntensity * 40}%`,
-          background: `radial-gradient(circle, ${sentimentConfig.primary} 0%, ${sentimentConfig.glow} 30%, transparent 70%)`,
-          opacity: 0.5
-        }}
-      />
-      
-      <div 
-        className="absolute w-16 h-16 rounded-xl flex items-center justify-center bg-slate-900 border-2 z-10 transition-all duration-500"
-        style={{
-          borderColor: sentimentConfig.primary,
-          boxShadow: `0 0 25px ${sentimentConfig.glow}, 0 0 12px ${sentimentConfig.glow}`,
-          transform: `scale(${0.95 + waveIntensity * 0.1})`
-        }}
+        className="relative w-32 h-32 flex items-center justify-center cursor-pointer select-none"
+        onClick={handleClick}
+        data-testid="button-voice-visualizer"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
       >
-        <div className="relative z-20 flex flex-col items-center">
-          <Phone className="w-8 h-8 text-slate-200" />
-          <div className="flex gap-0.5 mt-1">
-            <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
-            <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse" style={{ animationDelay: '0.2s' }} />
-            <div className="w-1 h-1 rounded-full bg-violet-500 animate-pulse" style={{ animationDelay: '0.4s' }} />
+        <div 
+          className="absolute inset-0 border border-dashed rounded-full animate-spin"
+          style={{ 
+            borderColor: config.active ? config.primary : 'rgba(59, 130, 246, 0.15)',
+            animationDuration: '20s',
+            opacity: config.active ? 1 : 0.4,
+          }}
+        />
+        <div 
+          className="absolute inset-2 border border-dotted rounded-full animate-spin"
+          style={{ 
+            borderColor: config.active ? `${config.primary}` : 'rgba(99, 102, 241, 0.1)',
+            animationDirection: 'reverse',
+            animationDuration: '15s',
+            opacity: config.active ? 1 : 0.4,
+          }}
+        />
+        
+        <div 
+          className="absolute rounded-full blur-3xl transition-all duration-500"
+          style={{ 
+            width: `${120 + waveIntensity * 40}%`,
+            height: `${120 + waveIntensity * 40}%`,
+            background: `radial-gradient(circle, ${config.primary} 0%, ${config.glow} 30%, transparent 70%)`,
+            opacity: config.active ? 0.5 : 0.15,
+            animation: config.active ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none',
+          }}
+        />
+        
+        <div 
+          className="absolute w-16 h-16 rounded-xl flex items-center justify-center bg-slate-900 border-2 z-10 transition-all duration-500"
+          style={{
+            borderColor: config.primary,
+            boxShadow: config.active 
+              ? `0 0 25px ${config.glow}, 0 0 12px ${config.glow}`
+              : `0 0 8px ${config.glow}`,
+            transform: `scale(${config.active ? (0.95 + waveIntensity * 0.1) : 0.9})`,
+          }}
+        >
+          <div className="relative z-20 flex flex-col items-center">
+            {getIcon()}
+            {config.active && (
+              <div className="flex gap-0.5 mt-1">
+                <div className="w-1 h-1 rounded-full animate-pulse" style={{ backgroundColor: config.primary }} />
+                <div className="w-1 h-1 rounded-full animate-pulse" style={{ backgroundColor: config.primary, animationDelay: '0.2s' }} />
+                <div className="w-1 h-1 rounded-full animate-pulse" style={{ backgroundColor: config.primary, animationDelay: '0.4s' }} />
+              </div>
+            )}
           </div>
         </div>
-      </div>
 
-      <div className="absolute -bottom-1 left-0 right-0 flex justify-center">
-        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" 
-          style={{ color: sentimentConfig.primary, backgroundColor: `${sentimentConfig.glow}` }}>
-          {sentimentConfig.label}
-        </span>
+        <div className="absolute -bottom-1 left-0 right-0 flex justify-center">
+          <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full transition-all duration-300" 
+            style={{ color: config.primary, backgroundColor: config.glow }}>
+            {config.label}
+          </span>
+        </div>
       </div>
     </div>
   );
