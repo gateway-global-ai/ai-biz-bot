@@ -15,8 +15,10 @@ import {
   ChevronLeft, FlaskConical, Save, Bot,
   Server, Zap, Cpu, Radio, Eye, EyeOff,
   Fingerprint, Heart, ShieldCheck, Database, Lock, Sparkles,
-  Brain, Key, Thermometer, Settings2
+  Brain, Key, Thermometer, Settings2, DollarSign, Play,
+  Loader2, Clock, RotateCcw, FileText, Rocket, CalendarClock
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import type { Agent, AIModelProvider } from '@shared/schema';
 import type { DiscScores, ArchProfile } from '@shared/schema';
 
@@ -227,12 +229,37 @@ export default function TheLab() {
     discReinforcement: '',
   });
 
+  const [budgetSettings, setBudgetSettings] = useState({
+    budgetAmountUsd: '100.00',
+    budgetPeriod: 'monthly' as 'daily' | 'weekly' | 'monthly',
+    startupScript: '',
+    startupBudgetUsd: '10.00',
+  });
+
   const { data: agents = [] } = useQuery<Agent[]>({
     queryKey: ['/api/agents'],
   });
   
   const agent = agents.find(a => a.id === agentId);
   const avatar = AVATAR_OPTIONS.find(a => a.id === agent?.avatarId) || AVATAR_OPTIONS[0];
+
+  interface BudgetSummary {
+    budgetAmountUsd: number;
+    budgetPeriod: string;
+    budgetSpentUsd: number;
+    budgetRemainingUsd: number;
+    budgetResetAt: string | null;
+    startupScript: string | null;
+    startupBudgetUsd: number;
+    startupStatus: string;
+    startupResultSummary: string | null;
+    startupLastRunAt: string | null;
+  }
+
+  const { data: budgetData, refetch: refetchBudget } = useQuery<BudgetSummary>({
+    queryKey: [`/api/agents/${agentId}/budget`],
+    enabled: !!agentId,
+  });
 
   useEffect(() => {
     if (agent) {
@@ -251,6 +278,17 @@ export default function TheLab() {
       });
     }
   }, [agent]);
+
+  useEffect(() => {
+    if (budgetData) {
+      setBudgetSettings({
+        budgetAmountUsd: budgetData.budgetAmountUsd.toFixed(2),
+        budgetPeriod: budgetData.budgetPeriod as 'daily' | 'weekly' | 'monthly',
+        startupScript: budgetData.startupScript || '',
+        startupBudgetUsd: budgetData.startupBudgetUsd.toFixed(2),
+      });
+    }
+  }, [budgetData]);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Agent> }) => 
@@ -279,6 +317,35 @@ export default function TheLab() {
       }
     });
   };
+
+  const saveBudgetMutation = useMutation({
+    mutationFn: (data: typeof budgetSettings) =>
+      apiRequest('PATCH', `/api/agents/${agentId}/budget`, data),
+    onSuccess: () => {
+      refetchBudget();
+      toast({ title: 'Budget & startup configuration saved!' });
+    },
+    onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
+  });
+
+  const runStartupMutation = useMutation({
+    mutationFn: () => apiRequest('POST', `/api/agents/${agentId}/startup-run`),
+    onSuccess: async (res) => {
+      const data = await res.json();
+      refetchBudget();
+      toast({ title: 'Startup research complete!', description: `Estimated cost: $${data.estimatedCostUsd?.toFixed(4) || '0.00'}` });
+    },
+    onError: (error: any) => toast({ title: 'Startup failed', description: error.message, variant: 'destructive' }),
+  });
+
+  const resetBudgetMutation = useMutation({
+    mutationFn: () => apiRequest('POST', `/api/agents/${agentId}/budget-reset`),
+    onSuccess: () => {
+      refetchBudget();
+      toast({ title: 'Budget reset!' });
+    },
+    onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
+  });
 
   const updateDisc = (key: keyof DiscScores, value: number[]) => {
     setDiscScores(prev => ({ ...prev, [key]: value[0] }));
@@ -661,6 +728,197 @@ export default function TheLab() {
               </CardContent>
             </Card>
           </div>
+        </div>
+
+        {/* Budget & Startup Script Section */}
+        <div className="mt-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Rocket className="w-5 h-5 text-amber-400" />
+            Startup Script & Budget
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Operating Budget Card */}
+            <Card className="bg-slate-900 border-amber-500/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-amber-400 flex items-center gap-2">
+                  <DollarSign className="w-4 h-4" />
+                  Operating Budget
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label className="text-xs text-slate-400">Budget Amount (USD)</Label>
+                  <div className="relative mt-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={budgetSettings.budgetAmountUsd}
+                      onChange={(e) => setBudgetSettings(prev => ({ ...prev, budgetAmountUsd: e.target.value }))}
+                      className="bg-slate-800 border-slate-600 pl-7 text-lg font-mono"
+                      data-testid="input-budget-amount"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-slate-400">Reset Period</Label>
+                  <Select 
+                    value={budgetSettings.budgetPeriod} 
+                    onValueChange={(v) => setBudgetSettings(prev => ({ ...prev, budgetPeriod: v as any }))}
+                  >
+                    <SelectTrigger className="bg-slate-800 border-slate-600 mt-1" data-testid="select-budget-period">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {budgetData && (
+                  <div className="rounded-lg bg-slate-800/60 p-3 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Spent this period</span>
+                      <span className="text-white font-mono">${budgetData.budgetSpentUsd.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">Remaining</span>
+                      <span className={`font-mono ${budgetData.budgetRemainingUsd > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        ${budgetData.budgetRemainingUsd.toFixed(2)}
+                      </span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="w-full bg-slate-700 rounded-full h-2 mt-1">
+                      <div
+                        className={`h-2 rounded-full transition-all ${
+                          budgetData.budgetAmountUsd > 0 && budgetData.budgetSpentUsd / budgetData.budgetAmountUsd > 0.8 
+                            ? 'bg-red-500' 
+                            : 'bg-emerald-500'
+                        }`}
+                        style={{ width: `${budgetData.budgetAmountUsd > 0 ? Math.min(100, (budgetData.budgetSpentUsd / budgetData.budgetAmountUsd) * 100) : 0}%` }}
+                      />
+                    </div>
+                    {budgetData.budgetResetAt && (
+                      <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
+                        <CalendarClock className="w-3 h-3" />
+                        Resets {new Date(budgetData.budgetResetAt).toLocaleDateString()}
+                      </div>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => resetBudgetMutation.mutate()}
+                      disabled={resetBudgetMutation.isPending}
+                      className="text-xs text-slate-400 mt-1"
+                      data-testid="button-reset-budget"
+                    >
+                      <RotateCcw className="w-3 h-3 mr-1" />
+                      Reset Spending
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Startup Script Card */}
+            <Card className="bg-slate-900 border-purple-500/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-purple-400 flex items-center justify-between flex-wrap gap-2">
+                  <span className="flex items-center gap-2">
+                    <Rocket className="w-4 h-4" />
+                    Startup Research Script
+                  </span>
+                  {budgetData && (
+                    <Badge className={`text-[10px] ${
+                      budgetData.startupStatus === 'completed' ? 'bg-emerald-500/20 text-emerald-300' :
+                      budgetData.startupStatus === 'running' ? 'bg-amber-500/20 text-amber-300' :
+                      budgetData.startupStatus === 'failed' ? 'bg-red-500/20 text-red-300' :
+                      'bg-slate-500/20 text-slate-300'
+                    }`}>
+                      {budgetData.startupStatus}
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <Label className="text-xs text-slate-400">Startup Budget (USD)</Label>
+                  <div className="relative mt-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={budgetSettings.startupBudgetUsd}
+                      onChange={(e) => setBudgetSettings(prev => ({ ...prev, startupBudgetUsd: e.target.value }))}
+                      className="bg-slate-800 border-slate-600 pl-7 font-mono"
+                      data-testid="input-startup-budget"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">Maximum spend for initial research</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-slate-400">Research Instructions</Label>
+                  <Textarea
+                    value={budgetSettings.startupScript}
+                    onChange={(e) => setBudgetSettings(prev => ({ ...prev, startupScript: e.target.value }))}
+                    placeholder="Tell the agent what to research on first launch. For example: 'Research the top 10 competitors in Lafayette, LA hotel market. Find their pricing, amenities, and review ratings. Provide a competitive analysis.'"
+                    className="bg-slate-800 border-slate-600 text-sm mt-1 min-h-[120px]"
+                    data-testid="input-startup-script"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => saveBudgetMutation.mutate(budgetSettings)}
+                    disabled={saveBudgetMutation.isPending}
+                    className="bg-purple-600"
+                    data-testid="button-save-budget"
+                  >
+                    {saveBudgetMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                    Save Budget Config
+                  </Button>
+                  <Button
+                    onClick={() => runStartupMutation.mutate()}
+                    disabled={runStartupMutation.isPending || !budgetSettings.startupScript.trim() || parseFloat(budgetSettings.startupBudgetUsd) <= 0}
+                    variant="outline"
+                    className="border-amber-500/50 text-amber-400"
+                    data-testid="button-run-startup"
+                  >
+                    {runStartupMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
+                    Run Startup
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Startup Results */}
+          {budgetData?.startupResultSummary && (
+            <Card className="bg-slate-900 border-emerald-500/20 mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-emerald-400 flex items-center justify-between flex-wrap gap-2">
+                  <span className="flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Startup Research Results
+                  </span>
+                  {budgetData.startupLastRunAt && (
+                    <span className="text-xs text-slate-500 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {new Date(budgetData.startupLastRunAt).toLocaleString()}
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="bg-slate-800/60 rounded-lg p-4 text-sm text-slate-300 whitespace-pre-wrap max-h-[400px] overflow-y-auto" data-testid="text-startup-results">
+                  {budgetData.startupResultSummary}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {showSystemPrompts && (

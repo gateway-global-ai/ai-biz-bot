@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -334,6 +334,17 @@ export const agents = pgTable("agents", {
   aiTemperature: integer("ai_temperature").default(60), // Stored as 0-100, divide by 100 for actual value
   aiMaxTokens: integer("ai_max_tokens").default(4096),
   hfToken: text("hf_token"), // User's HuggingFace token (encrypted)
+  // Budget Configuration
+  budgetAmountUsd: numeric("budget_amount_usd", { precision: 10, scale: 2 }).default("0"),
+  budgetPeriod: text("budget_period").default("monthly"), // daily, weekly, monthly
+  budgetSpentUsd: numeric("budget_spent_usd", { precision: 10, scale: 2 }).default("0"),
+  budgetResetAt: timestamp("budget_reset_at"),
+  // Startup Script
+  startupScript: text("startup_script"),
+  startupBudgetUsd: numeric("startup_budget_usd", { precision: 10, scale: 2 }).default("0"),
+  startupStatus: text("startup_status").default("pending"), // pending, running, completed, failed
+  startupResultSummary: text("startup_result_summary"),
+  startupLastRunAt: timestamp("startup_last_run_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

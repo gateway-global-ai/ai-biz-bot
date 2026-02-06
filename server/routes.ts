@@ -2505,6 +2505,213 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   });
 
   // ============================================
+  // AGENT BUDGET & STARTUP SCRIPT API
+  // ============================================
+
+  // Cost estimation: approximate USD per 1K tokens by model
+  const MODEL_COST_PER_1K_TOKENS: Record<string, { input: number; output: number }> = {
+    'kimi-k2.5': { input: 0.002, output: 0.006 },
+    'kimi-k2-turbo-preview': { input: 0.001, output: 0.003 },
+    'moonshot-v1-128k': { input: 0.0016, output: 0.0048 },
+    'moonshot-v1-32k': { input: 0.0008, output: 0.0024 },
+    'moonshot-v1-8k': { input: 0.0004, output: 0.0012 },
+    'Qwen/Kimi-K2-Instruct': { input: 0.002, output: 0.006 },
+    'default': { input: 0.002, output: 0.006 },
+  };
+
+  function estimateCostUsd(modelId: string, inputTokens: number, outputTokens: number): number {
+    const rates = MODEL_COST_PER_1K_TOKENS[modelId] || MODEL_COST_PER_1K_TOKENS['default'];
+    return (inputTokens / 1000) * rates.input + (outputTokens / 1000) * rates.output;
+  }
+
+  function estimateTokens(text: string): number {
+    return Math.ceil(text.length / 3.5);
+  }
+
+  function getNextResetDate(period: string): Date {
+    const now = new Date();
+    switch (period) {
+      case 'daily':
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      case 'weekly':
+        const dayOfWeek = now.getDay();
+        const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilMonday);
+      case 'monthly':
+      default:
+        return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    }
+  }
+
+  // Update agent budget configuration
+  app.patch("/api/agents/:id/budget", async (req, res) => {
+    try {
+      const schema = z.object({
+        budgetAmountUsd: z.string().refine(v => !isNaN(parseFloat(v)) && parseFloat(v) >= 0, { message: "Budget must be a non-negative number" }).optional(),
+        budgetPeriod: z.enum(["daily", "weekly", "monthly"]).optional(),
+        startupScript: z.string().max(10000).optional().nullable(),
+        startupBudgetUsd: z.string().refine(v => !isNaN(parseFloat(v)) && parseFloat(v) >= 0, { message: "Startup budget must be a non-negative number" }).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+      const updates: any = {};
+      if (parsed.data.budgetAmountUsd !== undefined) updates.budgetAmountUsd = parsed.data.budgetAmountUsd;
+      if (parsed.data.budgetPeriod !== undefined) {
+        updates.budgetPeriod = parsed.data.budgetPeriod;
+        updates.budgetResetAt = getNextResetDate(parsed.data.budgetPeriod);
+      }
+      if (parsed.data.startupScript !== undefined) updates.startupScript = parsed.data.startupScript;
+      if (parsed.data.startupBudgetUsd !== undefined) updates.startupBudgetUsd = parsed.data.startupBudgetUsd;
+
+      const agent = await storage.updateAgent(req.params.id, updates);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+      res.json(agent);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get agent budget summary
+  app.get("/api/agents/:id/budget", async (req, res) => {
+    try {
+      const agent = await storage.getAgent(req.params.id);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+
+      // Check if budget period has reset
+      const now = new Date();
+      let spentUsd = parseFloat(agent.budgetSpentUsd || '0');
+      let resetAt = agent.budgetResetAt;
+
+      if (resetAt && now > new Date(resetAt)) {
+        spentUsd = 0;
+        resetAt = getNextResetDate(agent.budgetPeriod || 'monthly');
+        await storage.updateAgent(agent.id, {
+          budgetSpentUsd: '0',
+          budgetResetAt: resetAt,
+        });
+      }
+
+      const budgetAmount = parseFloat(agent.budgetAmountUsd || '0');
+      const startupBudget = parseFloat(agent.startupBudgetUsd || '0');
+
+      res.json({
+        budgetAmountUsd: budgetAmount,
+        budgetPeriod: agent.budgetPeriod || 'monthly',
+        budgetSpentUsd: spentUsd,
+        budgetRemainingUsd: Math.max(0, budgetAmount - spentUsd),
+        budgetResetAt: resetAt,
+        startupScript: agent.startupScript,
+        startupBudgetUsd: startupBudget,
+        startupStatus: agent.startupStatus || 'pending',
+        startupResultSummary: agent.startupResultSummary,
+        startupLastRunAt: agent.startupLastRunAt,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Run agent startup script
+  app.post("/api/agents/:id/startup-run", async (req, res) => {
+    try {
+      const agent = await storage.getAgent(req.params.id);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+
+      if (!agent.startupScript || agent.startupScript.trim().length === 0) {
+        return res.status(400).json({ error: "No startup script configured for this agent" });
+      }
+
+      const startupBudget = parseFloat(agent.startupBudgetUsd || '0');
+      if (startupBudget <= 0) {
+        return res.status(400).json({ error: "Startup budget must be greater than $0" });
+      }
+
+      // Mark as running
+      await storage.updateAgent(agent.id, { startupStatus: 'running' });
+
+      const modelId = agent.aiModelId || 'moonshot-v1-128k';
+      const temperature = (agent.aiTemperature || 60) / 100;
+      const maxTokens = agent.aiMaxTokens || 4096;
+
+      // Build research prompt
+      const systemPrompt = agent.systemPrompt
+        ? `${agent.systemPrompt}\n\n--- STARTUP RESEARCH TASK ---\nYou have been allocated a startup budget of $${startupBudget.toFixed(2)} for initial research. Complete the research task below thoroughly. Provide actionable findings, data points, and recommendations. Be concise but comprehensive.`
+        : `You are ${agent.name}, an AI agent performing initial research. You have a budget of $${startupBudget.toFixed(2)}. Complete the research task thoroughly with actionable findings.`;
+
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        { role: 'user' as const, content: `STARTUP RESEARCH TASK:\n\n${agent.startupScript}\n\nProvide a thorough research report with findings, data, and actionable recommendations.` },
+      ];
+
+      // Estimate input tokens for cost tracking
+      const inputText = messages.map(m => m.content).join(' ');
+      const estimatedInputTokens = estimateTokens(inputText);
+
+      // Cap output tokens based on budget
+      const modelRates = MODEL_COST_PER_1K_TOKENS[modelId] || MODEL_COST_PER_1K_TOKENS['default'];
+      const inputCost = (estimatedInputTokens / 1000) * modelRates.input;
+      const remainingBudget = startupBudget - inputCost;
+      const maxOutputByBudget = Math.floor((remainingBudget / modelRates.output) * 1000);
+      const cappedMaxTokens = Math.min(maxTokens, Math.max(500, maxOutputByBudget));
+
+      try {
+        const response = await chat({
+          model: modelId as any,
+          messages,
+          temperature,
+          max_tokens: cappedMaxTokens,
+        });
+
+        // Estimate cost
+        const estimatedOutputTokens = estimateTokens(response);
+        const totalCost = estimateCostUsd(modelId, estimatedInputTokens, estimatedOutputTokens);
+
+        // Update agent with results
+        const currentSpent = parseFloat(agent.budgetSpentUsd || '0');
+        await storage.updateAgent(agent.id, {
+          startupStatus: 'completed',
+          startupResultSummary: response.slice(0, 10000),
+          startupLastRunAt: new Date(),
+          budgetSpentUsd: (currentSpent + totalCost).toFixed(2),
+        });
+
+        res.json({
+          success: true,
+          result: response,
+          estimatedCostUsd: totalCost,
+          tokensUsed: {
+            input: estimatedInputTokens,
+            output: estimatedOutputTokens,
+          },
+        });
+      } catch (aiError: any) {
+        await storage.updateAgent(agent.id, { startupStatus: 'failed' });
+        res.status(500).json({ error: `AI request failed: ${aiError.message}` });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Reset agent budget spending
+  app.post("/api/agents/:id/budget-reset", async (req, res) => {
+    try {
+      const agent = await storage.getAgent(req.params.id);
+      if (!agent) return res.status(404).json({ error: "Agent not found" });
+      
+      await storage.updateAgent(agent.id, {
+        budgetSpentUsd: '0',
+        budgetResetAt: getNextResetDate(agent.budgetPeriod || 'monthly'),
+      });
+      
+      res.json({ success: true, message: 'Budget reset successfully' });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
   // ORGANIZATIONS, PROJECTS & TASKS API
   // ============================================
 
