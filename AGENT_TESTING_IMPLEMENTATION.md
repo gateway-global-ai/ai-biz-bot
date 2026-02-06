@@ -12,7 +12,7 @@ All 9 requested agents have been implemented with complete system prompts and co
 - 5-minute startup auditor for local businesses
 - Analyzes Google Places data, competitors, and generates SWOT analysis
 - Outputs ready-to-deploy system prompts for voice, SMS, website, and owner agents
-- Example Link: https://bb9f13ab-ca49-469b-8f41-271a794499db-00-2amy2ogm2d6y9.spock.replit.dev/chat/b62402fe-1e5a-4d4a-820f-aa35e65b5ba3
+- Accessible via chat interface (refer to deployment-specific URL configuration)
 
 #### **Travel Agency Dev Agent**
 - Developer relations engineer for GRN Connect hotel-rate API

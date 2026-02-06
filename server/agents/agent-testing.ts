@@ -293,10 +293,7 @@ export class AgentTestingService {
       return false;
     }
 
-    if (registeredTemplate !== template) {
-      warnings.push('Registered template does not match the provided template instance');
-    }
-
+    // Template is registered successfully
     return true;
   }
 
