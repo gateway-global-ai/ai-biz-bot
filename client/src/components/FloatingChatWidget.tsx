@@ -94,8 +94,18 @@ export default function FloatingChatWidget({
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-[9999] w-[360px] max-w-[calc(100vw-2rem)]" data-testid="chat-widget-container">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl shadow-black/40 flex flex-col overflow-hidden" style={{ maxHeight: "min(520px, calc(100vh - 6rem))" }}>
+    <div 
+      className="fixed bottom-5 right-5 z-[9999] max-w-[calc(100vw-2rem)] md:max-w-[600px]" 
+      data-testid="chat-widget-container"
+    >
+      {/* 
+        Responsive height:
+        Mobile: min(100vh - 5rem, 700px) - accounts for mobile browser chrome
+        Desktop: min(100vh - 3rem, 800px) - larger viewport allows more content
+      */}
+      <div 
+        className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl shadow-black/40 flex flex-col overflow-hidden h-[min(100vh-5rem,700px)] md:h-[min(100vh-3rem,800px)]"
+      >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-700" style={{ background: primaryColor }}>
           <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-sm">
             {botName[0].toUpperCase()}
