@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useCustomerAuth } from "@/lib/customerAuth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -26,6 +26,8 @@ import {
   PhoneCall,
   Mic,
   Shield,
+  Search,
+  X,
 } from "lucide-react";
 import gatewayLogo from "@assets/gatewaylogo_header_left_1770354860467.png";
 
@@ -37,6 +39,120 @@ export default function MyAccount() {
   const [editingEmail, setEditingEmail] = useState(false);
   const [nameValue, setNameValue] = useState("");
   const [emailValue, setEmailValue] = useState("");
+  const [showAddBusiness, setShowAddBusiness] = useState(false);
+  const [addingBusiness, setAddingBusiness] = useState(false);
+  const [mapsKey, setMapsKey] = useState<string | null>(null);
+  const [mapsLibLoaded, setMapsLibLoaded] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showAddBusiness) return;
+    fetch("/api/config/maps-key")
+      .then((r) => r.json())
+      .then((d) => { if (d.key) setMapsKey(d.key); })
+      .catch(() => {});
+  }, [showAddBusiness]);
+
+  useEffect(() => {
+    if (!showAddBusiness || !mapsKey) return;
+    const existingLib = document.querySelector('script[data-gmpx-lib]');
+    if (existingLib) {
+      setMapsLibLoaded(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.type = "module";
+    script.src = "https://ajax.googleapis.com/ajax/libs/@googlemaps/extended-component-library/0.6.11/index.min.js";
+    script.setAttribute("data-gmpx-lib", "true");
+    script.async = true;
+    script.onload = () => setMapsLibLoaded(true);
+    document.head.appendChild(script);
+  }, [showAddBusiness, mapsKey]);
+
+  useEffect(() => {
+    if (!mapsLibLoaded || !mapsKey || !pickerRef.current || !showAddBusiness) return;
+    const container = pickerRef.current;
+    container.innerHTML = "";
+
+    const existingLoader = document.querySelector("gmpx-api-loader");
+    if (!existingLoader) {
+      const apiLoader = document.createElement("gmpx-api-loader");
+      apiLoader.setAttribute("key", mapsKey);
+      apiLoader.setAttribute("solution-channel", "GMP_GE_mapsandplacesautocomplete_v2");
+      container.appendChild(apiLoader);
+    }
+
+    const placePicker = document.createElement("gmpx-place-picker") as any;
+    placePicker.setAttribute("placeholder", "Search for your business...");
+    placePicker.setAttribute("data-testid", "input-add-business-search");
+    placePicker.style.cssText = "width:100%;--gmpx-color-surface:rgb(15 23 42);--gmpx-color-on-surface:#e2e8f0;--gmpx-color-on-surface-variant:#64748b;--gmpx-color-primary:#818cf8;--gmpx-color-outline:#334155;--gmpx-font-family-base:inherit;--gmpx-font-size-base:0.95rem;border:1px solid #334155;border-radius:0.5rem;";
+
+    const phone = user?.phone || "";
+    const handlePlaceChange = async () => {
+      const place = placePicker.value;
+      if (!place || !(place.displayName || place.name)) return;
+
+      const placeId = place.id ?? place.place_id ?? undefined;
+      const businessName = place.displayName || place.name || "";
+      const businessAddress = place.formattedAddress || place.formatted_address || "";
+
+      let placeData: any = {
+        name: businessName,
+        formatted_address: businessAddress,
+        place_id: placeId,
+      };
+      if (place.types) placeData.types = place.types;
+      if (place.rating) placeData.rating = place.rating;
+      if (place.userRatingCount) placeData.user_ratings_total = place.userRatingCount;
+      if (place.location) {
+        placeData.geometry = { location: { lat: place.location.lat(), lng: place.location.lng() } };
+      }
+
+      if (!phone) {
+        toast({ title: "Error", description: "Phone number is missing from your account", variant: "destructive" });
+        return;
+      }
+
+      setAddingBusiness(true);
+      try {
+        const res = await fetch("/api/demo/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phone,
+            businessName,
+            businessAddress,
+            placeId: placeId || null,
+            placeData,
+          }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || "Failed to create business");
+        }
+        await queryClient.invalidateQueries({ queryKey: ["/api/customer/businesses"] });
+        setShowAddBusiness(false);
+        toast({ title: "Business Added", description: `${businessName} has been created.` });
+      } catch (err: any) {
+        toast({ title: "Error", description: err.message || "Failed to add business", variant: "destructive" });
+      } finally {
+        setAddingBusiness(false);
+      }
+    };
+
+    placePicker.addEventListener("gmpx-placechange", handlePlaceChange);
+    container.appendChild(placePicker);
+
+    setTimeout(() => {
+      const input = placePicker.shadowRoot?.querySelector("input");
+      if (input) input.focus();
+    }, 300);
+
+    return () => {
+      placePicker.removeEventListener("gmpx-placechange", handlePlaceChange);
+      container.innerHTML = "";
+    };
+  }, [mapsLibLoaded, mapsKey, showAddBusiness, user?.phone]);
 
   const businessesQuery = useQuery({
     queryKey: ["/api/customer/businesses"],
@@ -364,19 +480,38 @@ export default function MyAccount() {
             </div>
             <Button
               variant="outline"
-              onClick={() => setLocation("/business")}
+              onClick={() => setShowAddBusiness(!showAddBusiness)}
               data-testid="button-add-business"
             >
-              <Globe className="w-4 h-4 mr-2" />
-              Add Business
+              {showAddBusiness ? (
+                <><X className="w-4 h-4 mr-2" />Cancel</>
+              ) : (
+                <><Globe className="w-4 h-4 mr-2" />Add Business</>
+              )}
             </Button>
           </div>
+
+          {showAddBusiness && (
+            <div className="mb-4 p-4 bg-slate-800/50 border border-slate-700 rounded-md" data-testid="add-business-panel">
+              <p className="text-sm text-slate-400 mb-3">
+                <Search className="w-4 h-4 inline-block mr-1 -mt-0.5" />
+                Search Google Maps for your business, then select it to generate your AI website.
+              </p>
+              <div ref={pickerRef} className="w-full" data-testid="place-picker-container" />
+              {addingBusiness && (
+                <div className="flex items-center gap-2 mt-3 text-sm text-blue-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Generating your AI website...
+                </div>
+              )}
+            </div>
+          )}
 
           {businessesQuery.isLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
             </div>
-          ) : businesses.length === 0 ? (
+          ) : businesses.length === 0 && !showAddBusiness ? (
             <div className="text-center py-8 border border-dashed border-slate-700 rounded-md">
               <Building2 className="w-10 h-10 mx-auto text-slate-600 mb-3" />
               <p className="text-slate-400 text-sm mb-4">
@@ -384,7 +519,7 @@ export default function MyAccount() {
               </p>
               <Button
                 variant="default"
-                onClick={() => setLocation("/business")}
+                onClick={() => setShowAddBusiness(true)}
                 data-testid="button-create-first"
               >
                 Get Started
