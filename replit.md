@@ -6,6 +6,17 @@ Gateway Global AI is an SMS-first AI task completion platform designed to comple
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+### Chat Interface Design Principles (DO NOT REDESIGN)
+The user has spent 2+ years perfecting chat interfaces. These principles are non-negotiable:
+- **NEVER redesign existing chat interfaces** without explicit user approval. The current designs are the standard.
+- **Purpose**: Chat interfaces serve AI communication, accessing control panels/options, controlling web pages, and collaboration (itineraries, planning, task management).
+- **Voice button behavior**: Voice button must open a visualizer INSIDE the chat window (replacing the message body), NOT cause the chat to disappear or navigate away.
+- **Voice visualizer on landing page**: Carefully designed, never replace or redesign — only add interaction layers while preserving original appearance.
+- **Split-panel pattern** (from NurseNest/TravelGenie examples): Chat on left, functional tabs on right (Plan/Bookings/Budget/Tasks). Chat coexists with actionable panels.
+- **Floating chat widget style**: Original design uses a floating card (bottom-right, rounded-3xl, shadow), NOT fullscreen takeover. FAB button when closed.
+- **Footer controls**: Input with mic button and send button. Camera/attachment icon optional.
+- **No double scrollbars, no floating windows over chat, no cards in scrolling pages.**
+
 ## System Architecture
 
 ### UI/UX Decisions
