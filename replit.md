@@ -18,7 +18,7 @@ The platform features a clean, modern design with a dark slate theme and immersi
 - **24-Hour SMS Automation**: A background scheduler manages a 4-step SMS update sequence (Start, Progress, Midpoint, Complete) for user tasks, personalized by Kimi.
 - **Telephony Integration**: Twilio manages SMS and voice interactions, including webhooks and a provisioning API.
 - **Database**: PostgreSQL with Drizzle ORM.
-- **Data Model**: Key entities include `users`, `agents` (with DISC profiles), `customers`, `telephony_configs`, and `call_logs`.
+- **Data Model**: Key entities include `users`, `agents` (with DISC profiles), `customers`, `telephony_configs`, `call_logs`, `site_configs` (business-to-agent mappings for AI Biz Bot), and `chat_logs` (web chat conversation history).
 - **Agent AI Model Configuration**: Agents can be configured with custom AI model settings (Provider, Model, Temperature, Max Tokens, API Token).
 
 ### Feature Specifications

@@ -3388,7 +3388,22 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
   app.post("/api/site-configs", async (req, res) => {
     try {
-      const config = await storage.createSiteConfig(req.body);
+      const schema = z.object({
+        name: z.string().min(1).max(200),
+        domain: z.string().optional(),
+        placeId: z.string().optional(),
+        placeData: z.any().optional(),
+        assignedAgentId: z.string().nullable().optional(),
+        systemPromptOverride: z.string().optional(),
+        chatbotEnabled: z.boolean().optional(),
+        voiceConciergeEnabled: z.boolean().optional(),
+        widgetPosition: z.string().optional(),
+        widgetColor: z.string().optional(),
+        greetingMessage: z.string().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const config = await storage.createSiteConfig(parsed.data);
       res.status(201).json(config);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -3397,7 +3412,22 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
   app.patch("/api/site-configs/:id", async (req, res) => {
     try {
-      const updated = await storage.updateSiteConfig(req.params.id, req.body);
+      const schema = z.object({
+        name: z.string().min(1).max(200).optional(),
+        domain: z.string().nullable().optional(),
+        placeId: z.string().nullable().optional(),
+        placeData: z.any().optional(),
+        assignedAgentId: z.string().nullable().optional(),
+        systemPromptOverride: z.string().nullable().optional(),
+        chatbotEnabled: z.boolean().optional(),
+        voiceConciergeEnabled: z.boolean().optional(),
+        widgetPosition: z.string().optional(),
+        widgetColor: z.string().optional(),
+        greetingMessage: z.string().nullable().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const updated = await storage.updateSiteConfig(req.params.id, parsed.data);
       if (!updated) return res.status(404).json({ error: "Site config not found" });
       res.json(updated);
     } catch (error: any) {
@@ -3436,6 +3466,8 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
         businessName: z.string().optional(),
         businessAddress: z.string().optional(),
         businessPhone: z.string().optional(),
+        siteConfigId: z.string().optional(),
+        visitorId: z.string().optional(),
         history: z.array(z.object({
           role: z.enum(['user', 'assistant']),
           content: z.string(),
@@ -3447,7 +3479,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
         return res.status(400).json({ error: parsed.error.message });
       }
 
-      const { message, businessName, businessAddress, businessPhone, history } = parsed.data;
+      const { message, businessName, businessAddress, businessPhone, siteConfigId, visitorId, history } = parsed.data;
 
       const systemPrompt = `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
 
@@ -3471,6 +3503,15 @@ You are helpful, concise, and conversational. Answer questions about the busines
         temperature: 0.7,
         max_tokens: 500,
       });
+
+      if (siteConfigId) {
+        try {
+          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'user', content: message });
+          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'assistant', content: response });
+        } catch (logErr) {
+          console.error("[Website Chat] Failed to log chat:", logErr);
+        }
+      }
 
       res.json({ response });
     } catch (error: any) {

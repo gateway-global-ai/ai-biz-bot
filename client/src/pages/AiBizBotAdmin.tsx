@@ -133,6 +133,8 @@ function AdminPanel({
           businessName: placeData?.name || site.name,
           businessAddress: placeData?.formatted_address,
           businessPhone: placeData?.formatted_phone_number,
+          siteConfigId: site.id,
+          visitorId: 'admin-test',
           history: chatMessages.slice(-10),
         }),
       });
