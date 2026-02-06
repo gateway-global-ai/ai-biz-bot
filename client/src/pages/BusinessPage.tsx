@@ -171,6 +171,23 @@ export default function BusinessPage() {
     placePicker.setAttribute('data-testid', 'input-place-search');
     placePicker.style.cssText = 'width:100%;--gmpx-color-surface:transparent;--gmpx-color-on-surface:#e2e8f0;--gmpx-color-on-surface-variant:#64748b;--gmpx-color-primary:#818cf8;--gmpx-color-outline:transparent;--gmpx-font-family-base:inherit;--gmpx-font-size-base:1.1rem;border:none;outline:none;';
 
+    const removeBorder = () => {
+      const shadow = placePicker.shadowRoot;
+      if (shadow) {
+        const style = document.createElement('style');
+        style.textContent = `
+          :host { border: none !important; outline: none !important; }
+          * { border-color: transparent !important; outline: none !important; }
+          .container, .input-container, [class*="container"] { border: none !important; border-color: transparent !important; }
+          input { border: none !important; outline: none !important; background: transparent !important; }
+        `;
+        shadow.appendChild(style);
+      } else {
+        requestAnimationFrame(removeBorder);
+      }
+    };
+    requestAnimationFrame(removeBorder);
+
     placePicker.addEventListener('gmpx-placechange', () => {
       const place = placePicker.value;
       if (place && (place.displayName || place.name)) {
