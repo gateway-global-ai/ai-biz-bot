@@ -111,7 +111,7 @@ export default function MvpLanding() {
 
       <nav className="relative z-20 border-b border-white/10 bg-black/20 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-2 flex items-center justify-between gap-3">
-          <img src={headerLogo} alt="Gateway Global AI Biz Bot" className="h-10 object-contain" data-testid="img-header-logo" />
+          <img src={headerLogo} alt="Gateway Global AI Biz Bot" className="h-16 object-contain" data-testid="img-header-logo" />
           <div className="flex items-center gap-3">
             <Link href="/kimi-audio">
               <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-voice-ai">
