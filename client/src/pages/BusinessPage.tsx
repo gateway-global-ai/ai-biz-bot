@@ -167,7 +167,7 @@ export default function BusinessPage() {
     container.appendChild(apiLoader);
 
     const placePicker = document.createElement('gmpx-place-picker') as any;
-    placePicker.setAttribute('placeholder', 'Search for your business (e.g. Boardwalk Suites Lafayette)');
+    placePicker.setAttribute('placeholder', 'What is your business name?');
     placePicker.setAttribute('data-testid', 'input-place-search');
     placePicker.style.cssText = 'width:100%;--gmpx-color-surface:transparent;--gmpx-color-on-surface:#e2e8f0;--gmpx-color-on-surface-variant:#64748b;--gmpx-color-primary:#818cf8;--gmpx-color-outline:transparent;--gmpx-font-family-base:inherit;--gmpx-font-size-base:1.1rem;border:none;outline:none;';
 
