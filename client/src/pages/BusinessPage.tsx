@@ -7,8 +7,7 @@ import {
   Briefcase, Zap, PhoneCall, CreditCard, ChevronRight,
   Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server,
   Search, MapPin, Star, ExternalLink, Loader2, ArrowRight, Sparkles,
-  Clock, Bot, Wand2, X, Eye, Send, User, KeyRound, LogIn, LogOut,
-  Volume2, VolumeX, Mic, MicOff
+  Clock, Bot, Wand2, X, Eye, Send, User, KeyRound, LogIn, LogOut
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useMutation } from '@tanstack/react-query';
@@ -23,19 +22,17 @@ import { apiRequest } from '@/lib/queryClient';
 
 type VoiceState = 'idle' | 'loading' | 'greeting' | 'greeting_paused' | 'conversation' | 'processing' | 'responding' | 'error';
 
-const VOICE_STATE_CONFIG: Record<VoiceState, { primary: string; glow: string; label: string; active: boolean }> = {
-  idle: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: 'READY', active: false },
-  loading: { primary: 'rgba(234, 179, 8, 0.8)', glow: 'rgba(234, 179, 8, 0.4)', label: 'LOADING', active: true },
-  greeting: { primary: 'rgba(139, 92, 246, 0.8)', glow: 'rgba(139, 92, 246, 0.4)', label: 'SPEAKING', active: true },
-  greeting_paused: { primary: 'rgba(100, 116, 139, 0.5)', glow: 'rgba(100, 116, 139, 0.2)', label: 'PAUSED', active: false },
-  conversation: { primary: 'rgba(16, 185, 129, 0.8)', glow: 'rgba(16, 185, 129, 0.4)', label: 'LISTENING', active: true },
-  processing: { primary: 'rgba(234, 179, 8, 0.8)', glow: 'rgba(234, 179, 8, 0.4)', label: 'THINKING', active: true },
-  responding: { primary: 'rgba(139, 92, 246, 0.8)', glow: 'rgba(139, 92, 246, 0.4)', label: 'SPEAKING', active: true },
-  error: { primary: 'rgba(239, 68, 68, 0.8)', glow: 'rgba(239, 68, 68, 0.4)', label: 'ERROR', active: false },
+type Sentiment = 'calm' | 'engaged' | 'helpful';
+
+const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label: string }> = {
+  calm: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: 'READY' },
+  engaged: { primary: 'rgba(16, 185, 129, 0.8)', glow: 'rgba(16, 185, 129, 0.4)', label: 'LISTENING' },
+  helpful: { primary: 'rgba(139, 92, 246, 0.8)', glow: 'rgba(139, 92, 246, 0.4)', label: 'SPEAKING' },
 };
 
 const VoiceVisualizer = () => {
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
+  const [sentiment, setSentiment] = useState<Sentiment>('calm');
   const [pulse, setPulse] = useState(0);
   const [showHelper, setShowHelper] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -47,10 +44,19 @@ const VoiceVisualizer = () => {
   useEffect(() => { voiceStateRef.current = voiceState; }, [voiceState]);
 
   useEffect(() => {
+    const sentimentInterval = setInterval(() => {
+      const sentiments: Sentiment[] = ['calm', 'engaged', 'helpful'];
+      setSentiment(sentiments[Math.floor(Math.random() * sentiments.length)]);
+    }, 2500);
+    
     const pulseInterval = setInterval(() => {
       setPulse(prev => (prev + 1) % 100);
     }, 50);
-    return () => clearInterval(pulseInterval);
+    
+    return () => {
+      clearInterval(sentimentInterval);
+      clearInterval(pulseInterval);
+    };
   }, []);
 
   const cleanup = useCallback(() => {
@@ -189,21 +195,8 @@ const VoiceVisualizer = () => {
     }
   }, [voiceState, startGreeting, toggleGreetingPause, cleanup]);
 
-  const config = VOICE_STATE_CONFIG[voiceState];
-  const waveIntensity = config.active ? (Math.sin(pulse / 10) * 0.3 + 0.7) : 0.3;
-
-  const getIcon = () => {
-    switch (voiceState) {
-      case 'greeting': return <Volume2 className="w-8 h-8 text-slate-200" />;
-      case 'greeting_paused': return <VolumeX className="w-8 h-8 text-slate-400" />;
-      case 'conversation': return <Mic className="w-8 h-8 text-emerald-300" />;
-      case 'processing': return <Loader2 className="w-8 h-8 text-yellow-300 animate-spin" />;
-      case 'responding': return <Volume2 className="w-8 h-8 text-violet-300" />;
-      case 'loading': return <Loader2 className="w-8 h-8 text-yellow-300 animate-spin" />;
-      case 'error': return <MicOff className="w-8 h-8 text-red-400" />;
-      default: return <Phone className="w-8 h-8 text-slate-200" />;
-    }
-  };
+  const sentimentConfig = SENTIMENT_COLORS[sentiment];
+  const waveIntensity = Math.sin(pulse / 10) * 0.3 + 0.7;
   
   return (
     <div className="relative flex items-center justify-center mx-auto" style={{ marginTop: '-100px' }}>
@@ -227,58 +220,51 @@ const VoiceVisualizer = () => {
         <div 
           className="absolute inset-0 border border-dashed rounded-full animate-spin"
           style={{ 
-            borderColor: config.active ? config.primary : 'rgba(59, 130, 246, 0.15)',
-            animationDuration: '20s',
-            opacity: config.active ? 1 : 0.4,
+            borderColor: 'rgba(59, 130, 246, 0.3)', 
+            animationDuration: '20s'
           }}
         />
         <div 
           className="absolute inset-2 border border-dotted rounded-full animate-spin"
           style={{ 
-            borderColor: config.active ? `${config.primary}` : 'rgba(99, 102, 241, 0.1)',
+            borderColor: 'rgba(99, 102, 241, 0.25)', 
             animationDirection: 'reverse',
-            animationDuration: '15s',
-            opacity: config.active ? 1 : 0.4,
+            animationDuration: '15s'
           }}
         />
         
         <div 
-          className="absolute rounded-full blur-3xl transition-all duration-500"
+          className="absolute rounded-full blur-3xl transition-all duration-500 animate-pulse"
           style={{ 
             width: `${120 + waveIntensity * 40}%`,
             height: `${120 + waveIntensity * 40}%`,
-            background: `radial-gradient(circle, ${config.primary} 0%, ${config.glow} 30%, transparent 70%)`,
-            opacity: config.active ? 0.5 : 0.15,
-            animation: config.active ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none',
+            background: `radial-gradient(circle, ${sentimentConfig.primary} 0%, ${sentimentConfig.glow} 30%, transparent 70%)`,
+            opacity: 0.5
           }}
         />
         
         <div 
           className="absolute w-16 h-16 rounded-xl flex items-center justify-center bg-slate-900 border-2 z-10 transition-all duration-500"
           style={{
-            borderColor: config.primary,
-            boxShadow: config.active 
-              ? `0 0 25px ${config.glow}, 0 0 12px ${config.glow}`
-              : `0 0 8px ${config.glow}`,
-            transform: `scale(${config.active ? (0.95 + waveIntensity * 0.1) : 0.9})`,
+            borderColor: sentimentConfig.primary,
+            boxShadow: `0 0 25px ${sentimentConfig.glow}, 0 0 12px ${sentimentConfig.glow}`,
+            transform: `scale(${0.95 + waveIntensity * 0.1})`
           }}
         >
           <div className="relative z-20 flex flex-col items-center">
-            {getIcon()}
-            {config.active && (
-              <div className="flex gap-0.5 mt-1">
-                <div className="w-1 h-1 rounded-full animate-pulse" style={{ backgroundColor: config.primary }} />
-                <div className="w-1 h-1 rounded-full animate-pulse" style={{ backgroundColor: config.primary, animationDelay: '0.2s' }} />
-                <div className="w-1 h-1 rounded-full animate-pulse" style={{ backgroundColor: config.primary, animationDelay: '0.4s' }} />
-              </div>
-            )}
+            <Phone className="w-8 h-8 text-slate-200" />
+            <div className="flex gap-0.5 mt-1">
+              <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
+              <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse" style={{ animationDelay: '0.2s' }} />
+              <div className="w-1 h-1 rounded-full bg-violet-500 animate-pulse" style={{ animationDelay: '0.4s' }} />
+            </div>
           </div>
         </div>
 
         <div className="absolute -bottom-1 left-0 right-0 flex justify-center">
-          <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full transition-all duration-300" 
-            style={{ color: config.primary, backgroundColor: config.glow }}>
-            {config.label}
+          <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" 
+            style={{ color: sentimentConfig.primary, backgroundColor: `${sentimentConfig.glow}` }}>
+            {sentimentConfig.label}
           </span>
         </div>
       </div>
