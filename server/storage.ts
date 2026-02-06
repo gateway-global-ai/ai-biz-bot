@@ -88,7 +88,8 @@ import {
   customerSessions,
   vlmProspects,
   vlmCampaigns,
-  vlmCallAttempts
+  vlmCallAttempts,
+  ogSettings
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -247,6 +248,11 @@ export interface IStorage {
   getVlmCallAttemptByCallSid(callSid: string): Promise<VlmCallAttempt | undefined>;
   createVlmCallAttempt(attempt: InsertVlmCallAttempt): Promise<VlmCallAttempt>;
   updateVlmCallAttempt(id: string, updates: Partial<InsertVlmCallAttempt>): Promise<VlmCallAttempt | undefined>;
+
+  getOgSettingsByPath(pagePath: string): Promise<any | undefined>;
+  getAllOgSettings(): Promise<any[]>;
+  upsertOgSettings(settings: any): Promise<any>;
+  deleteOgSettings(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1100,6 +1106,33 @@ export class DatabaseStorage implements IStorage {
   async updateVlmCallAttempt(id: string, updates: Partial<InsertVlmCallAttempt>): Promise<VlmCallAttempt | undefined> {
     const [updated] = await db.update(vlmCallAttempts).set(updates).where(eq(vlmCallAttempts.id, id)).returning();
     return updated;
+  }
+
+  async getOgSettingsByPath(pagePath: string): Promise<any | undefined> {
+    const [settings] = await db.select().from(ogSettings).where(eq(ogSettings.pagePath, pagePath));
+    return settings;
+  }
+
+  async getAllOgSettings(): Promise<any[]> {
+    return db.select().from(ogSettings).orderBy(ogSettings.pagePath);
+  }
+
+  async upsertOgSettings(settings: any): Promise<any> {
+    const existing = await this.getOgSettingsByPath(settings.pagePath);
+    if (existing) {
+      const [updated] = await db.update(ogSettings)
+        .set({ ...settings, updatedAt: new Date() })
+        .where(eq(ogSettings.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(ogSettings).values(settings).returning();
+    return created;
+  }
+
+  async deleteOgSettings(id: string): Promise<boolean> {
+    const result = await db.delete(ogSettings).where(eq(ogSettings.id, id));
+    return true;
   }
 }
 

@@ -1129,3 +1129,24 @@ export const A2P_VERTICALS = [
   'NON_PROFIT',
   'OTHER',
 ] as const;
+
+export const ogSettings = pgTable("og_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pagePath: text("page_path").notNull().unique(),
+  ogTitle: text("og_title").notNull(),
+  ogDescription: text("og_description").notNull(),
+  ogUrl: text("og_url"),
+  ogImage: text("og_image"),
+  ogType: text("og_type").default("website"),
+  ogSiteName: text("og_site_name"),
+  twitterCard: text("twitter_card").default("summary_large_image"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOgSettingsSchema = createInsertSchema(ogSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertOgSettings = z.infer<typeof insertOgSettingsSchema>;
+export type OgSettings = typeof ogSettings.$inferSelect;

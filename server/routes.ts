@@ -63,11 +63,68 @@ const webhooksUpdateSchema = z.object({
   smsFallbackUrl: z.string().url().optional().or(z.literal('')),
 });
 
+const SOCIAL_CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|LinkedInBot|WhatsApp|Slackbot|TelegramBot|Pinterest|Googlebot|bingbot|Discordbot|vkShare/i;
+
+const DEFAULT_OG: Record<string, string> = {
+  ogTitle: "Free Custom Websites, AI Voice and Chat Enabled",
+  ogDescription: "We support small business owners with free websites, enabled with voice AI agents, AI chat bots, and beautiful modern designs. Websites are free. No Credit card required.",
+  ogUrl: "http://aibizbot.gatewayglobal.ai",
+  ogImage: "http://aibizbot.gatewayglobal.ai/og-image.png",
+  ogType: "website",
+  ogSiteName: "AI Biz Bot by Gateway Global",
+  twitterCard: "summary_large_image",
+};
+
+function buildOgHtml(og: Record<string, string>): string {
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"/>
+<title>${og.ogTitle || DEFAULT_OG.ogTitle}</title>
+<meta name="description" content="${og.ogDescription || DEFAULT_OG.ogDescription}"/>
+<meta property="og:title" content="${og.ogTitle || DEFAULT_OG.ogTitle}"/>
+<meta property="og:description" content="${og.ogDescription || DEFAULT_OG.ogDescription}"/>
+<meta property="og:url" content="${og.ogUrl || DEFAULT_OG.ogUrl}"/>
+<meta property="og:image" content="${og.ogImage || DEFAULT_OG.ogImage}"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:type" content="${og.ogType || DEFAULT_OG.ogType}"/>
+<meta property="og:site_name" content="${og.ogSiteName || DEFAULT_OG.ogSiteName}"/>
+<meta name="twitter:card" content="${og.twitterCard || DEFAULT_OG.twitterCard}"/>
+<meta name="twitter:title" content="${og.ogTitle || DEFAULT_OG.ogTitle}"/>
+<meta name="twitter:description" content="${og.ogDescription || DEFAULT_OG.ogDescription}"/>
+<meta name="twitter:image" content="${og.ogImage || DEFAULT_OG.ogImage}"/>
+</head><body></body></html>`;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
+
+  app.use(async (req, res, next) => {
+    const ua = req.headers["user-agent"] || "";
+    if (!SOCIAL_CRAWLER_UA.test(ua)) return next();
+    if (req.path.startsWith("/api/") || req.path.startsWith("/assets/") || req.path.match(/\.\w+$/)) return next();
+
+    try {
+      const pagePath = req.path === "/" ? "/" : req.path.replace(/\/$/, "");
+      const dbOg = await storage.getOgSettingsByPath(pagePath);
+      const og = dbOg ? {
+        ogTitle: dbOg.ogTitle,
+        ogDescription: dbOg.ogDescription,
+        ogUrl: dbOg.ogUrl || DEFAULT_OG.ogUrl,
+        ogImage: dbOg.ogImage || DEFAULT_OG.ogImage,
+        ogType: dbOg.ogType || DEFAULT_OG.ogType,
+        ogSiteName: dbOg.ogSiteName || DEFAULT_OG.ogSiteName,
+        twitterCard: dbOg.twitterCard || DEFAULT_OG.twitterCard,
+      } : DEFAULT_OG;
+      res.status(200).set({ "Content-Type": "text/html" }).end(buildOgHtml(og));
+    } catch (err) {
+      console.error("[OG] Crawler middleware error:", err);
+      res.status(200).set({ "Content-Type": "text/html" }).end(buildOgHtml(DEFAULT_OG));
+    }
+  });
+
   // Admin Auth routes
   app.post("/api/auth/send-otp", sendOtp);
   app.post("/api/auth/verify-otp", verifyOtp);
@@ -3735,6 +3792,50 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       const limit = parseInt(req.query.limit as string) || 50;
       const logs = await storage.getChatLogs(req.params.id, limit);
       res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // OG META TAG MANAGEMENT API
+  // ============================================
+
+  app.get("/api/admin/og-settings", async (_req, res) => {
+    try {
+      const settings = await storage.getAllOgSettings();
+      res.json({ settings, defaults: DEFAULT_OG });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/admin/og-settings", async (req, res) => {
+    try {
+      const { pagePath, ogTitle, ogDescription, ogUrl, ogImage, ogType, ogSiteName, twitterCard } = req.body;
+      if (!pagePath || !ogTitle || !ogDescription) {
+        return res.status(400).json({ error: "Page path, title, and description are required" });
+      }
+      const result = await storage.upsertOgSettings({
+        pagePath: pagePath.startsWith("/") ? pagePath : `/${pagePath}`,
+        ogTitle,
+        ogDescription,
+        ogUrl: ogUrl || null,
+        ogImage: ogImage || null,
+        ogType: ogType || "website",
+        ogSiteName: ogSiteName || null,
+        twitterCard: twitterCard || "summary_large_image",
+      });
+      res.json({ success: true, settings: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/admin/og-settings/:id", async (req, res) => {
+    try {
+      await storage.deleteOgSettings(req.params.id);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
