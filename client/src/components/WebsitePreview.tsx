@@ -14,6 +14,7 @@ interface PlaceData {
   photos?: any[];
   reviews?: any[];
   types?: string[];
+  geometry?: { lat: number; lng: number };
 }
 
 interface WebsitePreviewProps {
@@ -67,6 +68,8 @@ interface ChatMessage {
 export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [mapsApiKey, setMapsApiKey] = useState<string | null>(null);
+  const [activeMapTab, setActiveMapTab] = useState<'map' | 'streetview'>('map');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: `Hi there! I'm the AI assistant for ${place.name}. I can help you with hours, services, directions, or anything else. What would you like to know?` }
   ]);
@@ -113,6 +116,13 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
     };
   }, []);
 
+  useEffect(() => {
+    fetch('/api/config/maps-key')
+      .then(res => res.json())
+      .then(data => { if (data.key) setMapsApiKey(data.key); })
+      .catch(() => {});
+  }, []);
+
   const toggleVoiceMode = useCallback(() => {
     if (isVoiceMode) {
       setIsVoiceMode(false);
@@ -133,7 +143,11 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
   const galleryImages = (place.photos || []).slice(1, 4).map(p => getPhotoUrl(p, 600)).filter(Boolean) as string[];
   const tagline = generateTagline(place);
   const description = generateDescription(place);
-  const mapLink = place.place_id ? `https://www.google.com/maps/place/?q=place_id:${place.place_id}` : '#';
+  const mapLink = place.place_id
+    ? `https://www.google.com/maps/place/?q=place_id:${place.place_id}`
+    : place.geometry
+      ? `https://www.google.com/maps/search/?api=1&query=${place.geometry.lat},${place.geometry.lng}`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.formatted_address)}`;
   const reviews = place.reviews || [];
   const hours = place.opening_hours?.weekday_text || [];
   const types = (place.types || []).filter(t => !['point_of_interest', 'establishment'].includes(t)).slice(0, 4);
@@ -303,6 +317,92 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                   <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-md px-4 py-2 rounded-full text-xs font-bold text-slate-900 shadow-lg">
                     See Gallery
                   </div>
+                </div>
+              </div>
+            )}
+
+            {mapsApiKey && (place.place_id || place.geometry) && (
+              <div className="md:col-span-2 bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col overflow-hidden" data-testid="section-location">
+                <div className="p-8 pb-0">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900">Find Us</h3>
+                      <p className="text-sm text-slate-500">{place.formatted_address}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-1 mb-4">
+                    <button
+                      onClick={() => setActiveMapTab('map')}
+                      className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${activeMapTab === 'map' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                      data-testid="button-map-tab"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m0 0l-3-3m3 3l3-3m-3 3V6.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Map
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setActiveMapTab('streetview')}
+                      className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${activeMapTab === 'streetview' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                      data-testid="button-streetview-tab"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        Street View
+                      </span>
+                    </button>
+                  </div>
+                </div>
+                <div className="h-80 w-full">
+                  {activeMapTab === 'map' ? (
+                    <iframe
+                      title={`Map of ${place.name}`}
+                      className="w-full h-full border-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      src={`https://www.google.com/maps/embed/v1/place?key=${mapsApiKey}&q=${place.place_id ? `place_id:${place.place_id}` : encodeURIComponent(place.formatted_address)}&zoom=16`}
+                      data-testid="iframe-map"
+                    />
+                  ) : (
+                    <iframe
+                      title={`Street View of ${place.name}`}
+                      className="w-full h-full border-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      src={place.geometry
+                        ? `https://www.google.com/maps/embed/v1/streetview?key=${mapsApiKey}&location=${place.geometry.lat},${place.geometry.lng}&heading=210&pitch=10&fov=90`
+                        : `https://www.google.com/maps/embed/v1/streetview?key=${mapsApiKey}&location=${encodeURIComponent(place.formatted_address)}&heading=210&pitch=10&fov=90`
+                      }
+                      data-testid="iframe-streetview"
+                    />
+                  )}
+                </div>
+                <div className="p-4 flex justify-between items-center border-t border-slate-100">
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                    </svg>
+                    <a href={mapLink} target="_blank" rel="noreferrer" className="text-blue-600 font-medium hover:underline" data-testid="link-directions">Get Directions</a>
+                  </div>
+                  {place.formatted_phone_number && (
+                    <a href={`tel:${place.formatted_phone_number}`} className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900 transition-colors" data-testid="link-call">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                      </svg>
+                      {place.formatted_phone_number}
+                    </a>
+                  )}
                 </div>
               </div>
             )}

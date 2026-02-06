@@ -287,6 +287,7 @@ interface SelectedPlace {
   opening_hours?: { weekday_text?: string[]; isOpen?: () => boolean };
   place_id?: string;
   reviews?: any[];
+  geometry?: { lat: number; lng: number };
 }
 
 const TrainingProgressBar = ({ progress }: { progress: number }) => (
@@ -537,6 +538,22 @@ export default function BusinessPage() {
       const place = placePicker.value;
       if (place && (place.displayName || place.name)) {
         const placeId = place.id ?? place.place_id ?? undefined;
+        let geometry: { lat: number; lng: number } | undefined;
+        if (place.location) {
+          const loc = place.location;
+          const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
+          const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
+          if (typeof lat === 'number' && typeof lng === 'number') {
+            geometry = { lat, lng };
+          }
+        } else if (place.geometry?.location) {
+          const loc = place.geometry.location;
+          const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
+          const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
+          if (typeof lat === 'number' && typeof lng === 'number') {
+            geometry = { lat, lng };
+          }
+        }
         const placeData: SelectedPlace = {
           name: place.displayName || place.name || '',
           formatted_address: place.formattedAddress || place.formatted_address || '',
@@ -549,6 +566,7 @@ export default function BusinessPage() {
           photos: place.photos || [],
           opening_hours: place.regularOpeningHours ?? place.opening_hours ?? undefined,
           reviews: [],
+          geometry,
         };
         setSelectedPlace(placeData);
         setMapsError(null);
