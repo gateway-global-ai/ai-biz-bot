@@ -781,14 +781,14 @@ export default function BusinessPage() {
       )}
 
       {/* Hero Section */}
-      <section className="relative min-h-screen flex flex-col justify-center px-6 overflow-hidden">
+      <section className="relative min-h-screen flex flex-col justify-center px-6 overflow-hidden -mt-8">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none" />
-        <div className="max-w-5xl mx-auto text-center relative z-10 space-y-6">
-          <div className="mb-4">
+        <div className="max-w-5xl mx-auto text-center relative z-10 space-y-10">
+          <div>
             <VoiceVisualizer />
           </div>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-6" data-testid="text-hero-heading">
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white" data-testid="text-hero-heading">
             Free Custom Websites<br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400">
               AI Voice and Chat Enabled
@@ -809,12 +809,12 @@ export default function BusinessPage() {
               </div>
             </div>
             {mapsError && (
-              <p className="text-xs text-amber-400 mt-2 flex items-center gap-1" data-testid="text-maps-error">
+              <p className="text-xs text-amber-400 mt-3 flex items-center gap-1" data-testid="text-maps-error">
                 <ShieldCheck className="w-3 h-3 flex-shrink-0" />
                 {mapsError}
               </p>
             )}
-            {!mapsError && <p className="text-xs text-slate-600 mt-2">Powered by Google Places</p>}
+            {!mapsError && <p className="text-xs text-slate-600 mt-3">Powered by Google Places</p>}
           </div>
 
           <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
