@@ -776,14 +776,14 @@ export default function BusinessPage() {
         </div>
       )}
       {/* Hero Section */}
-      <section className="relative min-h-screen flex flex-col px-6 overflow-hidden pt-8 md:pt-12">
+      <section className="relative min-h-screen flex flex-col px-6 overflow-hidden pt-4 md:pt-12">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none" />
-        <div className="max-w-5xl mx-auto text-center relative z-10 flex flex-col items-center flex-1 justify-between pb-16 md:pb-24">
-          <div className="flex-1 flex items-end pb-12 md:pb-16">
+        <div className="max-w-5xl mx-auto text-center relative z-10 flex flex-col items-center flex-1 justify-between pb-8 md:pb-24">
+          <div className="flex-1 flex items-end pb-4 md:pb-16">
             <VoiceVisualizer />
           </div>
-          <div className="space-y-10 md:space-y-14">
+          <div className="space-y-6 md:space-y-14">
             <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white" data-testid="text-hero-heading">
               Free Custom Websites<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-3xl md:text-[48px]">
