@@ -51,6 +51,7 @@ import DeveloperChatInterface from "@/pages/DeveloperChatInterface";
 import ChatEmbedShowcase from "@/pages/ChatEmbedShowcase";
 import AgentManagementPage from "@/pages/AgentManagementPage";
 import AgentTestingDashboard from "@/pages/AgentTestingDashboard";
+import ChatWithAgentPreview from "@/pages/ChatWithAgentPreview";
 import WidgetShowcasePage from "@/pages/WidgetShowcasePage";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
@@ -305,6 +306,7 @@ function AppRouter() {
       <Route path="/conversation" component={MockConversation} />
       <Route path="/agent-management" component={AgentManagementPage} />
       <Route path="/agent-testing" component={AgentTestingDashboard} />
+      <Route path="/agent-preview" component={ChatWithAgentPreview} />
       <Route path="/widget-showcase" component={WidgetShowcasePage} />
       <Route component={NotFound} />
     </Switch>
