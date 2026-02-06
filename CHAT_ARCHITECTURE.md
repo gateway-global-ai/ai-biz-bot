@@ -2,32 +2,32 @@
 
 ## Decision
 
-**We are committing to `StandardizedChatInterface` and `FloatingChatWidget` as the ONLY base chat interface components for all customer-facing and business-facing chat interactions.**
+**We are committing to using BOTH the Gateway Chat SDK (`/sdk/chat/`) for embeddable widgets AND `StandardizedChatInterface` for in-app React pages as the ONLY approved chat interface implementations.**
 
 ## Context
 
-The platform previously had multiple inconsistent chat interface implementations across different pages. This led to:
-- Duplicated code
-- Inconsistent user experiences
-- Difficult maintenance
-- Feature disparity between different chat interfaces
+The platform had multiple inconsistent chat interface implementations. We now have:
+1. **Gateway Chat SDK** - Frontend-only embeddable JavaScript widget for external websites
+2. **StandardizedChatInterface** - React component for internal app pages
 
-## The Solution
+## The Complete Solution
 
-We have implemented two core chat components that support ALL chat use cases:
+### 1. Gateway Chat SDK (`/sdk/chat/`)
+**Purpose:** Frontend-only embeddable chat widget for ANY website (React, vanilla JS, WordPress, etc.)
 
-### 1. StandardizedChatInterface
-**Purpose:** Full-featured chat interface with support for:
-- **Floating mode** (can be positioned as needed)
-- **Fixed mode** (attached to a specific location)
-- **Fullscreen mode** (100vh, optimal for dedicated chat pages)
-
-**Three Built-in Modes:**
-- **Customer Mode**: Public-facing customer chat with simple Q&A
-- **Owner Mode**: Business owner portal with tabs for Settings, Customers, Projects, and Reports
-- **Developer Mode**: Technical interface for page creation, app deployment, and agent management
+**The Three Modes:**
+- **Floating Mode**: FAB button + popup chat card (bottom-right corner)
+- **Fixed Mode**: Embedded widget with constrained dimensions  
+- **Fullscreen Mode**: Mobile responsive mode (fills viewport on small screens)
 
 **Key Features:**
+- Shadow DOM isolation (no CSS conflicts)
+- Pure frontend JavaScript (no backend required)
+- Connects to Gateway platform APIs
+- Voice visualizer with orb + frequency bars
+- Auto-init via script tag or programmatic API
+- Customizable colors, names, greetings
+- Multiple design patterns (floating, overlay, toolbar, split panel)
 - Responsive design (mobile and desktop optimized)
 - Mode switching capability
 - Customizable colors, greetings, and placeholders
@@ -39,124 +39,179 @@ We have implemented two core chat components that support ALL chat use cases:
 **Purpose:** Embeddable floating widget that appears in the bottom-right corner
 
 **Features:**
-- Lightweight and portable
-- Easy integration into any website
-- Responsive design
-- Auto-focus on open
-- Message history
-- Loading states
+- Shadow DOM isolation
+- Voice visualizer inside chat body
+- Multiple design patterns (see SDK README)
+- Auto-init from script tag
+- Programmatic JavaScript API
 
-## Usage Guidelines
+**Usage - Script Tag:**
+```html
+<script
+  src="https://your-gateway.com/sdk/gateway-chat.js"
+  data-bot-id="your-bot-id"
+  data-color="#6366f1"
+  data-bot-name="AI Assistant"
+  data-voice="true"
+></script>
+```
 
-### ✅ DO: Use StandardizedChatInterface or FloatingChatWidget
+**Usage - Programmatic:**
+```javascript
+const widget = GatewayChat.init({
+  botId: 'your-bot-id',
+  apiBase: 'https://your-gateway.com',
+  theme: { primaryColor: '#6366f1' },
+  voice: { enabled: true },
+});
+widget.open();
+```
 
-**For customer-facing chat:**
+### 2. StandardizedChatInterface (`/client/src/components/`)
+**Purpose:** React component for in-app chat pages with business management capabilities
+
+**Three Built-in Modes:**
+- **Customer Mode**: Public-facing customer chat with simple Q&A
+- **Owner Mode**: Business owner portal with tabs for Settings, Customers, Projects, and Reports  
+- **Developer Mode**: Technical interface for page creation, app deployment, and agent management
+
+**Features:**
+- 100vh fullscreen support for business portals
+- Mode switching (Customer/Owner/Developer)
+- Responsive design (mobile/desktop)
+- Customizable colors and greetings
+- Real-time chat with message history
+- Max-width constraints (600px) for readability
+
+**Usage:**
 ```tsx
 import StandardizedChatInterface from '@/components/StandardizedChatInterface';
 
 <StandardizedChatInterface
   mode="customer"
   siteConfigId="your-site-id"
-  botName="AI Assistant"
+  botName="AI Biz Bot"
   fullscreen={true}
 />
 ```
 
-**For floating widget:**
-```tsx
-import FloatingChatWidget from '@/components/FloatingChatWidget';
+### 3. FloatingChatWidget (`/client/src/components/`)
+**Purpose:** React-based floating widget (superseded by Gateway Chat SDK for most use cases)
 
-<FloatingChatWidget
-  siteConfigId="your-site-id"
-  botName="AI Assistant"
-  primaryColor="#6366f1"
-/>
+**Note:** Use the Gateway Chat SDK (`/sdk/chat/`) instead for new implementations. FloatingChatWidget is maintained for existing React-only integrations.
+
+## Usage Guidelines
+
+### ✅ DO: Use the Right Tool for the Job
+
+**For embedding in external websites (WordPress, static sites, etc.):**
+```html
+<!-- Use Gateway Chat SDK -->
+<script src="https://your-gateway.com/sdk/gateway-chat.js" data-bot-id="xxx"></script>
 ```
 
-**For business owner portal:**
+**For React app pages (business portals, customer dashboards):**
+**For React app pages (business portals, customer dashboards):**
 ```tsx
-<StandardizedChatInterface
-  mode="owner"
-  siteConfigId="owner-portal"
-  fullscreen={true}
-  allowModeSwitch={true}
-/>
+<!-- Use StandardizedChatInterface -->
+import StandardizedChatInterface from '@/components/StandardizedChatInterface';
+
+<StandardizedChatInterface mode="owner" fullscreen={true} />
 ```
 
 ### ❌ DO NOT: Create new custom chat interfaces
 
-Do NOT create new chat interface components from scratch. If you need custom functionality:
+Do NOT create new chat interface components from scratch. The Gateway Chat SDK and StandardizedChatInterface cover ALL use cases:
+- External website embedding → Gateway Chat SDK
+- Internal React pages → StandardizedChatInterface  
+- Business management → StandardizedChatInterface (owner/developer modes)
 
-1. **First, try to use props** - `StandardizedChatInterface` supports extensive customization through props
-2. **If props aren't enough**, extend the component through composition (wrap it)
-3. **Only as a last resort**, propose adding new props to the base component
+## The Three Modes Explained
 
-### Special Cases
+Both the SDK and StandardizedChatInterface support the three modes described in the requirements:
 
-There are exactly TWO specialized chat implementations that serve specific admin/agent purposes:
+### 1. Floating Mode
+- **SDK Implementation**: FAB button + popup chat card
+- **React Implementation**: FloatingChatWidget (deprecated - use SDK instead)
+- **Behavior**: Fixed position, collapsible
+- **Use case**: Embedded widget for any website
 
-1. **AgentChat** (`/chat/:agentId`)
-   - Purpose: Direct chat with a specific AI agent (with avatar, voice, sharing)
-   - Use case: Public shareable links to individual agents
-   - Not for general use - internal admin tool
+### 2. Fixed Mode
+- **SDK Implementation**: Configurable width/height in container
+- **React Implementation**: `StandardizedChatInterface` with `fullscreen={false}`
+- **Behavior**: Constrained dimensions, embedded in page
+- **Use case**: Chat as part of a larger layout
 
-2. **CommandChat** (`/command-chat`)
-   - Purpose: Admin command interface with agent selection and quick actions
-   - Use case: Business operators managing multiple agents
-   - Not for general use - internal admin tool
+### 3. Fullscreen Mode
+- **SDK Implementation**: Mobile responsive (100vh on small screens)
+- **React Implementation**: `StandardizedChatInterface` with `fullscreen={true}`
+- **Behavior**: 100vh height, full viewport usage
+- **Use case**: Dedicated chat pages, business management portals
 
-These are acceptable because they serve DISTINCT purposes and are not customer-facing chat interfaces.
+## Architecture
 
-## Migration Path
+```
+┌─────────────────────────────────────────────────────┐
+│                  Gateway Platform                   │
+│                                                     │
+│  /api/website-chat  ←  Chat messages               │
+│  /api/bots/:id      ←  Bot configuration           │
+│  /sdk/gateway-chat.js  →  SDK JavaScript file      │
+└─────────────────────────────────────────────────────┘
+           ▲                           ▲
+           │                           │
+   ┌───────┴─────────┐         ┌──────┴────────┐
+   │  Gateway Chat   │         │ Standardized  │
+   │  SDK (External) │         │ ChatInterface │
+   │  /sdk/chat/     │         │ (Internal)    │
+   │  Pure JS        │         │ React         │
+   └─────────────────┘         └───────────────┘
+```
 
-If you find yourself maintaining or updating an old chat interface:
+## Benefits of This Dual Approach
 
-1. **Evaluate**: Can this be replaced with `StandardizedChatInterface`?
-2. **Refactor**: If yes, migrate to use the standardized component
-3. **Document**: If no (truly special case), document WHY it needs custom implementation
-4. **Review**: Get architectural review before creating any new chat interface
-
-## Benefits of This Decision
-
-1. **Consistency**: All customer chats look and feel the same
-2. **Maintainability**: Bug fixes and features added once benefit all interfaces
-3. **Portability**: Easy to embed chat anywhere with consistent behavior
-4. **Scalability**: Can expand from simple chatbot to full customer management system
-5. **Developer Experience**: Clear pattern to follow, less decision fatigue
+1. **Gateway Chat SDK** - Universal embeddability without framework dependencies
+2. **StandardizedChatInterface** - Rich React features for internal business portals
+3. **Single Backend** - Both use the same Gateway platform APIs
+4. **Consistent Experience** - Same AI, same features, different presentation layers
+5. **Scalability** - From simple chatbot to full customer management system
 
 ## Implementation Status
 
+### ✅ Gateway Chat SDK
+- `/sdk/chat/src/gateway-chat.js` - Main SDK file
+- `/sdk/chat/examples/` - Example integrations
+- `/sdk/chat/reference-apps/` - Complete reference implementations
+- Served at `/sdk/*` route
+- Used in BusinessPage for floating widget
+
 ### ✅ Using StandardizedChatInterface
-- `/chat/customer` - CustomerChatInterface
-- `/chat/owner` - OwnerChatInterface  
-- `/chat/developer` - DeveloperChatInterface
-- `/interface/customer` - CustomerChatInterface (alt route)
-- `/interface/owner` - OwnerChatInterface (alt route)
-- `/interface/developer` - DeveloperChatInterface (alt route)
-- `/chat-showcase` - ChatEmbedShowcase (documentation)
+- `/chat/customer` - Customer chat interface
+- `/chat/owner` - Owner business portal (fullscreen with tabs)
+- `/chat/developer` - Developer technical interface (fullscreen with tabs)
+- `/interface/*` - Public demo routes
+- Used in ChatWithAgentPreview for agent visualization
 
-### ✅ Using FloatingChatWidget
-- Available for embedding in any website
-- Documented in `/chat-showcase`
-
-### ⚠️ Specialized (Not for General Use)
-- `/chat/:agentId` - AgentChat (agent-specific features)
-- `/command-chat` - CommandChat (admin interface)
-
-### 🎓 Domain-Specific (Different Purpose)
-- `/classroom/*` - ImmersiveClassroom (educational tool, not chat)
+### ⚠️ Specialized (Justified - Not for General Use)
+- `/chat/:agentId` - AgentChat (agent-specific features: avatars, voice, sharing)
+- `/command-chat` - CommandChat (admin tool: agent selection, DISC metrics, quick commands)
 
 ## Future Considerations
 
-If new requirements emerge that can't be met by the current components:
-
-1. **Evaluate**: Does this truly need a new component, or can we extend the existing ones?
-2. **Propose**: Create an ADR (Architecture Decision Record) explaining the need
-3. **Discuss**: Team review before implementation
-4. **Implement**: If approved, update this document
+**For external websites:** Always use Gateway Chat SDK
+**For React app pages:** Always use StandardizedChatInterface
+**New requirements:** Extend existing components, don't create new ones
 
 ## Conclusion
 
-**StandardizedChatInterface and FloatingChatWidget are sufficient for all customer-facing and business-facing chat needs. No new chat interface implementations should be created without architectural review and explicit justification.**
+**The Gateway Chat SDK (`/sdk/chat/`) and StandardizedChatInterface (`/client/src/components/`) are the ONLY approved chat implementations. Together they provide:**
 
-This architectural decision transforms our chatbot from a simple Q&A tool into a platform that can expand to handle full customer management systems through the fullscreen Owner and Developer modes.
+- ✅ Floating, fixed, and fullscreen modes
+- ✅ External website embeddability (SDK)
+- ✅ Internal React app integration (StandardizedChatInterface)
+- ✅ Business management capabilities (Owner/Developer modes)
+- ✅ Voice interaction with visualizers
+- ✅ Consistent backend integration
+- ✅ Scalability from chatbot to customer management system
+
+**This is more than enough** - a complete, production-ready foundation that handles all current and future chat needs without requiring alternative implementations.
