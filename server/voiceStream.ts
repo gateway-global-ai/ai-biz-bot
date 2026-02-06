@@ -2,7 +2,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { Server } from "http";
 import { AudioBuffer, convertWavToTwilioAudio } from "./audioCodec";
 import { voiceSessionManager } from "./voiceSession";
-import { processAudioWithKimi, generateSpeech, isKimiAudioConfigured } from "./kimiAudio";
+import { processAudioWithKimi, generateSpeech, isKimiAudioConfigured } from "./kimiAudioReplicate";
 import { generateVoiceResponse } from "./kimi";
 import * as fs from "fs";
 import * as path from "path";

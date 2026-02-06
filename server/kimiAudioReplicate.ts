@@ -1,3 +1,8 @@
+/**
+ * kimiAudioReplicate.ts - Replicate-hosted Kimi-Audio
+ * EXCLUSIVELY for Twilio phone voice (needs hosted audio URLs).
+ * Browser voice uses kimiAudioDirect.ts instead (HuggingFace + Moonshot direct).
+ */
 import Replicate from "replicate";
 
 const replicate = new Replicate({
