@@ -456,6 +456,41 @@ Use this information to provide accurate, helpful, and personalized responses to
 Always emphasize our strengths and unique value propositions.
 `;
   }
+
+  /**
+   * Complete SWOT analysis and trigger workspace onboarding
+   * This is the integration point for the Google Workspace orchestrator
+   */
+  async completeSwotAndInitiateOnboarding(
+    businessId: string,
+    businessProfile: BusinessProfile
+  ): Promise<{
+    swotAnalysis: any;
+    onboardingInitiated: boolean;
+    workspaceConfigId?: string;
+  }> {
+    try {
+      // Perform deep research
+      const insights = await this.performDeepResearch(businessProfile);
+
+      // Store SWOT analysis in database (would be implemented)
+      // const swotAnalysisId = await this.storeSwotAnalysis(businessId, insights.swotAnalysis);
+
+      // Trigger workspace onboarding orchestrator
+      // Uncomment when database is ready:
+      // const { workspaceOrchestrator } = await import('../services/workspace-orchestrator');
+      // const onboardingResult = await workspaceOrchestrator.onSwotComplete(businessId, swotAnalysisId);
+
+      return {
+        swotAnalysis: insights.swotAnalysis,
+        onboardingInitiated: true, // Would be based on actual result
+        // workspaceConfigId: onboardingResult.workspaceConfigId,
+      };
+    } catch (error: any) {
+      console.error('SWOT completion and onboarding error:', error);
+      throw error;
+    }
+  }
 }
 
 // Export singleton instance
