@@ -236,7 +236,7 @@ export default function BusinessPage() {
           <div className="max-w-2xl mx-auto" data-testid="container-place-search">
             <div className="relative group">
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-              <div className="relative bg-slate-900 rounded-xl border border-slate-700 p-2 flex items-center gap-2">
+              <div className="relative bg-slate-900 rounded-xl border-0 p-2 flex items-center gap-2">
                 <div className="pl-2 text-slate-500">
                   <Search className="w-5 h-5" />
                 </div>
