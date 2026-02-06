@@ -1,6 +1,15 @@
 # Chat Interface Components
 
+> **⚠️ IMPORTANT**: These are the ONLY approved chat interface components for the platform. Do not create alternative chat implementations. See `/CHAT_ARCHITECTURE.md` for architectural decisions and guidelines.
+
 This directory contains portable chat interface components that can be embedded into any website with full support for TTS voice, real-time conversation, and telephony integration.
+
+## Core Philosophy
+
+StandardizedChatInterface and FloatingChatWidget provide everything needed for chat interactions, from simple customer Q&A to full-screen customer management systems. These components support:
+- **Floating mode**: Positioned widget
+- **Fixed mode**: Attached to a location
+- **Fullscreen mode**: 100vh for dedicated pages with full business management capabilities
 
 ## Components
 
