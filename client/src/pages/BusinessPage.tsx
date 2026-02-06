@@ -137,6 +137,8 @@ export default function BusinessPage() {
       .catch(() => {});
   }, []);
 
+  const [mapsError, setMapsError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!mapsKey) return;
     if ((window as any).google?.maps?.places) {
@@ -144,30 +146,43 @@ export default function BusinessPage() {
       return;
     }
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${mapsKey}&libraries=places`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${mapsKey}&libraries=places&loading=async`;
     script.async = true;
     script.defer = true;
-    script.onload = () => setScriptLoaded(true);
+    script.onload = () => {
+      setScriptLoaded(true);
+      setMapsError(null);
+    };
+    script.onerror = () => {
+      setMapsError('Failed to load Google Maps. Check API key and enabled APIs.');
+    };
+    (window as any).gm_authFailure = () => {
+      setMapsError('Google Maps API not activated. Enable "Maps JavaScript API" and "Places API" in Google Cloud Console.');
+    };
     document.head.appendChild(script);
   }, [mapsKey]);
 
   useEffect(() => {
     if (!scriptLoaded || !inputRef.current || !(window as any).google) return;
-    const autocomplete = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
-      types: ['establishment'],
-      fields: [
-        'name', 'formatted_address', 'place_id', 'rating',
-        'user_ratings_total', 'website', 'opening_hours',
-        'photos', 'types', 'formatted_phone_number'
-      ],
-    });
-    autocomplete.addListener('place_changed', () => {
-      const place = autocomplete.getPlace();
-      if (place && place.name) {
-        setSelectedPlace(place);
-        setIsSearching(false);
-      }
-    });
+    try {
+      const autocomplete = new (window as any).google.maps.places.Autocomplete(inputRef.current, {
+        types: ['establishment'],
+        fields: [
+          'name', 'formatted_address', 'place_id', 'rating',
+          'user_ratings_total', 'website', 'opening_hours',
+          'photos', 'types', 'formatted_phone_number'
+        ],
+      });
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (place && place.name) {
+          setSelectedPlace(place);
+          setIsSearching(false);
+        }
+      });
+    } catch (err: any) {
+      setMapsError('Places Autocomplete unavailable. Enable "Places API" in Google Cloud Console.');
+    }
   }, [scriptLoaded]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -239,7 +254,13 @@ export default function BusinessPage() {
                 )}
               </div>
             </div>
-            <p className="text-xs text-slate-600 mt-2">Powered by Google Places</p>
+            {mapsError && (
+              <p className="text-xs text-amber-400 mt-2 flex items-center gap-1" data-testid="text-maps-error">
+                <ShieldCheck className="w-3 h-3 flex-shrink-0" />
+                {mapsError}
+              </p>
+            )}
+            {!mapsError && <p className="text-xs text-slate-600 mt-2">Powered by Google Places</p>}
           </div>
 
           <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
