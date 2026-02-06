@@ -44,6 +44,7 @@ import MyAccount from "@/pages/MyAccount";
 import CustomerSiteManager from "@/pages/CustomerSiteManager";
 import VoiceLeadMachine from "@/pages/VoiceLeadMachine";
 import SitesAndLeads from "@/pages/SitesAndLeads";
+import CommandChat from "@/pages/CommandChat";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
@@ -283,6 +284,7 @@ function AppRouter() {
       {/* BusinessPage moved to public routes */}
       <Route path="/lead-machine" component={VoiceLeadMachine} />
       <Route path="/sites-leads" component={SitesAndLeads} />
+      <Route path="/command-chat" component={CommandChat} />
       <Route path="/aibizbot" component={AiBizBotAdmin} />
       <Route path="/google-analyst" component={GoogleApiAnalyst} />
       <Route path="/assessment" component={DiscAssessment} />

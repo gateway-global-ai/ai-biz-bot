@@ -3784,6 +3784,160 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   });
 
   // ============================================
+  // ADMIN COMMAND CHAT API
+  // ============================================
+  app.post("/api/admin/command-chat", async (req, res) => {
+    try {
+      const chatSchema = z.object({
+        agentId: z.string().min(1),
+        message: z.string().min(1).max(4000),
+        history: z.array(z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string(),
+        })).max(20).optional().default([]),
+      });
+
+      const parsed = chatSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const { agentId, message, history } = parsed.data;
+
+      const agent = await storage.getAgent(agentId);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
+      // Gather live business context
+      let businessContext = '';
+      try {
+        const sites = await storage.getSiteConfigs();
+        const customers = await storage.getCustomers();
+        const allChatLogs: any[] = [];
+        for (const site of sites.slice(0, 50)) {
+          const logs = await storage.getChatLogs(site.id, 200);
+          allChatLogs.push(...logs);
+        }
+        const chatLogs = allChatLogs;
+        const prospects = await storage.getVlmProspects({ limit: 10000 });
+        const campaigns = await storage.getVlmCampaigns();
+
+        const activeSites = sites.filter(s => s.chatbotEnabled || s.voiceConciergeEnabled);
+        const totalVisitors = new Set(chatLogs.map((l: any) => l.visitorId).filter(Boolean)).size;
+        const totalMessages = chatLogs.length;
+        const wonProspects = prospects.filter(p => p.status === 'won');
+        const calledProspects = prospects.filter(p => p.status === 'called');
+        const newCustomers = customers.filter((c: any) => c.status === 'new');
+        const activeCustomers = customers.filter((c: any) => c.status === 'active');
+
+        businessContext = `\n\n--- ADMIN BUSINESS CONTEXT (LIVE DATA) ---
+SITES: ${sites.length} total, ${activeSites.length} active (with chatbot/voice enabled)
+VISITORS: ${totalVisitors} unique visitors across all sites
+MESSAGES: ${totalMessages} total chat messages
+CUSTOMERS: ${customers.length} total (${newCustomers.length} new, ${activeCustomers.length} active)
+LEADS/PROSPECTS: ${prospects.length} total, ${calledProspects.length} called, ${wonProspects.length} converted
+CAMPAIGNS: ${campaigns.length || 0} VLM campaigns
+
+Top Sites by Activity:`;
+
+        const sitesWithCounts = sites.map(s => {
+          const siteLogs = chatLogs.filter((l: any) => l.siteConfigId === s.id);
+          const visitors = new Set(siteLogs.map((l: any) => l.visitorId).filter(Boolean)).size;
+          return { name: s.name, visitors, messages: siteLogs.length, chatbot: s.chatbotEnabled, voice: s.voiceConciergeEnabled };
+        }).sort((a, b) => b.messages - a.messages).slice(0, 10);
+
+        sitesWithCounts.forEach(s => {
+          businessContext += `\n- ${s.name}: ${s.visitors} visitors, ${s.messages} messages${s.chatbot ? ' [Chat]' : ''}${s.voice ? ' [Voice]' : ''}`;
+        });
+
+        if (customers.length > 0) {
+          businessContext += `\n\nRecent Customers:`;
+          customers.slice(0, 5).forEach((c: any) => {
+            businessContext += `\n- ${c.name} (${c.status})${c.phone ? ' Ph:' + c.phone : ''}${c.email ? ' ' + c.email : ''}`;
+          });
+        }
+
+        if (prospects.length > 0) {
+          businessContext += `\n\nRecent Prospects:`;
+          prospects.slice(0, 5).forEach((p: any) => {
+            businessContext += `\n- ${p.businessName} (${p.status}, score:${p.qualityScore || 'N/A'})${p.phone ? ' Ph:' + p.phone : ''}`;
+          });
+        }
+
+        businessContext += `\n--- END BUSINESS CONTEXT ---`;
+      } catch (contextError) {
+        console.warn('Failed to gather business context:', contextError);
+        businessContext = '\n\n[Business context unavailable - some data could not be loaded]';
+      }
+
+      // Build admin-enhanced system prompt
+      const discProfile = `D:${agent.dominance} I:${agent.influence} S:${agent.steadiness} C:${agent.conscientiousness}`;
+      const systemPrompt = (agent.systemPrompt || `You are ${agent.name}, a helpful AI assistant with DISC profile: ${discProfile}. Voice style: ${agent.voiceName}.`) + `
+
+You are in ADMIN COMMAND MODE. The admin is using you to manage and monitor business operations. You have access to live business data below.
+
+Your capabilities in this mode:
+- Report on site analytics, visitor activity, and chat history
+- Analyze lead quality scores and conversion rates
+- Summarize customer status and pipeline health
+- Advise on VoiceLeadMachine campaign strategy
+- Help configure agent settings and telephony
+- Provide actionable business intelligence and recommendations
+
+Be direct, data-driven, and actionable. Reference specific numbers from the live data. If the admin asks about something not in the data, say what data you do have and suggest how to get more.
+${businessContext}`;
+
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        ...history.slice(-10).map((m: any) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        })),
+        { role: 'user' as const, content: message },
+      ];
+
+      const agentModel = agent.aiModelId || 'kimi-k2-turbo-preview';
+      const agentTemp = agent.aiTemperature ? agent.aiTemperature / 100 : 0.7;
+      const agentMaxTokens = agent.aiMaxTokens || 4096;
+
+      let modelToUse: string;
+      if (agentModel === 'kimi-k2.5' || agentModel === 'kimi-k2-5') {
+        modelToUse = KIMI_MODELS.K2_5;
+      } else if (agentModel === 'kimi-k2-thinking') {
+        modelToUse = KIMI_MODELS.K2_THINKING;
+      } else if (agentModel.startsWith('kimi-') || agentModel.startsWith('moonshot-')) {
+        modelToUse = agentModel;
+      } else {
+        modelToUse = KIMI_MODELS.K2_TURBO;
+      }
+
+      let response: string;
+      try {
+        response = await chat({
+          model: modelToUse,
+          messages,
+          temperature: agentTemp,
+          max_tokens: agentMaxTokens,
+        });
+      } catch (firstError: any) {
+        console.warn('Admin command chat first attempt failed, retrying:', firstError.message);
+        response = await chat({
+          model: modelToUse,
+          messages,
+          temperature: agentTemp,
+          max_tokens: agentMaxTokens,
+        });
+      }
+
+      res.json({ response });
+    } catch (error: any) {
+      console.error('Admin command chat error:', error);
+      res.status(500).json({ error: error.message || 'Failed to generate response' });
+    }
+  });
+
+  // ============================================
   // PUBLIC AGENT CHAT API
   // ============================================
 
