@@ -4,6 +4,8 @@ const replicate = new Replicate({
   auth: process.env.REPLICATE_API_TOKEN,
 });
 
+const KIMI_AUDIO_MODEL = "zsxkib/kimi-audio-7b-instruct:7500b32387695e89da3d09271850319ba027969f0c714dfc226361609ff29f2b";
+
 export interface KimiAudioResponse {
   audioUrl: string;
   transcript: string;
@@ -14,7 +16,49 @@ export interface KimiAudioResponse {
 export interface ConversationMessage {
   role: "user" | "assistant";
   type: "audio" | "text";
-  content: string; // URL for audio, text for text
+  content: string;
+}
+
+function extractOutput(output: unknown): { audioUrl: string; transcript: string } {
+  let audioUrl = "";
+  let transcript = "";
+
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      if (typeof item === "string" && item.startsWith("http")) {
+        audioUrl = item;
+      } else if (typeof item === "string") {
+        transcript = item;
+      } else if (typeof item === "object" && item !== null) {
+        const obj = item as Record<string, unknown>;
+        if (typeof obj.json_str === "string") transcript = obj.json_str;
+        if (typeof obj.media_path === "string") audioUrl = obj.media_path;
+        if (typeof obj.text === "string") transcript = obj.text;
+        if (typeof obj.audio === "string") audioUrl = obj.audio;
+      }
+    }
+  } else if (typeof output === "object" && output !== null) {
+    const obj = output as Record<string, unknown>;
+    if (typeof obj.json_str === "string") transcript = obj.json_str;
+    if (typeof obj.media_path === "string") audioUrl = obj.media_path;
+    if (typeof obj.audio === "string") audioUrl = obj.audio;
+    if (typeof obj.text === "string") transcript = obj.text;
+    if (typeof obj.output === "object" && obj.output !== null) {
+      const inner = obj.output as Record<string, unknown>;
+      if (typeof inner.audio === "string") audioUrl = inner.audio;
+      if (typeof inner.text === "string") transcript = inner.text;
+      if (typeof inner.json_str === "string") transcript = inner.json_str;
+      if (typeof inner.media_path === "string") audioUrl = inner.media_path;
+    }
+  } else if (typeof output === "string") {
+    if (output.startsWith("http")) {
+      audioUrl = output;
+    } else {
+      transcript = output;
+    }
+  }
+
+  return { audioUrl, transcript };
 }
 
 export async function processAudioWithKimi(
@@ -25,120 +69,61 @@ export async function processAudioWithKimi(
   try {
     if (!process.env.REPLICATE_API_TOKEN) {
       console.error("[Kimi-Audio] REPLICATE_API_TOKEN not configured");
-      return {
-        audioUrl: "",
-        transcript: "",
-        success: false,
-        error: "Replicate API token not configured",
-      };
+      return { audioUrl: "", transcript: "", success: false, error: "Replicate API token not configured" };
     }
 
     console.log("[Kimi-Audio] Processing audio:", audioUrl);
     console.log("[Kimi-Audio] History length:", conversationHistory.length);
 
-    // Build messages for multi-turn conversation
-    const messages: Array<{ role: string; message_type: string; content: string }> = [];
-
-    // Add system prompt if provided
+    let promptParts: string[] = [];
     if (systemPrompt) {
-      messages.push({
-        role: "system",
-        message_type: "text",
-        content: systemPrompt,
-      });
+      promptParts.push(systemPrompt);
     }
-
-    // Add conversation history
-    for (const msg of conversationHistory) {
-      messages.push({
-        role: msg.role,
-        message_type: msg.type,
-        content: msg.content,
-      });
+    if (conversationHistory.length > 0) {
+      const recentHistory = conversationHistory.slice(-6);
+      const historyText = recentHistory
+        .filter(m => m.type === "text" && m.content)
+        .map(m => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+        .join("\n");
+      if (historyText) {
+        promptParts.push(`Recent conversation context:\n${historyText}`);
+      }
     }
+    promptParts.push("Please respond naturally to the user's audio input.");
+    const prompt = promptParts.join("\n\n");
 
-    // Add current user audio
-    messages.push({
-      role: "user",
-      message_type: "audio",
-      content: audioUrl,
+    const output = await replicate.run(KIMI_AUDIO_MODEL, {
+      input: {
+        audio: audioUrl,
+        prompt: prompt,
+        output_type: "both",
+        return_json: true,
+        audio_top_k: 10,
+        text_top_k: 5,
+        audio_temperature: 0.8,
+        text_temperature: 0.0,
+        audio_repetition_penalty: 1.0,
+        text_repetition_penalty: 1.0,
+        audio_repetition_window_size: 64,
+        text_repetition_window_size: 16,
+      },
     });
 
-    console.log("[Kimi-Audio] Sending to Replicate with", messages.length, "messages");
+    console.log("[Kimi-Audio] Raw output type:", typeof output);
 
-    // Call Kimi-Audio via Replicate
-    const output = await replicate.run(
-      "zsxkib/kimi-audio-7b-instruct:40ab49e15bb65fc63a67f8207c821e592ed4a545e0e1452c34ba7268c64f7a0a",
-      {
-        input: {
-          messages: JSON.stringify(messages),
-          output_type: "audio",
-          audio_top_k: 10,
-          text_top_k: 5,
-          audio_temperature: 0.8,
-          text_temperature: 0.0,
-          audio_repetition_penalty: 1.0,
-          text_repetition_penalty: 1.0,
-          audio_repetition_window_size: 64,
-          text_repetition_window_size: 16,
-        },
-      }
-    );
+    const { audioUrl: audioOutputUrl, transcript } = extractOutput(output);
 
-    console.log("[Kimi-Audio] Raw output:", output);
-
-    // Parse the response (Replicate returns different formats)
-    let audioOutputUrl = "";
-    let textTranscript = "";
-
-    // Cast to unknown for type safety
-    const result: unknown = output;
-
-    if (Array.isArray(result)) {
-      for (const item of result) {
-        if (typeof item === "string" && item.startsWith("http")) {
-          audioOutputUrl = item;
-        } else if (typeof item === "string") {
-          textTranscript = item;
-        }
-      }
-    } else if (typeof result === "object" && result !== null) {
-      const obj = result as Record<string, unknown>;
-      if (typeof obj.audio === "string") {
-        audioOutputUrl = obj.audio;
-      }
-      if (typeof obj.text === "string") {
-        textTranscript = obj.text;
-      }
-      if (typeof obj.output === "object" && obj.output !== null) {
-        const inner = obj.output as Record<string, unknown>;
-        if (typeof inner.audio === "string") audioOutputUrl = inner.audio;
-        if (typeof inner.text === "string") textTranscript = inner.text;
-      }
-    } else if (typeof result === "string") {
-      if (result.startsWith("http")) {
-        audioOutputUrl = result;
-      } else {
-        textTranscript = result;
-      }
-    }
-
-    console.log("[Kimi-Audio] Processed - Audio URL:", audioOutputUrl);
-    console.log("[Kimi-Audio] Processed - Transcript:", textTranscript);
+    console.log("[Kimi-Audio] Processed - Audio URL:", audioOutputUrl ? "yes" : "none");
+    console.log("[Kimi-Audio] Processed - Transcript:", transcript.substring(0, 100));
 
     return {
       audioUrl: audioOutputUrl,
-      transcript: textTranscript,
+      transcript,
       success: true,
     };
   } catch (error: any) {
-    console.error("[Kimi-Audio] Error:", error);
-    return {
-      audioUrl: "",
-      transcript: "",
-      success: false,
-      error: error.message || "Unknown error",
-    };
+    console.error("[Kimi-Audio] Error:", error.message || error);
+    return { audioUrl: "", transcript: "", success: false, error: error.message || "Unknown error" };
   }
 }
 
@@ -150,40 +135,23 @@ export async function transcribeAudio(audioUrl: string): Promise<string> {
 
     console.log("[Kimi-Audio] Transcribing:", audioUrl);
 
-    const output = await replicate.run(
-      "zsxkib/kimi-audio-7b-instruct:40ab49e15bb65fc63a67f8207c821e592ed4a545e0e1452c34ba7268c64f7a0a",
-      {
-        input: {
-          messages: JSON.stringify([
-            {
-              role: "user",
-              message_type: "audio",
-              content: audioUrl,
-            },
-          ]),
-          output_type: "text",
-          text_temperature: 0.0,
-          text_top_k: 5,
-        },
-      }
-    );
+    const output = await replicate.run(KIMI_AUDIO_MODEL, {
+      input: {
+        audio: audioUrl,
+        prompt: "Please transcribe this audio accurately.",
+        output_type: "text",
+        return_json: true,
+        text_temperature: 0.0,
+        text_top_k: 5,
+      },
+    });
 
-    console.log("[Kimi-Audio] Transcription output:", output);
+    console.log("[Kimi-Audio] Transcription output type:", typeof output);
 
-    // Extract text from response
-    if (typeof output === "string") {
-      return output;
-    }
-    if (typeof output === "object" && output !== null && "text" in output) {
-      return (output as any).text;
-    }
-    if (Array.isArray(output) && output.length > 0) {
-      return String(output[0]);
-    }
-
-    return "";
+    const { transcript } = extractOutput(output);
+    return transcript;
   } catch (error: any) {
-    console.error("[Kimi-Audio] Transcription error:", error);
+    console.error("[Kimi-Audio] Transcription error:", error.message);
     throw error;
   }
 }
@@ -199,48 +167,27 @@ export async function generateSpeech(
 
     console.log("[Kimi-Audio] Generating speech for:", text.substring(0, 100));
 
-    // Use text-to-speech mode
-    const output = await replicate.run(
-      "zsxkib/kimi-audio-7b-instruct:40ab49e15bb65fc63a67f8207c821e592ed4a545e0e1452c34ba7268c64f7a0a",
-      {
-        input: {
-          messages: JSON.stringify([
-            {
-              role: "user",
-              message_type: "text",
-              content: `Please say the following in a ${voiceStyle} tone: "${text}"`,
-            },
-          ]),
-          output_type: "audio",
-          audio_temperature: 0.8,
-          audio_top_k: 10,
-        },
-      }
-    );
+    const output = await replicate.run(KIMI_AUDIO_MODEL, {
+      input: {
+        prompt: `Please say the following in a ${voiceStyle} tone: "${text}"`,
+        output_type: "audio",
+        return_json: false,
+        audio_temperature: 0.8,
+        audio_top_k: 10,
+      },
+    });
 
-    console.log("[Kimi-Audio] TTS output:", output);
+    console.log("[Kimi-Audio] TTS output type:", typeof output);
 
-    // Extract audio URL with proper type handling
-    const result: unknown = output;
-    
-    if (Array.isArray(result)) {
-      for (const item of result) {
-        if (typeof item === "string" && item.startsWith("http")) {
-          return item;
-        }
-      }
-    } else if (typeof result === "object" && result !== null) {
-      const obj = result as Record<string, unknown>;
-      if (typeof obj.audio === "string") {
-        return obj.audio;
-      }
-    } else if (typeof result === "string" && result.startsWith("http")) {
-      return result;
+    const { audioUrl } = extractOutput(output);
+
+    if (!audioUrl) {
+      console.error("[Kimi-Audio] TTS returned no audio URL");
     }
 
-    return "";
+    return audioUrl;
   } catch (error: any) {
-    console.error("[Kimi-Audio] TTS error:", error);
+    console.error("[Kimi-Audio] TTS error:", error.message);
     throw error;
   }
 }
