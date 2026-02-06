@@ -1,4 +1,5 @@
-import { google, calendar_v3, tasks_v1, docs_v1, sheets_v4 } from 'googleapis';
+import { google, calendar_v3, tasks_v1, docs_v1, sheets_v4, drive_v3 } from 'googleapis';
+import { Readable } from 'stream';
 
 export interface GoogleWorkspaceCredentials {
   accessToken: string;
@@ -43,6 +44,7 @@ export class GoogleWorkspaceService {
   private tasks: tasks_v1.Tasks | null = null;
   private docs: docs_v1.Docs | null = null;
   private sheets: sheets_v4.Sheets | null = null;
+  private drive: drive_v3.Drive | null = null;
 
   constructor(credentials?: GoogleWorkspaceCredentials) {
     this.oauth2Client = new google.auth.OAuth2(
@@ -67,6 +69,7 @@ export class GoogleWorkspaceService {
     this.tasks = google.tasks({ version: 'v1', auth: this.oauth2Client });
     this.docs = google.docs({ version: 'v1', auth: this.oauth2Client });
     this.sheets = google.sheets({ version: 'v4', auth: this.oauth2Client });
+    this.drive = google.drive({ version: 'v3', auth: this.oauth2Client });
   }
 
   getAuthUrl(state?: string): string {
