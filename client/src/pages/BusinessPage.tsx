@@ -582,7 +582,6 @@ export default function BusinessPage() {
           )}
         </div>
       </nav>
-
       {stage === 'generating' && (
         <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col items-center justify-center">
           <div className="max-w-md mx-auto text-center space-y-8 px-6">
@@ -627,14 +626,12 @@ export default function BusinessPage() {
           </div>
         </div>
       )}
-
       {stage === 'preview' && (
         <div className="fixed top-16 right-4 z-[55] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-md px-4 py-2 flex items-center gap-3">
           <Eye className="w-4 h-4 text-blue-400" />
           <span className="text-sm text-slate-300">Preview: <span className="text-white font-mono font-bold">{formatTime(previewTimer)}</span></span>
         </div>
       )}
-
       {showOverlay && (
         <div className="fixed inset-0 z-[60] bg-slate-950/95 backdrop-blur-sm flex items-center justify-center px-6">
           <div className="max-w-lg w-full">
@@ -761,7 +758,6 @@ export default function BusinessPage() {
           </div>
         </div>
       )}
-
       {tokenError && (
         <div className="fixed inset-0 z-[60] bg-slate-950 flex items-center justify-center px-6">
           <div className="text-center space-y-6 max-w-md">
@@ -779,7 +775,6 @@ export default function BusinessPage() {
           </div>
         </div>
       )}
-
       {/* Hero Section */}
       <section className="relative min-h-screen flex flex-col px-6 overflow-hidden pt-8 md:pt-12">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
@@ -791,7 +786,7 @@ export default function BusinessPage() {
           <div className="space-y-10 md:space-y-14">
             <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white" data-testid="text-hero-heading">
               Free Custom Websites<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-[48px]">
                 AI Voice and Chat Enabled
               </span>
             </h1>
@@ -826,7 +821,6 @@ export default function BusinessPage() {
           </div>
         </div>
       </section>
-
       {/* Selected Business Preview Card */}
       {selectedPlace && stage === 'landing' && (
         <section className="px-6 pb-12 -mt-2">
@@ -918,7 +912,6 @@ export default function BusinessPage() {
           </div>
         </section>
       )}
-
       {/* Website Preview (shown after generation) */}
       {(stage === 'preview' || stage === 'full-access' || stage === 'phone-gate' || stage === 'sending-link' || stage === 'training' || stage === 'demo-ready' || stage === 'name-gate') && selectedPlace && (
         <section className="px-6 pb-12">
@@ -989,7 +982,6 @@ export default function BusinessPage() {
           </div>
         </section>
       )}
-
       {/* Features - commented out for now
       <section className="py-16 px-6">
         <div className="max-w-6xl mx-auto">
@@ -1017,7 +1009,6 @@ export default function BusinessPage() {
         </div>
       </section>
       */}
-
       {/* Enterprise Form */}
       <section className="py-16 px-6 bg-slate-900/30 border-y border-slate-900">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
@@ -1117,11 +1108,9 @@ export default function BusinessPage() {
           </Card>
         </div>
       </section>
-
       <footer className="py-12 text-center text-slate-600 text-sm border-t border-slate-900">
         <p>&copy; 2025 Gateway Global AI. Enterprise Division.</p>
       </footer>
-
       {showLoginModal && (
         <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4" onClick={() => setShowLoginModal(false)}>
           <div className="bg-slate-900 border border-slate-700 rounded-md w-full max-w-sm p-6 space-y-5 relative" onClick={(e) => e.stopPropagation()}>
