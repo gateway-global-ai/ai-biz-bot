@@ -114,9 +114,12 @@ chat-mvp-merge/
 
 ## 📚 Documentation
 
-### Getting Started
+### Quick Start
+- **[FAQ.md](./FAQ.md)** - Quick answers to common questions
 - **[GETTING_STARTED_GUIDE.md](./GETTING_STARTED_GUIDE.md)** - Complete guide for new developers
 - **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Solutions to common problems
+
+### Reference
 - [STATUS.md](./STATUS.md) - Current build/test status and next steps
 
 ### Project Information
