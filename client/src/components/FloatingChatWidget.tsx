@@ -95,9 +95,14 @@ export default function FloatingChatWidget({
 
   return (
     <div 
-      className="fixed bottom-5 right-5 z-[9999] max-w-[calc(100vw-2rem)] md:w-[420px] md:max-w-[600px]" 
+      className="fixed bottom-5 right-5 z-[9999] max-w-[calc(100vw-2rem)] md:max-w-[600px]" 
       data-testid="chat-widget-container"
     >
+      {/* 
+        Responsive height:
+        Mobile: min(100vh - 5rem, 700px) - accounts for mobile browser chrome
+        Desktop: min(100vh - 3rem, 800px) - larger viewport allows more content
+      */}
       <div 
         className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl shadow-black/40 flex flex-col overflow-hidden h-[min(100vh-5rem,700px)] md:h-[min(100vh-3rem,800px)]"
       >

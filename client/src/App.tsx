@@ -285,7 +285,11 @@ function AppRouter() {
       <Route path="/security" component={SecurityDashboard} />
       <Route path="/disc" component={DiscVisualizer} />
       <Route path="/developer" component={DeveloperPage} />
-      {/* New Standardized Chat Interfaces */}
+      {/* 
+        Standardized Chat Interfaces - Protected Routes
+        /chat/owner and /chat/developer require authentication for actual business use.
+        Public demo routes are at /interface/owner and /interface/developer for showcase purposes.
+      */}
       <Route path="/chat/owner" component={OwnerChatInterface} />
       <Route path="/chat/developer" component={DeveloperChatInterface} />
       {/* BusinessPage moved to public routes */}
@@ -362,6 +366,7 @@ function App() {
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
               <Route path="/chat/customer" component={CustomerChatInterface} />
               <Route path="/chat-showcase" component={ChatEmbedShowcase} />
+              {/* Public demo routes for chat interfaces - no authentication required */}
               <Route path="/interface/customer" component={CustomerChatInterface} />
               <Route path="/interface/owner" component={OwnerChatInterface} />
               <Route path="/interface/developer" component={DeveloperChatInterface} />
