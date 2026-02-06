@@ -235,7 +235,7 @@ export default function BusinessPage() {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-16 pb-12 px-6 overflow-hidden">
+      <section className="relative min-h-screen flex flex-col justify-center px-6 overflow-hidden">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none" />
         <div className="max-w-5xl mx-auto text-center relative z-10 space-y-6">
