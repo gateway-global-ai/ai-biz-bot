@@ -37,6 +37,7 @@ import GoogleCalendarPage from "@/pages/GoogleCalendarPage";
 import GoogleTasksPage from "@/pages/GoogleTasksPage";
 import AiBizBotAdmin from "@/pages/AiBizBotAdmin";
 import Login from "@/pages/Login";
+import SdkShowcase from "@/pages/SdkShowcase";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
@@ -339,6 +340,7 @@ function App() {
             <Route path="/login" component={Login} />
             <Route path="/v2" component={LandingV2} />
             <Route path="/kimi-audio" component={KimiAudioDemo} />
+            <Route path="/sdk" component={SdkShowcase} />
             <Route path="/chat/:agentId" component={AgentChat} />
             {/* Protected routes with sidebar */}
             <Route component={AppWithSidebar} />

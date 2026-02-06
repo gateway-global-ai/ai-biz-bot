@@ -16,6 +16,16 @@ The user has spent 2+ years perfecting chat interfaces. These principles are non
 - **Floating chat widget style**: Original design uses a floating card (bottom-right, rounded-3xl, shadow), NOT fullscreen takeover. FAB button when closed.
 - **Footer controls**: Input with mic button and send button. Camera/attachment icon optional.
 - **No double scrollbars, no floating windows over chat, no cards in scrolling pages.**
+- **iPhone Principle**: Manage infinite complexity through minimal controls. One button, many paths. Overlays as intermediate navigation steps.
+- **Multi-path overlays**: Click to open, make a selection, view content. Not single-path buttons in headers.
+- **Toggle-everything**: Features are on/off with toggle switches. No complex settings dialogs.
+- **Rich headers**: Chat headers can hold icon toolbars, voice controls, status indicators. Not just thin bars.
+
+### SDK & Component Library
+- **Public SDK showcase page**: Available at `/sdk` route (no auth required). Documents all chat interface patterns with interactive demos.
+- **SDK directory**: `/sdk/chat/` contains the open-source frontend SDK (gateway-chat.js), TypeScript types, reference app sources, and README.
+- **Composable widgets**: TogglePanel, OverlayMenu, IconToolbar, VoiceVisualizer, SplitPanel, CategoryGrid, FloatingWidget - all demonstrated at `/sdk`.
+- **Frontend-only**: SDK makes API calls to Gateway platform (`/api/website-chat`, `/api/bots/:id/public`). No backend code in SDK.
 
 ## System Architecture
 

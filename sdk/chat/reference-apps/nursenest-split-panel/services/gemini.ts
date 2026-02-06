@@ -1,0 +1,120 @@
+
+
+import { GoogleGenAI, GroundingMetadata } from "@google/genai";
+import { Coordinates, Message, TripFocus } from "../types";
+
+// Initialize Gemini Client
+// We assume process.env.API_KEY is available as per instructions.
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+const MODEL_NAME = 'gemini-2.5-flash';
+
+export const sendMessageToGemini = async (
+  history: Message[],
+  userLocation: Coordinates | null,
+  tripFocus: TripFocus | null,
+  userPhoneNumber?: string | null
+): Promise<{ text: string; groundingMetadata?: GroundingMetadata }> => {
+  try {
+    // Convert app history to Gemini chat format
+    // We only send text history to maintain context
+    
+    const lastUserMessage = history[history.length - 1];
+    if (!lastUserMessage || lastUserMessage.role !== 'user') {
+        throw new Error("Invalid history state");
+    }
+
+    const contents = history.map(msg => ({
+        role: msg.role,
+        parts: [{ text: msg.text }]
+    }));
+
+    const toolConfig: any = {};
+    
+    // Inject location if available for better local results
+    if (userLocation) {
+        toolConfig.retrievalConfig = {
+            latLng: {
+                latitude: userLocation.latitude,
+                longitude: userLocation.longitude
+            }
+        };
+    }
+
+    // Construct a dynamic system instruction based on the trip focus
+    let systemInstruction = `You are "NurseNest", a specialized AI housing coordinator for traveling nurses.
+    Your mission is to find the perfect extended-stay accommodation near their hospital assignment.
+
+    *** INTERACTION PROTOCOL - FOLLOW STRICTLY ***
+
+    PHASE 1: ANCHORING (When user sets a location/hospital)
+    1. Acknowledge the location.
+    2. **STOP.** Do NOT list hotels yet. It is impersonal to dump results immediately.
+    3. Ask narrowing questions first:
+       - "How close would you like to be to the hospital?"
+       - "Will you have a car, or will you be using Uber/Lyft (rideshare), walking, or public transit?" (Crucial for determining amenities)
+       - "Do you have a specific budget or specific needs like a full kitchen?"
+
+    PHASE 2: RECOMMENDATION (Only after preferences are clear)
+    1. Use googleMaps to find options based on the criteria.
+    2. **STRICT RESULT LIMIT:** You must NEVER show more than 2 results at a time. This is critical to avoid overwhelming the user.
+    3. **MANDATORY DISTANCE & COMMUTE CONTEXT:** 
+       - For EVERY result, you MUST explicitly state the approximate distance AND travel time from the Trip Anchor${tripFocus ? ` ("${tripFocus.name}")` : ''}.
+       - **Calculation Rule:** If the user has specified a transport mode (or if you know it), calculate time based on that mode (e.g., "5 min drive", "15 min walk", "10 min Uber ride"). If unknown, give driving time.
+    4. **PRIORITIZE:** Present the **#1 Highest Rated/Best Fit** option first.
+       - Format: "The top recommendation is [Name]. It is rated [Rating]. It is a [Time] [Mode] from your hospital."
+    5. Mention others exist: "I have other options if this doesn't fit."
+    6. **SAVE SUGGESTION:** Remind them they can click "Save" on the map cards to add hotels to their comparison list in the notes.
+
+    PHASE 3: LIFESTYLE CHECK (Mandatory Follow-up)
+    - Immediately after presenting a housing option, ask:
+      "Would you like me to take a look at nearby gyms, grocery stores, or coffee shops to see what's nearby?"
+    - Contextualize this: "Since you are [Transport Mode], I can check for things within [Distance]."
+
+    GENERAL RULES:
+    - Persona: Empathetic, efficient, professional.
+    - Focus on "Safety", "Quiet", "Blackout curtains", "Commute time".
+    - If the user speaks a language other than English, reply in that language.`;
+
+    if (userPhoneNumber) {
+        systemInstruction += `\n\nUSER CONTEXT: Verified Phone: ${userPhoneNumber}. Assure them their profile is linked if they call support.`;
+    }
+
+    if (tripFocus) {
+        systemInstruction += `\n\nCURRENT TRIP ANCHOR: The user is assigned to: "${tripFocus.name}" (${tripFocus.type}).`;
+        if (tripFocus.transportMode) {
+             systemInstruction += `\nTRANSPORT MODE: The user is traveling by: ${tripFocus.transportMode.toUpperCase()}. Calculate all travel times based on this mode.`;
+             if (tripFocus.transportMode === 'walking') systemInstruction += ` Prioritize safety and sidewalks.`;
+             if (tripFocus.transportMode === 'rideshare') systemInstruction += ` User is using Uber/Lyft. Calculate driving times but mention "ride".`;
+        }
+        
+        systemInstruction += `\nCRITICAL INSTRUCTION:
+        For EVERY location recommendation you provide, you MUST calculate and state the approximate travel time from the Trip Anchor ("${tripFocus.name}") using the mode: ${tripFocus.transportMode || 'Driving'}.`;
+    }
+
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: contents,
+      config: {
+        systemInstruction: systemInstruction,
+        tools: [{ googleMaps: {} }],
+        toolConfig: Object.keys(toolConfig).length > 0 ? toolConfig : undefined,
+      }
+    });
+
+    const candidate = response.candidates?.[0];
+    const text = candidate?.content?.parts?.map(p => p.text).join('') || "I couldn't find that information.";
+    const groundingMetadata = candidate?.groundingMetadata as GroundingMetadata | undefined;
+
+    return {
+      text,
+      groundingMetadata
+    };
+
+  } catch (error) {
+    console.error("Gemini API Error:", error);
+    return {
+      text: "I'm having trouble connecting to my travel database right now. Please try again in a moment.",
+    };
+  }
+};
