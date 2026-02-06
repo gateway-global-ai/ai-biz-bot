@@ -23,6 +23,9 @@ import {
   Check,
   ExternalLink,
   Sparkles,
+  PhoneCall,
+  Mic,
+  Shield,
 } from "lucide-react";
 import gatewayLogo from "@assets/gatewaylogo_header_left_1770354860467.png";
 
@@ -246,6 +249,8 @@ export default function MyAccount() {
               className={
                 plan === "enterprise"
                   ? "bg-violet-500/20 text-violet-300"
+                  : plan === "voice"
+                  ? "bg-amber-500/20 text-amber-300"
                   : plan === "pro"
                   ? "bg-blue-500/20 text-blue-300"
                   : "bg-slate-700 text-slate-300"
@@ -255,49 +260,93 @@ export default function MyAccount() {
             </Badge>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {(Object.entries(PLAN_LIMITS) as [PlanType, typeof PLAN_LIMITS[PlanType]][]).map(
-              ([key, info]) => (
-                <div
-                  key={key}
-                  className={`rounded-md border p-4 text-center ${
-                    key === plan
-                      ? "border-blue-500 bg-blue-500/10"
-                      : "border-slate-700 bg-slate-800/50"
-                  }`}
-                  data-testid={`plan-card-${key}`}
-                >
-                  <p className="text-sm font-semibold text-white mb-1">{info.label}</p>
-                  <p className="text-2xl font-bold text-white">
-                    {info.price === 0 ? "Free" : `$${info.price}`}
-                    {info.price > 0 && (
-                      <span className="text-xs text-slate-400 font-normal">/mo</span>
+              ([key, info]) => {
+                const isCurrent = key === plan;
+                const planKeys = Object.keys(PLAN_LIMITS) as PlanType[];
+                const currentIdx = planKeys.indexOf(plan);
+                const thisIdx = planKeys.indexOf(key);
+                const isDowngrade = thisIdx < currentIdx;
+                const borderColor = isCurrent
+                  ? "border-blue-500 bg-blue-500/10"
+                  : key === "enterprise"
+                  ? "border-slate-700 bg-slate-800/50"
+                  : "border-slate-700 bg-slate-800/50";
+
+                return (
+                  <div
+                    key={key}
+                    className={`rounded-md border p-4 flex flex-col ${borderColor}`}
+                    data-testid={`plan-card-${key}`}
+                  >
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">{info.tagline}</p>
+                    <p className="text-sm font-semibold text-white">{info.label}</p>
+                    <p className="text-2xl font-bold text-white mt-1">
+                      {info.price === 0 ? "Free" : `$${info.price}`}
+                      {info.price > 0 && (
+                        <span className="text-xs text-slate-400 font-normal">/mo</span>
+                      )}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1 mb-3">
+                      {info.maxBusinesses >= 999
+                        ? "Unlimited businesses"
+                        : `${info.maxBusinesses} business${info.maxBusinesses > 1 ? "es" : ""}`}
+                    </p>
+
+                    <div className="space-y-2 flex-1 mb-4">
+                      {info.features.map((feature, i) => (
+                        <div key={i} className="flex items-start gap-2 text-xs">
+                          <Check className="w-3 h-3 text-emerald-400 mt-0.5 flex-shrink-0" />
+                          <span className="text-slate-300">{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {isCurrent ? (
+                      <Badge variant="secondary" className="w-full justify-center bg-blue-500/20 text-blue-300">
+                        Current Plan
+                      </Badge>
+                    ) : isDowngrade ? null : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full"
+                        data-testid={`button-upgrade-${key}`}
+                      >
+                        <Sparkles className="w-3 h-3 mr-1" />
+                        Upgrade
+                      </Button>
                     )}
-                  </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {info.maxBusinesses >= 999
-                      ? "Unlimited"
-                      : `${info.maxBusinesses} business${info.maxBusinesses > 1 ? "es" : ""}`}
-                  </p>
-                  {key === plan ? (
-                    <Badge variant="secondary" className="mt-3 bg-blue-500/20 text-blue-300">
-                      Current
-                    </Badge>
-                  ) : key !== "free" ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-3"
-                      data-testid={`button-upgrade-${key}`}
-                    >
-                      <Sparkles className="w-3 h-3 mr-1" />
-                      Upgrade
-                    </Button>
-                  ) : null}
-                </div>
-              )
+                  </div>
+                );
+              }
             )}
           </div>
+
+          {planInfo.liveVoiceMinutes > 0 || planInfo.websiteTtsMinutes > 0 ? (
+            <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
+                <Mic className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+                <p className="text-lg font-bold text-white">{planInfo.websiteTtsMinutes.toLocaleString()}</p>
+                <p className="text-xs text-slate-400">Website Voice Min</p>
+              </div>
+              {planInfo.liveVoiceMinutes > 0 && (
+                <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
+                  <PhoneCall className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
+                  <p className="text-lg font-bold text-white">{planInfo.liveVoiceMinutes.toLocaleString()}</p>
+                  <p className="text-xs text-slate-400">Live Voice Min</p>
+                </div>
+              )}
+              {planInfo.dedicatedNumber && (
+                <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
+                  <Shield className="w-5 h-5 text-amber-400 mx-auto mb-1" />
+                  <p className="text-lg font-bold text-white">Active</p>
+                  <p className="text-xs text-slate-400">Dedicated Number</p>
+                </div>
+              )}
+            </div>
+          ) : null}
         </Card>
 
         <Card className="bg-slate-900 border-slate-800 p-6">

@@ -16,7 +16,7 @@ import {
   getTwilioFromPhoneNumber,
   getTwilioClient
 } from "./twilio";
-import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
+import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, PLAN_LIMITS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
@@ -72,6 +72,11 @@ export async function registerRoutes(
   app.post("/api/auth/verify-otp", verifyOtp);
   app.get("/api/auth/session", verifySession);
   app.post("/api/auth/logout", logout);
+
+  // Plans endpoint (public - accessible by AI agents, dashboard, and external consumers)
+  app.get("/api/plans", (_req, res) => {
+    res.json({ plans: PLAN_LIMITS });
+  });
 
   // Customer Auth routes (separate from admin)
   app.post("/api/customer/send-otp", customerSendOtp);
