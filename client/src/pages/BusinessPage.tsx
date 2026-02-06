@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import gatewayLogo from '@assets/Pidea_logo_header_(5)_1770354228583.png';
+import gatewayLogo from '@assets/gatewaylogo_header_left_1770354860467.png';
 import { 
   Phone, Building2, Users, Globe, ShieldCheck, 
   ArrowLeft, CheckCircle2, MessageSquare, 
