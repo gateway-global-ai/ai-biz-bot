@@ -237,6 +237,111 @@ export class GoogleWorkspaceService {
     }
   }
 
+  async updateTask(taskId: string, params: Partial<TaskParams> & { status?: string }): Promise<ToolResult> {
+    if (!this.tasks) {
+      return { success: false, error: 'Google Tasks not connected' };
+    }
+
+    try {
+      const body: tasks_v1.Schema$Task = {};
+      if (params.title !== undefined) body.title = params.title;
+      if (params.notes !== undefined) body.notes = params.notes;
+      if (params.dueDate !== undefined) body.due = params.dueDate;
+      if (params.status !== undefined) body.status = params.status;
+
+      const response = await this.tasks.tasks.patch({
+        tasklist: '@default',
+        task: taskId,
+        requestBody: body
+      });
+
+      return {
+        success: true,
+        data: {
+          id: response.data.id,
+          title: response.data.title,
+          notes: response.data.notes,
+          due: response.data.due,
+          status: response.data.status
+        }
+      };
+    } catch (error: any) {
+      console.error('Task update error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteTask(taskId: string): Promise<ToolResult> {
+    if (!this.tasks) {
+      return { success: false, error: 'Google Tasks not connected' };
+    }
+
+    try {
+      await this.tasks.tasks.delete({
+        tasklist: '@default',
+        task: taskId
+      });
+      return { success: true, data: { deleted: true } };
+    } catch (error: any) {
+      console.error('Task delete error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async updateCalendarEvent(eventId: string, params: Partial<CalendarEventParams>): Promise<ToolResult> {
+    if (!this.calendar) {
+      return { success: false, error: 'Google Calendar not connected' };
+    }
+
+    try {
+      const body: calendar_v3.Schema$Event = {};
+      if (params.summary !== undefined) body.summary = params.summary;
+      if (params.description !== undefined) body.description = params.description;
+      if (params.startTime !== undefined) body.start = { dateTime: params.startTime, timeZone: 'America/New_York' };
+      if (params.endTime !== undefined) body.end = { dateTime: params.endTime, timeZone: 'America/New_York' };
+      if (params.attendees !== undefined) body.attendees = params.attendees.map(email => ({ email }));
+
+      const response = await this.calendar.events.patch({
+        calendarId: 'primary',
+        eventId,
+        requestBody: body,
+        sendUpdates: 'all'
+      });
+
+      return {
+        success: true,
+        data: {
+          id: response.data.id,
+          summary: response.data.summary,
+          start: response.data.start?.dateTime || response.data.start?.date,
+          end: response.data.end?.dateTime || response.data.end?.date,
+          htmlLink: response.data.htmlLink
+        }
+      };
+    } catch (error: any) {
+      console.error('Calendar event update error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteCalendarEvent(eventId: string): Promise<ToolResult> {
+    if (!this.calendar) {
+      return { success: false, error: 'Google Calendar not connected' };
+    }
+
+    try {
+      await this.calendar.events.delete({
+        calendarId: 'primary',
+        eventId,
+        sendUpdates: 'all'
+      });
+      return { success: true, data: { deleted: true } };
+    } catch (error: any) {
+      console.error('Calendar event delete error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   async createDocument(params: DocumentParams): Promise<ToolResult> {
     if (!this.docs) {
       return { success: false, error: 'Google Docs not connected' };

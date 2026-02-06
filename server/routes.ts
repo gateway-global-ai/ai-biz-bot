@@ -399,6 +399,143 @@ export async function registerRoutes(
     }
   });
 
+  // ============ Google Calendar API ============
+
+  app.get("/api/google/calendar/events/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { maxResults, timeMin } = req.query;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.listCalendarEvents(
+        maxResults ? parseInt(maxResults as string) : 20,
+        timeMin as string | undefined
+      );
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google/calendar/events/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { summary, description, startTime, endTime, attendees } = req.body;
+      if (!summary || !startTime || !endTime) {
+        return res.status(400).json({ success: false, error: "summary, startTime, and endTime are required" });
+      }
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.createCalendarEvent({ summary, description, startTime, endTime, attendees });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.patch("/api/google/calendar/events/:businessId/:eventId", async (req, res) => {
+    try {
+      const { businessId, eventId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.updateCalendarEvent(eventId, req.body);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/google/calendar/events/:businessId/:eventId", async (req, res) => {
+    try {
+      const { businessId, eventId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.deleteCalendarEvent(eventId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ============ Google Tasks API ============
+
+  app.get("/api/google/tasks/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { maxResults } = req.query;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.listTasks(maxResults ? parseInt(maxResults as string) : 20);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google/tasks/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { title, notes, dueDate } = req.body;
+      if (!title) {
+        return res.status(400).json({ success: false, error: "title is required" });
+      }
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.createTask({ title, notes, dueDate });
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.patch("/api/google/tasks/:businessId/:taskId", async (req, res) => {
+    try {
+      const { businessId, taskId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.updateTask(taskId, req.body);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/google/tasks/:businessId/:taskId", async (req, res) => {
+    try {
+      const { businessId, taskId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.deleteTask(taskId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ============ Places Aggregate API - Business Reports ============
 
   app.post("/api/reports/compute-insights", async (req, res) => {

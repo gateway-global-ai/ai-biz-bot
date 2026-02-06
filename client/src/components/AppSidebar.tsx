@@ -1,5 +1,5 @@
 import { useLocation, Link } from 'wouter';
-import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles, ClipboardCheck, AudioLines, Bot, Users, LayoutDashboard, Globe, Stethoscope, CreditCard, HardDrive } from 'lucide-react';
+import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Phone, Terminal, Building2, Sparkles, ClipboardCheck, AudioLines, Bot, Users, LayoutDashboard, Globe, Stethoscope, CreditCard, HardDrive, Calendar, ListTodo } from 'lucide-react';
 import gatewayLogoSm from '@assets/GatewayGlobalLogo_sm_1770154272626.png';
 import {
   Sidebar,
@@ -26,6 +26,8 @@ const OPERATIONS_ITEMS = [
   { id: 'billing', label: 'Billing', path: '/billing', icon: CreditCard },
   { id: 'twilio-health', label: 'SMS Health Check', path: '/twilio-health', icon: Stethoscope },
   { id: 'google-drive', label: 'Google Drive', path: '/google-drive', icon: HardDrive },
+  { id: 'google-calendar', label: 'Google Calendar', path: '/google-calendar', icon: Calendar },
+  { id: 'google-tasks', label: 'Google Tasks', path: '/google-tasks', icon: ListTodo },
 ];
 
 const SYSTEM_ITEMS = [

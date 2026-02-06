@@ -33,6 +33,8 @@ import TwilioHealthCheck from "@/pages/TwilioHealthCheck";
 import TelephonyManager from "@/pages/TelephonyManager";
 import BillingPage from "@/pages/BillingPage";
 import GoogleDrivePage from "@/pages/GoogleDrivePage";
+import GoogleCalendarPage from "@/pages/GoogleCalendarPage";
+import GoogleTasksPage from "@/pages/GoogleTasksPage";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
@@ -257,6 +259,8 @@ function AppRouter() {
       <Route path="/telephony" component={TelephonyManager} />
       <Route path="/billing" component={BillingPage} />
       <Route path="/google-drive" component={GoogleDrivePage} />
+      <Route path="/google-calendar" component={GoogleCalendarPage} />
+      <Route path="/google-tasks" component={GoogleTasksPage} />
       <Route path="/telephony-legacy" component={TelephonyPanel} />
       <Route path="/twilio-account" component={TwilioAccountManager} />
       <Route path="/twilio-health" component={TwilioHealthCheck} />

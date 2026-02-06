@@ -45,5 +45,5 @@ The platform features a clean, modern design with a dark slate theme and immersi
 -   **Google Gemini**: Fallback AI engine and powers Gemini Live voice chat.
 -   **PostgreSQL**: Relational database.
 -   **Stripe**: Payment processing.
--   **Google Workspace**: Integration for Calendar, Tasks, Docs, and Sheets.
+-   **Google Workspace**: Full integration for Drive (file browser, upload, folder management), Calendar (event listing, creation, deletion with all-day event support), Tasks (task listing, creation, completion toggle, deletion), Docs, and Sheets. All accessed via admin dashboard pages under Operations.
 -   **Google Maps Platform**: Used for Google Maps JavaScript API (client-side) and various Google Cloud APIs (server-side, e.g., Places Aggregate API, Text Search).
