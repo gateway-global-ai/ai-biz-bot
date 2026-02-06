@@ -78,7 +78,7 @@ export class GoogleWorkspaceService {
       'https://www.googleapis.com/auth/tasks',
       'https://www.googleapis.com/auth/documents',
       'https://www.googleapis.com/auth/spreadsheets',
-      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/drive',
       'https://www.googleapis.com/auth/cloud-platform'
     ];
 
@@ -328,6 +328,162 @@ export class GoogleWorkspaceService {
     }
   }
 
+  async listDrives(): Promise<ToolResult> {
+    if (!this.drive) {
+      return { success: false, error: 'Google Drive not connected' };
+    }
+
+    try {
+      const myDrive = {
+        id: 'root',
+        name: 'My Drive',
+        kind: 'personal',
+      };
+
+      const response = await this.drive.drives.list({
+        pageSize: 50,
+      });
+
+      const sharedDrives = (response.data.drives || []).map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        kind: 'shared',
+      }));
+
+      return { success: true, data: { drives: [myDrive, ...sharedDrives] } };
+    } catch (error: any) {
+      console.error('Drive list error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async listDriveFiles(folderId: string = 'root', pageToken?: string, pageSize: number = 50): Promise<ToolResult> {
+    if (!this.drive) {
+      return { success: false, error: 'Google Drive not connected' };
+    }
+
+    try {
+      const query = `'${folderId}' in parents and trashed = false`;
+      const response = await this.drive.files.list({
+        q: query,
+        pageSize,
+        pageToken: pageToken || undefined,
+        fields: 'nextPageToken, files(id, name, mimeType, size, modifiedTime, iconLink, thumbnailLink, webViewLink, parents, shared)',
+        orderBy: 'folder,name',
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true,
+      });
+
+      const files = (response.data.files || []).map((f: any) => ({
+        id: f.id,
+        name: f.name,
+        mimeType: f.mimeType,
+        size: f.size ? parseInt(f.size) : null,
+        modifiedTime: f.modifiedTime,
+        iconLink: f.iconLink,
+        thumbnailLink: f.thumbnailLink,
+        webViewLink: f.webViewLink,
+        isFolder: f.mimeType === 'application/vnd.google-apps.folder',
+        shared: f.shared || false,
+      }));
+
+      return {
+        success: true,
+        data: {
+          files,
+          nextPageToken: response.data.nextPageToken || null,
+        },
+      };
+    } catch (error: any) {
+      console.error('Drive files list error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async createDriveFolder(name: string, parentId: string = 'root'): Promise<ToolResult> {
+    if (!this.drive) {
+      return { success: false, error: 'Google Drive not connected' };
+    }
+
+    try {
+      const response = await this.drive.files.create({
+        requestBody: {
+          name,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: [parentId],
+        },
+        fields: 'id, name, mimeType, webViewLink',
+        supportsAllDrives: true,
+      });
+
+      return {
+        success: true,
+        data: {
+          id: response.data.id,
+          name: response.data.name,
+          mimeType: response.data.mimeType,
+          webViewLink: response.data.webViewLink,
+        },
+      };
+    } catch (error: any) {
+      console.error('Drive folder creation error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async uploadDriveFile(name: string, content: Buffer, mimeType: string, parentId: string = 'root'): Promise<ToolResult> {
+    if (!this.drive) {
+      return { success: false, error: 'Google Drive not connected' };
+    }
+
+    try {
+      const response = await this.drive.files.create({
+        requestBody: {
+          name,
+          parents: [parentId],
+        },
+        media: {
+          mimeType,
+          body: Readable.from(content),
+        },
+        fields: 'id, name, mimeType, size, webViewLink',
+        supportsAllDrives: true,
+      });
+
+      return {
+        success: true,
+        data: {
+          id: response.data.id,
+          name: response.data.name,
+          mimeType: response.data.mimeType,
+          size: response.data.size,
+          webViewLink: response.data.webViewLink,
+        },
+      };
+    } catch (error: any) {
+      console.error('Drive file upload error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteDriveFile(fileId: string): Promise<ToolResult> {
+    if (!this.drive) {
+      return { success: false, error: 'Google Drive not connected' };
+    }
+
+    try {
+      await this.drive.files.delete({
+        fileId,
+        supportsAllDrives: true,
+      });
+
+      return { success: true, data: { deleted: true } };
+    } catch (error: any) {
+      console.error('Drive file delete error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
   async executeTool(toolName: string, args: any): Promise<ToolResult> {
     switch (toolName) {
       case 'createCalendarEvent':
@@ -342,6 +498,14 @@ export class GoogleWorkspaceService {
         return this.createDocument(args);
       case 'createSpreadsheet':
         return this.createSpreadsheet(args);
+      case 'listDrives':
+        return this.listDrives();
+      case 'listDriveFiles':
+        return this.listDriveFiles(args.folderId, args.pageToken, args.pageSize);
+      case 'createDriveFolder':
+        return this.createDriveFolder(args.name, args.parentId);
+      case 'deleteDriveFile':
+        return this.deleteDriveFile(args.fileId);
       default:
         return { success: false, error: `Unknown tool: ${toolName}` };
     }

@@ -309,6 +309,96 @@ export async function registerRoutes(
     res.json({ success: true, wasConnected });
   });
 
+  // ============ Google Drive API ============
+
+  const multer = (await import('multer')).default;
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+  app.get("/api/google/drive/drives/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.listDrives();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.get("/api/google/drive/files/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { folderId = 'root', pageToken, pageSize } = req.query;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.listDriveFiles(
+        folderId as string,
+        pageToken as string | undefined,
+        pageSize ? parseInt(pageSize as string) : undefined
+      );
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google/drive/folder/:businessId", async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { name, parentId } = req.body;
+      if (!name) return res.status(400).json({ success: false, error: "Folder name is required" });
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.createDriveFolder(name, parentId || 'root');
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.post("/api/google/drive/upload/:businessId", upload.single('file'), async (req, res) => {
+    try {
+      const { businessId } = req.params;
+      const { parentId } = req.body;
+      const file = (req as any).file;
+      if (!file) return res.status(400).json({ success: false, error: "No file provided" });
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.uploadDriveFile(file.originalname, file.buffer, file.mimetype, parentId || 'root');
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  app.delete("/api/google/drive/files/:businessId/:fileId", async (req, res) => {
+    try {
+      const { businessId, fileId } = req.params;
+      const credentials = googleWorkspaceCredentials.get(businessId);
+      if (!credentials) {
+        return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
+      }
+      const service = createGoogleWorkspaceService(credentials);
+      const result = await service.deleteDriveFile(fileId);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // ============ Places Aggregate API - Business Reports ============
 
   app.post("/api/reports/compute-insights", async (req, res) => {
