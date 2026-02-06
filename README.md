@@ -114,7 +114,12 @@ chat-mvp-merge/
 
 ## 📚 Documentation
 
+### Getting Started
+- **[GETTING_STARTED_GUIDE.md](./GETTING_STARTED_GUIDE.md)** - Complete guide for new developers
+- **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Solutions to common problems
 - [STATUS.md](./STATUS.md) - Current build/test status and next steps
+
+### Project Information
 - [MERGE_SUMMARY.md](./MERGE_SUMMARY.md) - Recent changes and commits
 - [BRANCH_GUIDE.md](./BRANCH_GUIDE.md) - Git workflow and branch strategy
 - [replit.md](./replit.md) - Detailed system architecture
@@ -161,18 +166,22 @@ npm audit
 
 ## 🐛 Known Issues
 
-### TypeScript Errors (Non-blocking)
-- `client/src/pages/BillingPage.tsx` - Fetch argument types
-- `client/src/pages/TelephonyManager.tsx` - Fetch argument types
-- `client/src/pages/BusinessPage.tsx` - Iterator configuration
-- `server/routes.ts` - Type safety improvements needed
+### TypeScript Memory
+- Type checking may run out of memory on large codebases
+- **Solution**: Use `npm run build` instead of `npm run check`, or increase memory with `NODE_OPTIONS="--max-old-space-size=4096"`
 
 ### Performance
 - Large bundle size (2.5 MB client bundle)
 - Some image assets >7 MB
 - Code splitting recommended
 
-See [STATUS.md](./STATUS.md) for complete list and recommendations.
+### Security
+- 1 moderate vulnerability in lodash (transitive dependency via recharts)
+- **Impact**: Low - not directly used by application code
+
+**Need help?** See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for detailed solutions.
+
+For complete status and recommendations, see [STATUS.md](./STATUS.md).
 
 ## 📝 Environment Variables
 
