@@ -776,49 +776,43 @@ export default function BusinessPage() {
         </div>
       )}
       {/* Hero Section */}
-      <section className="relative min-h-screen flex flex-col px-6 overflow-hidden pt-4 md:pt-12">
+      <section className="relative px-6 overflow-hidden py-6 md:py-16">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none" />
-        <div className="max-w-5xl mx-auto text-center relative z-10 flex flex-col items-center flex-1 justify-between pb-8 md:pb-24">
-          <div className="flex-1 flex items-end pb-4 md:pb-16">
+        <div className="max-w-5xl mx-auto text-center relative z-10">
+          <div className="mb-6 md:mb-10">
             <VoiceVisualizer />
           </div>
-          <div className="space-y-6 md:space-y-14">
-            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white" data-testid="text-hero-heading">
-              Free Custom Websites<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-3xl md:text-[48px]">
-                AI Voice and Chat Enabled
-              </span>
-            </h1>
-
-            {/* Google Places Autocomplete - Extended Component Library */}
-            <div className="max-w-2xl mx-auto" data-testid="container-place-search">
-              <div className="relative group">
-                <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-                <div className="relative bg-slate-900 rounded-xl border-0 p-2 flex items-center gap-2">
-                  <div ref={pickerContainerRef} className="flex-1 min-w-0" />
-                  {!libLoaded && mapsKey && (
-                    <div className="pr-3">
-                      <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-                    </div>
-                  )}
-                </div>
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white mb-4 md:mb-8" data-testid="text-hero-heading">
+            Free Custom Websites<br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-3xl md:text-[48px]">
+              AI Voice and Chat Enabled
+            </span>
+          </h1>
+          <div className="max-w-2xl mx-auto mb-6 md:mb-10" data-testid="container-place-search">
+            <div className="relative group">
+              <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
+              <div className="relative bg-slate-900 rounded-xl border-0 p-2 flex items-center gap-2">
+                <div ref={pickerContainerRef} className="flex-1 min-w-0" />
+                {!libLoaded && mapsKey && (
+                  <div className="pr-3">
+                    <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                  </div>
+                )}
               </div>
-              {mapsError && (
-                <p className="text-xs text-amber-400 mt-3 flex items-center gap-1" data-testid="text-maps-error">
-                  <ShieldCheck className="w-3 h-3 flex-shrink-0" />
-                  {mapsError}
-                </p>
-              )}
-              {!mapsError && <p className="text-xs text-slate-600 mt-3">Powered by Google Places</p>}
             </div>
+            {mapsError && (
+              <p className="text-xs text-amber-400 mt-3 flex items-center gap-1" data-testid="text-maps-error">
+                <ShieldCheck className="w-3 h-3 flex-shrink-0" />
+                {mapsError}
+              </p>
+            )}
+            {!mapsError && <p className="text-xs text-slate-600 mt-3">Powered by Google Places</p>}
           </div>
-          <div className="flex-1 flex items-end">
-            <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
-              Fully Developed Web Site In 1 Hour!<br/>
-              <span className="text-white font-medium">No Credit Card Required.</span>
-            </p>
-          </div>
+          <p className="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
+            Fully Developed Web Site In 1 Hour!<br/>
+            <span className="text-white font-medium">No Credit Card Required.</span>
+          </p>
         </div>
       </section>
       {/* Selected Business Preview Card */}
