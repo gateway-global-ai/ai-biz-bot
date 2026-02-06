@@ -5,14 +5,18 @@ import {
   Briefcase, Zap, PhoneCall, CreditCard, ChevronRight,
   Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server,
   Search, MapPin, Star, ExternalLink, Loader2, ArrowRight, Sparkles,
-  Clock, Bot, Wand2, X, Eye, Send, User
+  Clock, Bot, Wand2, X, Eye, Send, User, KeyRound, LogIn, LogOut
 } from 'lucide-react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useAuth } from '@/lib/auth';
+import { useToast } from '@/hooks/use-toast';
+import { apiRequest } from '@/lib/queryClient';
 
 type Sentiment = 'calm' | 'engaged' | 'helpful';
 
@@ -195,6 +199,75 @@ export default function BusinessPage() {
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [generatingProgress, setGeneratingProgress] = useState(0);
   const [tokenError, setTokenError] = useState<string | null>(null);
+
+  const { user, isAuthenticated, login: authLogin, logout: authLogout } = useAuth();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginStep, setLoginStep] = useState<'phone' | 'otp'>('phone');
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginOtp, setLoginOtp] = useState('');
+  const [loginMaskedPhone, setLoginMaskedPhone] = useState('');
+
+  const formatLoginPhone = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+  };
+
+  const sendOtpMutation = useMutation({
+    mutationFn: async (phoneNumber: string) => {
+      const response = await apiRequest('POST', '/api/auth/send-otp', { phone: phoneNumber });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setLoginMaskedPhone(data.phone);
+      setLoginStep('otp');
+      toast({ title: 'Code Sent', description: `Verification code sent to ***-***-${data.phone}` });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message || 'Failed to send code', variant: 'destructive' });
+    },
+  });
+
+  const verifyOtpMutation = useMutation({
+    mutationFn: async ({ phone, code }: { phone: string; code: string }) => {
+      const response = await apiRequest('POST', '/api/auth/verify-otp', { phone, code });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      authLogin(data.token, data.user);
+      setShowLoginModal(false);
+      setLoginStep('phone');
+      setLoginPhone('');
+      setLoginOtp('');
+      toast({ title: 'Welcome!', description: `Logged in as ${data.user.name || 'Admin'}` });
+      setLocation('/dashboard');
+    },
+    onError: (error: any) => {
+      toast({ title: 'Verification Failed', description: error.message || 'Invalid or expired code', variant: 'destructive' });
+    },
+  });
+
+  const handleLoginPhoneSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const digits = loginPhone.replace(/\D/g, '');
+    if (digits.length !== 10) {
+      toast({ title: 'Invalid Phone', description: 'Please enter a valid 10-digit phone number', variant: 'destructive' });
+      return;
+    }
+    sendOtpMutation.mutate(loginPhone);
+  };
+
+  const handleLoginOtpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loginOtp.length !== 6) {
+      toast({ title: 'Invalid Code', description: 'Please enter the 6-digit verification code', variant: 'destructive' });
+      return;
+    }
+    verifyOtpMutation.mutate({ phone: loginPhone, code: loginOtp });
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -474,18 +547,39 @@ export default function BusinessPage() {
     <div className="min-h-screen bg-slate-950 text-slate-200">
       <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-4">
-          <Link href="/">
-            <Button variant="ghost" size="icon" data-testid="button-back">
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-          </Link>
           <span className="font-bold text-lg tracking-tight flex items-center gap-2">
             <Building2 className="w-5 h-5 text-blue-500" />
-            Gateway<span className="text-slate-500">Global</span> Business
+            Gateway<span className="text-slate-500">Global</span> AI
           </span>
+          <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider">
+            <Sparkles className="w-3 h-3" /> AI Website Generator
+          </div>
         </div>
-        <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold uppercase tracking-wider">
-          <Sparkles className="w-3 h-3" /> AI Website Generator
+        <div className="flex items-center gap-2">
+          {isAuthenticated ? (
+            <>
+              <Link href="/dashboard">
+                <Button variant="ghost" size="sm" className="text-slate-300" data-testid="button-dashboard">
+                  <ShieldCheck className="w-4 h-4 mr-1" />
+                  Dashboard
+                </Button>
+              </Link>
+              <Button variant="ghost" size="sm" className="text-slate-400" onClick={() => authLogout()} data-testid="button-logout">
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-300"
+              onClick={() => { setShowLoginModal(true); setLoginStep('phone'); setLoginPhone(''); setLoginOtp(''); }}
+              data-testid="button-admin-login"
+            >
+              <LogIn className="w-4 h-4 mr-1" />
+              Admin
+            </Button>
+          )}
         </div>
       </nav>
 
@@ -1024,6 +1118,101 @@ export default function BusinessPage() {
       <footer className="py-12 text-center text-slate-600 text-sm border-t border-slate-900">
         <p>&copy; 2025 Gateway Global AI. Enterprise Division.</p>
       </footer>
+
+      {showLoginModal && (
+        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4" onClick={() => setShowLoginModal(false)}>
+          <div className="bg-slate-900 border border-slate-700 rounded-md w-full max-w-sm p-6 space-y-5 relative" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-3 right-3 text-slate-400"
+              onClick={() => setShowLoginModal(false)}
+              data-testid="button-close-login"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+
+            <div className="text-center space-y-2">
+              <div className="mx-auto w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
+                <ShieldCheck className="w-6 h-6 text-blue-400" />
+              </div>
+              <h3 className="text-lg font-bold text-white">Admin Login</h3>
+              <p className="text-sm text-slate-400">
+                {loginStep === 'phone'
+                  ? 'Enter your phone number to receive a verification code'
+                  : `Enter the 6-digit code sent to ***-***-${loginMaskedPhone}`}
+              </p>
+            </div>
+
+            {loginStep === 'phone' ? (
+              <form onSubmit={handleLoginPhoneSubmit} className="space-y-4">
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400" />
+                  <Input
+                    data-testid="input-admin-phone"
+                    type="tel"
+                    placeholder="(555) 123-4567"
+                    value={loginPhone}
+                    onChange={(e) => setLoginPhone(formatLoginPhone(e.target.value))}
+                    className="pl-10 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+                    disabled={sendOtpMutation.isPending}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600"
+                  disabled={sendOtpMutation.isPending}
+                  data-testid="button-admin-send-code"
+                >
+                  {sendOtpMutation.isPending ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending...</>
+                  ) : (
+                    'Send Verification Code'
+                  )}
+                </Button>
+              </form>
+            ) : (
+              <form onSubmit={handleLoginOtpSubmit} className="space-y-4">
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400" />
+                  <Input
+                    data-testid="input-admin-otp"
+                    type="text"
+                    placeholder="123456"
+                    value={loginOtp}
+                    onChange={(e) => setLoginOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="pl-10 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 text-center text-xl tracking-widest"
+                    disabled={verifyOtpMutation.isPending}
+                    maxLength={6}
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600"
+                  disabled={verifyOtpMutation.isPending}
+                  data-testid="button-admin-verify"
+                >
+                  {verifyOtpMutation.isPending ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
+                  ) : (
+                    'Verify & Login'
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full text-slate-400"
+                  onClick={() => { setLoginStep('phone'); setLoginOtp(''); }}
+                  disabled={verifyOtpMutation.isPending}
+                  data-testid="button-admin-back"
+                >
+                  Use a different number
+                </Button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -9,7 +9,7 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### UI/UX Decisions
-The platform features a clean, modern design with a purple gradient theme and immersive 3D animated backgrounds. It includes an MVP landing page for task submission, a carousel-style onboarding flow with Vanta.js 3D effects, and a card-based Agent Dashboard. Dedicated environment views (The Vibe, The Office, The Lab, The Classroom) offer distinct functionalities and themes. Interactive visualizers are used for DISC profiles and ARCH communication models.
+The platform features a clean, modern design with a dark slate theme and immersive 3D animated backgrounds. The **home page (`/`) is the Business Page** — a lead generation landing page for AI-powered website generation with Google Places autocomplete. It includes an Admin Login button in the header that triggers an inline OTP modal for authorized phone numbers, redirecting to the admin dashboard on success. The admin dashboard and agent customization tools (The Vibe, The Office, The Lab, The Classroom) are protected behind OTP authentication. Interactive visualizers are used for DISC profiles and ARCH communication models.
 
 **3D Animated Backgrounds (Vanta.js)**:
 - Component: `client/src/components/VantaBackground.tsx`

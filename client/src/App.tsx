@@ -238,7 +238,7 @@ function TwilioHub() {
 function AppRouter() {
   return (
     <Switch>
-      <Route path="/" component={OnboardingFlow} />
+      <Route path="/">{() => <Redirect to="/dashboard" />}</Route>
       <Route path="/onboard" component={OnboardingFlow} />
       <Route path="/agents" component={AgentDashboard} />
       <Route path="/dashboard" component={AgentDashboard} />
@@ -321,13 +321,13 @@ function App() {
         <AuthProvider>
           <Switch>
             {/* Public routes */}
-            <Route path="/" component={MvpLanding} />
-            <Route path="/v2" component={LandingV2} />
-            <Route path="/login" component={Login} />
-            <Route path="/kimi-audio" component={KimiAudioDemo} />
-            <Route path="/chat/:agentId" component={AgentChat} />
+            <Route path="/" component={BusinessPage} />
             <Route path="/business" component={BusinessPage} />
             <Route path="/demo" component={BusinessPage} />
+            <Route path="/login" component={Login} />
+            <Route path="/v2" component={LandingV2} />
+            <Route path="/kimi-audio" component={KimiAudioDemo} />
+            <Route path="/chat/:agentId" component={AgentChat} />
             {/* Protected routes with sidebar */}
             <Route component={AppWithSidebar} />
           </Switch>
