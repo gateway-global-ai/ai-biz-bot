@@ -2570,12 +2570,41 @@ Keep responses concise and engaging. If asked personal questions, you can share 
         { role: 'user' as const, content: message },
       ];
 
-      const response = await chat({
-        model: KIMI_MODELS.K2_TURBO,
-        messages,
-        temperature: 0.7,
-        max_tokens: 1024,
-      });
+      // Use agent's configured model, falling back to K2_TURBO
+      const agentModel = agent.aiModelId || 'kimi-k2-turbo-preview';
+      const agentTemp = agent.aiTemperature ? agent.aiTemperature / 100 : 0.7;
+      const agentMaxTokens = agent.aiMaxTokens || 4096;
+
+      // Map model IDs to Kimi model constants
+      let modelToUse: string;
+      if (agentModel === 'kimi-k2.5' || agentModel === 'kimi-k2-5') {
+        modelToUse = KIMI_MODELS.K2_5;
+      } else if (agentModel === 'kimi-k2-thinking') {
+        modelToUse = KIMI_MODELS.K2_THINKING;
+      } else if (agentModel.startsWith('kimi-') || agentModel.startsWith('moonshot-')) {
+        modelToUse = agentModel;
+      } else {
+        modelToUse = KIMI_MODELS.K2_TURBO;
+      }
+
+      // Retry once on transient failures
+      let response: string;
+      try {
+        response = await chat({
+          model: modelToUse,
+          messages,
+          temperature: agentTemp,
+          max_tokens: agentMaxTokens,
+        });
+      } catch (firstError: any) {
+        console.warn('Chat first attempt failed, retrying:', firstError.message);
+        response = await chat({
+          model: modelToUse,
+          messages,
+          temperature: agentTemp,
+          max_tokens: agentMaxTokens,
+        });
+      }
 
       res.json({ response });
     } catch (error: any) {
