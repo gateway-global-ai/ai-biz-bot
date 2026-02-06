@@ -556,9 +556,40 @@ export async function registerRoutes(
     }
   });
 
+  async function requireActiveSubscription(): Promise<{ allowed: boolean; error?: string }> {
+    try {
+      const { getUncachableStripeClient } = await import('./stripeClient');
+      const stripe = await getUncachableStripeClient();
+
+      const subscriptions = await stripe.subscriptions.list({
+        status: 'active',
+        limit: 1,
+      });
+
+      if (subscriptions.data.length > 0) {
+        return { allowed: true };
+      }
+
+      return {
+        allowed: false,
+        error: "A paid subscription is required to search for or provision phone numbers. Please subscribe to a plan first at the Billing page.",
+      };
+    } catch (err: any) {
+      return {
+        allowed: false,
+        error: "Unable to verify subscription status. Please ensure you have an active paid plan before requesting phone numbers.",
+      };
+    }
+  }
+
   // Search available phone numbers
   app.get("/api/telephony/numbers/search", async (req, res) => {
     try {
+      const subCheck = await requireActiveSubscription();
+      if (!subCheck.allowed) {
+        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
+      }
+
       const { areaCode, country = 'US' } = req.query;
       if (!areaCode || typeof areaCode !== 'string') {
         return res.status(400).json({ error: "Area code is required" });
@@ -573,6 +604,11 @@ export async function registerRoutes(
   // Provision a phone number
   app.post("/api/telephony/numbers/provision", async (req, res) => {
     try {
+      const subCheck = await requireActiveSubscription();
+      if (!subCheck.allowed) {
+        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
+      }
+
       const { phoneNumber, voiceUrl, smsUrl } = req.body;
       if (!phoneNumber) {
         return res.status(400).json({ error: "Phone number is required" });
@@ -908,6 +944,11 @@ export async function registerRoutes(
   // Search available US numbers by area code
   app.get("/api/twilio/numbers/available", async (req, res) => {
     try {
+      const subCheck = await requireActiveSubscription();
+      if (!subCheck.allowed) {
+        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
+      }
+
       const areaCode = (req.query.areaCode as string || '').replace(/\D/g, '').slice(0, 3);
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
       
@@ -959,6 +1000,11 @@ export async function registerRoutes(
   // Buy a number (E.164 or 10-digit US)
   app.post("/api/twilio/numbers", async (req, res) => {
     try {
+      const subCheck = await requireActiveSubscription();
+      if (!subCheck.allowed) {
+        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
+      }
+
       const { phoneNumber, friendlyName, messagingServiceSid } = req.body;
       
       if (!phoneNumber) {
