@@ -1010,29 +1010,23 @@ export default function BusinessPage() {
                         ))}
                       </div>
                     </div>
-                    <div className="flex flex-col gap-2 pt-2">
+                    <div className="flex flex-col gap-3 pt-3">
                       <Button 
                         className="w-full bg-gradient-to-r from-blue-600 to-indigo-600" 
                         data-testid="button-generate-site"
                         onClick={handleGenerateWebsite}
                       >
                         <Sparkles className="w-4 h-4 mr-2" />
-                        Generate AI Website
+                        Yes, This Is My Business
                       </Button>
-                      <div className="flex gap-2">
-                        <Button variant="outline" className="flex-1 border-slate-700 text-slate-300" data-testid="button-get-number">
-                          <Phone className="w-4 h-4 mr-2" />
-                          AI Phone
-                        </Button>
-                        {selectedPlace.website && (
-                          <Button variant="outline" className="flex-1 border-slate-700 text-slate-300" onClick={() => window.open(selectedPlace.website, '_blank')} data-testid="button-current-site">
-                            <ExternalLink className="w-4 h-4 mr-2" />
-                            Current Site
-                          </Button>
-                        )}
-                      </div>
-                      <Button variant="ghost" size="sm" className="text-slate-500" onClick={() => setSelectedPlace(null)} data-testid="button-clear-selection">
-                        Choose a different business
+                      <Button 
+                        variant="outline" 
+                        className="w-full border-slate-700 text-slate-300" 
+                        onClick={() => setSelectedPlace(null)} 
+                        data-testid="button-clear-selection"
+                      >
+                        <Search className="w-4 h-4 mr-2" />
+                        Search Again
                       </Button>
                     </div>
                   </div>
