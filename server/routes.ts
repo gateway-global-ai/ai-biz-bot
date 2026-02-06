@@ -2505,6 +2505,226 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   });
 
   // ============================================
+  // ORGANIZATIONS, PROJECTS & TASKS API
+  // ============================================
+
+  // Organizations CRUD
+  app.get("/api/organizations", async (req, res) => {
+    try {
+      const orgs = await storage.getOrganizations();
+      res.json(orgs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/organizations/:id", async (req, res) => {
+    try {
+      const org = await storage.getOrganization(req.params.id);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+      res.json(org);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/organizations", async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(100),
+        description: z.string().max(500).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const org = await storage.createOrganization(parsed.data);
+      res.status(201).json(org);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/organizations/:id", async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(100).optional(),
+        description: z.string().max(500).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const org = await storage.updateOrganization(req.params.id, parsed.data);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+      res.json(org);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/organizations/:id", async (req, res) => {
+    try {
+      await storage.deleteOrganization(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Projects CRUD
+  app.get("/api/projects", async (req, res) => {
+    try {
+      const orgId = req.query.orgId as string | undefined;
+      const projectsList = await storage.getProjects(orgId);
+      res.json(projectsList);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/projects/:id", async (req, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      res.json(project);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/projects", async (req, res) => {
+    try {
+      const schema = z.object({
+        orgId: z.string().min(1),
+        name: z.string().min(1).max(200),
+        description: z.string().max(2000).optional(),
+        status: z.enum(["active", "completed", "archived"]).optional(),
+        leadAgentId: z.string().optional().nullable(),
+        agentIds: z.array(z.string()).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const project = await storage.createProject(parsed.data);
+      res.status(201).json(project);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/projects/:id", async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(200).optional(),
+        description: z.string().max(2000).optional(),
+        status: z.enum(["active", "completed", "archived"]).optional(),
+        leadAgentId: z.string().optional().nullable(),
+        agentIds: z.array(z.string()).optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const project = await storage.updateProject(req.params.id, parsed.data);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      res.json(project);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/projects/:id", async (req, res) => {
+    try {
+      await storage.deleteProject(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Project Tasks CRUD
+  app.get("/api/projects/:projectId/tasks", async (req, res) => {
+    try {
+      const tasksList = await storage.getProjectTasks(req.params.projectId);
+      res.json(tasksList);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/projects/:projectId/tasks", async (req, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).max(500),
+        description: z.string().max(5000).optional(),
+        status: z.enum(["todo", "in_progress", "review", "done"]).optional(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+        assignedAgentId: z.string().optional().nullable(),
+        dueDate: z.string().optional().nullable(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const taskData = {
+        ...parsed.data,
+        projectId: req.params.projectId,
+        dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : undefined,
+      };
+      const task = await storage.createProjectTask(taskData);
+      res.status(201).json(task);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/project-tasks/:id", async (req, res) => {
+    try {
+      const schema = z.object({
+        title: z.string().min(1).max(500).optional(),
+        description: z.string().max(5000).optional(),
+        status: z.enum(["todo", "in_progress", "review", "done"]).optional(),
+        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+        assignedAgentId: z.string().optional().nullable(),
+        dueDate: z.string().optional().nullable(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const updates: any = { ...parsed.data };
+      if (parsed.data.dueDate) updates.dueDate = new Date(parsed.data.dueDate);
+      if (parsed.data.status === 'done') updates.completedAt = new Date();
+      const task = await storage.updateProjectTask(req.params.id, updates);
+      if (!task) return res.status(404).json({ error: "Task not found" });
+      res.json(task);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/project-tasks/:id", async (req, res) => {
+    try {
+      await storage.deleteProjectTask(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Project context endpoint - assembles full context for chat
+  app.get("/api/projects/:id/context", async (req, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      const org = await storage.getOrganization(project.orgId);
+      const tasksList = await storage.getProjectTasks(project.id);
+      const allAgents = await storage.getAgents();
+      const assignedAgents = allAgents.filter(a => 
+        project.agentIds?.includes(a.id) || a.id === project.leadAgentId
+      );
+      res.json({
+        organization: org,
+        project,
+        tasks: tasksList,
+        agents: assignedAgents.map(a => ({ id: a.id, name: a.name })),
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
   // PUBLIC AGENT CHAT API
   // ============================================
 
@@ -2536,6 +2756,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       const chatSchema = z.object({
         agentId: z.string().min(1),
         message: z.string().min(1).max(4000),
+        projectId: z.string().optional(),
         history: z.array(z.object({
           role: z.enum(['user', 'assistant']),
           content: z.string(),
@@ -2547,7 +2768,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
         return res.status(400).json({ error: parsed.error.message });
       }
 
-      const { agentId, message, history } = parsed.data;
+      const { agentId, message, history, projectId } = parsed.data;
 
       const agent = await storage.getAgent(agentId);
       if (!agent) {
@@ -2556,9 +2777,43 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
       // Build system prompt based on agent personality
       const discProfile = `D:${agent.dominance} I:${agent.influence} S:${agent.steadiness} C:${agent.conscientiousness}`;
-      const systemPrompt = agent.systemPrompt || `You are ${agent.name}, a helpful AI assistant with the following DISC personality profile: ${discProfile}. 
+      let systemPrompt = agent.systemPrompt || `You are ${agent.name}, a helpful AI assistant with the following DISC personality profile: ${discProfile}. 
 Be conversational, helpful, and maintain a consistent personality. Your voice style is ${agent.voiceName}.
 Keep responses concise and engaging. If asked personal questions, you can share that you're an AI assistant named ${agent.name}.`;
+
+      // Inject project context if a projectId is provided
+      if (projectId) {
+        try {
+          const project = await storage.getProject(projectId);
+          if (project) {
+            const org = await storage.getOrganization(project.orgId);
+            const projectTasksList = await storage.getProjectTasks(project.id);
+            const todoTasks = projectTasksList.filter(t => t.status === 'todo');
+            const inProgressTasks = projectTasksList.filter(t => t.status === 'in_progress');
+            const reviewTasks = projectTasksList.filter(t => t.status === 'review');
+            const doneTasks = projectTasksList.filter(t => t.status === 'done');
+
+            let contextBlock = `\n\n--- PROJECT CONTEXT ---`;
+            if (org) contextBlock += `\nOrganization: ${org.name}${org.description ? ' - ' + org.description : ''}`;
+            contextBlock += `\nProject: ${project.name} (${project.status})`;
+            if (project.description) contextBlock += `\nDescription: ${project.description}`;
+            contextBlock += `\nTask Summary: ${todoTasks.length} to-do, ${inProgressTasks.length} in progress, ${reviewTasks.length} in review, ${doneTasks.length} done`;
+            
+            if (todoTasks.length > 0 || inProgressTasks.length > 0 || reviewTasks.length > 0) {
+              contextBlock += `\n\nActive Tasks:`;
+              [...inProgressTasks, ...reviewTasks, ...todoTasks].slice(0, 10).forEach(t => {
+                contextBlock += `\n- [${t.status.toUpperCase()}] ${t.title}${t.priority !== 'medium' ? ' (' + t.priority + ')' : ''}${t.description ? ': ' + t.description.slice(0, 100) : ''}`;
+              });
+            }
+            contextBlock += `\n--- END PROJECT CONTEXT ---`;
+            contextBlock += `\n\nYou are working on the "${project.name}" project. Reference the project tasks and context in your responses. Help the user manage, plan, and execute this project.`;
+            
+            systemPrompt += contextBlock;
+          }
+        } catch (err) {
+          console.warn('Failed to load project context for chat:', err);
+        }
+      }
 
       // Build conversation messages
       const messages = [
