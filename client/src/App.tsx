@@ -327,6 +327,7 @@ function App() {
             <Route path="/kimi-audio" component={KimiAudioDemo} />
             <Route path="/chat/:agentId" component={AgentChat} />
             <Route path="/business" component={BusinessPage} />
+            <Route path="/demo" component={BusinessPage} />
             {/* Protected routes with sidebar */}
             <Route component={AppWithSidebar} />
           </Switch>

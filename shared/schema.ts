@@ -473,6 +473,32 @@ export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({
 export type InsertAuthSession = z.infer<typeof insertAuthSessionSchema>;
 export type AuthSession = typeof authSessions.$inferSelect;
 
+// Demo leads for business website onboarding flow
+export const demoLeads = pgTable("demo_leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phone: text("phone").notNull(),
+  name: text("name"),
+  businessName: text("business_name").notNull(),
+  businessAddress: text("business_address"),
+  placeId: text("place_id"),
+  placeData: jsonb("place_data"),
+  magicToken: text("magic_token").notNull().unique(),
+  magicTokenExpiresAt: timestamp("magic_token_expires_at").notNull(),
+  magicTokenUsed: boolean("magic_token_used").default(false),
+  demoStartedAt: timestamp("demo_started_at"),
+  demoReadyAt: timestamp("demo_ready_at"),
+  status: text("status").notNull().default("pending"), // pending, preview, training, ready, expired
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDemoLeadSchema = createInsertSchema(demoLeads).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDemoLead = z.infer<typeof insertDemoLeadSchema>;
+export type DemoLead = typeof demoLeads.$inferSelect;
+
 // Twilio Sub-Accounts for multi-tenant phone number management
 export const twilioSubAccounts = pgTable("twilio_sub_accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

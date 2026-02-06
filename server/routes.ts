@@ -25,6 +25,7 @@ import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MOD
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
 import { getAvailableApis, calculateCosts, analyzeWithKimi, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
+import crypto from "crypto";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -70,6 +71,130 @@ export async function registerRoutes(
   app.post("/api/auth/verify-otp", verifyOtp);
   app.get("/api/auth/session", verifySession);
   app.post("/api/auth/logout", logout);
+
+  // ============ Demo Lead / Magic Link Onboarding ============
+
+  function normalizePhone(phone: string): string {
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length === 10) return `+1${digits}`;
+    if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+    return `+${digits}`;
+  }
+
+  const demoCreateSchema = z.object({
+    phone: z.string().min(7).max(20),
+    businessName: z.string().min(1).max(500),
+    businessAddress: z.string().max(500).optional().nullable(),
+    placeId: z.string().max(200).optional().nullable(),
+    placeData: z.any().optional().nullable(),
+  });
+
+  app.post("/api/demo/create", async (req, res) => {
+    try {
+      const parsed = demoCreateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Phone number and business name are required" });
+      }
+      const { phone, businessName, businessAddress, placeId, placeData } = parsed.data;
+
+      const normalizedPhone = normalizePhone(phone);
+      const magicToken = crypto.randomBytes(32).toString("hex");
+      const magicTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const lead = await storage.createDemoLead({
+        phone: normalizedPhone,
+        businessName,
+        businessAddress: businessAddress || null,
+        placeId: placeId || null,
+        placeData: placeData || null,
+        magicToken,
+        magicTokenExpiresAt,
+        magicTokenUsed: false,
+        demoStartedAt: new Date(),
+        demoReadyAt: null,
+        status: "preview",
+        name: null,
+      });
+
+      const host = req.headers.host || "localhost:5000";
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const magicLink = `${protocol}://${host}/demo?token=${magicToken}`;
+
+      const fromNumber = await getTwilioFromPhoneNumber();
+      if (fromNumber) {
+        await sendSms(
+          normalizedPhone,
+          `Welcome to Gateway Global AI!\n\nYour free AI-powered website for "${businessName}" is being built right now.\n\nClick here to access your site anytime:\n${magicLink}\n\nNo login needed - this link is your key.`,
+          fromNumber
+        );
+      }
+
+      res.json({
+        success: true,
+        leadId: lead.id,
+        magicToken,
+        magicLink,
+        smsSent: !!fromNumber,
+      });
+    } catch (error: any) {
+      console.error("[Demo] Create error:", error);
+      res.status(500).json({ error: error.message || "Failed to create demo" });
+    }
+  });
+
+  app.get("/api/demo/verify/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const lead = await storage.getDemoLeadByToken(token);
+
+      if (!lead) {
+        return res.status(404).json({ error: "Invalid or expired link" });
+      }
+
+      if (lead.magicTokenExpiresAt < new Date()) {
+        return res.status(410).json({ error: "This link has expired" });
+      }
+
+      if (!lead.magicTokenUsed) {
+        await storage.updateDemoLead(lead.id, { magicTokenUsed: true } as any);
+      }
+
+      res.json({
+        success: true,
+        lead: {
+          id: lead.id,
+          businessName: lead.businessName,
+          businessAddress: lead.businessAddress,
+          placeId: lead.placeId,
+          placeData: lead.placeData,
+          status: lead.status,
+          name: lead.name,
+          demoStartedAt: lead.demoStartedAt,
+          demoReadyAt: lead.demoReadyAt,
+        },
+      });
+    } catch (error: any) {
+      console.error("[Demo] Verify error:", error);
+      res.status(500).json({ error: error.message || "Failed to verify link" });
+    }
+  });
+
+  app.post("/api/demo/:id/update-name", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name } = req.body;
+      if (!name) {
+        return res.status(400).json({ error: "Name is required" });
+      }
+      const updated = await storage.updateDemoLead(id, { name, status: "ready" } as any);
+      if (!updated) {
+        return res.status(404).json({ error: "Demo not found" });
+      }
+      res.json({ success: true, lead: updated });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to update" });
+    }
+  });
 
   // Gemini API key endpoint (for client-side Gemini Live)
   app.get("/api/gemini-key", (req, res) => {

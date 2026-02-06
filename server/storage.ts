@@ -41,6 +41,8 @@ import {
   type InsertProject,
   type ProjectTask,
   type InsertProjectTask,
+  type DemoLead,
+  type InsertDemoLead,
   telephonyConfigs,
   callLogs,
   users,
@@ -61,7 +63,8 @@ import {
   lessonSessions,
   organizations,
   projects,
-  projectTasks
+  projectTasks,
+  demoLeads
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -156,6 +159,11 @@ export interface IStorage {
   createProjectTask(task: InsertProjectTask): Promise<ProjectTask>;
   updateProjectTask(id: string, updates: Partial<InsertProjectTask>): Promise<ProjectTask | undefined>;
   deleteProjectTask(id: string): Promise<boolean>;
+  
+  createDemoLead(lead: InsertDemoLead): Promise<DemoLead>;
+  getDemoLeadByToken(token: string): Promise<DemoLead | undefined>;
+  getDemoLeadByPhone(phone: string): Promise<DemoLead | undefined>;
+  updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -743,6 +751,29 @@ export class DatabaseStorage implements IStorage {
   async deleteProjectTask(id: string): Promise<boolean> {
     await db.delete(projectTasks).where(eq(projectTasks.id, id));
     return true;
+  }
+
+  async createDemoLead(lead: InsertDemoLead): Promise<DemoLead> {
+    const [created] = await db.insert(demoLeads).values(lead).returning();
+    return created;
+  }
+
+  async getDemoLeadByToken(token: string): Promise<DemoLead | undefined> {
+    const [lead] = await db.select().from(demoLeads).where(eq(demoLeads.magicToken, token));
+    return lead;
+  }
+
+  async getDemoLeadByPhone(phone: string): Promise<DemoLead | undefined> {
+    const [lead] = await db.select().from(demoLeads)
+      .where(eq(demoLeads.phone, phone))
+      .orderBy(desc(demoLeads.createdAt))
+      .limit(1);
+    return lead;
+  }
+
+  async updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined> {
+    const [updated] = await db.update(demoLeads).set(updates).where(eq(demoLeads.id, id)).returning();
+    return updated;
   }
 }
 

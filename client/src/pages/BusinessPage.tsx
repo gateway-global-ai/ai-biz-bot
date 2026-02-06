@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Phone, Building2, Users, Globe, ShieldCheck, 
   ArrowLeft, CheckCircle2, MessageSquare, 
   Briefcase, Zap, PhoneCall, CreditCard, ChevronRight,
   Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server,
-  Search, MapPin, Star, ExternalLink, Loader2, ArrowRight, Sparkles
+  Search, MapPin, Star, ExternalLink, Loader2, ArrowRight, Sparkles,
+  Clock, Bot, Wand2, X, Eye, Send, User
 } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -100,6 +101,17 @@ const VoiceVisualizer = () => {
   );
 };
 
+type OnboardingStage = 
+  | 'landing'
+  | 'generating'
+  | 'preview'
+  | 'phone-gate'
+  | 'sending-link'
+  | 'training'
+  | 'demo-ready'
+  | 'name-gate'
+  | 'full-access';
+
 interface SelectedPlace {
   name: string;
   formatted_address: string;
@@ -112,6 +124,49 @@ interface SelectedPlace {
   opening_hours?: { weekday_text?: string[]; isOpen?: () => boolean };
   place_id?: string;
 }
+
+const TrainingProgressBar = ({ progress }: { progress: number }) => (
+  <div className="w-full max-w-md mx-auto">
+    <div className="flex justify-between text-xs text-slate-400 mb-2">
+      <span>Training AI Agents</span>
+      <span>{Math.round(progress)}%</span>
+    </div>
+    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+      <div 
+        className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 rounded-full transition-all duration-1000 ease-out"
+        style={{ width: `${progress}%` }}
+      />
+    </div>
+  </div>
+);
+
+const AgentTrainingAnimation = () => {
+  const [currentAgent, setCurrentAgent] = useState(0);
+  const agentNames = ['Voice Concierge', 'Chat Support', 'Business Analyst', 'Content Writer'];
+  
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentAgent(prev => (prev + 1) % agentNames.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <div className="relative">
+        <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500/20 to-violet-500/20 flex items-center justify-center animate-pulse">
+          <Bot className="w-10 h-10 text-blue-400" />
+        </div>
+        <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center">
+          <Loader2 className="w-3 h-3 text-white animate-spin" />
+        </div>
+      </div>
+      <p className="text-sm text-slate-400 animate-pulse">
+        Training: <span className="text-white font-medium">{agentNames[currentAgent]}</span>
+      </p>
+    </div>
+  );
+};
 
 export default function BusinessPage() {
   const [formState, setFormState] = useState({
@@ -127,6 +182,64 @@ export default function BusinessPage() {
   const [selectedPlace, setSelectedPlace] = useState<SelectedPlace | null>(null);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const pickerContainerRef = useRef<HTMLDivElement>(null);
+
+  const [stage, setStage] = useState<OnboardingStage>('landing');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [previewTimer, setPreviewTimer] = useState(60);
+  const [trainingProgress, setTrainingProgress] = useState(0);
+  const [demoLeadId, setDemoLeadId] = useState<string | null>(null);
+  const [ownerName, setOwnerName] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [demoCountdown, setDemoCountdown] = useState(3600);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [generatingProgress, setGeneratingProgress] = useState(0);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (token) {
+      fetch(`/api/demo/verify/${token}`)
+        .then(r => {
+          if (!r.ok) {
+            if (r.status === 410) {
+              setTokenError('This link has expired. Please visit the business page to create a new website.');
+            } else {
+              setTokenError('This link is no longer valid. Please visit the business page to get started.');
+            }
+            return null;
+          }
+          return r.json();
+        })
+        .then(data => {
+          if (!data) return;
+          if (data.success && data.lead) {
+            setDemoLeadId(data.lead.id);
+            if (data.lead.placeData) {
+              setSelectedPlace(data.lead.placeData as SelectedPlace);
+            } else {
+              setSelectedPlace({
+                name: data.lead.businessName,
+                formatted_address: data.lead.businessAddress || '',
+              });
+            }
+            if (data.lead.name) {
+              setOwnerName(data.lead.name);
+              setStage('full-access');
+            } else if (data.lead.status === 'ready') {
+              setStage('full-access');
+            } else {
+              setStage('training');
+              setMagicLinkSent(true);
+            }
+          }
+        })
+        .catch(() => {
+          setTokenError('Could not verify your link. Please try again.');
+        });
+    }
+  }, []);
 
   useEffect(() => {
     fetch('/api/config/maps-key')
@@ -210,10 +323,152 @@ export default function BusinessPage() {
     container.appendChild(placePicker);
   }, [libLoaded, mapsKey]);
 
+  const handleGenerateWebsite = useCallback(() => {
+    if (!selectedPlace) return;
+    setStage('generating');
+    setGeneratingProgress(0);
+
+    const interval = setInterval(() => {
+      setGeneratingProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setStage('preview');
+          return 100;
+        }
+        return prev + Math.random() * 8 + 2;
+      });
+    }, 200);
+  }, [selectedPlace]);
+
+  useEffect(() => {
+    if (stage !== 'preview') return;
+    setPreviewTimer(60);
+    const interval = setInterval(() => {
+      setPreviewTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setStage('phone-gate');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [stage]);
+
+  useEffect(() => {
+    if (stage !== 'training') return;
+    setTrainingProgress(0);
+    const interval = setInterval(() => {
+      setTrainingProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          return 100;
+        }
+        return prev + Math.random() * 2 + 0.5;
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, [stage]);
+
+  useEffect(() => {
+    if (stage !== 'training') return;
+    setDemoCountdown(3600);
+    const interval = setInterval(() => {
+      setDemoCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setStage('demo-ready');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [stage]);
+
+  const handleSendMagicLink = async () => {
+    if (!phoneNumber.trim()) {
+      setPhoneError('Please enter your phone number');
+      return;
+    }
+    const digits = phoneNumber.replace(/\D/g, '');
+    if (digits.length < 10) {
+      setPhoneError('Please enter a valid phone number');
+      return;
+    }
+    setPhoneError('');
+    setStage('sending-link');
+
+    try {
+      const res = await fetch('/api/demo/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: phoneNumber,
+          businessName: selectedPlace?.name || '',
+          businessAddress: selectedPlace?.formatted_address || '',
+          placeId: selectedPlace?.place_id || null,
+          placeData: selectedPlace || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDemoLeadId(data.leadId);
+        setMagicLinkSent(true);
+        setStage('training');
+      } else {
+        setPhoneError(data.error || 'Something went wrong. Please try again.');
+        setStage('phone-gate');
+      }
+    } catch {
+      setPhoneError('Connection error. Please try again.');
+      setStage('phone-gate');
+    }
+  };
+
+  const handleDismissTraining = () => {
+    setStage('full-access');
+  };
+
+  const handleSubmitName = async () => {
+    if (!ownerName.trim()) {
+      setNameError('Please enter your name to continue');
+      return;
+    }
+    setNameError('');
+    if (demoLeadId) {
+      try {
+        await fetch(`/api/demo/${demoLeadId}/update-name`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: ownerName }),
+        });
+      } catch {}
+    }
+    setStage('full-access');
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setTimeout(() => setIsSubmitted(true), 800);
   };
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const formatTimeHMS = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m ${s}s`;
+  };
+
+  const showOverlay = stage === 'phone-gate' || stage === 'sending-link' || stage === 'training' || stage === 'demo-ready' || stage === 'name-gate';
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -233,6 +488,203 @@ export default function BusinessPage() {
           <Sparkles className="w-3 h-3" /> AI Website Generator
         </div>
       </nav>
+
+      {stage === 'generating' && (
+        <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col items-center justify-center">
+          <div className="max-w-md mx-auto text-center space-y-8 px-6">
+            <div className="relative w-24 h-24 mx-auto">
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500/30 to-violet-500/30 animate-ping" style={{ animationDuration: '2s' }} />
+              <div className="relative w-24 h-24 rounded-full bg-slate-900 border-2 border-blue-500/50 flex items-center justify-center">
+                <Wand2 className="w-10 h-10 text-blue-400 animate-pulse" />
+              </div>
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-2" data-testid="text-generating-title">
+                Building Your Website
+              </h2>
+              <p className="text-slate-400">
+                Creating a custom AI-powered website for <span className="text-white font-medium">{selectedPlace?.name}</span>
+              </p>
+            </div>
+            <div className="w-full">
+              <div className="flex justify-between text-xs text-slate-400 mb-2">
+                <span>Generating</span>
+                <span>{Math.min(Math.round(generatingProgress), 100)}%</span>
+              </div>
+              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(generatingProgress, 100)}%` }}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              {['Analyzing business data', 'Designing layout', 'Training AI voice', 'Configuring chat'].map((step, i) => (
+                <Badge key={i} variant="secondary" className="bg-slate-800/50 text-slate-400 text-xs">
+                  {generatingProgress > (i + 1) * 20 ? (
+                    <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-400" />
+                  ) : (
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  )}
+                  {step}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stage === 'preview' && (
+        <div className="fixed top-16 right-4 z-[55] bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-md px-4 py-2 flex items-center gap-3">
+          <Eye className="w-4 h-4 text-blue-400" />
+          <span className="text-sm text-slate-300">Preview: <span className="text-white font-mono font-bold">{formatTime(previewTimer)}</span></span>
+        </div>
+      )}
+
+      {showOverlay && (
+        <div className="fixed inset-0 z-[60] bg-slate-950/95 backdrop-blur-sm flex items-center justify-center px-6">
+          <div className="max-w-lg w-full">
+            {(stage === 'phone-gate' || stage === 'sending-link') && (
+              <div className="text-center space-y-8">
+                <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-blue-500/20 to-violet-500/20 flex items-center justify-center">
+                  <Phone className="w-10 h-10 text-blue-400" />
+                </div>
+                <div>
+                  <h2 className="text-3xl font-bold text-white mb-3" data-testid="text-gate-title">
+                    Your Website Is Ready
+                  </h2>
+                  <p className="text-slate-400 text-lg leading-relaxed">
+                    Enter your phone number and we'll send you a magic link to access your free website anytime.
+                  </p>
+                </div>
+                <div className="max-w-sm mx-auto space-y-4">
+                  <div>
+                    <Input
+                      type="tel"
+                      placeholder="(555) 123-4567"
+                      value={phoneNumber}
+                      onChange={(e) => { setPhoneNumber(e.target.value); setPhoneError(''); }}
+                      className="bg-slate-800 border-slate-700 text-center text-lg h-12"
+                      data-testid="input-phone-gate"
+                      disabled={stage === 'sending-link'}
+                    />
+                    {phoneError && (
+                      <p className="text-sm text-red-400 mt-2" data-testid="text-phone-error">{phoneError}</p>
+                    )}
+                  </div>
+                  <Button
+                    onClick={handleSendMagicLink}
+                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 h-12 text-base"
+                    disabled={stage === 'sending-link'}
+                    data-testid="button-send-magic-link"
+                  >
+                    {stage === 'sending-link' ? (
+                      <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Sending...</>
+                    ) : (
+                      <><Send className="w-5 h-5 mr-2" /> Send Magic Link</>
+                    )}
+                  </Button>
+                  <p className="text-xs text-slate-600">
+                    We'll text you a link. No passwords, no apps, no credit card.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {stage === 'training' && (
+              <div className="text-center space-y-8">
+                <AgentTrainingAnimation />
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-3" data-testid="text-training-title">
+                    Polishing Up Our Skills
+                  </h2>
+                  <p className="text-slate-400 text-lg leading-relaxed max-w-md mx-auto">
+                    We're training your team of AI agents to serve you and help you grow your business. 
+                    We'll have everything ready for you within 1 hour.
+                  </p>
+                </div>
+                {magicLinkSent && (
+                  <div className="flex items-center justify-center gap-2 text-sm text-emerald-400">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Magic link sent to your phone</span>
+                  </div>
+                )}
+                <TrainingProgressBar progress={trainingProgress} />
+                <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
+                  <Clock className="w-4 h-4" />
+                  <span>Full demo ready in {formatTimeHMS(demoCountdown)}</span>
+                </div>
+                <Button
+                  onClick={handleDismissTraining}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 h-12 text-base"
+                  data-testid="button-preview-site"
+                >
+                  <Eye className="w-5 h-5 mr-2" />
+                  Click To Preview Site
+                </Button>
+              </div>
+            )}
+
+            {(stage === 'demo-ready' || stage === 'name-gate') && (
+              <div className="text-center space-y-8">
+                <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-emerald-500/20 to-blue-500/20 flex items-center justify-center">
+                  <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+                </div>
+                <div>
+                  <h2 className="text-3xl font-bold text-white mb-3" data-testid="text-demo-ready-title">
+                    Your Demo Is Ready
+                  </h2>
+                  <p className="text-slate-400 text-lg leading-relaxed">
+                    Your AI team has been fully trained on <span className="text-white font-medium">{selectedPlace?.name}</span>. 
+                    Enter your name to unlock your complete website demo with admin tools.
+                  </p>
+                </div>
+                <div className="max-w-sm mx-auto space-y-4">
+                  <div>
+                    <Input
+                      type="text"
+                      placeholder="Your name"
+                      value={ownerName}
+                      onChange={(e) => { setOwnerName(e.target.value); setNameError(''); }}
+                      className="bg-slate-800 border-slate-700 text-center text-lg h-12"
+                      data-testid="input-owner-name"
+                    />
+                    {nameError && (
+                      <p className="text-sm text-red-400 mt-2" data-testid="text-name-error">{nameError}</p>
+                    )}
+                  </div>
+                  <Button
+                    onClick={handleSubmitName}
+                    className="w-full bg-gradient-to-r from-emerald-600 to-blue-600 h-12 text-base"
+                    data-testid="button-unlock-demo"
+                  >
+                    <ArrowRight className="w-5 h-5 mr-2" />
+                    View My Website
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tokenError && (
+        <div className="fixed inset-0 z-[60] bg-slate-950 flex items-center justify-center px-6">
+          <div className="text-center space-y-6 max-w-md">
+            <div className="w-16 h-16 mx-auto rounded-full bg-red-500/10 flex items-center justify-center">
+              <X className="w-8 h-8 text-red-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-white" data-testid="text-token-error-title">Link Not Valid</h2>
+            <p className="text-slate-400">{tokenError}</p>
+            <Link href="/business">
+              <Button className="bg-gradient-to-r from-blue-600 to-indigo-600" data-testid="button-go-to-business">
+                <ArrowRight className="w-4 h-4 mr-2" />
+                Create Your Free Website
+              </Button>
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Hero Section */}
       <section className="relative min-h-screen flex flex-col justify-center px-6 overflow-hidden">
@@ -279,13 +731,12 @@ export default function BusinessPage() {
       </section>
 
       {/* Selected Business Preview Card */}
-      {selectedPlace && (
+      {selectedPlace && stage === 'landing' && (
         <section className="px-6 pb-12 -mt-2">
           <div className="max-w-3xl mx-auto">
             <Card className="bg-slate-900/80 border-blue-500/30 backdrop-blur-sm">
               <CardContent className="p-6">
                 <div className="flex flex-col md:flex-row md:items-start gap-5">
-                  {/* Business Photo */}
                   {selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getURI === 'function' ? (
                     <div className="w-full md:w-40 h-28 rounded-lg overflow-hidden flex-shrink-0 bg-slate-800">
                       <img
@@ -342,7 +793,11 @@ export default function BusinessPage() {
                     </div>
 
                     <div className="flex flex-wrap gap-3 pt-3">
-                      <Button className="bg-gradient-to-r from-blue-600 to-indigo-600" data-testid="button-generate-site">
+                      <Button 
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600" 
+                        data-testid="button-generate-site"
+                        onClick={handleGenerateWebsite}
+                      >
                         <Sparkles className="w-4 h-4 mr-2" />
                         Generate AI Website
                       </Button>
@@ -363,6 +818,77 @@ export default function BusinessPage() {
                 </div>
               </CardContent>
             </Card>
+          </div>
+        </section>
+      )}
+
+      {/* Website Preview (shown after generation) */}
+      {(stage === 'preview' || stage === 'full-access' || stage === 'phone-gate' || stage === 'sending-link' || stage === 'training' || stage === 'demo-ready' || stage === 'name-gate') && selectedPlace && (
+        <section className="px-6 pb-12">
+          <div className="max-w-5xl mx-auto space-y-8">
+            <div className="text-center">
+              <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 mb-4">
+                <CheckCircle2 className="w-3 h-3 mr-1" /> Website Generated
+              </Badge>
+              <h2 className="text-3xl font-bold text-white mb-2">{selectedPlace.name}</h2>
+              <p className="text-slate-400">{selectedPlace.formatted_address}</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="bg-slate-900/60 border-slate-800">
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 bg-blue-500/10 rounded-md flex items-center justify-center mx-auto mb-4">
+                    <Phone className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <h3 className="font-bold text-white mb-1">AI Voice Concierge</h3>
+                  <p className="text-sm text-slate-400">24/7 phone support for your customers</p>
+                  {stage === 'full-access' && (
+                    <Badge variant="secondary" className="mt-3 bg-emerald-500/10 text-emerald-400 text-xs">Active</Badge>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="bg-slate-900/60 border-slate-800">
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 bg-indigo-500/10 rounded-md flex items-center justify-center mx-auto mb-4">
+                    <MessageSquare className="w-6 h-6 text-indigo-400" />
+                  </div>
+                  <h3 className="font-bold text-white mb-1">AI Chat Widget</h3>
+                  <p className="text-sm text-slate-400">Smart chat trained on your business</p>
+                  {stage === 'full-access' && (
+                    <Badge variant="secondary" className="mt-3 bg-emerald-500/10 text-emerald-400 text-xs">Active</Badge>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="bg-slate-900/60 border-slate-800">
+                <CardContent className="p-6 text-center">
+                  <div className="w-12 h-12 bg-violet-500/10 rounded-md flex items-center justify-center mx-auto mb-4">
+                    <Globe className="w-6 h-6 text-violet-400" />
+                  </div>
+                  <h3 className="font-bold text-white mb-1">Custom Website</h3>
+                  <p className="text-sm text-slate-400">Professional site with your brand</p>
+                  {stage === 'full-access' && (
+                    <Badge variant="secondary" className="mt-3 bg-emerald-500/10 text-emerald-400 text-xs">Live</Badge>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {stage === 'full-access' && (
+              <div className="text-center space-y-4">
+                <div className="flex items-center justify-center gap-2 text-emerald-400">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="font-medium">
+                    {ownerName ? `Welcome, ${ownerName}!` : 'Welcome!'} Your demo is fully unlocked.
+                  </span>
+                </div>
+                <p className="text-slate-400 text-sm">
+                  Check your phone for the magic link to access your website anytime. 
+                  Your AI agents are ready to serve your customers.
+                </p>
+              </div>
+            )}
           </div>
         </section>
       )}
