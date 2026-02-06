@@ -42,6 +42,7 @@ import SdkShowcase from "@/pages/SdkShowcase";
 import GooglePlacesSdk from "@/pages/GooglePlacesSdk";
 import MyAccount from "@/pages/MyAccount";
 import CustomerSiteManager from "@/pages/CustomerSiteManager";
+import VoiceLeadMachine from "@/pages/VoiceLeadMachine";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
@@ -279,6 +280,7 @@ function AppRouter() {
       <Route path="/disc" component={DiscVisualizer} />
       <Route path="/developer" component={DeveloperPage} />
       {/* BusinessPage moved to public routes */}
+      <Route path="/lead-machine" component={VoiceLeadMachine} />
       <Route path="/aibizbot" component={AiBizBotAdmin} />
       <Route path="/google-analyst" component={GoogleApiAnalyst} />
       <Route path="/assessment" component={DiscAssessment} />

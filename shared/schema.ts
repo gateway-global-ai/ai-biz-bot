@@ -961,6 +961,148 @@ export const insertChatLogSchema = createInsertSchema(chatLogs).omit({
 export type InsertChatLog = z.infer<typeof insertChatLogSchema>;
 export type ChatLog = typeof chatLogs.$inferSelect;
 
+// =========================================
+// VoiceLeadMachine - Outbound Lead Generator
+// =========================================
+
+export type GoogleReviewData = {
+  authorName: string;
+  rating: number;
+  text: string;
+  time: number;
+  relativeTimeDescription: string;
+};
+
+export type GooglePhotoData = {
+  photoReference: string;
+  width: number;
+  height: number;
+  htmlAttributions?: string[];
+};
+
+export const vlmProspects = pgTable("vlm_prospects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  industry: text("industry").notNull(),
+  businessName: text("business_name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  website: text("website"),
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  postalCode: text("postal_code"),
+  googlePlaceId: text("google_place_id").unique(),
+  sourceUrl: text("source_url"),
+  qualityScore: integer("quality_score").default(0).notNull(),
+  status: text("status").default("new").notNull(),
+  rating: numeric("rating", { precision: 2, scale: 1 }),
+  reviewCount: integer("review_count"),
+  editorialSummary: text("editorial_summary"),
+  generativeSummary: text("generative_summary"),
+  reviewSummary: text("review_summary"),
+  reviews: jsonb("reviews").$type<GoogleReviewData[]>(),
+  photos: jsonb("photos").$type<GooglePhotoData[]>(),
+  websiteQualityScore: integer("website_quality_score"),
+  websiteQualityReport: jsonb("website_quality_report"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVlmProspectSchema = createInsertSchema(vlmProspects, {
+  industry: z.string().min(1),
+  businessName: z.string().min(1),
+  phone: z.string().optional(),
+  email: z.string().email().optional().or(z.literal("")),
+  website: z.string().url().optional().or(z.literal("")),
+  qualityScore: z.number().int().min(0).max(100).optional(),
+  status: z.enum(["new", "queued", "called", "won", "lost"]).optional(),
+  rating: z.string().optional(),
+  reviewCount: z.number().int().optional(),
+}).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVlmProspect = z.infer<typeof insertVlmProspectSchema>;
+export type VlmProspect = typeof vlmProspects.$inferSelect;
+
+export const vlmCampaigns = pgTable("vlm_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  industry: text("industry").notNull(),
+  city: text("city").notNull(),
+  status: text("status").default("draft").notNull(),
+  telephonyConfigId: varchar("telephony_config_id").references(() => telephonyConfigs.id),
+  callerIdNumber: text("caller_id_number"),
+  scriptTemplate: text("script_template"),
+  maxCallsPerDay: integer("max_calls_per_day").default(50),
+  callsPerHour: integer("calls_per_hour").default(10),
+  retryAttempts: integer("retry_attempts").default(3),
+  retryDelayHours: integer("retry_delay_hours").default(24),
+  totalProspects: integer("total_prospects").default(0),
+  totalCalled: integer("total_called").default(0),
+  totalConnected: integer("total_connected").default(0),
+  totalSales: integer("total_sales").default(0),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVlmCampaignSchema = createInsertSchema(vlmCampaigns, {
+  name: z.string().min(1),
+  industry: z.string().min(1),
+  city: z.string().min(1),
+  status: z.enum(["draft", "active", "paused", "completed"]).optional(),
+}).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVlmCampaign = z.infer<typeof insertVlmCampaignSchema>;
+export type VlmCampaign = typeof vlmCampaigns.$inferSelect;
+
+export const vlmCallAttempts = pgTable("vlm_call_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: varchar("campaign_id").references(() => vlmCampaigns.id),
+  prospectId: varchar("prospect_id").references(() => vlmProspects.id).notNull(),
+  attemptNumber: integer("attempt_number").default(1).notNull(),
+  callSid: text("call_sid"),
+  status: text("status").default("pending").notNull(),
+  outcome: text("outcome"),
+  duration: integer("duration").default(0),
+  recordingUrl: text("recording_url"),
+  notes: text("notes"),
+  calledAt: timestamp("called_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVlmCallAttemptSchema = createInsertSchema(vlmCallAttempts, {
+  attemptNumber: z.number().int().min(1).max(10),
+  status: z.enum(["pending", "queued", "ringing", "in_progress", "completed", "failed", "no_answer", "busy"]).optional(),
+  outcome: z.enum(["connected", "voicemail", "no_answer", "rejected", "sale", "callback"]).optional(),
+}).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVlmCallAttempt = z.infer<typeof insertVlmCallAttemptSchema>;
+export type VlmCallAttempt = typeof vlmCallAttempts.$inferSelect;
+
+export type VlmLeadBuilderOptions = {
+  city: string;
+  industry: string;
+  maxResults?: number;
+  enrichEmail?: boolean;
+};
+
+export type VlmCampaignConfig = {
+  name: string;
+  industry: string;
+  city: string;
+  callerIdNumber?: string;
+  scriptTemplate?: string;
+};
+
 // A2P Use Case definitions (from TCR matrix)
 export const A2P_USE_CASES = [
   { value: 'CUSTOMER_CARE', label: 'Customer Care', description: 'Support and service messages' },

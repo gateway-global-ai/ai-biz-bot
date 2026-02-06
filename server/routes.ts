@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { registerVlmRoutes } from "./vlm-routes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -5995,6 +5996,8 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       res.status(500).json({ error: error.message });
     }
   });
+
+  registerVlmRoutes(app);
 
   return httpServer;
 }

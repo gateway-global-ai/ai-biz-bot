@@ -53,6 +53,12 @@ import {
   type InsertCustomerAccount,
   type CustomerSession,
   type InsertCustomerSession,
+  type VlmProspect,
+  type InsertVlmProspect,
+  type VlmCampaign,
+  type InsertVlmCampaign,
+  type VlmCallAttempt,
+  type InsertVlmCallAttempt,
   botTemplates,
   telephonyConfigs,
   callLogs,
@@ -79,7 +85,10 @@ import {
   siteConfigs,
   chatLogs,
   customerAccounts,
-  customerSessions
+  customerSessions,
+  vlmProspects,
+  vlmCampaigns,
+  vlmCallAttempts
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -214,6 +223,28 @@ export interface IStorage {
 
   // Site Config by owner
   getSiteConfigsByOwner(ownerId: string): Promise<SiteConfig[]>;
+
+  // VLM Prospect operations
+  getVlmProspects(options?: { industry?: string; city?: string; status?: string; limit?: number }): Promise<VlmProspect[]>;
+  getVlmProspect(id: string): Promise<VlmProspect | undefined>;
+  getVlmProspectByPlaceId(placeId: string): Promise<VlmProspect | undefined>;
+  createVlmProspect(prospect: InsertVlmProspect): Promise<VlmProspect>;
+  createVlmProspects(prospects: InsertVlmProspect[]): Promise<VlmProspect[]>;
+  updateVlmProspect(id: string, updates: Partial<InsertVlmProspect>): Promise<VlmProspect | undefined>;
+  deleteVlmProspect(id: string): Promise<boolean>;
+
+  // VLM Campaign operations
+  getVlmCampaigns(): Promise<VlmCampaign[]>;
+  getVlmCampaign(id: string): Promise<VlmCampaign | undefined>;
+  createVlmCampaign(campaign: InsertVlmCampaign): Promise<VlmCampaign>;
+  updateVlmCampaign(id: string, updates: Partial<InsertVlmCampaign>): Promise<VlmCampaign | undefined>;
+  deleteVlmCampaign(id: string): Promise<boolean>;
+
+  // VLM Call Attempt operations
+  getVlmCallAttempts(options?: { campaignId?: string; prospectId?: string; limit?: number }): Promise<VlmCallAttempt[]>;
+  getVlmCallAttemptByCallSid(callSid: string): Promise<VlmCallAttempt | undefined>;
+  createVlmCallAttempt(attempt: InsertVlmCallAttempt): Promise<VlmCallAttempt>;
+  updateVlmCallAttempt(id: string, updates: Partial<InsertVlmCallAttempt>): Promise<VlmCallAttempt | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -955,6 +986,99 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(siteConfigs)
       .where(eq(siteConfigs.ownerId, ownerId))
       .orderBy(desc(siteConfigs.createdAt));
+  }
+
+  async getVlmProspects(options?: { industry?: string; city?: string; status?: string; limit?: number }): Promise<VlmProspect[]> {
+    const conditions = [];
+    if (options?.industry) conditions.push(eq(vlmProspects.industry, options.industry));
+    if (options?.city) conditions.push(ilike(vlmProspects.city, `%${options.city}%`));
+    if (options?.status) conditions.push(eq(vlmProspects.status, options.status));
+    const query = db.select().from(vlmProspects);
+    if (conditions.length > 0) {
+      return (query as any).where(and(...conditions)).orderBy(desc(vlmProspects.qualityScore)).limit(options?.limit || 500);
+    }
+    return query.orderBy(desc(vlmProspects.qualityScore)).limit(options?.limit || 500);
+  }
+
+  async getVlmProspect(id: string): Promise<VlmProspect | undefined> {
+    const [prospect] = await db.select().from(vlmProspects).where(eq(vlmProspects.id, id));
+    return prospect;
+  }
+
+  async getVlmProspectByPlaceId(placeId: string): Promise<VlmProspect | undefined> {
+    const [prospect] = await db.select().from(vlmProspects).where(eq(vlmProspects.googlePlaceId, placeId));
+    return prospect;
+  }
+
+  async createVlmProspect(prospect: InsertVlmProspect): Promise<VlmProspect> {
+    const [created] = await db.insert(vlmProspects).values(prospect).returning();
+    return created;
+  }
+
+  async createVlmProspects(prospects: InsertVlmProspect[]): Promise<VlmProspect[]> {
+    if (prospects.length === 0) return [];
+    const created = await db.insert(vlmProspects).values(prospects).onConflictDoNothing({ target: vlmProspects.googlePlaceId }).returning();
+    return created;
+  }
+
+  async updateVlmProspect(id: string, updates: Partial<InsertVlmProspect>): Promise<VlmProspect | undefined> {
+    const [updated] = await db.update(vlmProspects).set(updates).where(eq(vlmProspects.id, id)).returning();
+    return updated;
+  }
+
+  async deleteVlmProspect(id: string): Promise<boolean> {
+    await db.delete(vlmProspects).where(eq(vlmProspects.id, id));
+    return true;
+  }
+
+  async getVlmCampaigns(): Promise<VlmCampaign[]> {
+    return db.select().from(vlmCampaigns).orderBy(desc(vlmCampaigns.createdAt));
+  }
+
+  async getVlmCampaign(id: string): Promise<VlmCampaign | undefined> {
+    const [campaign] = await db.select().from(vlmCampaigns).where(eq(vlmCampaigns.id, id));
+    return campaign;
+  }
+
+  async createVlmCampaign(campaign: InsertVlmCampaign): Promise<VlmCampaign> {
+    const [created] = await db.insert(vlmCampaigns).values(campaign).returning();
+    return created;
+  }
+
+  async updateVlmCampaign(id: string, updates: Partial<InsertVlmCampaign>): Promise<VlmCampaign | undefined> {
+    const [updated] = await db.update(vlmCampaigns).set(updates).where(eq(vlmCampaigns.id, id)).returning();
+    return updated;
+  }
+
+  async deleteVlmCampaign(id: string): Promise<boolean> {
+    await db.delete(vlmCampaigns).where(eq(vlmCampaigns.id, id));
+    return true;
+  }
+
+  async getVlmCallAttempts(options?: { campaignId?: string; prospectId?: string; limit?: number }): Promise<VlmCallAttempt[]> {
+    const conditions = [];
+    if (options?.campaignId) conditions.push(eq(vlmCallAttempts.campaignId, options.campaignId));
+    if (options?.prospectId) conditions.push(eq(vlmCallAttempts.prospectId, options.prospectId));
+    const query = db.select().from(vlmCallAttempts);
+    if (conditions.length > 0) {
+      return (query as any).where(and(...conditions)).orderBy(desc(vlmCallAttempts.createdAt)).limit(options?.limit || 200);
+    }
+    return query.orderBy(desc(vlmCallAttempts.createdAt)).limit(options?.limit || 200);
+  }
+
+  async getVlmCallAttemptByCallSid(callSid: string): Promise<VlmCallAttempt | undefined> {
+    const [attempt] = await db.select().from(vlmCallAttempts).where(eq(vlmCallAttempts.callSid, callSid));
+    return attempt;
+  }
+
+  async createVlmCallAttempt(attempt: InsertVlmCallAttempt): Promise<VlmCallAttempt> {
+    const [created] = await db.insert(vlmCallAttempts).values(attempt).returning();
+    return created;
+  }
+
+  async updateVlmCallAttempt(id: string, updates: Partial<InsertVlmCallAttempt>): Promise<VlmCallAttempt | undefined> {
+    const [updated] = await db.update(vlmCallAttempts).set(updates).where(eq(vlmCallAttempts.id, id)).returning();
+    return updated;
   }
 }
 
