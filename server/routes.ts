@@ -205,7 +205,7 @@ export async function registerRoutes(
     res.json({ apiKey });
   });
 
-  // ============ Google Places Details (for reviews) ============
+  // ============ Google Places Details (comprehensive) ============
   app.get("/api/places/details/:placeId", async (req, res) => {
     try {
       const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
@@ -213,17 +213,50 @@ export async function registerRoutes(
         return res.status(500).json({ error: "Google API key not configured" });
       }
       const { placeId } = req.params;
+      const fields = [
+        'name', 'formatted_address', 'formatted_phone_number', 'international_phone_number',
+        'website', 'url', 'rating', 'user_ratings_total', 'price_level', 'business_status',
+        'types', 'opening_hours', 'geometry', 'vicinity', 'utc_offset',
+        'address_components', 'plus_code', 'icon', 'icon_mask_base_uri', 'icon_background_color',
+        'wheelchair_accessible_entrance', 'delivery', 'dine_in', 'takeout', 'curbside_pickup',
+        'reservable', 'serves_beer', 'serves_wine', 'serves_breakfast', 'serves_lunch',
+        'serves_dinner', 'serves_brunch', 'serves_vegetarian_food',
+        'editorial_summary', 'reviews', 'photos'
+      ].join(',');
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=reviews,user_ratings_total,rating&key=${apiKey}`
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=${fields}&key=${apiKey}`
       );
       const data = await response.json();
       if (data.status !== 'OK') {
         return res.status(400).json({ error: data.status, reviews: [] });
       }
+      const result = data.result || {};
       res.json({
-        reviews: data.result?.reviews || [],
-        user_ratings_total: data.result?.user_ratings_total || 0,
-        rating: data.result?.rating || 0,
+        reviews: result.reviews || [],
+        user_ratings_total: result.user_ratings_total || 0,
+        rating: result.rating || 0,
+        price_level: result.price_level,
+        business_status: result.business_status,
+        url: result.url,
+        vicinity: result.vicinity,
+        utc_offset: result.utc_offset,
+        international_phone_number: result.international_phone_number,
+        address_components: result.address_components,
+        plus_code: result.plus_code,
+        editorial_summary: result.editorial_summary?.overview || null,
+        wheelchair_accessible_entrance: result.wheelchair_accessible_entrance,
+        delivery: result.delivery,
+        dine_in: result.dine_in,
+        takeout: result.takeout,
+        curbside_pickup: result.curbside_pickup,
+        reservable: result.reservable,
+        serves_beer: result.serves_beer,
+        serves_wine: result.serves_wine,
+        serves_breakfast: result.serves_breakfast,
+        serves_lunch: result.serves_lunch,
+        serves_dinner: result.serves_dinner,
+        serves_brunch: result.serves_brunch,
+        serves_vegetarian_food: result.serves_vegetarian_food,
       });
     } catch (error: any) {
       console.error("[Places Details] Error:", error.message);

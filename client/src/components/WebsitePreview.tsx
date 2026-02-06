@@ -6,8 +6,10 @@ interface PlaceData {
   rating?: number;
   user_ratings_total?: number;
   formatted_phone_number?: string;
+  international_phone_number?: string;
   website?: string;
   place_id?: string;
+  url?: string;
   opening_hours?: {
     weekday_text?: string[];
   };
@@ -15,6 +17,26 @@ interface PlaceData {
   reviews?: any[];
   types?: string[];
   geometry?: { lat: number; lng: number };
+  price_level?: number;
+  business_status?: string;
+  vicinity?: string;
+  utc_offset?: number;
+  editorial_summary?: string;
+  plus_code?: { global_code?: string; compound_code?: string };
+  address_components?: any[];
+  wheelchair_accessible_entrance?: boolean;
+  delivery?: boolean;
+  dine_in?: boolean;
+  takeout?: boolean;
+  curbside_pickup?: boolean;
+  reservable?: boolean;
+  serves_beer?: boolean;
+  serves_wine?: boolean;
+  serves_breakfast?: boolean;
+  serves_lunch?: boolean;
+  serves_dinner?: boolean;
+  serves_brunch?: boolean;
+  serves_vegetarian_food?: boolean;
 }
 
 interface WebsitePreviewProps {
@@ -68,8 +90,9 @@ interface ChatMessage {
 export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [adminTab, setAdminTab] = useState<'data' | 'reviews' | 'ai'>('data');
   const [mapsApiKey, setMapsApiKey] = useState<string | null>(null);
-  const [activeMapTab, setActiveMapTab] = useState<'map' | 'streetview'>('map');
+  const [activeMapTab, setActiveMapTab] = useState<'map' | 'streetview' | 'satellite'>('map');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: `Hi there! I'm the AI assistant for ${place.name}. I can help you with hours, services, directions, or anything else. What would you like to know?` }
   ]);
@@ -337,35 +360,29 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                     </div>
                   </div>
                   <div className="flex gap-1 mb-4">
-                    <button
-                      onClick={() => setActiveMapTab('map')}
-                      className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${activeMapTab === 'map' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                      data-testid="button-map-tab"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m0 0l-3-3m3 3l3-3m-3 3V6.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        Map
-                      </span>
-                    </button>
-                    <button
-                      onClick={() => setActiveMapTab('streetview')}
-                      className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${activeMapTab === 'streetview' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                      data-testid="button-streetview-tab"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        Street View
-                      </span>
-                    </button>
+                    {([
+                      { key: 'map' as const, label: 'Map', icon: 'M9 6.75V15m0 0l-3-3m3 3l3-3m-3 3V6.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+                      { key: 'streetview' as const, label: 'Street View', icon: 'M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z' },
+                      { key: 'satellite' as const, label: 'Satellite', icon: 'M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418' },
+                    ]).map(tab => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setActiveMapTab(tab.key)}
+                        className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${activeMapTab === tab.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                        data-testid={`button-${tab.key}-tab`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d={tab.icon} />
+                          </svg>
+                          {tab.label}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <div className="h-80 w-full">
-                  {activeMapTab === 'map' ? (
+                  {activeMapTab === 'map' && (
                     <iframe
                       title={`Map of ${place.name}`}
                       className="w-full h-full border-0"
@@ -374,7 +391,8 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                       src={`https://www.google.com/maps/embed/v1/place?key=${mapsApiKey}&q=${place.place_id ? `place_id:${place.place_id}` : encodeURIComponent(place.formatted_address)}&zoom=16`}
                       data-testid="iframe-map"
                     />
-                  ) : (
+                  )}
+                  {activeMapTab === 'streetview' && (
                     <iframe
                       title={`Street View of ${place.name}`}
                       className="w-full h-full border-0"
@@ -385,6 +403,16 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                         : `https://www.google.com/maps/embed/v1/streetview?key=${mapsApiKey}&location=${encodeURIComponent(place.formatted_address)}&heading=210&pitch=10&fov=90`
                       }
                       data-testid="iframe-streetview"
+                    />
+                  )}
+                  {activeMapTab === 'satellite' && (
+                    <iframe
+                      title={`Satellite View of ${place.name}`}
+                      className="w-full h-full border-0"
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                      src={`https://www.google.com/maps/embed/v1/view?key=${mapsApiKey}&center=${place.geometry ? `${place.geometry.lat},${place.geometry.lng}` : encodeURIComponent(place.formatted_address)}&zoom=18&maptype=satellite`}
+                      data-testid="iframe-satellite"
                     />
                   )}
                 </div>
@@ -406,6 +434,62 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                 </div>
               </div>
             )}
+
+            {place.editorial_summary && (
+              <div className="md:col-span-2 bg-gradient-to-br from-indigo-50 to-blue-50 p-8 rounded-[2rem] shadow-xl shadow-indigo-200/30 border border-indigo-100 flex flex-col" data-testid="section-editorial-summary">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-bold text-indigo-900">Google Summary</h3>
+                </div>
+                <p className="text-indigo-800/80 text-lg leading-relaxed">{place.editorial_summary}</p>
+              </div>
+            )}
+
+            {(() => {
+              const amenities = [
+                { key: 'wheelchair_accessible_entrance' as const, label: 'Wheelchair Accessible', icon: 'M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z' },
+                { key: 'delivery' as const, label: 'Delivery', icon: 'M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12' },
+                { key: 'dine_in' as const, label: 'Dine-In', icon: 'M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165C17.155 8.51 18 9.473 18 10.608v2.513m-3-4.87v-1.5m-6 1.5v-1.5m12 9.75l-1.5.75a3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0L3 16.5m18-12.75C21 2.343 19.657 1 18 1H6C4.343 1 3 2.343 3 3.75' },
+                { key: 'takeout' as const, label: 'Takeout', icon: 'M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z' },
+                { key: 'curbside_pickup' as const, label: 'Curbside Pickup', icon: 'M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12' },
+                { key: 'reservable' as const, label: 'Reservations', icon: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5' },
+                { key: 'serves_beer' as const, label: 'Beer', icon: 'M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5' },
+                { key: 'serves_wine' as const, label: 'Wine', icon: 'M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5' },
+                { key: 'serves_breakfast' as const, label: 'Breakfast', icon: 'M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165C17.155 8.51 18 9.473 18 10.608v2.513m-3-4.87v-1.5m-6 1.5v-1.5m12 9.75l-1.5.75a3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0L3 16.5m18-12.75C21 2.343 19.657 1 18 1H6C4.343 1 3 2.343 3 3.75' },
+                { key: 'serves_lunch' as const, label: 'Lunch', icon: 'M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165C17.155 8.51 18 9.473 18 10.608v2.513m-3-4.87v-1.5m-6 1.5v-1.5m12 9.75l-1.5.75a3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0L3 16.5m18-12.75C21 2.343 19.657 1 18 1H6C4.343 1 3 2.343 3 3.75' },
+                { key: 'serves_dinner' as const, label: 'Dinner', icon: 'M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165C17.155 8.51 18 9.473 18 10.608v2.513m-3-4.87v-1.5m-6 1.5v-1.5m12 9.75l-1.5.75a3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0L3 16.5m18-12.75C21 2.343 19.657 1 18 1H6C4.343 1 3 2.343 3 3.75' },
+                { key: 'serves_brunch' as const, label: 'Brunch', icon: 'M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165C17.155 8.51 18 9.473 18 10.608v2.513m-3-4.87v-1.5m-6 1.5v-1.5m12 9.75l-1.5.75a3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0L3 16.5m18-12.75C21 2.343 19.657 1 18 1H6C4.343 1 3 2.343 3 3.75' },
+                { key: 'serves_vegetarian_food' as const, label: 'Vegetarian', icon: 'M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z' },
+              ];
+              const activeAmenities = amenities.filter(a => place[a.key] === true);
+              if (activeAmenities.length === 0) return null;
+              return (
+                <div className="md:col-span-2 bg-white p-8 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100" data-testid="section-amenities">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.745 3.745 0 011.043 3.296A3.745 3.745 0 0121 12z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900">Amenities &amp; Services</h3>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    {activeAmenities.map(a => (
+                      <div key={a.key} className="flex items-center gap-2 px-4 py-2.5 bg-violet-50 text-violet-700 rounded-xl text-sm font-medium border border-violet-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d={a.icon} />
+                        </svg>
+                        {a.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {reviews.length > 0 && (
               <div className="md:col-span-2 bg-white p-8 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col">
@@ -472,7 +556,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h2 className="text-xl font-bold">Admin Dashboard</h2>
-                  <p className="text-slate-400 text-sm">Manage website content and reviews</p>
+                  <p className="text-slate-400 text-sm">All available data, features &amp; views</p>
                 </div>
                 <button onClick={() => setIsAdminOpen(false)} className="p-2 hover:bg-slate-800 rounded-full transition-colors" data-testid="button-preview-admin-close">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
@@ -481,54 +565,354 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                 </button>
               </div>
               <div className="flex gap-4 border-b border-slate-700">
-                <button className="pb-3 text-sm font-medium text-blue-400 border-b-2 border-blue-400">Business Data</button>
-                <button className="pb-3 text-sm font-medium text-slate-400 hover:text-white">Reviews ({reviews.length})</button>
-                <button className="pb-3 text-sm font-medium text-slate-400 hover:text-white">AI Biz Bot</button>
+                {([
+                  { key: 'data' as const, label: 'Business Data' },
+                  { key: 'reviews' as const, label: `Reviews (${reviews.length})` },
+                  { key: 'ai' as const, label: 'AI Features' },
+                ]).map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setAdminTab(tab.key)}
+                    className={`pb-3 text-sm font-medium transition-colors ${adminTab === tab.key ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400 hover:text-white'}`}
+                    data-testid={`tab-admin-${tab.key}`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
             </div>
             <div className="flex-1 overflow-y-auto bg-slate-50 p-6">
-              <div className="space-y-6">
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-semibold">
-                        <th className="p-4">Include</th>
-                        <th className="p-4">Field Name</th>
-                        <th className="p-4">Value Preview</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
+              {adminTab === 'data' && (
+                <div className="space-y-6">
+                  {(() => {
+                    const priceLevelLabels = ['Free', 'Inexpensive', 'Moderate', 'Expensive', 'Very Expensive'];
+                    const amenityFields: { key: keyof PlaceData; label: string }[] = [
+                      { key: 'wheelchair_accessible_entrance', label: 'Wheelchair Accessible' },
+                      { key: 'delivery', label: 'Delivery' },
+                      { key: 'dine_in', label: 'Dine-In' },
+                      { key: 'takeout', label: 'Takeout' },
+                      { key: 'curbside_pickup', label: 'Curbside Pickup' },
+                      { key: 'reservable', label: 'Reservable' },
+                      { key: 'serves_beer', label: 'Serves Beer' },
+                      { key: 'serves_wine', label: 'Serves Wine' },
+                      { key: 'serves_breakfast', label: 'Serves Breakfast' },
+                      { key: 'serves_lunch', label: 'Serves Lunch' },
+                      { key: 'serves_dinner', label: 'Serves Dinner' },
+                      { key: 'serves_brunch', label: 'Serves Brunch' },
+                      { key: 'serves_vegetarian_food', label: 'Vegetarian Food' },
+                    ];
+                    const hasAnyAmenity = amenityFields.some(a => place[a.key] !== undefined);
+
+                    return (
+                      <>
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                          <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                            <span className="text-sm font-bold text-emerald-800">Google Places &mdash; Active on Website</span>
+                          </div>
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                                <th className="p-3">Include</th>
+                                <th className="p-3">Field</th>
+                                <th className="p-3">Value</th>
+                                <th className="p-3 text-right">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {[
+                                { field: 'name', value: place.name, has: true },
+                                { field: 'address', value: place.formatted_address, has: true },
+                                { field: 'rating', value: place.rating ? `${place.rating} / 5 (${place.user_ratings_total?.toLocaleString() || '0'} reviews)` : undefined, has: !!place.rating },
+                                { field: 'phone', value: place.formatted_phone_number, has: !!place.formatted_phone_number },
+                                { field: 'website', value: place.website, has: !!place.website },
+                                { field: 'opening_hours', value: hours.length > 0 ? `${hours.length} day schedule` : undefined, has: hours.length > 0 },
+                                { field: 'reviews', value: reviews.length > 0 ? `${reviews.length} reviews` : undefined, has: reviews.length > 0 },
+                                { field: 'photos', value: `${(place.photos || []).length} photos`, has: (place.photos || []).length > 0 },
+                                { field: 'map_view', value: 'Google Maps Embed', has: !!(mapsApiKey && (place.place_id || place.geometry)) },
+                                { field: 'street_view', value: 'Google Street View Embed', has: !!(mapsApiKey && place.geometry) },
+                                { field: 'satellite_view', value: 'Google Satellite View Embed', has: !!(mapsApiKey && (place.place_id || place.geometry)) },
+                              ].map(({ field, value, has }) => (
+                                <tr key={field} className="group hover:bg-slate-50/50 transition-colors">
+                                  <td className="p-3 w-14">
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                      <input type="checkbox" defaultChecked className="sr-only peer" />
+                                      <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600" />
+                                    </label>
+                                  </td>
+                                  <td className="p-3 font-medium text-slate-700 font-mono text-xs">{field}</td>
+                                  <td className="p-3 text-slate-500 text-xs truncate max-w-[200px]">{value || 'N/A'}</td>
+                                  <td className="p-3 text-right">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${has ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                                      <span className={`w-1.5 h-1.5 rounded-full ${has ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                      {has ? 'Live' : 'N/A'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                          <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-blue-500" />
+                            <span className="text-sm font-bold text-blue-800">Google Places &mdash; Additional Fields Available</span>
+                          </div>
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 font-semibold">
+                                <th className="p-3">Field</th>
+                                <th className="p-3">Value</th>
+                                <th className="p-3 text-right">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {[
+                                { field: 'place_id', value: place.place_id },
+                                { field: 'google_maps_url', value: place.url },
+                                { field: 'international_phone', value: place.international_phone_number },
+                                { field: 'price_level', value: place.price_level !== undefined ? `${place.price_level} - ${priceLevelLabels[place.price_level] || 'Unknown'}` : undefined },
+                                { field: 'business_status', value: place.business_status },
+                                { field: 'vicinity', value: place.vicinity },
+                                { field: 'editorial_summary', value: place.editorial_summary },
+                                { field: 'plus_code', value: place.plus_code?.compound_code || place.plus_code?.global_code },
+                                { field: 'utc_offset', value: place.utc_offset !== undefined ? `UTC ${place.utc_offset >= 0 ? '+' : ''}${place.utc_offset / 60}` : undefined },
+                                { field: 'geometry', value: place.geometry ? `${place.geometry.lat.toFixed(6)}, ${place.geometry.lng.toFixed(6)}` : undefined },
+                                { field: 'types', value: (place.types || []).join(', ') || undefined },
+                                { field: 'address_components', value: place.address_components ? `${place.address_components.length} components` : undefined },
+                              ].map(({ field, value }) => (
+                                <tr key={field} className="group hover:bg-slate-50/50 transition-colors">
+                                  <td className="p-3 font-medium text-slate-700 font-mono text-xs">{field}</td>
+                                  <td className="p-3 text-slate-500 text-xs truncate max-w-[240px]">{value || <span className="text-slate-300 italic">not returned</span>}</td>
+                                  <td className="p-3 text-right">
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${value ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>
+                                      <span className={`w-1.5 h-1.5 rounded-full ${value ? 'bg-blue-500' : 'bg-slate-300'}`} />
+                                      {value ? 'Available' : 'Empty'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {hasAnyAmenity && (
+                          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="px-4 py-3 bg-violet-50 border-b border-violet-100 flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-violet-500" />
+                              <span className="text-sm font-bold text-violet-800">Amenities &amp; Services</span>
+                            </div>
+                            <div className="p-4 grid grid-cols-2 gap-2">
+                              {amenityFields.map(({ key, label }) => {
+                                const val = place[key];
+                                return (
+                                  <div key={key} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${val === true ? 'bg-violet-50 text-violet-800' : val === false ? 'bg-slate-50 text-slate-400' : 'bg-slate-50 text-slate-300 italic'}`}>
+                                    {val === true ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-violet-600 shrink-0">
+                                        <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                                      </svg>
+                                    ) : val === false ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 text-slate-300 shrink-0">
+                                        <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                                      </svg>
+                                    ) : (
+                                      <span className="w-4 h-4 flex items-center justify-center shrink-0">&ndash;</span>
+                                    )}
+                                    {label}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                          <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-amber-500" />
+                            <span className="text-sm font-bold text-amber-800">Map Views</span>
+                          </div>
+                          <div className="p-4 space-y-2">
+                            {[
+                              { label: 'Map View', desc: 'Standard Google Maps embed showing location pin', available: !!(mapsApiKey && (place.place_id || place.geometry)) },
+                              { label: 'Street View', desc: 'Ground-level 360-degree panoramic imagery', available: !!(mapsApiKey && place.geometry) },
+                              { label: 'Satellite View', desc: 'Aerial satellite imagery of the location', available: !!(mapsApiKey && (place.place_id || place.geometry)) },
+                            ].map(view => (
+                              <div key={view.label} className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                                <div>
+                                  <div className="text-sm font-semibold text-slate-700">{view.label}</div>
+                                  <div className="text-xs text-slate-400">{view.desc}</div>
+                                </div>
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${view.available ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${view.available ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                  {view.available ? 'Live' : 'Unavailable'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                          <div className="px-4 py-3 bg-sky-50 border-b border-sky-100 flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-sky-500" />
+                            <span className="text-sm font-bold text-sky-800">Weather &mdash; Google Maps Grounding</span>
+                          </div>
+                          <div className="p-4 space-y-2">
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                              <div>
+                                <div className="text-sm font-semibold text-slate-700">Current Weather</div>
+                                <div className="text-xs text-slate-400">Temperature, conditions, humidity via Google Grounding Lite</div>
+                              </div>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-50 text-sky-700">
+                                <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+                                AI-Powered
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50">
+                              <div>
+                                <div className="text-sm font-semibold text-slate-700">Forecast</div>
+                                <div className="text-xs text-slate-400">Multi-day weather forecast for business area</div>
+                              </div>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-50 text-sky-700">
+                                <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+                                AI-Powered
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 text-sm flex gap-3">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 shrink-0 mt-0.5">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                          </svg>
+                          <div>
+                            <p className="font-medium mb-1">Developer Reference</p>
+                            <p className="text-blue-600 text-xs">Toggle fields on/off to control website sections. Green = active on site, Blue = available from API, Violet = amenity data. AI agents can use any available field to add website features.</p>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {adminTab === 'reviews' && (
+                <div className="space-y-4">
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-amber-500" />
+                        <span className="text-sm font-bold text-amber-800">Google Business Reviews</span>
+                      </div>
+                      <span className="text-xs text-amber-600 font-medium">{reviews.length} reviews from Google Places API</span>
+                    </div>
+                    {reviews.length > 0 ? (
+                      <div className="divide-y divide-slate-100">
+                        {reviews.map((review: any, idx: number) => (
+                          <div key={idx} className="p-4 hover:bg-slate-50/50 transition-colors">
+                            <div className="flex items-start gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden shrink-0">
+                                {review.profile_photo_url ? (
+                                  <img src={review.profile_photo_url} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-xs font-bold text-slate-500">
+                                    {review.author_name?.charAt(0) || '?'}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <span className="font-semibold text-sm text-slate-900">{review.author_name}</span>
+                                  <span className="text-amber-400 flex">
+                                    {[...Array(5)].map((_, s) => (
+                                      <svg key={s} className={`w-3 h-3 ${s < Math.round(review.rating) ? 'fill-current' : 'text-slate-200 fill-current'}`} viewBox="0 0 20 20">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                      </svg>
+                                    ))}
+                                  </span>
+                                  {review.relative_time_description && (
+                                    <span className="text-xs text-slate-400">{review.relative_time_description}</span>
+                                  )}
+                                </div>
+                                <p className="text-slate-600 text-sm leading-relaxed">{review.text}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-8 text-center text-slate-400 text-sm">No reviews available from Google Places API</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {adminTab === 'ai' && (
+                <div className="space-y-4">
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="px-4 py-3 bg-gradient-to-r from-indigo-50 to-violet-50 border-b border-indigo-100 flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                      <span className="text-sm font-bold text-indigo-800">AI-Powered Features</span>
+                    </div>
+                    <div className="p-4 space-y-3">
                       {[
-                        { field: 'name', value: place.name },
-                        { field: 'address', value: place.formatted_address },
-                        { field: 'rating', value: place.rating?.toString() || 'N/A' },
-                        { field: 'phone', value: place.formatted_phone_number || 'N/A' },
-                        { field: 'website', value: place.website || 'N/A' },
-                        { field: 'opening_hours', value: hours.length > 0 ? `${hours.length} days` : 'N/A' },
-                        { field: 'reviews', value: `${reviews.length} reviews` },
-                        { field: 'photos', value: `${(place.photos || []).length} photos` },
-                      ].map(({ field, value }) => (
-                        <tr key={field} className="group hover:bg-slate-50 transition-colors">
-                          <td className="p-4 w-16">
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              <input type="checkbox" defaultChecked className="sr-only peer" />
-                              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-                            </label>
-                          </td>
-                          <td className="p-4 font-medium text-slate-700 font-mono text-sm">{field}</td>
-                          <td className="p-4 text-slate-500 text-sm truncate max-w-xs">{value}</td>
-                        </tr>
+                        { title: 'AI Business Summary', desc: 'Auto-generated business description using AI analysis of all Place data, reviews, and category context.', icon: 'M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z', source: 'Kimi 2.5 + Google Places', status: place.editorial_summary ? 'Available' : 'Can Generate' },
+                        { title: 'AI Business Reviews', desc: 'AI-synthesized review analysis: sentiment trends, common praises/complaints, and key takeaways from all reviews.', icon: 'M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z', source: 'Kimi 2.5 + Reviews API', status: reviews.length > 0 ? 'Can Generate' : 'Needs Reviews' },
+                        { title: 'AI Area Reviews', desc: 'Neighborhood and area analysis including nearby attractions, walkability, transit access, and local character.', icon: 'M15 10.5a3 3 0 11-6 0 3 3 0 016 0z M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z', source: 'Kimi 2.5 + Google Maps Grounding', status: place.geometry ? 'Can Generate' : 'Needs Location' },
+                        { title: 'AI Competitor Analysis', desc: 'SWOT analysis comparing the business with nearby competitors in the same category.', icon: 'M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6', source: 'Google Places Aggregate API', status: place.types?.length ? 'Can Generate' : 'Needs Types' },
+                        { title: 'Weather Widget', desc: 'Real-time weather conditions and forecast for the business location using Google Maps Grounding.', icon: 'M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z', source: 'Google Maps Grounding Lite', status: place.geometry ? 'Can Generate' : 'Needs Location' },
+                        { title: '5 Most Recent Reviews', desc: 'Displays the latest 5 customer reviews sorted by recency with full text and rating.', icon: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z', source: 'Google Places Reviews API', status: reviews.length > 0 ? `${Math.min(5, reviews.length)} Available` : 'Needs Reviews' },
+                      ].map(feature => (
+                        <div key={feature.title} className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                          <div className="flex items-start gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d={feature.icon} />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                                <span className="font-bold text-sm text-slate-800">{feature.title}</span>
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${
+                                  feature.status === 'Available' ? 'bg-emerald-50 text-emerald-700' :
+                                  feature.status.startsWith('Can') ? 'bg-indigo-50 text-indigo-700' :
+                                  feature.status.includes('Available') ? 'bg-emerald-50 text-emerald-700' :
+                                  'bg-slate-100 text-slate-500'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${
+                                    feature.status === 'Available' ? 'bg-emerald-500' :
+                                    feature.status.startsWith('Can') ? 'bg-indigo-500' :
+                                    feature.status.includes('Available') ? 'bg-emerald-500' :
+                                    'bg-slate-400'
+                                  }`} />
+                                  {feature.status}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 mb-2">{feature.desc}</p>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Source:</span>
+                                <span className="text-[10px] font-medium text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">{feature.source}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+
+                  {place.editorial_summary && (
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                      <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span className="text-sm font-bold text-emerald-800">Google Editorial Summary</span>
+                      </div>
+                      <div className="p-4">
+                        <p className="text-sm text-slate-600 leading-relaxed">{place.editorial_summary}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="p-4 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 text-sm flex gap-3">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 shrink-0">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                  <p>Unchecking items will hide the corresponding sections on the main website.</p>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

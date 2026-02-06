@@ -281,13 +281,35 @@ interface SelectedPlace {
   rating?: number;
   user_ratings_total?: number;
   formatted_phone_number?: string;
+  international_phone_number?: string;
   website?: string;
   types?: string[];
   photos?: any[];
   opening_hours?: { weekday_text?: string[]; isOpen?: () => boolean };
   place_id?: string;
+  url?: string;
   reviews?: any[];
   geometry?: { lat: number; lng: number };
+  price_level?: number;
+  business_status?: string;
+  vicinity?: string;
+  utc_offset?: number;
+  editorial_summary?: string;
+  plus_code?: { global_code?: string; compound_code?: string };
+  address_components?: any[];
+  wheelchair_accessible_entrance?: boolean;
+  delivery?: boolean;
+  dine_in?: boolean;
+  takeout?: boolean;
+  curbside_pickup?: boolean;
+  reservable?: boolean;
+  serves_beer?: boolean;
+  serves_wine?: boolean;
+  serves_breakfast?: boolean;
+  serves_lunch?: boolean;
+  serves_dinner?: boolean;
+  serves_brunch?: boolean;
+  serves_vegetarian_food?: boolean;
 }
 
 const TrainingProgressBar = ({ progress }: { progress: number }) => (
@@ -575,16 +597,36 @@ export default function BusinessPage() {
           try {
             const detailsRes = await fetch(`/api/places/details/${encodeURIComponent(placeId)}`);
             const details = await detailsRes.json();
-            if (details.reviews && details.reviews.length > 0) {
-              setSelectedPlace(prev => prev ? {
-                ...prev,
-                reviews: details.reviews,
-                user_ratings_total: details.user_ratings_total || prev.user_ratings_total,
-                rating: details.rating || prev.rating,
-              } : prev);
-            }
+            setSelectedPlace(prev => prev ? {
+              ...prev,
+              reviews: details.reviews?.length > 0 ? details.reviews : prev.reviews,
+              user_ratings_total: details.user_ratings_total || prev.user_ratings_total,
+              rating: details.rating || prev.rating,
+              price_level: details.price_level,
+              business_status: details.business_status,
+              url: details.url,
+              vicinity: details.vicinity,
+              utc_offset: details.utc_offset,
+              international_phone_number: details.international_phone_number,
+              address_components: details.address_components,
+              plus_code: details.plus_code,
+              editorial_summary: details.editorial_summary,
+              wheelchair_accessible_entrance: details.wheelchair_accessible_entrance,
+              delivery: details.delivery,
+              dine_in: details.dine_in,
+              takeout: details.takeout,
+              curbside_pickup: details.curbside_pickup,
+              reservable: details.reservable,
+              serves_beer: details.serves_beer,
+              serves_wine: details.serves_wine,
+              serves_breakfast: details.serves_breakfast,
+              serves_lunch: details.serves_lunch,
+              serves_dinner: details.serves_dinner,
+              serves_brunch: details.serves_brunch,
+              serves_vegetarian_food: details.serves_vegetarian_food,
+            } : prev);
           } catch (err) {
-            console.error('[Places] Failed to fetch reviews:', err);
+            console.error('[Places] Failed to fetch details:', err);
           }
         }
       }
