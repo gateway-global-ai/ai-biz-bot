@@ -127,6 +127,8 @@ chat-mvp-merge/
 
 ## 📚 Documentation
 
+- [CHAT_ARCHITECTURE.md](./CHAT_ARCHITECTURE.md) - **Chat interface architectural decision and standards**
+- [CHAT_IMPLEMENTATION_SUMMARY.md](./CHAT_IMPLEMENTATION_SUMMARY.md) - Portable chat interface implementation
 - [STATUS.md](./STATUS.md) - Current build/test status and next steps
 - [MERGE_SUMMARY.md](./MERGE_SUMMARY.md) - Recent changes and commits
 - [BRANCH_GUIDE.md](./BRANCH_GUIDE.md) - Git workflow and branch strategy
