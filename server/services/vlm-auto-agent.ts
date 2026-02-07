@@ -181,7 +181,7 @@ export class VlmAutoAgentService {
       );
 
       // Generate knowledge-enhanced script if enabled
-      let enhancedScriptTemplate = config.callScript || DEFAULT_PITCH_TEMPLATE;
+      let enhancedScriptTemplate: string;
       if (config.useKnowledgeBase && qualifiedProspects.length > 0) {
         this.progress.phase = "generating_script";
         this.progress.message = "Generating knowledge-enhanced scripts...";
