@@ -118,11 +118,7 @@ export function registerInquiryRoutes(app: Express) {
   // Delete an inquiry
   app.delete("/api/inquiries/:id", async (req: Request, res: Response) => {
     try {
-      const success = await storage.deleteInquiry(req.params.id);
-      
-      if (!success) {
-        return res.status(404).json({ error: "Inquiry not found" });
-      }
+      await storage.deleteInquiry(req.params.id);
       
       res.json({ success: true });
     } catch (error: any) {
