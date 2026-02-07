@@ -1,7 +1,25 @@
 # Voice SDK Implementation Summary
 
 ## Overview
-Successfully implemented a comprehensive Push-to-Talk (PTT) voice interface integrated with Google Gemini's latest native audio models, with proper model configurations, cost comparisons, and SDK templates.
+Successfully implemented a comprehensive Push-to-Talk (PTT) voice interface integrated with Google Gemini's native audio models, with proper model configurations, cost comparisons, and SDK templates.
+
+## ⚠️ Important: Model Categories
+
+### Native Audio Models (For Real-Time Voice)
+These models are specifically designed for live audio conversations with built-in STT/TTS:
+- **gemini-2.5-flash-native-audio-preview-12-2025** (Latest, cutting-edge)
+- **gemini-2.5-flash-native-audio-preview** (Stable, production)
+- **gemini-2.0-flash-native-audio** (Budget option)
+
+### General Purpose Models
+Can handle voice via Live API but lack specialized audio features:
+- **gemini-2.5-flash-latest** (Text + basic voice support)
+
+### Reasoning Models (NOT for Voice)
+Powerful multimodal models that require separate STT/TTS services:
+- **gemini-2.5-pro-preview** (Complex reasoning, NOT a voice model)
+
+**Note:** `geminiVoiceModels.ts` correctly contains ONLY native audio models (1-3 above). Pro and Flash-latest are documented separately as they have different use cases.
 
 ## Key Components Implemented
 
@@ -47,7 +65,7 @@ Comprehensive 3-tab admin interface:
 - **Audio sampling rate specifications**
 
 ### 3. Model Configuration System (`shared/geminiVoiceModels.ts`)
-Comprehensive configuration for 4 Gemini models:
+Comprehensive configuration for **NATIVE AUDIO MODELS ONLY** (4 voice-specific models):
 
 #### gemini-2.5-flash-native-audio-preview-12-2025 (Latest, Cutting-Edge)
 - **30 HD voices** in 24 languages
@@ -83,6 +101,8 @@ Comprehensive configuration for 4 Gemini models:
 - Native audio support
 - **No function calling**
 - Ideal for high-volume deployments
+
+**Note:** gemini-2.5-pro-preview is NOT included in voice models as it's a reasoning model that requires separate STT/TTS services. See dedicated documentation in `ai-biz-bot/ai-voice-sdk-v1/gemini-2.5-pro-preview.md`.
 
 ### 4. PTT Backend Service (`server/pttService.ts`)
 - **Proper Gemini Live API configuration:**
@@ -227,12 +247,16 @@ Example savings (60 min/day usage):
 
 ## Files Modified/Created
 
-### Created Files (8)
+### Created Files (11)
 1. `client/src/components/PushToTalkInterface.tsx` - PTT UI component
 2. `client/src/components/VoiceAdminPanel.tsx` - Admin panel
 3. `client/src/components/ModelCostComparison.tsx` - Cost comparison
-4. `shared/geminiVoiceModels.ts` - Model configurations
+4. `shared/geminiVoiceModels.ts` - Voice model configurations (native audio only)
 5. `server/pttService.ts` - PTT backend service
+6. `VOICE_PTT_IMPLEMENTATION_SUMMARY.md` - Implementation overview
+7. `ai-biz-bot/ai-voice-sdk-v1/gemini-2.5-flash-native-audio-preview-12-2025.md` - Native audio model
+8. **`ai-biz-bot/ai-voice-sdk-v1/gemini-2.5-pro-preview.md`** - Reasoning model (NOT for voice)
+9. **`ai-biz-bot/ai-voice-sdk-v1/gemini-2.5-flash-latest.md`** - General purpose model
 
 ### Modified Files (5)
 1. `shared/schema.ts` - Added voice admin fields
@@ -241,6 +265,40 @@ Example savings (60 min/day usage):
 4. `genai-business-site-generator (2)/services/liveService.ts` - Fixed model version
 5. `sdk/learning/src/services/geminiService.ts` - Fixed model version
 6. `sdk/chat/reference-apps/agent-reports/App.tsx` - Fixed model version
+
+## Model Documentation Summary
+
+### Voice Models (in `geminiVoiceModels.ts` - For PTT Applications)
+1. **gemini-2.5-flash-native-audio-preview-12-2025** - Latest, 30 voices, affective dialog ⭐
+2. **gemini-2.5-flash-native-audio-preview** - Stable, 8 voices, production-ready
+3. **gemini-2.5-flash-latest** - 4 voices, budget-friendly, basic voice support 💰
+4. **gemini-2.0-flash-native-audio** - 4 voices, cheapest, high-volume
+
+### Non-Voice Models (Separate Documentation)
+5. **gemini-2.5-pro-preview** - Multimodal reasoning (**NOT a voice model**)
+   - **Use for:** Complex analysis, code generation, research, strategy
+   - **NOT for:** Real-time voice conversations
+   - **Voice Architecture:** User Speech → STT Service → Pro Model → TTS Service → Audio
+   - **Documentation:** `ai-biz-bot/ai-voice-sdk-v1/gemini-2.5-pro-preview.md`
+
+## Model Selection Decision Tree
+
+```
+Need AI capabilities?
+    │
+    ├─► VOICE APPLICATION?
+    │       │
+    │       ├─► Production quality voice chat → gemini-2.5-flash-native-audio-preview-12-2025
+    │       ├─► Budget voice chat → gemini-2.5-flash-latest
+    │       └─► High-volume budget → gemini-2.0-flash-native-audio
+    │
+    └─► TEXT/ANALYSIS APPLICATION?
+            │
+            ├─► Complex reasoning, large context → gemini-2.5-pro-preview
+            │                                      (Use separate STT/TTS if voice needed)
+            │
+            └─► Fast general-purpose → gemini-2.5-flash-latest
+```
 
 ## Key Achievements
 
