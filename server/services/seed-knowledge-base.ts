@@ -427,7 +427,7 @@ When calling restaurants, emphasize:
       researchedBy: 'business_research_team'
     });
 
-    const healthcareIntelligence = await knowledgeBaseService.storeKnowledge({
+    await knowledgeBaseService.storeKnowledge({
       category: 'business_intelligence',
       subcategory: 'healthcare',
       title: 'Healthcare Practice Management Challenges',
