@@ -6,6 +6,7 @@ import { registerAgentRoutes } from "./agents/agent-routes";
 import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding";
 import knowledgeRoutes from "./routes/knowledge-routes";
 import { registerMenuRoutes } from "./routes/menu-routes";
+import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -2648,6 +2649,42 @@ export async function registerRoutes(
       }
       const log = await storage.createCallLog(parsed.data);
       res.json(log);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update call log with notes and customer info
+  app.patch("/api/telephony/calls/:id", async (req, res) => {
+    try {
+      const updateSchema = z.object({
+        notes: z.string().optional(),
+        customerName: z.string().optional(),
+        customerEmail: z.string().email().optional(),
+      });
+
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const updated = await storage.updateCallLog(req.params.id, parsed.data);
+      if (!updated) {
+        return res.status(404).json({ error: "Call log not found" });
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Unified call tracking endpoint - combines database logs
+  app.get("/api/call-tracking", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const logs = await storage.getCallLogs(undefined, limit);
+      res.json(logs);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -6680,6 +6717,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
   // Register Menu and Cart routes
   registerMenuRoutes(app);
+
+  // Register Inquiry routes
+  registerInquiryRoutes(app);
 
   return httpServer;
 }

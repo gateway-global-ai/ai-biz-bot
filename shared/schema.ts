@@ -67,6 +67,10 @@ export const callLogs = pgTable("call_logs", {
   status: text("status").notNull(), // 'completed' | 'missed' | 'blocked' | 'failed'
   recordingUrl: text("recording_url"),
   callSid: text("call_sid"),
+  // Customer tracking fields
+  customerName: text("customer_name"),
+  customerEmail: text("customer_email"),
+  notes: text("notes"),
   timestamp: timestamp("timestamp").defaultNow(),
 });
 
@@ -1662,3 +1666,61 @@ export const insertOrderItemSchema = createInsertSchema(orderItems).omit({
 
 export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
 export type OrderItem = typeof orderItems.$inferSelect;
+
+// Inquiries - Contact form submissions and customer inquiries
+export const inquiries = pgTable("inquiries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Customer Information
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  company: text("company"),
+  
+  // Inquiry Details
+  subject: text("subject"),
+  message: text("message").notNull(),
+  source: text("source").default("website"), // 'website', 'chat', 'phone', 'email', 'sms'
+  
+  // Status & Assignment
+  status: text("status").default("new"), // 'new', 'viewed', 'in_progress', 'resolved', 'closed'
+  priority: text("priority").default("normal"), // 'low', 'normal', 'high', 'urgent'
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  
+  // Response & Notes
+  response: text("response"),
+  internalNotes: text("internal_notes"),
+  
+  // Tracking
+  viewedAt: timestamp("viewed_at"),
+  respondedAt: timestamp("responded_at"),
+  resolvedAt: timestamp("resolved_at"),
+  
+  // Metadata
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  referrer: text("referrer"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertInquirySchema = createInsertSchema(inquiries, {
+  source: z
+    .enum(["website", "chat", "phone", "email", "sms"])
+    .default("website"),
+  status: z
+    .enum(["new", "viewed", "in_progress", "resolved", "closed"])
+    .default("new"),
+  priority: z
+    .enum(["low", "normal", "high", "urgent"])
+    .default("normal"),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertInquiry = z.infer<typeof insertInquirySchema>;
+export type Inquiry = typeof inquiries.$inferSelect;
