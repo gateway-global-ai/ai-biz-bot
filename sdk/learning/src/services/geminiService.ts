@@ -383,7 +383,7 @@ export class ClassroomSession {
 
     try {
       this.sessionPromise = this.client.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+        model: 'gemini-2.5-flash-native-audio-preview',
         config: {
           systemInstruction: systemInstruction,
           responseModalities: [Modality.AUDIO],
