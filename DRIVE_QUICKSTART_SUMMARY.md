@@ -198,7 +198,7 @@ After reviewing the SDK:
 
 - [SDK README](./sdk/google-drive/README.md) - Full SDK documentation and API reference
 - [Quickstart README](./sdk/google-drive/examples/quickstart/README.md) - Client-side quickstart guide
-- [Main Repository Google Workspace Integration](./server/mcp/googleWorkspace.ts) - Server-side implementation
+- [Main Repository Google Workspace Integration](https://github.com/gateway-global-ai/chat-mvp-merge/blob/main/server/mcp/googleWorkspace.ts) - Server-side implementation
 - [Google Drive API Documentation](https://developers.google.com/drive/api/v3/about-sdk)
 - [Google API JavaScript Client](https://github.com/google/google-api-javascript-client)
 

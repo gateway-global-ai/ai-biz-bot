@@ -317,7 +317,7 @@ After completing this quickstart, you can:
 - [Google Drive API Documentation](https://developers.google.com/drive/api/v3/about-sdk)
 - [Google API JavaScript Client](https://github.com/google/google-api-javascript-client)
 - [OAuth 2.0 for Client-Side Web Applications](https://developers.google.com/identity/protocols/oauth2/javascript-implicit-flow)
-- [Main Repository Google Workspace Integration](../../../../server/mcp/googleWorkspace.ts)
+- [Main Repository Google Workspace Integration](https://github.com/gateway-global-ai/chat-mvp-merge/blob/main/server/mcp/googleWorkspace.ts)
 
 ## License
 
