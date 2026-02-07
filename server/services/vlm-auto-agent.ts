@@ -3,6 +3,7 @@ import { VlmGoogleMapsService } from "./vlm-google-maps";
 import { VlmQualityScoringService } from "./vlm-quality-scoring";
 import { VlmEmailEnrichmentService } from "./vlm-email-enrichment";
 import { VlmOutboundCallerService } from "./vlm-outbound-caller";
+import { knowledgeBaseService } from "./knowledge-base";
 import type { VlmProspect, VlmCampaign, InsertVlmProspect } from "@shared/schema";
 
 const scoringService = new VlmQualityScoringService();
@@ -20,6 +21,7 @@ export interface AutoAgentConfig {
   callScript?: string;
   callerIdNumber?: string;
   callDelayMs: number;
+  useKnowledgeBase?: boolean; // New option to enable knowledge base integration
 }
 
 export interface AutoAgentProgress {
@@ -31,6 +33,7 @@ export interface AutoAgentProgress {
   callsQueued: number;
   callsComplete: number;
   errors: string[];
+  knowledgeEnhanced?: boolean; // Track if knowledge base was used
 }
 
 const DEFAULT_PITCH_TEMPLATE = `Hi, this is your Google Place AI Biz Bot calling about {businessName}. We've built a free Google-powered AI website for your business that's now available online. Would you like us to send you the link? Press 1 to receive your free website link via text message. Press 2 if you're not interested. Your basic site is already live and our AI concierge is ready to answer questions from your customers.`;
@@ -50,6 +53,27 @@ export class VlmAutoAgentService {
       phase: "idle", message: "", discovered: 0, enriched: 0,
       sitesGenerated: 0, callsQueued: 0, callsComplete: 0, errors: [],
     };
+  }
+
+  /**
+   * Generate AI-enhanced script using knowledge base
+   */
+  async generateKnowledgeBasedScript(prospect: Partial<VlmProspect>, campaign?: VlmCampaign): Promise<string> {
+    try {
+      // If we have a full prospect object, use the enhanced method
+      if (prospect.businessName && prospect.industry) {
+        return await callerService.generateKnowledgeEnhancedScript(
+          prospect as VlmProspect,
+          campaign
+        );
+      }
+      
+      // Fallback to simple script generation
+      return this.generateAiScript(prospect);
+    } catch (error) {
+      console.error("[VlmAutoAgent] Knowledge script generation failed:", error);
+      return this.generateAiScript(prospect);
+    }
   }
 
   generateAiScript(prospect: Partial<VlmProspect>, baseScript?: string): string {
@@ -156,6 +180,34 @@ export class VlmAutoAgentService {
       const qualifiedProspects = savedProspects.filter(
         (p) => p.qualityScore >= config.minQualityScore && p.phone
       );
+
+      // Generate knowledge-enhanced script if enabled
+      let enhancedScriptTemplate = config.callScript || DEFAULT_PITCH_TEMPLATE;
+      if (config.useKnowledgeBase && qualifiedProspects.length > 0) {
+        this.progress.phase = "generating_script";
+        this.progress.message = "Generating knowledge-enhanced scripts...";
+        
+        try {
+          // Use the first qualified prospect as a template to generate industry-specific script
+          const sampleProspect = qualifiedProspects[0];
+          enhancedScriptTemplate = await callerService.generateKnowledgeEnhancedScript(
+            sampleProspect,
+            campaign
+          );
+          
+          this.progress.knowledgeEnhanced = true;
+          
+          // Update campaign with enhanced script
+          await storage.updateVlmCampaign(campaign.id, {
+            scriptTemplate: enhancedScriptTemplate
+          });
+          
+          console.log("[VlmAutoAgent] Knowledge-enhanced script generated");
+        } catch (error: any) {
+          console.error("[VlmAutoAgent] Knowledge enhancement failed, using default:", error);
+          this.progress.knowledgeEnhanced = false;
+        }
+      }
 
       if (config.autoGenerateSites) {
         this.progress.phase = "generating_sites";

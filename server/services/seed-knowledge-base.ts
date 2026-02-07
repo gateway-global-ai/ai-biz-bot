@@ -322,10 +322,235 @@ Google Workspace offers free APIs for Gmail, Calendar, Drive, Docs, and Sheets.
       progress: 60
     });
 
+    // 6. Add business intelligence for outbound campaigns
+    console.log('💼 Creating business intelligence for outbound campaigns...');
+    
+    const restaurantIntelligence = await knowledgeBaseService.storeKnowledge({
+      category: 'business_intelligence',
+      subcategory: 'restaurant',
+      title: 'Restaurant Industry Challenges 2026',
+      summary: 'Key pain points: staffing, online ordering complexity, reservation no-shows, and customer communication',
+      content: `# Restaurant Industry Analysis 2026
+
+## Major Challenges
+
+### 1. Staffing Crisis
+- Industry-wide shortage of qualified staff
+- High turnover rates (75% annually)
+- Training costs and time investment
+
+### 2. Online Ordering Complexity
+- Multiple third-party platforms (DoorDash, UberEats, Grubhub)
+- High commission fees (15-30%)
+- Integration challenges with existing systems
+
+### 3. Reservation Management
+- No-show rates averaging 15-20%
+- Manual booking processes
+- Limited reminder systems
+
+### 4. Customer Communication
+- Difficulty responding to reviews
+- Slow response to customer inquiries
+- Phone calls during peak hours
+
+## Technology Solutions
+
+### AI-Powered Platforms Can Help:
+- **24/7 Customer Service**: AI chatbots handle common questions
+- **Automated Reservations**: Reduce no-shows with smart reminders
+- **Centralized Ordering**: Single platform for all online orders
+- **Review Management**: Automated responses and monitoring
+
+## Value Proposition for Outreach
+When calling restaurants, emphasize:
+✓ Increase reservations by reducing no-shows
+✓ Save staff time with automated customer service
+✓ Streamline online ordering and reduce fees
+✓ Improve review ratings with better response times
+      `,
+      tags: ['restaurant', 'hospitality', 'pain-points', 'outbound'],
+      keywords: ['reservations', 'ordering', 'staff', 'reviews', 'automation'],
+      sources: [
+        {
+          url: 'https://restaurant.org/research/reports',
+          title: 'National Restaurant Association Industry Report',
+          date: '2026-01-15',
+          credibility: 'industry_report'
+        }
+      ],
+      status: 'active',
+      researchedBy: 'business_research_team'
+    });
+
+    const retailIntelligence = await knowledgeBaseService.storeKnowledge({
+      category: 'business_intelligence',
+      subcategory: 'retail',
+      title: 'Retail Business Trends 2026',
+      summary: 'Focus on omnichannel experiences, foot traffic challenges, and customer engagement',
+      content: `# Retail Industry Trends 2026
+
+## Key Challenges
+
+### 1. Foot Traffic Decline
+- Competition from online retailers
+- Changing consumer shopping habits
+- Need for compelling in-store experiences
+
+### 2. Customer Engagement
+- Limited hours for customer support
+- Difficulty tracking customer preferences
+- Inconsistent omnichannel experience
+
+### 3. Inventory Management
+- Balancing stock levels
+- Seasonal demand fluctuations
+- Supply chain uncertainties
+
+## Technology Solutions
+
+### AI Can Transform Retail:
+- **Virtual Shopping Assistant**: Guide customers 24/7
+- **Smart Recommendations**: Personalized product suggestions
+- **Inventory Alerts**: Real-time stock updates
+- **Customer Insights**: Track preferences and behavior
+
+## Outreach Value Propositions
+✓ Boost foot traffic with engaging digital experiences
+✓ Provide 24/7 customer service without extra staff
+✓ Increase sales with personalized recommendations
+✓ Build customer loyalty with consistent engagement
+      `,
+      tags: ['retail', 'shopping', 'customer-service', 'outbound'],
+      keywords: ['foot-traffic', 'engagement', 'omnichannel', 'ai'],
+      status: 'active',
+      researchedBy: 'business_research_team'
+    });
+
+    const healthcareIntelligence = await knowledgeBaseService.storeKnowledge({
+      category: 'business_intelligence',
+      subcategory: 'healthcare',
+      title: 'Healthcare Practice Management Challenges',
+      summary: 'Appointment no-shows, patient communication, and administrative burden are top concerns',
+      content: `# Healthcare Practice Management 2026
+
+## Critical Pain Points
+
+### 1. Appointment No-Shows
+- Average no-show rate: 18-23%
+- Revenue loss and wasted time slots
+- Difficulty filling last-minute openings
+
+### 2. Patient Communication
+- Phone tag with patients
+- After-hours inquiries go unanswered
+- Missed opportunities for follow-up care
+
+### 3. Administrative Burden
+- Staff overwhelmed with scheduling calls
+- Manual appointment reminders
+- Insurance verification delays
+
+## AI Solutions for Healthcare
+
+### Intelligent Automation:
+- **Smart Scheduling**: AI handles appointment booking
+- **Automated Reminders**: Reduce no-shows by 40%
+- **Patient Portal**: 24/7 access to information
+- **Triage Assistant**: Answer common medical questions
+
+## Outreach Messaging
+✓ Reduce no-shows with automated appointment reminders
+✓ Free up staff time with AI-powered scheduling
+✓ Improve patient satisfaction with 24/7 communication
+✓ Increase revenue by filling last-minute cancellations
+      `,
+      tags: ['healthcare', 'medical', 'appointments', 'outbound'],
+      keywords: ['no-shows', 'scheduling', 'patients', 'automation'],
+      status: 'active',
+      researchedBy: 'business_research_team'
+    });
+
+    const salesIntelligence = await knowledgeBaseService.storeKnowledge({
+      category: 'sales_intelligence',
+      subcategory: 'cold_calling',
+      title: 'Effective Cold Calling for SMB Outreach',
+      summary: 'Best practices for cold calling small business owners with high conversion rates',
+      content: `# Cold Calling Best Practices for SMB
+
+## Script Structure (30-45 seconds max)
+
+### Opening (5 seconds)
+- Identify yourself and company clearly
+- Use a friendly, professional tone
+
+### Hook (10 seconds)
+- Lead with a specific benefit
+- Reference the business by name
+- Create curiosity
+
+### Body (20 seconds)
+- Explain the main value proposition
+- Keep it conversational
+- Focus on outcomes, not features
+
+### Close (10 seconds)
+- Clear, simple call-to-action
+- Make responding easy (press 1 or 2)
+- Respect their time
+
+## Do's and Don'ts
+
+### ✓ Do:
+- Keep it short and focused
+- Use the business name
+- Lead with benefits
+- Sound natural, not scripted
+- Provide easy opt-out
+- Respect calling hours (9 AM - 6 PM)
+
+### ✗ Don't:
+- Read robotically from script
+- Use jargon or technical terms
+- Apologize for calling
+- Make unrealistic promises
+- Ignore time zones
+- Call too early or too late
+
+## Proven Phrases
+
+**Openings:**
+- "Hi, this is [Name] calling about [Business Name]..."
+- "We noticed your business and wanted to share..."
+
+**Value Propositions:**
+- "We help [industry] businesses like yours [benefit]..."
+- "This takes just 30 seconds..."
+- "Your basic solution is already ready..."
+
+**Calls-to-Action:**
+- "Press 1 if this sounds helpful..."
+- "Would you like us to send you the details?"
+- "Press 2 if you're not interested..."
+
+## Conversion Tips
+
+1. **Personalization**: Always use business name and industry
+2. **Timing**: Call between 10-11 AM or 2-4 PM
+3. **Confidence**: Sound helpful, not desperate
+4. **Respect**: Honor opt-out requests immediately
+5. **Follow-up**: Send promised information quickly
+      `,
+      tags: ['sales', 'cold-calling', 'scripts', 'smb', 'outbound'],
+      keywords: ['script', 'calling', 'conversion', 'best-practices'],
+      status: 'active',
+      researchedBy: 'sales_team'
+    });
+
     console.log('\n✅ Knowledge base seeded successfully!\n');
     console.log('Created:');
     console.log(`  - ${5} API documentation entries`);
-    console.log(`  - ${2} knowledge base entries`);
+    console.log(`  - ${6} knowledge base entries (including outbound intelligence)`);
     console.log(`  - ${3} research tasks`);
     console.log('\nNext steps:');
     console.log('  1. Review knowledge at /api/knowledge');
