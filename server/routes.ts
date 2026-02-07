@@ -31,6 +31,7 @@ import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MOD
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
 import { getAvailableApis, calculateCosts, analyzeWithKimi, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
+import { placesCache, CACHE_TTL } from "./placesCache";
 import crypto from "crypto";
 
 const updateConfigSchema = z.object({
@@ -419,6 +420,194 @@ export async function registerRoutes(
       console.error("[Places Details] Error:", error.message);
       res.status(500).json({ error: error.message, reviews: [] });
     }
+  });
+
+  // Google Places Search - for business discovery (with caching)
+  app.post("/api/places/search", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { query, location, radius } = req.body;
+
+      if (!query) {
+        return res.status(400).json({ error: "Search query is required" });
+      }
+
+      // Validate location and radius if provided
+      if (location) {
+        if (typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
+          return res.status(400).json({ error: "Location must have valid latitude and longitude" });
+        }
+        if (radius !== undefined && (typeof radius !== 'number' || radius <= 0)) {
+          return res.status(400).json({ error: "Radius must be a positive number" });
+        }
+      }
+
+      // Use cache to reduce API calls
+      const cacheParams = { query, location, radius };
+      const result = await placesCache.getOrFetch(
+        'places-search',
+        cacheParams,
+        async () => {
+          // Use the new Places API (Text Search) for better results
+          const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': apiKey,
+              'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.businessStatus,places.photos,places.primaryType'
+            },
+            body: JSON.stringify({
+              textQuery: query,
+              ...(location && { locationBias: { circle: { center: location, radius: radius || 5000 } } })
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            console.error('[Places Search] API error:', data);
+            throw new Error(data.error?.message || 'Search failed');
+          }
+
+          // Transform the new API format to be more user-friendly
+          const places = (data.places || []).map((place: any) => ({
+            placeId: place.id,
+            name: place.displayName?.text || 'Unknown',
+            address: place.formattedAddress || '',
+            location: place.location,
+            rating: place.rating || 0,
+            userRatingCount: place.userRatingCount || 0,
+            types: place.types || [],
+            primaryType: place.primaryType,
+            businessStatus: place.businessStatus,
+            photos: place.photos?.map((p: any) => p.name) || []
+          }));
+
+          return { places, count: places.length };
+        },
+        CACHE_TTL.PLACE_SEARCH
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Places Search] Error:", error.message);
+      res.status(500).json({ error: error.message, places: [] });
+    }
+  });
+
+  // Google Places Owner Report - competitive analysis (with caching)
+  app.post("/api/places/owner-report", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { businessName, radiusMiles } = req.body;
+
+      if (!businessName) {
+        return res.status(400).json({ error: "Business name is required" });
+      }
+
+      // Use cache to reduce expensive report generation
+      const cacheParams = { businessName, radiusMiles };
+      const result = await placesCache.getOrFetch(
+        'owner-report',
+        cacheParams,
+        async () => {
+          const report = await generateOwnerReport(
+            { mode: 'owner', businessName, radiusMiles },
+            apiKey
+          );
+
+          return {
+            report,
+            formatted: {
+              sms: formatOwnerReportForSms(report),
+              chat: formatOwnerReportForChat(report)
+            }
+          };
+        },
+        CACHE_TTL.OWNER_REPORT
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Owner Report] Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Google Places Marketing Search - market research (with caching)
+  app.post("/api/places/marketing-search", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { address, latitude, longitude, category, radiusMiles, minRating, maxRating, priceLevels } = req.body;
+
+      if (!category) {
+        return res.status(400).json({ error: "Category is required" });
+      }
+
+      if (!address && (!latitude || !longitude)) {
+        return res.status(400).json({ error: "Either address or latitude/longitude is required" });
+      }
+
+      // Use cache to reduce API calls
+      const cacheParams = { address, latitude, longitude, category, radiusMiles, minRating, maxRating, priceLevels };
+      const result = await placesCache.getOrFetch(
+        'marketing-search',
+        cacheParams,
+        async () => {
+          const report = await generateMarketingSearch(
+            { 
+              mode: 'marketing', 
+              address, 
+              latitude, 
+              longitude, 
+              category, 
+              radiusMiles,
+              minRating,
+              maxRating,
+              priceLevels
+            },
+            apiKey
+          );
+
+          return {
+            report,
+            formatted: {
+              sms: formatMarketingReportForSms(report),
+              chat: formatMarketingReportForChat(report)
+            }
+          };
+        },
+        CACHE_TTL.MARKETING_SEARCH
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Marketing Search] Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Cache management endpoints
+  app.get("/api/places/cache/stats", (req, res) => {
+    const stats = placesCache.getStats();
+    res.json(stats);
+  });
+
+  app.post("/api/places/cache/clear", (req, res) => {
+    placesCache.clear();
+    res.json({ success: true, message: 'Cache cleared successfully' });
   });
 
   // ============ Google Workspace Integration ============
