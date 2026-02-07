@@ -31,18 +31,33 @@ interface VoiceAdminPanelProps {
 const GEMINI_MODELS = [
   { id: 'gemini-2.5-flash-native-audio-preview', name: 'Gemini 2.5 Flash Native Audio (Recommended)' },
   { id: 'gemini-2.0-flash-native-audio', name: 'Gemini 2.0 Flash Native Audio' },
+  { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash Experimental' },
 ];
 
-const GEMINI_VOICES = [
-  { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
-  { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
-  { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
-  { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
-  { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
-  { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
-  { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
-  { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
-];
+// Model-specific voice mappings
+const MODEL_VOICES: Record<string, Array<{ id: string; name: string; gender: string; description: string }>> = {
+  'gemini-2.5-flash-native-audio-preview': [
+    { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
+    { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+    { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
+    { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
+    { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+    { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+    { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
+    { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+  ],
+  'gemini-2.0-flash-native-audio': [
+    { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+    { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+    { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+    { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+  ],
+  'gemini-2.0-flash-exp': [
+    { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+    { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+    { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+  ],
+};
 
 const VOICE_PERSONAS = [
   { id: 'professional', name: 'Professional', description: 'Formal and business-oriented' },
@@ -79,6 +94,22 @@ export const VoiceAdminPanel: React.FC<VoiceAdminPanelProps> = ({
   });
   const [isSaving, setIsSaving] = useState(false);
   const isPaid = userTier === 'paid';
+
+  // Get available voices for the current model
+  const availableVoices = MODEL_VOICES[config.model] || MODEL_VOICES['gemini-2.5-flash-native-audio-preview'];
+
+  // Handle model change and validate voice compatibility
+  const handleModelChange = (newModel: string) => {
+    const newAvailableVoices = MODEL_VOICES[newModel] || [];
+    const isCurrentVoiceAvailable = newAvailableVoices.some(v => v.id === config.voice);
+    
+    setConfig({
+      ...config,
+      model: newModel,
+      // If current voice isn't available in new model, switch to first available voice
+      voice: isCurrentVoiceAvailable ? config.voice : newAvailableVoices[0]?.id || 'Puck',
+    });
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -123,7 +154,7 @@ export const VoiceAdminPanel: React.FC<VoiceAdminPanelProps> = ({
         <Label htmlFor="model">AI Model</Label>
         <Select
           value={config.model}
-          onValueChange={(value) => setConfig({ ...config, model: value })}
+          onValueChange={handleModelChange}
           disabled={!isPaid}
         >
           <SelectTrigger id="model" className={!isPaid ? 'opacity-60' : ''}>
@@ -138,7 +169,7 @@ export const VoiceAdminPanel: React.FC<VoiceAdminPanelProps> = ({
           </SelectContent>
         </Select>
         <p className="text-sm text-slate-500">
-          The AI model used for voice interactions
+          The AI model used for voice interactions. Each model supports different voices.
         </p>
       </div>
 
@@ -154,7 +185,7 @@ export const VoiceAdminPanel: React.FC<VoiceAdminPanelProps> = ({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {GEMINI_VOICES.map((voice) => (
+            {availableVoices.map((voice) => (
               <SelectItem key={voice.id} value={voice.id}>
                 {voice.name} - {voice.description} ({voice.gender})
               </SelectItem>
@@ -162,7 +193,12 @@ export const VoiceAdminPanel: React.FC<VoiceAdminPanelProps> = ({
           </SelectContent>
         </Select>
         <p className="text-sm text-slate-500">
-          The voice personality for your AI assistant
+          The voice personality for your AI assistant. Available voices vary by model.
+          {availableVoices.length > 0 && (
+            <span className="block mt-1 text-xs text-slate-400">
+              {availableVoices.length} voice{availableVoices.length !== 1 ? 's' : ''} available for {GEMINI_MODELS.find(m => m.id === config.model)?.name}
+            </span>
+          )}
         </p>
       </div>
 

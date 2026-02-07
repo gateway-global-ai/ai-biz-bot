@@ -112,21 +112,56 @@ export const PushToTalkInterface: React.FC<PushToTalkInterfaceProps> = ({
   const handleRecordingStop = async () => {
     const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
     
-    // Simulate transcription (in real implementation, this would call an API)
-    // For now, we'll show a placeholder
-    const mockTranscript = 'Your voice message was recorded';
-    setTranscript(mockTranscript);
-    setEditText(mockTranscript);
+    // Show processing state
+    setTranscript('Processing your message...');
     
-    // Show edit window for 1 second
-    setShowEditWindow(true);
-    
-    editTimerRef.current = setTimeout(() => {
-      if (!isEditing) {
-        // Auto-send after 1 second if not editing
-        handleSend(audioBlob, mockTranscript);
+    try {
+      // Convert blob to base64
+      const audioBase64 = await blobToBase64(audioBlob);
+      
+      // Call PTT API to transcribe
+      const transcribeResponse = await fetch('/api/ptt/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioBase64 })
+      });
+      
+      if (!transcribeResponse.ok) {
+        throw new Error('Transcription failed');
       }
-    }, 1000);
+      
+      const transcribeData = await transcribeResponse.json();
+      const userTranscript = transcribeData.transcript || 'Your voice message';
+      
+      setTranscript(userTranscript);
+      setEditText(userTranscript);
+      
+      // Show edit window for 1 second
+      setShowEditWindow(true);
+      
+      editTimerRef.current = setTimeout(() => {
+        if (!isEditing) {
+          // Auto-send after 1 second if not editing
+          handleSend(audioBlob, userTranscript);
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('Error processing recording:', error);
+      setTranscript('Error processing audio. Please try again.');
+      setShowEditWindow(false);
+    }
+  };
+  
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = (reader.result as string).split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   };
 
   const handleEditClick = () => {
