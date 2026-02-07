@@ -145,7 +145,8 @@ function InquiryDetailDialog({
             Inquiry Details
           </DialogTitle>
           <DialogDescription className="text-slate-400">
-            Submitted {format(new Date(inquiry.createdAt), "PPpp")}
+            Submitted{" "}
+            {inquiry.createdAt ? format(new Date(inquiry.createdAt), "PPpp") : "an unknown time"}
           </DialogDescription>
         </DialogHeader>
 
