@@ -2,6 +2,9 @@
 
 ## Current State (as of February 6, 2026)
 
+**🎯 Quick Start**: New to this repository? Start with [GETTING_STARTED_GUIDE.md](./GETTING_STARTED_GUIDE.md)  
+**🔧 Having Issues?**: Check [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for solutions
+
 ### Branch Information
 - **Active Branch**: `copilot/merge-recent-commits`
 - **Development Branch Created**: `feature/ongoing-development`
@@ -28,12 +31,19 @@ Build time: ~10 seconds (client) + ~0.3 seconds (server)
 - Large chunk size (>500 kB) - Consider code splitting
 - Some PostCSS plugin missing `from` option
 
-#### TypeScript Check: ⚠️ PASSING WITH ERRORS
-The following files have type errors (non-blocking):
-- `client/src/pages/BillingPage.tsx` - Incorrect argument types for fetch calls
-- `client/src/pages/BusinessPage.tsx` - Iterator flag issue with Uint8Array
-- `client/src/pages/TelephonyManager.tsx` - Incorrect argument types for fetch calls
-- `server/routes.ts` - Type mismatches for string assignments
+#### TypeScript Check: ⚠️ MEMORY LIMITATION
+TypeScript type checking may run out of memory on this codebase size.
+
+**Workaround**:
+```bash
+# Option 1: Use build instead (recommended)
+npm run build
+
+# Option 2: Increase memory
+NODE_OPTIONS="--max-old-space-size=4096" npm run check
+```
+
+See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md#typescript-memory-issues) for detailed solutions.
 
 #### Test Status: ℹ️ NO TESTS
 - No test infrastructure currently exists in the project
@@ -48,6 +58,8 @@ The following files have type errors (non-blocking):
 - **Advisory**: GHSA-xxjr-mmjv-4gpg
 - **Impact**: Low - Not directly used by application code
 - **Recommendation**: Monitor for recharts update or consider alternative charting library
+
+See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md#security-vulnerabilities) for how to handle this.
 
 ### Dependencies
 - **Total Packages**: 607
@@ -64,16 +76,18 @@ git checkout feature/ongoing-development
 ## Recommended Next Steps
 
 ### High Priority
-1. **Fix TypeScript Errors** - Address type mismatches in:
-   - BillingPage.tsx (fetch call arguments)
-   - TelephonyManager.tsx (fetch call arguments)
-   - BusinessPage.tsx (iterator configuration)
-   - routes.ts (type safety for model assignments)
+1. **Read Documentation**
+   - Start with [GETTING_STARTED_GUIDE.md](./GETTING_STARTED_GUIDE.md) to understand the repository
+   - Review [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for common issues
 
 2. **Environment Configuration**
-   - Set up `.env` file with required credentials
-   - Document required environment variables
-   - Create `.env.example` template
+   - Set up `.env` file with required credentials (see `.env.example`)
+   - Test database connection
+   - Verify the application runs with `npm run dev`
+
+3. **Address Performance Issues**
+   - Optimize large images (>7 MB) to reasonable sizes
+   - Consider implementing code splitting for the large bundle
 
 ### Medium Priority
 3. **Performance Optimization**
