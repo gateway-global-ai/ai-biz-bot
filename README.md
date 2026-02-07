@@ -127,6 +127,7 @@ chat-mvp-merge/
 
 ## 📚 Documentation
 
+### Core Documentation
 - [CHAT_ARCHITECTURE.md](./CHAT_ARCHITECTURE.md) - **Chat interface architectural decision and standards**
 - [CHAT_IMPLEMENTATION_SUMMARY.md](./CHAT_IMPLEMENTATION_SUMMARY.md) - Portable chat interface implementation
 - [STATUS.md](./STATUS.md) - Current build/test status and next steps
@@ -134,6 +135,12 @@ chat-mvp-merge/
 - [BRANCH_GUIDE.md](./BRANCH_GUIDE.md) - Git workflow and branch strategy
 - [replit.md](./replit.md) - Detailed system architecture
 - [docs/TELEPHONY_ARCHITECTURE.md](./docs/TELEPHONY_ARCHITECTURE.md) - Telephony system design
+
+### Google Business Integration
+- [GOOGLE_BUSINESS_QUICKSTART.md](./GOOGLE_BUSINESS_QUICKSTART.md) - **Quick start for small business owners**
+- [GOOGLE_BUSINESS_MCP_INTEGRATION.md](./GOOGLE_BUSINESS_MCP_INTEGRATION.md) - **Complete integration guide linking knowledge base with MCP server**
+- [Google Business Notes/GOOGLE_PLACES_INTEGRATION.md](./Google%20Business%20Notes/GOOGLE_PLACES_INTEGRATION.md) - Google Places API integration details
+- [Google Business Notes/GOOGLE_PLACES_API_DETAILS.md](./Google%20Business%20Notes/GOOGLE_PLACES_API_DETAILS.md) - Technical API documentation
 
 ## 🌿 Branch Strategy
 
