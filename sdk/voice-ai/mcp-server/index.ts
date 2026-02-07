@@ -613,7 +613,7 @@ class MCPVoiceServer {
   private getProvidersInfo(): unknown {
     return {
       stt: [
-        { name: 'deepgram', languages: 50+, latency: '<500ms', bestFor: 'Accuracy and speed' },
+        { name: 'deepgram', languages: '50+', latency: '<500ms', bestFor: 'Accuracy and speed' },
         { name: 'assemblyai', languages: 6, latency: '~300ms', bestFor: 'Reliable streaming' },
         { name: 'openai', languages: 99, latency: '~500ms', bestFor: 'Whisper model quality' }
       ],

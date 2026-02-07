@@ -337,6 +337,7 @@ export class CostCalculator {
 
   /**
    * Calculate complete voice agent session cost (STT + LLM + TTS)
+   * @param silenceRatio Fraction of time with silence (not billed, informational only)
    */
   static calculateVoiceAgentSession(
     sttProvider: VoiceProvider,
@@ -344,13 +345,19 @@ export class CostCalculator {
     sessionMinutes: number,
     userTalkRatio: number = 0.5, // User talks 50% of the time
     agentTalkRatio: number = 0.4, // Agent talks 40% of the time
-    silenceRatio: number = 0.1
+    silenceRatio: number = 0.1 // Silence time (10%, not billed)
   ): {
     stt: CostEstimate;
     tts: CostEstimate;
     total: number;
     details: Record<string, unknown>;
   } {
+    // Validate ratios sum to ~1.0
+    const totalRatio = userTalkRatio + agentTalkRatio + silenceRatio;
+    if (Math.abs(totalRatio - 1.0) > 0.01) {
+      console.warn(`Talk ratios sum to ${totalRatio}, expected ~1.0`);
+    }
+
     // STT cost (user speech)
     const userTalkMinutes = sessionMinutes * userTalkRatio;
     const sttCost = this.calculateSTTCost(sttProvider, userTalkMinutes);
