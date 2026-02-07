@@ -216,6 +216,15 @@ export function BusinessOnboardingWizard({ onComplete }: BusinessOnboardingWizar
               key={place.placeId}
               className="cursor-pointer hover:border-primary transition-colors"
               onClick={() => selectBusiness(place)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  selectBusiness(place);
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-label={`Select ${place.name} at ${place.address}`}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
