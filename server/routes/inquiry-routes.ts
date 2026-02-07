@@ -33,15 +33,16 @@ export function registerInquiryRoutes(app: Express) {
         return res.status(404).json({ error: "Inquiry not found" });
       }
       
+      let updatedInquiry = inquiry;
       // Mark as viewed if not already viewed
       if (!inquiry.viewedAt) {
-        await storage.updateInquiry(inquiry.id, {
+        updatedInquiry = await storage.updateInquiry(inquiry.id, {
           status: inquiry.status === 'new' ? 'viewed' : inquiry.status,
           viewedAt: new Date(),
         });
       }
       
-      res.json(inquiry);
+      res.json(updatedInquiry);
     } catch (error: any) {
       console.error("[Inquiries] Error fetching inquiry:", error.message);
       res.status(500).json({ error: error.message });
