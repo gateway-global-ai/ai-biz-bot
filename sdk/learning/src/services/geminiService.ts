@@ -347,7 +347,12 @@ export class ClassroomSession {
 
   constructor(private callbacks: LiveSessionCallbacks, private outputAudioContext: AudioContext) {
     this.client = new GoogleGenAI({ apiKey: API_KEY });
-    this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+    // Use 16000 Hz for input (microphone) as required by Gemini Live API
+    // This matches the API's expected PCM format
+    this.inputAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ 
+      sampleRate: 16000,
+      latencyHint: 'interactive'
+    });
   }
 
   async connect(lessonContext: LessonPlan) {
@@ -450,15 +455,30 @@ export class ClassroomSession {
 
     const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
     if (base64Audio) {
-      const audioBytes = base64ToUint8Array(base64Audio);
-      const audioBuffer = await decodeAudioData(audioBytes, this.outputAudioContext, 24000, 1);
-      this.callbacks.onAudioData(audioBuffer);
+      try {
+        const audioBytes = base64ToUint8Array(base64Audio);
+        // Ensure we're using the correct sample rate (24000 Hz) for Gemini Live API output
+        const audioBuffer = await decodeAudioData(audioBytes, this.outputAudioContext, 24000, 1);
+        this.callbacks.onAudioData(audioBuffer);
+      } catch (error) {
+        console.error("Failed to decode audio:", error);
+        // Continue operation even if one audio chunk fails
+      }
     }
   }
 
   private async startMicrophone() {
     try {
-      this.audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Request microphone with optimal settings for voice
+      this.audioStream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          sampleRate: 16000, // Match input context
+          channelCount: 1,   // Mono audio
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
       this.source = this.inputAudioContext.createMediaStreamSource(this.audioStream);
       this.processor = this.inputAudioContext.createScriptProcessor(4096, 1, 1);
 
@@ -469,6 +489,8 @@ export class ClassroomSession {
         
         this.sessionPromise?.then(session => {
            session.sendRealtimeInput({ media: pcmBlob });
+        }).catch(err => {
+          console.error("Failed to send audio input:", err);
         });
       };
 

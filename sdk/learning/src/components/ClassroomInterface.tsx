@@ -29,17 +29,30 @@ const ClassroomInterface: React.FC<Props> = ({ plan, onEndClass }) => {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sessionRef = useRef<ClassroomSession | null>(null);
   const [nextStartTime, setNextStartTime] = useState<number>(0);
+  const currentAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  
+  // Enhanced Audio Features
+  const [autoNarrate, setAutoNarrate] = useState(true);
+  const [audioSpeed, setAudioSpeed] = useState(1.0);
+  const [isAudioPaused, setIsAudioPaused] = useState(false);
+  const [isInstructorSpeaking, setIsInstructorSpeaking] = useState(false);
+  const audioCache = useRef<Map<string, AudioBuffer>>(new Map());
   
   // Force a re-render for visualizer when analyser is attached
   const [analyserState, setAnalyserState] = useState<AnalyserNode | null>(null);
 
   useEffect(() => {
-    // Initialize Audio Context on mount
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    // Initialize Audio Context with consistent sample rate
+    // Using 24000 Hz to match Gemini Live API output
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ 
+      sampleRate: 24000,
+      latencyHint: 'interactive' // Optimize for low latency
+    });
     outputCtxRef.current = ctx;
     
     const analyser = ctx.createAnalyser();
-    analyser.fftSize = 64; 
+    analyser.fftSize = 128; // Increased for better visualization
+    analyser.smoothingTimeConstant = 0.8; // Smoother transitions
     analyser.connect(ctx.destination);
     analyserRef.current = analyser;
     setAnalyserState(analyser);
@@ -50,7 +63,10 @@ const ClassroomInterface: React.FC<Props> = ({ plan, onEndClass }) => {
         setBoard(content);
       },
       onAudioData: (buffer) => {
+        setIsInstructorSpeaking(true);
         playAudioBuffer(buffer);
+        // Reset speaking indicator after audio finishes
+        setTimeout(() => setIsInstructorSpeaking(false), buffer.duration * 1000);
       },
       onClose: () => setIsConnected(false),
       onError: (err) => setError(err.message || "Connection failed")
@@ -101,6 +117,17 @@ const ClassroomInterface: React.FC<Props> = ({ plan, onEndClass }) => {
 
     handleImageGeneration();
   }, [board.imagePrompt, board.imageUrl, lastProcessedImagePrompt]);
+
+  // Auto-narrate when board content changes
+  useEffect(() => {
+    if (autoNarrate && !isConnected && board.title) {
+      // Only auto-narrate if using TTS mode (not connected to live session)
+      const timer = setTimeout(() => {
+        handleNarrate();
+      }, 500); // Small delay to let content settle
+      return () => clearTimeout(timer);
+    }
+  }, [board.title, board.content, autoNarrate, isConnected]);
 
 
   const ensureAudioContext = async () => {

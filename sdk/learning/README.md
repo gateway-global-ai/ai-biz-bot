@@ -422,6 +422,33 @@ Visit the [live demo](https://your-gateway.com/sdk/learning/demo) to see the SDK
 
 ---
 
+## 🎙️ Audio Quality & Configuration
+
+The Learning SDK uses Google's Gemini Live API for high-quality, real-time voice interaction:
+
+### Audio Specifications
+- **AI Instructor Voice**: 24kHz PCM16 mono (~384 kbps)
+- **Student Microphone**: 16kHz PCM16 mono (~256 kbps)
+- **Latency**: <200ms typical end-to-end
+- **Processing**: Echo cancellation, noise suppression, auto-gain control
+
+### Browser Requirements
+- Modern browser with Web Audio API support
+- Microphone access for voice interaction
+- Stable internet connection (recommended: >1 Mbps)
+
+### Audio Features
+- ✅ Crystal-clear AI instructor voice
+- ✅ Real-time voice visualization
+- ✅ Background noise reduction
+- ✅ Automatic gain control
+- ✅ Echo cancellation
+- ✅ Low-latency streaming
+
+For detailed audio configuration and troubleshooting, see [AUDIO_CONFIG.md](./AUDIO_CONFIG.md).
+
+---
+
 ## 📦 What's Included
 
 ```
@@ -443,6 +470,7 @@ sdk/learning/
 │   ├── basic.html                    # Simple script tag usage
 │   ├── react.tsx                     # React integration
 │   └── advanced.tsx                  # Advanced features
+├── AUDIO_CONFIG.md                   # Audio configuration docs
 ├── package.json
 ├── tsconfig.json
 └── README.md
