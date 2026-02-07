@@ -143,30 +143,86 @@ export function registerInquiryRoutes(app: Express) {
   // Get inquiry statistics
   app.get("/api/inquiries/stats", async (req: Request, res: Response) => {
     try {
-      const all = await storage.getInquiries({ limit: 1000 });
-      
+      // Fetch all inquiries to ensure stats are computed over the full dataset
+      const all = await storage.getInquiries({});
+
       const stats = {
         total: all.length,
-        new: all.filter(i => i.status === 'new').length,
-        viewed: all.filter(i => i.status === 'viewed').length,
-        inProgress: all.filter(i => i.status === 'in_progress').length,
-        resolved: all.filter(i => i.status === 'resolved').length,
-        closed: all.filter(i => i.status === 'closed').length,
+        new: 0,
+        viewed: 0,
+        inProgress: 0,
+        resolved: 0,
+        closed: 0,
         bySource: {
-          website: all.filter(i => i.source === 'website').length,
-          chat: all.filter(i => i.source === 'chat').length,
-          phone: all.filter(i => i.source === 'phone').length,
-          email: all.filter(i => i.source === 'email').length,
-          sms: all.filter(i => i.source === 'sms').length,
+          website: 0,
+          chat: 0,
+          phone: 0,
+          email: 0,
+          sms: 0,
         },
         byPriority: {
-          low: all.filter(i => i.priority === 'low').length,
-          normal: all.filter(i => i.priority === 'normal').length,
-          high: all.filter(i => i.priority === 'high').length,
-          urgent: all.filter(i => i.priority === 'urgent').length,
+          low: 0,
+          normal: 0,
+          high: 0,
+          urgent: 0,
         },
       };
-      
+
+      for (const i of all) {
+        // Status counts
+        switch (i.status) {
+          case "new":
+            stats.new++;
+            break;
+          case "viewed":
+            stats.viewed++;
+            break;
+          case "in_progress":
+            stats.inProgress++;
+            break;
+          case "resolved":
+            stats.resolved++;
+            break;
+          case "closed":
+            stats.closed++;
+            break;
+        }
+
+        // Source counts
+        switch (i.source) {
+          case "website":
+            stats.bySource.website++;
+            break;
+          case "chat":
+            stats.bySource.chat++;
+            break;
+          case "phone":
+            stats.bySource.phone++;
+            break;
+          case "email":
+            stats.bySource.email++;
+            break;
+          case "sms":
+            stats.bySource.sms++;
+            break;
+        }
+
+        // Priority counts
+        switch (i.priority) {
+          case "low":
+            stats.byPriority.low++;
+            break;
+          case "normal":
+            stats.byPriority.normal++;
+            break;
+          case "high":
+            stats.byPriority.high++;
+            break;
+          case "urgent":
+            stats.byPriority.urgent++;
+            break;
+        }
+      }
       res.json(stats);
     } catch (error: any) {
       console.error("[Inquiries] Error fetching stats:", error.message);
