@@ -18,9 +18,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Mail, Phone, Building2, Calendar, User, MessageSquare,
+  Mail, Phone, Building2, User, MessageSquare,
   CheckCircle2, Clock, AlertCircle, XCircle, Loader2,
-  Eye, Edit, Trash2, Filter, Search, RefreshCw,
+  Eye, Trash2, Search, RefreshCw,
 } from "lucide-react";
 import type { Inquiry } from "@shared/schema";
 import { format } from "date-fns";
