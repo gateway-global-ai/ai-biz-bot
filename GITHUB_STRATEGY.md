@@ -31,6 +31,7 @@ This document outlines the GitHub repository organization strategy for Gateway G
 - **Timeline**: Q1 2026
 
 **[identity-verification-mcp-gateway-gobal-ai](https://github.com/gateway-global-ai/identity-verification-mcp-gateway-gobal-ai)**
+<!-- Note: Repository name has typo "gobal" instead of "global" - this is the actual repo name -->
 - **Status**: Needs Integration
 - **Purpose**: Authentication MCP server
 - **Description**: Amazing MCP for authentication and identity verification

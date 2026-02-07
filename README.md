@@ -337,6 +337,7 @@ MIT License - See LICENSE file for details
 ### Related Repositories
 - [twilio-telephony-voice-ai](https://github.com/gateway-global-ai/twilio-telephony-voice-ai) - Twilio integration (pending merge)
 - [identity-verification-mcp](https://github.com/gateway-global-ai/identity-verification-mcp-gateway-gobal-ai) - Authentication MCP (pending integration)
+  <!-- Note: Actual repo name has typo "gobal" -->
 - [.github](https://github.com/gateway-global-ai/.github) - Organization profile
 
 ### Deprecated Repositories
