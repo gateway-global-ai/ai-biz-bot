@@ -236,11 +236,11 @@ const response = await fetch('/api/vlm/auto-agent/run', {
 
 ## Performance Impact
 
-### Minimal Overhead
-- Knowledge base queries cached
-- Fast lookup (< 100ms)
-- Fallback to standard scripts
-- No impact on existing campaigns
+### Current Performance Characteristics
+- Knowledge base queries executed on each request (no caching layer yet)
+- Some additional latency due to live knowledge base lookups
+- Fallback to standard scripts when knowledge results are unavailable
+- No impact on existing campaigns' core execution flow
 
 ### Expected Improvements
 - Connection rate: +2-4%
