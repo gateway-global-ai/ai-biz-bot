@@ -6,6 +6,19 @@ AI-powered website generator that creates professional business websites from Go
 
 **Location:** `sdk/website-builder/` (consolidated from multiple previous locations)
 
+## 🎉 NEW: Advanced Features Integrated (Feb 7, 2026)
+
+The website builder now includes **enterprise-grade chat and e-commerce components**:
+
+- ✅ **Advanced Chat Interface** - Floating, Fixed, and Fullscreen modes
+- ✅ **Restaurant Menus** - Full menu system with categories and items
+- ✅ **Shopping Cart** - Complete cart with quantity management
+- ✅ **Checkout/Cashier** - Payment processing and order completion
+- ✅ **OTP Admin** - Secure admin authentication
+- ✅ **Voice AI Ready** - Integration with Voice AI SDK
+
+See [Advanced Components Documentation](./components/advanced/README.md) for details.
+
 ## Overview
 
 This template creates instant, professional websites for businesses by:
@@ -17,13 +30,26 @@ This template creates instant, professional websites for businesses by:
 
 ## Features
 
+### Core Website Generation
 - **Auto-Generated Content**: AI writes taglines, descriptions, and business insights
 - **Real Data**: Hours, reviews, photos pulled from Google Maps
 - **Voice Concierge**: Real-time AI voice assistant for customers
-- **Chat Widget**: AI chat support embedded in the website
+- **Nearby Places**: Auto-generates "neighborhood guide" with restaurants and activities
+
+### Advanced Chat & Commerce (NEW)
+- **Standardized Chat Interface**: Floating, Fixed, and Fullscreen view modes
+- **Multi-Mode Support**: Customer, Owner, and Developer modes with different branding
+- **Restaurant Menus**: Complete menu system with categories, items, and dietary badges
+- **Shopping Cart**: Full cart with quantity management and price calculations
+- **Checkout/Cashier**: Payment processing and order completion
+- **OTP Admin Panel**: Secure admin authentication for business owners
+- **Voice AI Integration**: Ready to integrate with Voice AI SDK
+
+### Customization
 - **Admin Panel**: Business owner can toggle fields, filter reviews, adjust settings
 - **AI Biz Bot**: Upsell assistant for integrations (Google Workspace, etc.)
-- **Nearby Places**: Auto-generates "neighborhood guide" with restaurants and activities
+- **Custom Branding**: Configurable colors, logos, and messaging
+- **Responsive Design**: Works on desktop, tablet, and mobile
 
 ## API Configuration
 
@@ -100,25 +126,115 @@ The AI Biz Bot can suggest these integrations:
 sdk/website-builder/
 ├── App.tsx              # Main app component
 ├── types.ts             # TypeScript interfaces
+├── types/
+│   └── menu.ts          # Menu & cart type definitions (NEW)
 ├── components/
 │   ├── PlaceSearch.tsx  # Google Places autocomplete
 │   ├── HeroSection.tsx  # Hero with photos
 │   ├── InfoGrid.tsx     # Hours, reviews, contact
 │   ├── BlogSection.tsx  # Nearby places guide
-│   ├── ChatWidget.tsx   # AI chat interface
+│   ├── ChatWidget.tsx   # AI chat interface (basic)
 │   ├── VoiceIndicator.tsx # Voice call UI
-│   └── AdminPanel.tsx   # Business owner admin
+│   ├── AdminPanel.tsx   # Business owner admin
+│   └── advanced/        # Advanced features (NEW)
+│       ├── README.md                    # Component documentation
+│       ├── StandardizedChatInterface.tsx # Advanced chat (3 modes)
+│       ├── FloatingChatWidget.tsx       # Floating FAB widget
+│       ├── MenuDisplay.tsx              # Restaurant menus
+│       ├── ShoppingCart.tsx             # Shopping cart
+│       ├── Checkout.tsx                 # Payment & checkout
+│       └── OtpLoginModal.tsx            # OTP authentication
 ├── services/
 │   ├── geminiService.ts # Gemini AI integration
 │   └── liveService.ts   # Voice AI service
-└── index.html           # Entry point
+└── package.json         # Dependencies & scripts
 ```
 
 ## Version History
 
 - **Latest (SDK)**: Production-ready with secure API handling and backend proxy support
+- **Feb 7, 2026**: Added advanced chat components (floating/fixed/fullscreen, menus, cart, checkout, OTP)
 - **Deprecated**: `website-builder/` (root) - to be removed
 - **Deprecated**: `genai-business-site-generator (2)/` - prototype with hardcoded keys
+
+## Using Advanced Features
+
+### Basic Chat (Simple)
+The basic ChatWidget component provides simple chat functionality:
+
+```tsx
+import ChatWidget from './components/ChatWidget';
+
+<ChatWidget
+  chatSession={chatSession}
+  isOpen={isOpen}
+  onClose={() => setIsOpen(false)}
+/>
+```
+
+### Advanced Chat (Recommended)
+For full features including floating/fixed/fullscreen modes:
+
+```tsx
+import StandardizedChatInterface from './components/advanced/StandardizedChatInterface';
+
+<StandardizedChatInterface
+  mode="customer"  // or "owner" or "developer"
+  fullscreen={false}
+  botName="AI Biz Bot"
+  primaryColor="#6366f1"
+  allowModeSwitch={true}
+  siteConfigId="your-site-id"
+/>
+```
+
+### E-Commerce Integration (Restaurants/Retail)
+Add menu, cart, and checkout for businesses that sell products:
+
+```tsx
+import MenuDisplay from './components/advanced/MenuDisplay';
+import ShoppingCart from './components/advanced/ShoppingCart';
+import Checkout from './components/advanced/Checkout';
+
+function RestaurantWebsite({ siteConfigId }) {
+  const [showCheckout, setShowCheckout] = useState(false);
+
+  return (
+    <>
+      <MenuDisplay siteConfigId={siteConfigId} />
+      <ShoppingCart 
+        siteConfigId={siteConfigId}
+        onCheckoutClick={() => setShowCheckout(true)}
+      />
+      {showCheckout && (
+        <Checkout
+          siteConfigId={siteConfigId}
+          onSuccess={() => alert('Order placed!')}
+          onBack={() => setShowCheckout(false)}
+        />
+      )}
+    </>
+  );
+}
+```
+
+### Admin Panel with OTP
+Secure admin access for business owners:
+
+```tsx
+import OtpLoginModal from './components/advanced/OtpLoginModal';
+
+<OtpLoginModal
+  isOpen={showLogin}
+  onClose={() => setShowLogin(false)}
+  onSuccess={(token) => {
+    // Store token and show admin features
+    setAuthToken(token);
+  }}
+/>
+```
+
+See [Advanced Components README](./components/advanced/README.md) for complete documentation.
 
 ## Future Enhancements
 
