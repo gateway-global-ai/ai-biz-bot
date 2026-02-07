@@ -91,14 +91,17 @@ export function registerInquiryRoutes(app: Express) {
         return res.status(400).json({ error: parsed.error.message });
       }
       
+      // Fetch existing inquiry so timestamps can be set only once
+      const existingInquiry = await storage.getInquiry(req.params.id);
+      
       const updates: any = { ...parsed.data };
       
-      // Set timestamps based on status changes
-      if (parsed.data.response && !updates.respondedAt) {
+      // Set timestamps based on status changes, only if not already set
+      if (parsed.data.response && existingInquiry && !existingInquiry.respondedAt) {
         updates.respondedAt = new Date();
       }
       
-      if (parsed.data.status === 'resolved' && !updates.resolvedAt) {
+      if (parsed.data.status === 'resolved' && existingInquiry && !existingInquiry.resolvedAt) {
         updates.resolvedAt = new Date();
       }
       
