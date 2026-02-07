@@ -3,7 +3,6 @@ import { VlmGoogleMapsService } from "./vlm-google-maps";
 import { VlmQualityScoringService } from "./vlm-quality-scoring";
 import { VlmEmailEnrichmentService } from "./vlm-email-enrichment";
 import { VlmOutboundCallerService } from "./vlm-outbound-caller";
-import { knowledgeBaseService } from "./knowledge-base";
 import type { VlmProspect, VlmCampaign, InsertVlmProspect } from "@shared/schema";
 
 const scoringService = new VlmQualityScoringService();
