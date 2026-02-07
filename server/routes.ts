@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { registerVlmRoutes } from "./vlm-routes";
 import { registerAgentRoutes } from "./agents/agent-routes";
 import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding";
+import knowledgeRoutes from "./routes/knowledge-routes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -6483,6 +6484,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
   // Register Workspace Onboarding routes
   registerWorkspaceOnboardingRoutes(app);
+
+  // Register Knowledge Base routes
+  app.use("/api/knowledge", knowledgeRoutes);
 
   return httpServer;
 }
