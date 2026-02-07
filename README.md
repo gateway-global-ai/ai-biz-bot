@@ -343,7 +343,9 @@ MIT License - See LICENSE file for details
 ### Deprecated Repositories
 See [GITHUB_STRATEGY.md](./GITHUB_STRATEGY.md) for list of archived repositories and migration paths.
 
-**Archival Templates**: [DEPRECATION_TEMPLATES.md](./DEPRECATION_TEMPLATES.md) provides standardized notices for deprecated repositories.
+**Archival Resources**:
+- [DEPRECATION_TEMPLATES.md](./DEPRECATION_TEMPLATES.md) - Standardized deprecation notices
+- [HOW_TO_APPLY_DEPRECATIONS.md](./HOW_TO_APPLY_DEPRECATIONS.md) - Step-by-step guide to apply templates
 
 ---
 

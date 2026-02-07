@@ -155,6 +155,8 @@ For deprecated repositories:
 4. Archive repository on GitHub
 5. Update organization .github profile to reflect changes
 
+**Step-by-Step Guide**: See [HOW_TO_APPLY_DEPRECATIONS.md](./HOW_TO_APPLY_DEPRECATIONS.md) for detailed instructions on applying deprecation templates to each repository.
+
 ## Communication Plan
 
 ### Internal Team
@@ -188,9 +190,11 @@ For deprecated repositories:
 1. ✅ Update chat-mvp-merge README with MVP focus
 2. ✅ Create GITHUB_STRATEGY.md (this document)
 3. ✅ Create PRODUCT_VISION.md
-4. [ ] Update .github repository with new branding
-5. [ ] Create deprecation READMEs for archived repos
-6. [ ] Archive deprecated repositories
+4. ✅ Create deprecation templates (DEPRECATION_TEMPLATES.md)
+5. ✅ Create application guide (HOW_TO_APPLY_DEPRECATIONS.md)
+6. [ ] Update .github repository with new branding
+7. [ ] Apply deprecation notices to 5 repositories (see [HOW_TO_APPLY_DEPRECATIONS.md](./HOW_TO_APPLY_DEPRECATIONS.md))
+8. [ ] Archive deprecated repositories
 
 ### Short-term (Q2 2026)
 1. [ ] Launch MVP platform
