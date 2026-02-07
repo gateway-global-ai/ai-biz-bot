@@ -72,6 +72,38 @@ To use gemini-2.5-pro-preview in a voice application:
 ## Python Configuration
 
 ```python
+Okay, let's look at a sample configuration for gemini-2.5-pro-preview .
+
+Unlike the gemini-2.5-flash-native-audio-preview-12-2025 model which is designed for live audio streams, gemini-2.5-pro-preview is a powerful multimodal reasoning model that primarily works with text, images, and other discrete inputs. When using it in a "chat" or conversational context, you interact with it by sending messages and receiving text responses. If you want to use it for voice, you'd typically integrate separate Speech-to-Text (STT) and Text-to-Speech (TTS) services.
+
+Key Configuration Points Explained for gemini-2.5-pro-preview :
+
+model_name="gemini-2.5-pro-preview" : This explicitly selects the powerful reasoning model.
+system_instruction=instruction : This is crucial for guiding the model's overall behavior, role, and output format. For a "Pro" model, you can often provide very complex and detailed instructions to shape its analytical approach.
+safety_settings : These define the content filtering behavior. For testing or specific applications, you might set them to BLOCK_NONE as shown, but in production, you'd typically use BLOCK_MEDIUM_AND_ABOVE or BLOCK_FEW for stricter content moderation.
+generation_config (Optional but common) :
+temperature : Controls the randomness of the output. Higher values (e.g., 0.8-1.0) make the output more creative and diverse, while lower values (e.g., 0.2-0.5) make it more deterministic and focused.
+top_p : Controls nucleus sampling. The model considers tokens whose cumulative probability mass adds up to top_p .
+top_k : Controls top-k sampling. The model samples from the top_k most probable tokens.
+max_output_tokens : Sets the maximum number of tokens the model will generate in a single response. This is important for controlling response length.
+model.start_chat(history=[]) : This initiates a conversational session. The history parameter allows you to provide previous turns of the conversation to maintain context.
+chat_session.send_message(user_message) : This is how you send input to the model. For gemini-2.5-pro-preview , this user_message will be text, or it could be a list of Part objects if you're sending multimodal input (e.g., text and an image).
+Important Note on Voice for gemini-2.5-pro-preview :
+
+To use gemini-2.5-pro-preview in a voice application, your architecture would look like this:
+
+User Speaks: Audio input.
+Speech-to-Text (STT) Service: Your application uses a separate STT service (like Google Cloud Speech-to-Text API) to transcribe the audio into text.
+gemini-2.5-pro-preview : Your application sends the transcribed text to the gemini-2.5-pro-preview model via chat_session.send_message() .
+Text Response: The model returns a text response.
+Text-to-Speech (TTS) Service: Your application uses a separate TTS service (like Google Cloud Text-to-Speech API) to convert the model's text response back into synthesized audio.
+Audio Playback: The synthesized audio is played back to the user.
+This approach gives you maximum flexibility to choose specific STT and TTS models/voices independently of the core reasoning model.
+
+Here's a sample configuration for initiating a chat with gemini-2.5-pro-preview :
+
+##CONFIG##
+
 import os
 from google.generativeai import GenerativeModel, configure
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
