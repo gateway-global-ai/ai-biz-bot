@@ -9,12 +9,21 @@ export function registerInquiryRoutes(app: Express) {
     try {
       const { status, priority, source, assignedTo, limit } = req.query;
       
+      const MAX_LIMIT = 100;
+      let validatedLimit: number | undefined = undefined;
+      if (typeof limit === "string") {
+        const parsed = parseInt(limit, 10);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          validatedLimit = Math.min(parsed, MAX_LIMIT);
+        }
+      }
+      
       const inquiries = await storage.getInquiries({
         status: status as string,
         priority: priority as string,
         source: source as string,
         assignedTo: assignedTo as string,
-        limit: limit ? parseInt(limit as string) : undefined,
+        limit: validatedLimit,
       });
       
       res.json(inquiries);
