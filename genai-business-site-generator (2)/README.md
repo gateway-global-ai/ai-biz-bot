@@ -21,7 +21,8 @@ This generator is part of a larger ecosystem. See the complete integration docum
 npm install
 
 # Set your Gemini API key
-echo "API_KEY=your_gemini_api_key_here" > .env.local
+echo "GEMINI_API_KEY=your_gemini_api_key_here" > .env.local
+# Note: The code uses API_KEY internally, but GEMINI_API_KEY is the standard naming
 
 # Run the app
 npm run dev

@@ -181,13 +181,13 @@ Click "Connect Google Workspace" to get:
 
 ### Support Channels
 - **Chat:** Click chat icon in bottom right
-- **Email:** support@example.com (coming soon)
-- **Phone:** Schedule a call through your admin panel
+- **GitHub Issues:** Report issues on the repository
+- **Documentation:** See guides in this repository
 
 ### Response Times
-- Chat: Instant (AI) or 2-4 hours (human)
-- Email: Within 24 hours
-- Phone: Scheduled calls within 48 hours
+- **Chat:** Instant (AI assistant)
+- **Issues:** Response within 24-48 hours
+- **Documentation:** Self-service available 24/7
 
 ## 🎓 Next Steps
 
