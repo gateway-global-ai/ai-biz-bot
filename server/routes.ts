@@ -6704,6 +6704,245 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
+  // ============================================
+  // VOICE ADMIN API
+  // ============================================
+  
+  // Get voice configuration for an agent
+  app.get("/api/voice/config/:agentId", async (req, res) => {
+    try {
+      const { agentId } = req.params;
+      
+      const agent = await storage.getAgent(agentId);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      
+      res.json({
+        model: agent.voiceModel || 'gemini-2.5-flash-native-audio-preview',
+        voice: agent.voiceName || 'Puck',
+        role: agent.voiceRole || 'AI Business Assistant',
+        companyName: agent.voiceCompanyName || 'AI Biz Bot',
+        systemPrompt: agent.systemPrompt || 'You are a helpful AI assistant for small businesses.',
+        voicePersona: agent.voicePersona || 'friendly',
+      });
+    } catch (error: any) {
+      console.error("[Voice Admin] Get config error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Update voice configuration for an agent
+  app.post("/api/voice/config/:agentId", async (req, res) => {
+    try {
+      const { agentId } = req.params;
+      const { model, voice, role, companyName, systemPrompt, voicePersona } = req.body;
+      
+      // Validate inputs
+      const validModels = [
+        'gemini-2.5-flash-native-audio-preview-12-2025',
+        'gemini-2.5-flash-native-audio-preview',
+        'gemini-2.5-flash-latest',
+        'gemini-2.0-flash-native-audio',
+      ];
+      
+      if (model && !validModels.includes(model)) {
+        return res.status(400).json({ error: "Invalid model specified" });
+      }
+      
+      const agent = await storage.getAgent(agentId);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      
+      // Update voice configuration
+      const updates: any = {};
+      if (model !== undefined) updates.voiceModel = model;
+      if (voice !== undefined) updates.voiceName = voice;
+      if (role !== undefined) updates.voiceRole = role;
+      if (companyName !== undefined) updates.voiceCompanyName = companyName;
+      if (systemPrompt !== undefined) updates.systemPrompt = systemPrompt;
+      if (voicePersona !== undefined) updates.voicePersona = voicePersona;
+      
+      const updatedAgent = await storage.updateAgent(agentId, updates);
+      
+      res.json({
+        success: true,
+        config: {
+          model: updatedAgent.voiceModel,
+          voice: updatedAgent.voiceName,
+          role: updatedAgent.voiceRole,
+          companyName: updatedAgent.voiceCompanyName,
+          systemPrompt: updatedAgent.systemPrompt,
+          voicePersona: updatedAgent.voicePersona,
+        }
+      });
+    } catch (error: any) {
+      console.error("[Voice Admin] Update config error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Get available voices for a model
+  app.get("/api/voice/models/:modelId/voices", (req, res) => {
+    const { modelId } = req.params;
+    
+    const modelVoices: Record<string, Array<{ id: string; name: string; gender: string; description: string }>> = {
+      'gemini-2.5-flash-native-audio-preview-12-2025': [
+        { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
+        { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+        { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+      ],
+      'gemini-2.5-flash-native-audio-preview': [
+        { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
+        { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+        { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+      ],
+      'gemini-2.5-flash-latest': [
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+      ],
+      'gemini-2.0-flash-native-audio': [
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+      ],
+    };
+    
+    const voices = modelVoices[modelId] || modelVoices['gemini-2.5-flash-native-audio-preview-12-2025'];
+    res.json({ voices });
+  });
+  
+  // ============================================
+  // PUSH-TO-TALK API
+  // ============================================
+  
+  // Process PTT audio recording
+  app.post("/api/ptt/process", async (req, res) => {
+    try {
+      const { audioBase64, agentId, conversationHistory } = req.body;
+      
+      if (!audioBase64) {
+        return res.status(400).json({ error: "Audio data required" });
+      }
+      
+      // Get agent configuration
+      let config: any = {
+        agentId: agentId || 'default',
+        model: 'gemini-2.5-flash-native-audio-preview',
+        voice: 'Puck',
+        systemPrompt: 'You are a helpful AI assistant for small businesses.'
+      };
+      
+      if (agentId) {
+        const agent = await storage.getAgent(agentId);
+        if (agent) {
+          config = {
+            agentId,
+            model: agent.voiceModel || config.model,
+            voice: agent.voiceName || config.voice,
+            systemPrompt: agent.systemPrompt || config.systemPrompt
+          };
+        }
+      }
+      
+      // Convert base64 to buffer
+      const audioBuffer = Buffer.from(audioBase64, 'base64');
+      
+      // Process with PTT service
+      const { getPTTService } = await import('./pttService');
+      const pttService = getPTTService();
+      const result = await pttService.processPTTAudio(
+        audioBuffer,
+        config,
+        conversationHistory || []
+      );
+      
+      if (!result.success) {
+        return res.status(500).json({ error: result.error });
+      }
+      
+      res.json({
+        success: true,
+        transcript: result.transcript,
+        responseText: result.responseText,
+        responseAudio: result.responseAudio?.toString('base64')
+      });
+    } catch (error: any) {
+      console.error("[PTT] Process error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Transcribe audio only (STT)
+  app.post("/api/ptt/transcribe", async (req, res) => {
+    try {
+      const { audioBase64 } = req.body;
+      
+      if (!audioBase64) {
+        return res.status(400).json({ error: "Audio data required" });
+      }
+      
+      const audioBuffer = Buffer.from(audioBase64, 'base64');
+      
+      const { getPTTService } = await import('./pttService');
+      const pttService = getPTTService();
+      const result = await pttService.transcribeAudio(audioBuffer);
+      
+      if (!result.success) {
+        return res.status(500).json({ error: result.error });
+      }
+      
+      res.json({
+        success: true,
+        transcript: result.transcript
+      });
+    } catch (error: any) {
+      console.error("[PTT] Transcribe error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Generate speech from text (TTS)
+  app.post("/api/ptt/synthesize", async (req, res) => {
+    try {
+      const { text, voice } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ error: "Text required" });
+      }
+      
+      const { getPTTService } = await import('./pttService');
+      const pttService = getPTTService();
+      const result = await pttService.generateSpeech(text, voice || 'Puck');
+      
+      if (!result.success) {
+        return res.status(500).json({ error: result.error });
+      }
+      
+      res.json({
+        success: true,
+        audio: result.audio?.toString('base64')
+      });
+    } catch (error: any) {
+      console.error("[PTT] Synthesize error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   registerVlmRoutes(app);
 
   // Register Agent System routes

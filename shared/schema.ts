@@ -338,6 +338,11 @@ export const agents = pgTable("agents", {
   aiTemperature: integer("ai_temperature").default(60), // Stored as 0-100, divide by 100 for actual value
   aiMaxTokens: integer("ai_max_tokens").default(4096),
   hfToken: text("hf_token"), // User's HuggingFace token (encrypted)
+  // Voice AI Configuration (Google Gemini)
+  voiceModel: text("voice_model").default("gemini-2.5-flash-native-audio-preview-12-2025"), // Gemini model for voice
+  voiceRole: text("voice_role").default("AI Business Assistant"),
+  voiceCompanyName: text("voice_company_name").default("AI Biz Bot"),
+  voicePersona: text("voice_persona").default("friendly"), // professional, friendly, enthusiastic, calm, authoritative
   // Budget Configuration
   budgetAmountUsd: numeric("budget_amount_usd", { precision: 10, scale: 2 }).default("0"),
   budgetPeriod: text("budget_period").default("monthly"), // daily, weekly, monthly
