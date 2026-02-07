@@ -471,7 +471,7 @@ When calling restaurants, emphasize:
       researchedBy: 'business_research_team'
     });
 
-    const salesIntelligence = await knowledgeBaseService.storeKnowledge({
+    await knowledgeBaseService.storeKnowledge({
       category: 'sales_intelligence',
       subcategory: 'cold_calling',
       title: 'Effective Cold Calling for SMB Outreach',
