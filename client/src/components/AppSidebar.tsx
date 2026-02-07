@@ -45,6 +45,7 @@ const OPERATIONS_ITEMS = [
   { id: 'gateway-admin', label: 'Gateway Admin', path: '/gateway-admin', icon: Globe },
   { id: 'telephony-mgr', label: 'Telephony', path: '/telephony', icon: Phone },
   { id: 'customers', label: 'Customer Manager', path: '/customers', icon: Users },
+  { id: 'inquiries', label: 'Inquiries', path: '/inquiries', icon: MessageSquare },
   { id: 'billing', label: 'Billing', path: '/billing', icon: CreditCard },
   { id: 'twilio-health', label: 'SMS Health Check', path: '/twilio-health', icon: Stethoscope },
   { id: 'google-drive', label: 'Google Drive', path: '/google-drive', icon: HardDrive },

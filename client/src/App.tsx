@@ -45,6 +45,7 @@ import CustomerSiteManager from "@/pages/CustomerSiteManager";
 import VoiceLeadMachine from "@/pages/VoiceLeadMachine";
 import SitesAndLeads from "@/pages/SitesAndLeads";
 import CommandChat from "@/pages/CommandChat";
+import InquiryManagement from "@/pages/InquiryManagement";
 import CustomerChatInterface from "@/pages/CustomerChatInterface";
 import OwnerChatInterface from "@/pages/OwnerChatInterface";
 import DeveloperChatInterface from "@/pages/DeveloperChatInterface";
@@ -307,6 +308,7 @@ function AppRouter() {
       {/* BusinessPage moved to public routes */}
       <Route path="/lead-machine" component={VoiceLeadMachine} />
       <Route path="/sites-leads" component={SitesAndLeads} />
+      <Route path="/inquiries" component={InquiryManagement} />
       <Route path="/command-chat" component={CommandChat} /> {/* Admin tool - specialized UI */}
       <Route path="/aibizbot" component={AiBizBotAdmin} />
       <Route path="/google-analyst" component={GoogleApiAnalyst} />

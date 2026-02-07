@@ -6,6 +6,7 @@ import { registerAgentRoutes } from "./agents/agent-routes";
 import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding";
 import knowledgeRoutes from "./routes/knowledge-routes";
 import { registerMenuRoutes } from "./routes/menu-routes";
+import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -6680,6 +6681,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
   // Register Menu and Cart routes
   registerMenuRoutes(app);
+
+  // Register Inquiry routes
+  registerInquiryRoutes(app);
 
   return httpServer;
 }

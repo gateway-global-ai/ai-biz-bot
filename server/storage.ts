@@ -59,6 +59,8 @@ import {
   type InsertVlmCampaign,
   type VlmCallAttempt,
   type InsertVlmCallAttempt,
+  type Inquiry,
+  type InsertInquiry,
   botTemplates,
   telephonyConfigs,
   callLogs,
@@ -89,7 +91,8 @@ import {
   vlmProspects,
   vlmCampaigns,
   vlmCallAttempts,
-  ogSettings
+  ogSettings,
+  inquiries
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -1132,6 +1135,53 @@ export class DatabaseStorage implements IStorage {
 
   async deleteOgSettings(id: string): Promise<boolean> {
     const result = await db.delete(ogSettings).where(eq(ogSettings.id, id));
+    return true;
+  }
+
+  // Inquiry operations
+  async getInquiries(filters?: {
+    status?: string;
+    priority?: string;
+    source?: string;
+    assignedTo?: string;
+    limit?: number;
+  }): Promise<Inquiry[]> {
+    let query = db.select().from(inquiries);
+    
+    const conditions = [];
+    if (filters?.status) conditions.push(eq(inquiries.status, filters.status));
+    if (filters?.priority) conditions.push(eq(inquiries.priority, filters.priority));
+    if (filters?.source) conditions.push(eq(inquiries.source, filters.source));
+    if (filters?.assignedTo) conditions.push(eq(inquiries.assignedTo, filters.assignedTo));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    const result = await query.orderBy(desc(inquiries.createdAt)).limit(filters?.limit || 100);
+    return result;
+  }
+
+  async getInquiry(id: string): Promise<Inquiry | undefined> {
+    const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, id));
+    return inquiry;
+  }
+
+  async createInquiry(inquiry: InsertInquiry): Promise<Inquiry> {
+    const [created] = await db.insert(inquiries).values(inquiry).returning();
+    return created;
+  }
+
+  async updateInquiry(id: string, updates: Partial<InsertInquiry>): Promise<Inquiry | undefined> {
+    const [updated] = await db.update(inquiries)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(inquiries.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteInquiry(id: string): Promise<boolean> {
+    await db.delete(inquiries).where(eq(inquiries.id, id));
     return true;
   }
 }
