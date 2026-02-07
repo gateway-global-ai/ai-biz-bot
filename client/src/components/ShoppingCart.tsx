@@ -19,7 +19,7 @@ export default function ShoppingCartComponent({ siteConfigId, onCheckout, onClos
   const { toast } = useToast();
 
   const getSessionId = () => {
-    return localStorage.getItem("cart_session_id") || "";
+    return localStorage.getItem("cart_session_id") || null;
   };
 
   useEffect(() => {
@@ -29,7 +29,8 @@ export default function ShoppingCartComponent({ siteConfigId, onCheckout, onClos
   const loadCart = async () => {
     try {
       const sessionId = getSessionId();
-      const response = await fetch(`/api/cart/${siteConfigId}?sessionId=${sessionId}`);
+      const queryParam = sessionId ? `sessionId=${sessionId}` : "";
+      const response = await fetch(`/api/cart/${siteConfigId}${queryParam ? `?${queryParam}` : ""}`);
       if (!response.ok) throw new Error("Failed to load cart");
       
       const cartData = await response.json();
@@ -51,26 +52,16 @@ export default function ShoppingCartComponent({ siteConfigId, onCheckout, onClos
   };
 
   const loadMenuItems = async (itemIds: string[]) => {
-    // For now, we'll fetch menu items individually
-    // In a production app, you'd want a batch endpoint
     const items: Record<string, MenuItem> = {};
     
+    // Fetch each menu item
     for (const itemId of itemIds) {
       try {
-        // This is a simplified approach - in production you'd batch these requests
-        // or include menu item details in the cart response
-        items[itemId] = { 
-          id: itemId, 
-          name: "Menu Item", 
-          price: "0.00",
-          isAvailable: true,
-          displayOrder: 0,
-          allergens: [],
-          dietaryInfo: [],
-          menuId: "",
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
+        const response = await fetch(`/api/menu-items/${itemId}`);
+        if (response.ok) {
+          const itemData = await response.json();
+          items[itemId] = itemData;
+        }
       } catch (error) {
         console.error(`Error loading menu item ${itemId}:`, error);
       }

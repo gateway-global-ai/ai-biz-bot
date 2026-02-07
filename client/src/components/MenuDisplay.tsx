@@ -67,7 +67,8 @@ export default function MenuDisplay({ siteConfigId, onCartUpdate }: MenuDisplayP
   const loadCart = async () => {
     try {
       const sessionId = getSessionId();
-      const response = await fetch(`/api/cart/${siteConfigId}?sessionId=${sessionId}`);
+      const queryParam = sessionId ? `sessionId=${sessionId}` : "";
+      const response = await fetch(`/api/cart/${siteConfigId}${queryParam ? `?${queryParam}` : ""}`);
       if (!response.ok) throw new Error("Failed to load cart");
       
       const cartData = await response.json();
@@ -278,8 +279,9 @@ export default function MenuDisplay({ siteConfigId, onCartUpdate }: MenuDisplayP
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={() => updateCartItemQuantity(cartItemId!, quantity - 1)}
+                                      onClick={() => cartItemId && updateCartItemQuantity(cartItemId, quantity - 1)}
                                       className="border-slate-600"
+                                      disabled={!cartItemId}
                                     >
                                       <Minus className="w-4 h-4" />
                                     </Button>
@@ -289,8 +291,9 @@ export default function MenuDisplay({ siteConfigId, onCartUpdate }: MenuDisplayP
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={() => updateCartItemQuantity(cartItemId!, quantity + 1)}
+                                      onClick={() => cartItemId && updateCartItemQuantity(cartItemId, quantity + 1)}
                                       className="border-slate-600"
+                                      disabled={!cartItemId}
                                     >
                                       <Plus className="w-4 h-4" />
                                     </Button>
@@ -344,8 +347,9 @@ export default function MenuDisplay({ siteConfigId, onCartUpdate }: MenuDisplayP
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => updateCartItemQuantity(cartItemId!, quantity - 1)}
+                              onClick={() => cartItemId && updateCartItemQuantity(cartItemId, quantity - 1)}
                               className="border-slate-600"
+                              disabled={!cartItemId}
                             >
                               <Minus className="w-4 h-4" />
                             </Button>
@@ -355,8 +359,9 @@ export default function MenuDisplay({ siteConfigId, onCartUpdate }: MenuDisplayP
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => updateCartItemQuantity(cartItemId!, quantity + 1)}
+                              onClick={() => cartItemId && updateCartItemQuantity(cartItemId, quantity + 1)}
                               className="border-slate-600"
+                              disabled={!cartItemId}
                             >
                               <Plus className="w-4 h-4" />
                             </Button>

@@ -205,6 +205,26 @@ export function registerMenuRoutes(app: Express) {
   // MENU ITEM ROUTES
   // ==========================================
   
+  // Get a specific menu item by ID
+  app.get("/api/menu-items/:itemId", async (req, res) => {
+    try {
+      const { itemId } = req.params;
+      
+      const item = await db.query.menuItems.findFirst({
+        where: eq(menuItems.id, itemId),
+      });
+      
+      if (!item) {
+        return res.status(404).json({ error: "Menu item not found" });
+      }
+      
+      res.json(item);
+    } catch (error) {
+      console.error("Error fetching menu item:", error);
+      res.status(500).json({ error: "Failed to fetch menu item" });
+    }
+  });
+  
   // Create a menu item
   app.post("/api/menu-items", async (req, res) => {
     try {
@@ -293,8 +313,8 @@ export function registerMenuRoutes(app: Express) {
         // Create a new cart
         const [newCart] = await db.insert(carts).values({
           siteConfigId,
-          sessionId: sessionId as string || undefined,
-          customerId: customerId as string || undefined,
+          sessionId: sessionId as string | undefined,
+          customerId: customerId as string | undefined,
           status: "active",
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
         }).returning();
@@ -545,7 +565,16 @@ export function registerMenuRoutes(app: Express) {
       const { orderId } = req.params;
       const { status } = req.body;
       
-      const updateData: any = { 
+      interface OrderUpdateData {
+        status: string;
+        updatedAt: Date;
+        confirmedAt?: Date;
+        completedAt?: Date;
+        actualDeliveryTime?: Date;
+        cancelledAt?: Date;
+      }
+      
+      const updateData: OrderUpdateData = { 
         status,
         updatedAt: new Date()
       };
@@ -587,9 +616,9 @@ async function updateCartTotals(cartId: string) {
   });
   
   const subtotal = items.reduce((sum, item) => sum + Number(item.totalPrice), 0);
-  const taxRate = 0.08; // 8% tax - should be configurable
+  const taxRate = 0.08; // TODO: Make this configurable per site/jurisdiction
   const taxAmount = subtotal * taxRate;
-  const deliveryFee = 5.00; // Flat delivery fee - should be configurable
+  const deliveryFee = 5.00; // TODO: Make this configurable per site
   const totalAmount = subtotal + taxAmount + deliveryFee;
   
   await db
