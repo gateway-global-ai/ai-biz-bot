@@ -450,7 +450,7 @@ export default function InquiryManagement() {
                         <PriorityBadge priority={inquiry.priority || 'normal'} />
                       </td>
                       <td className="p-4 text-slate-400 text-sm">
-                        {format(new Date(inquiry.createdAt), "MMM d, yyyy")}
+                        {inquiry.createdAt ? format(new Date(inquiry.createdAt), "MMM d, yyyy") : "-"}
                       </td>
                       <td className="p-4">
                         <div className="flex gap-2">
