@@ -434,6 +434,7 @@ export function registerVlmRoutes(app: Express) {
         callScript: z.string().optional(),
         callerIdNumber: z.string().optional(),
         callDelayMs: z.number().int().min(0).optional().default(3000),
+        useKnowledgeBase: z.boolean().optional().default(true), // Enable by default
       });
 
       const parsed = schema.safeParse(req.body);
@@ -481,6 +482,40 @@ export function registerVlmRoutes(app: Express) {
       );
       res.json({ script });
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/vlm/auto-agent/generate-knowledge-script", async (req: Request, res: Response) => {
+    try {
+      const { prospectId, campaignId } = req.body;
+      
+      if (!prospectId) {
+        return res.status(400).json({ error: "prospectId required" });
+      }
+
+      const prospect = await storage.getVlmProspect(prospectId);
+      if (!prospect) {
+        return res.status(404).json({ error: "Prospect not found" });
+      }
+
+      let campaign = null;
+      if (campaignId) {
+        campaign = await storage.getVlmCampaign(campaignId);
+      }
+
+      const script = await callerService.generateKnowledgeEnhancedScript(prospect, campaign || undefined);
+      
+      res.json({ 
+        script,
+        prospect: {
+          businessName: prospect.businessName,
+          industry: prospect.industry,
+          city: prospect.city
+        }
+      });
+    } catch (error: any) {
+      console.error("[VLM] Knowledge script generation error:", error.message);
       res.status(500).json({ error: error.message });
     }
   });
