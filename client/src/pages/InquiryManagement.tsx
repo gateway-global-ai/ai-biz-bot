@@ -325,9 +325,25 @@ export default function InquiryManagement() {
     );
   });
 
-  const handleViewInquiry = (inquiry: Inquiry) => {
-    setSelectedInquiry(inquiry);
-    setDetailOpen(true);
+  const handleViewInquiry = async (inquiry: Inquiry) => {
+    try {
+      const res = await apiRequest("GET", `/api/inquiries/${inquiry.id}`);
+      const freshInquiry: Inquiry = await res.json();
+      setSelectedInquiry(freshInquiry);
+      setDetailOpen(true);
+      // Ensure list and stats reflect any server-side "viewed" updates
+      queryClient.invalidateQueries({ queryKey: ["/api/inquiries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inquiries/stats"] });
+    } catch (error) {
+      // Fallback to existing data if the fresh fetch fails
+      setSelectedInquiry(inquiry);
+      setDetailOpen(true);
+      toast({
+        title: "Error",
+        description: "Failed to load the latest inquiry details.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
