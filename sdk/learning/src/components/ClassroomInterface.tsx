@@ -29,6 +29,14 @@ const ClassroomInterface: React.FC<Props> = ({ plan, onEndClass }) => {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sessionRef = useRef<ClassroomSession | null>(null);
   const [nextStartTime, setNextStartTime] = useState<number>(0);
+  const currentAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  
+  // Enhanced Audio Features
+  const [autoNarrate, setAutoNarrate] = useState(true);
+  const [audioSpeed, setAudioSpeed] = useState(1.0);
+  const [isAudioPaused, setIsAudioPaused] = useState(false);
+  const [isInstructorSpeaking, setIsInstructorSpeaking] = useState(false);
+  const audioCache = useRef<Map<string, AudioBuffer>>(new Map());
   
   // Force a re-render for visualizer when analyser is attached
   const [analyserState, setAnalyserState] = useState<AnalyserNode | null>(null);
@@ -50,7 +58,10 @@ const ClassroomInterface: React.FC<Props> = ({ plan, onEndClass }) => {
         setBoard(content);
       },
       onAudioData: (buffer) => {
+        setIsInstructorSpeaking(true);
         playAudioBuffer(buffer);
+        // Reset speaking indicator after audio finishes
+        setTimeout(() => setIsInstructorSpeaking(false), buffer.duration * 1000);
       },
       onClose: () => setIsConnected(false),
       onError: (err) => setError(err.message || "Connection failed")
@@ -101,6 +112,17 @@ const ClassroomInterface: React.FC<Props> = ({ plan, onEndClass }) => {
 
     handleImageGeneration();
   }, [board.imagePrompt, board.imageUrl, lastProcessedImagePrompt]);
+
+  // Auto-narrate when board content changes
+  useEffect(() => {
+    if (autoNarrate && !isConnected && board.title) {
+      // Only auto-narrate if using TTS mode (not connected to live session)
+      const timer = setTimeout(() => {
+        handleNarrate();
+      }, 500); // Small delay to let content settle
+      return () => clearTimeout(timer);
+    }
+  }, [board.title, board.content, autoNarrate, isConnected]);
 
 
   const ensureAudioContext = async () => {
