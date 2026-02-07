@@ -339,7 +339,7 @@ export const agents = pgTable("agents", {
   aiMaxTokens: integer("ai_max_tokens").default(4096),
   hfToken: text("hf_token"), // User's HuggingFace token (encrypted)
   // Voice AI Configuration (Google Gemini)
-  voiceModel: text("voice_model").default("gemini-2.5-flash-native-audio-preview"), // Gemini model for voice
+  voiceModel: text("voice_model").default("gemini-2.5-flash-native-audio-preview-12-2025"), // Gemini model for voice
   voiceRole: text("voice_role").default("AI Business Assistant"),
   voiceCompanyName: text("voice_company_name").default("AI Biz Bot"),
   voicePersona: text("voice_persona").default("friendly"), // professional, friendly, enthusiastic, calm, authoritative

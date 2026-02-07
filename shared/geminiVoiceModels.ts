@@ -93,12 +93,12 @@ export interface GeminiModelConfig {
 }
 
 export const GEMINI_VOICE_MODELS: Record<string, GeminiModelConfig> = {
-  'gemini-2.5-flash-native-audio-preview': {
-    id: 'gemini-2.5-flash-native-audio-preview',
-    name: 'gemini-2.5-flash-native-audio-preview',
-    displayName: 'Gemini 2.5 Flash Native Audio',
-    description: 'Latest model with best quality native audio support and advanced features',
-    releaseDate: '2025-01',
+  'gemini-2.5-flash-native-audio-preview-12-2025': {
+    id: 'gemini-2.5-flash-native-audio-preview-12-2025',
+    name: 'gemini-2.5-flash-native-audio-preview-12-2025',
+    displayName: 'Gemini 2.5 Flash Native Audio (December 2025)',
+    description: 'Cutting-edge native audio model with enhanced quality, affective dialog, proactive audio, and improved barge-in. 30 HD voices in 24 languages.',
+    releaseDate: '2025-12',
     isLatest: true,
     isBudgetFriendly: false,
     
@@ -170,7 +170,158 @@ export const GEMINI_VOICE_MODELS: Record<string, GeminiModelConfig> = {
     performance: {
       averageLatency: 800,
       streamingLatency: 300,
-      audioQuality: 'Premium HD (24kHz)',
+      audioQuality: 'Premium HD (24kHz output, 16kHz input)',
+    },
+    
+    sdkTemplate: 'gemini-2.5-live-api-native-audio',
+    exampleCode: `// Gemini 2.5 Flash Native Audio (Dec 2025) - Live API
+// Features: Affective Dialog, Proactive Audio, Improved Barge-in
+// Audio: 16kHz input, 24kHz output
+import { GoogleGenAI, Modality } from '@google/genai';
+
+const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+// System instruction defines AI persona and behavior
+const systemInstruction = \`You are a Support Specialist at TechCorp.
+Your primary task is: Help users with troubleshooting.
+Personality: Friendly, patient, and technically knowledgeable.
+Communication Style: Clear, step-by-step guidance.
+Keep responses conversational and concise.\`;
+
+// Connect to Live API for bidirectional streaming
+const session = await client.live.connect({
+  model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+  config: {
+    // Define AI persona and context
+    systemInstruction: {
+      parts: [{ text: systemInstruction }]
+    },
+    // Enable both audio and text responses
+    responseModalities: [Modality.AUDIO, Modality.TEXT],
+    // Configure voice output
+    speechConfig: {
+      voiceConfig: {
+        prebuiltVoiceConfig: { 
+          voiceName: 'Zephyr' // Choose from 30 HD voices
+        }
+      }
+    },
+    // Audio processing settings
+    audioConfig: {
+      enableAutomaticSpeechRecognition: true, // STT
+      enableTextToSpeech: true, // TTS
+      inputAudioSampleRate: 16000, // Browser standard
+      outputAudioSampleRate: 24000, // Gemini native HD
+    },
+    // Generation parameters
+    generationConfig: {
+      temperature: 0.8,
+      topP: 0.95,
+      topK: 40,
+      maxOutputTokens: 2048,
+    }
+  },
+  callbacks: {
+    onopen: () => console.log('Connected to native audio model'),
+    onmessage: (msg) => {
+      // Handle incoming audio (24kHz PCM) and text
+      handleResponse(msg);
+    },
+    onerror: (err) => console.error(err),
+  }
+});
+
+// Send audio input (16kHz PCM recommended)
+await session.sendRealtimeInput({
+  media: { 
+    data: audioBase64, 
+    mimeType: 'audio/pcm;rate=16000' 
+  }
+});
+
+// For browser AudioContext:
+// Input: new AudioContext({ sampleRate: 16000 })
+// Output: new AudioContext({ sampleRate: 24000 })`,
+  },
+  
+  'gemini-2.5-flash-native-audio-preview': {
+    id: 'gemini-2.5-flash-native-audio-preview',
+    name: 'gemini-2.5-flash-native-audio-preview',
+    displayName: 'Gemini 2.5 Flash Native Audio (General Preview)',
+    description: 'Stable native audio model with excellent quality and live conversation capabilities. Recommended for production use.',
+    releaseDate: '2025-01',
+    isLatest: false,
+    isBudgetFriendly: false,
+    
+    apiEndpoint: 'https://generativelanguage.googleapis.com/v1beta',
+    usesLiveAPI: true,
+    usesBidiStreaming: true,
+    
+    capabilities: {
+      audioInput: true,
+      audioOutput: true,
+      textInput: true,
+      textOutput: true,
+      streaming: true,
+      functionCalling: true,
+    },
+    
+    systemPromptConfig: {
+      format: 'systemInstruction',
+      maxLength: 8000,
+      supportsRoles: true,
+    },
+    
+    samplingConfig: {
+      temperature: {
+        min: 0,
+        max: 2.0,
+        default: 1.0,
+        recommended: 0.8,
+      },
+      topP: {
+        min: 0,
+        max: 1.0,
+        default: 0.95,
+        recommended: 0.95,
+      },
+      topK: {
+        min: 1,
+        max: 40,
+        default: 40,
+        recommended: 40,
+      },
+      maxOutputTokens: {
+        min: 1,
+        max: 8192,
+        default: 8192,
+        recommended: 2048,
+      },
+    },
+    
+    availableVoices: [
+      { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive', quality: 'premium' },
+      { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate', quality: 'premium' },
+      { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing', quality: 'premium' },
+      { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic', quality: 'premium' },
+      { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative', quality: 'premium' },
+      { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident', quality: 'premium' },
+      { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear', quality: 'premium' },
+      { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable', quality: 'premium' },
+    ],
+    
+    pricing: {
+      inputAudioPerMinute: 0.04,
+      outputAudioPerMinute: 0.12,
+      inputTextPer1MTokens: 0.075,
+      outputTextPer1MTokens: 0.30,
+      currency: 'USD',
+    },
+    
+    performance: {
+      averageLatency: 800,
+      streamingLatency: 300,
+      audioQuality: 'Premium HD (24kHz output, 16kHz input)',
     },
     
     sdkTemplate: 'gemini-2.5-live-api',
@@ -179,7 +330,6 @@ import { GoogleGenAI, Modality } from '@google/genai';
 
 const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Connect to Live API for bidirectional streaming
 const session = await client.live.connect({
   model: 'gemini-2.5-flash-native-audio-preview',
   config: {
@@ -202,11 +352,119 @@ const session = await client.live.connect({
   callbacks: {
     onopen: () => console.log('Connected'),
     onmessage: (msg) => handleResponse(msg),
-    onerror: (err) => console.error(err),
   }
 });
 
-// Send audio input
+// Send 16kHz PCM audio
+await session.sendRealtimeInput({
+  media: { data: audioBase64, mimeType: 'audio/pcm;rate=16000' }
+});`,
+  },
+  
+  'gemini-2.5-flash-latest': {
+    id: 'gemini-2.5-flash-latest',
+    name: 'gemini-2.5-flash-latest',
+    displayName: 'Gemini 2.5 Flash Latest (General Purpose)',
+    description: 'Latest stable Flash model. Can handle voice via Live API but lacks specialized native-audio features like affective dialog and advanced barge-in.',
+    releaseDate: '2025-01',
+    isLatest: false,
+    isBudgetFriendly: true,
+    
+    apiEndpoint: 'https://generativelanguage.googleapis.com/v1beta',
+    usesLiveAPI: true,
+    usesBidiStreaming: true,
+    
+    capabilities: {
+      audioInput: true,
+      audioOutput: true,
+      textInput: true,
+      textOutput: true,
+      streaming: true,
+      functionCalling: true,
+    },
+    
+    systemPromptConfig: {
+      format: 'systemInstruction',
+      maxLength: 8000,
+      supportsRoles: true,
+    },
+    
+    samplingConfig: {
+      temperature: {
+        min: 0,
+        max: 2.0,
+        default: 1.0,
+        recommended: 0.7,
+      },
+      topP: {
+        min: 0,
+        max: 1.0,
+        default: 0.95,
+        recommended: 0.9,
+      },
+      topK: {
+        min: 1,
+        max: 40,
+        default: 40,
+        recommended: 32,
+      },
+      maxOutputTokens: {
+        min: 1,
+        max: 8192,
+        default: 8192,
+        recommended: 2048,
+      },
+    },
+    
+    availableVoices: [
+      { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable', quality: 'hd' },
+      { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative', quality: 'hd' },
+      { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate', quality: 'hd' },
+      { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident', quality: 'hd' },
+    ],
+    
+    pricing: {
+      inputAudioPerMinute: 0.03,
+      outputAudioPerMinute: 0.10,
+      inputTextPer1MTokens: 0.05,
+      outputTextPer1MTokens: 0.20,
+      currency: 'USD',
+    },
+    
+    performance: {
+      averageLatency: 900,
+      streamingLatency: 350,
+      audioQuality: 'HD (24kHz output, 16kHz input)',
+    },
+    
+    sdkTemplate: 'gemini-2.5-live-api-general',
+    exampleCode: `// Gemini 2.5 Flash Latest - General Purpose with Voice
+// Note: Less specialized than native-audio variants
+import { GoogleGenAI, Modality } from '@google/genai';
+
+const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+const session = await client.live.connect({
+  model: 'gemini-2.5-flash-latest',
+  config: {
+    systemInstruction: {
+      parts: [{ text: 'You are a helpful AI assistant.' }]
+    },
+    responseModalities: [Modality.AUDIO],
+    speechConfig: {
+      voiceConfig: {
+        prebuiltVoiceConfig: { voiceName: 'Puck' }
+      }
+    },
+    generationConfig: {
+      temperature: 0.7,
+      topP: 0.9,
+      topK: 32,
+      maxOutputTokens: 2048,
+    }
+  }
+});
+
 await session.sendRealtimeInput({
   media: { data: audioBase64, mimeType: 'audio/pcm;rate=16000' }
 });`,
@@ -215,8 +473,8 @@ await session.sendRealtimeInput({
   'gemini-2.0-flash-native-audio': {
     id: 'gemini-2.0-flash-native-audio',
     name: 'gemini-2.0-flash-native-audio',
-    displayName: 'Gemini 2.0 Flash Native Audio',
-    description: 'Budget-friendly model with good quality audio support',
+    displayName: 'Gemini 2.0 Flash Native Audio (Budget)',
+    description: 'Budget-friendly native audio model. Good quality at lower cost, ideal for high-volume deployments.',
     releaseDate: '2024-12',
     isLatest: false,
     isBudgetFriendly: true,
@@ -289,12 +547,11 @@ await session.sendRealtimeInput({
     },
     
     sdkTemplate: 'gemini-2.0-live-api',
-    exampleCode: `// Gemini 2.0 Flash Native Audio - Live API
+    exampleCode: `// Gemini 2.0 Flash Native Audio - Budget-Friendly
 import { GoogleGenAI, Modality } from '@google/genai';
 
 const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Connect to Live API
 const session = await client.live.connect({
   model: 'gemini-2.0-flash-native-audio',
   config: {
@@ -313,14 +570,9 @@ const session = await client.live.connect({
       topK: 32,
       maxOutputTokens: 1024,
     }
-  },
-  callbacks: {
-    onopen: () => console.log('Connected'),
-    onmessage: (msg) => handleResponse(msg),
   }
 });
 
-// Send audio
 await session.sendRealtimeInput({
   media: { data: audioBase64, mimeType: 'audio/pcm;rate=16000' }
 });`,

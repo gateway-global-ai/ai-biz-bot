@@ -42,7 +42,7 @@ export class PushToTalkService {
     conversationHistory: Array<{ role: string; content: string }> = []
   ): Promise<PTTResponse> {
     try {
-      const model = config.model || 'gemini-2.5-flash-native-audio-preview';
+      const model = config.model || 'gemini-2.5-flash-native-audio-preview-12-2025';
       const voice = config.voice || 'Puck';
       const systemPrompt = config.systemPrompt || 'You are a helpful AI assistant.';
       
@@ -71,19 +71,35 @@ export class PushToTalkService {
         }]
       });
       
-      // Call Gemini API
+      // Configure for Live API with proper settings
+      // Note: Using generateContent for PTT (one-shot), not live.connect
       const response = await this.client.models.generateContent({
         model,
         contents,
         config: {
           systemInstruction: { parts: [{ text: systemPrompt }] },
-          responseModalities: [Modality.AUDIO, Modality.TEXT],
+          responseModalities: ['AUDIO', 'TEXT'],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: {
                 voiceName: voice
               }
             }
+          },
+          // Audio processing configuration
+          audioConfig: {
+            enableAutomaticSpeechRecognition: true,
+            enableTextToSpeech: true,
+            // Input audio is expected at 16kHz (browser standard)
+            // Output audio will be 24kHz (Gemini native)
+            inputAudioSampleRate: 16000,
+            outputAudioSampleRate: 24000,
+          },
+          generationConfig: {
+            temperature: 0.8,
+            topP: 0.95,
+            topK: 40,
+            maxOutputTokens: 2048,
           }
         }
       });
@@ -108,13 +124,12 @@ export class PushToTalkService {
           responseText += part.text;
         }
         if (part.inlineData && part.inlineData.mimeType?.startsWith('audio/')) {
+          // Audio is PCM 24kHz from Gemini
           responseAudio = Buffer.from(part.inlineData.data, 'base64');
         }
       }
       
-      // Try to extract user transcript if available
-      // Note: Gemini might not always provide transcript in the same response
-      // In production, you might need a separate STT call
+      // Extract user transcript from response metadata
       userTranscript = this.extractUserTranscript(response) || 'Audio message received';
       
       return {

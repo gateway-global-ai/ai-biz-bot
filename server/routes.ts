@@ -6740,9 +6740,10 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       
       // Validate inputs
       const validModels = [
+        'gemini-2.5-flash-native-audio-preview-12-2025',
         'gemini-2.5-flash-native-audio-preview',
+        'gemini-2.5-flash-latest',
         'gemini-2.0-flash-native-audio',
-        'gemini-2.0-flash-exp'
       ];
       
       if (model && !validModels.includes(model)) {
@@ -6787,6 +6788,16 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     const { modelId } = req.params;
     
     const modelVoices: Record<string, Array<{ id: string; name: string; gender: string; description: string }>> = {
+      'gemini-2.5-flash-native-audio-preview-12-2025': [
+        { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
+        { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+        { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+      ],
       'gemini-2.5-flash-native-audio-preview': [
         { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
         { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
@@ -6797,20 +6808,21 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
         { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
       ],
+      'gemini-2.5-flash-latest': [
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+      ],
       'gemini-2.0-flash-native-audio': [
         { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
         { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
         { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
         { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
       ],
-      'gemini-2.0-flash-exp': [
-        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
-        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
-        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
-      ],
     };
     
-    const voices = modelVoices[modelId] || modelVoices['gemini-2.5-flash-native-audio-preview'];
+    const voices = modelVoices[modelId] || modelVoices['gemini-2.5-flash-native-audio-preview-12-2025'];
     res.json({ voices });
   });
   
