@@ -22,11 +22,13 @@ Gateway Global AI is the all-in-one platform for small business owners to launch
 - 💬 **Revolutionary Chat Interface** - Float, fix, or expand modes with full admin integration
 - 🎯 **DISC & ARCH Controls** - Advanced agent personality customization
 - 📁 **Google Workspace** - Seamless Drive, Calendar, Tasks, Docs, and Sheets integration
+- 🎓 **Learning SDK** - Immersive AI classroom for micro-learning experiences ⭐ NEW
 
 **For complete product vision**, see [PRODUCT_VISION.md](./PRODUCT_VISION.md) | **For GitHub strategy**, see [GITHUB_STRATEGY.md](./GITHUB_STRATEGY.md)
 
 ## 📋 Recent Updates
 
+**Learning SDK** (Feb 7, 2026): Integrated immersive AI-powered virtual classroom SDK with voice-enabled lessons, interactive quizzes, and knowledge base integration. First learning SDK built into a business platform - creates micro-learning experiences for small business topics and Gateway SDK usage. See [Learning SDK Documentation](sdk/learning/README.md) for details.
 **Google Drive SDK** (Feb 7, 2026): Created comprehensive Google Drive SDK organized in `sdk/google-drive/` alongside Voice AI and Chat SDKs. Includes TypeScript implementation with full Drive API functionality, quickstart example, type definitions, and comprehensive documentation. See [Google Drive SDK Documentation](sdk/google-drive/README.md) for details.
 
 **Voice AI SDK** (Feb 7, 2026): Integrated comprehensive Voice AI Unified SDK with support for multiple providers (OpenAI, Gemini, KIMI, ElevenLabs, Deepgram, Inworld). Includes cost optimization tools, Twilio integration, MCP server, and extensive examples. See [Voice AI SDK Documentation](docs/VOICE_AI_SDK.md) for details.
@@ -86,12 +88,13 @@ chat-mvp-merge/
 │   └── index.ts         # Server entry point
 ├── sdk/                 # SDKs and libraries
 │   ├── chat/            # Chat widget SDK
+│   └── learning/        # Learning & Classroom SDK ⭐ NEW
 │   ├── google-drive/    # Google Drive SDK ⭐ NEW
 │   └── voice-ai/        # Voice AI Unified SDK ⭐ NEW
 ├── shared/              # Shared types and utilities
 ├── docs/                # Documentation
-│   ├── VOICE_AI_SDK.md        # Voice AI SDK guide ⭐ NEW
-│   └── VOICE_AI_RESEARCH.md   # Comprehensive research report ⭐ NEW
+│   ├── VOICE_AI_SDK.md        # Voice AI SDK guide ⭐
+│   └── VOICE_AI_RESEARCH.md   # Comprehensive research report ⭐
 ├── dist/                # Build output (generated)
 └── script/              # Build scripts
 ```
@@ -155,6 +158,18 @@ chat-mvp-merge/
 - **Google Docs & Sheets**: Document creation and management
 - **Unified Access**: All workspace tools in admin dashboard
 
+### 🎓 Learning SDK - Immersive AI Classroom ⭐ NEW
+- **AI-Generated Lessons**: Dynamic curriculum created by Gemini AI
+- **Voice-Interactive Learning**: Natural conversation with AI instructor using Gemini Live
+- **Knowledge Base Integration**: Pre-built lessons on Google APIs, Gateway SDKs, and business tools
+- **Interactive Quizzes**: AI-generated multiple-choice questions with instant feedback
+- **Cinematic UI**: Futuristic classroom environment with dynamic visuals
+- **Micro-Learning Focus**: Bite-sized lessons perfect for busy entrepreneurs
+- **Learning Paths**: Structured multi-lesson journeys (Getting Started, Google Integration, Voice Automation)
+- **Progress Tracking**: Monitor completion and award certificates
+- **Embeddable**: Add to any website with script tag or React component
+- **First of Its Kind**: The only immersive learning SDK built into a business platform
+
 ### 🛠️ Business Management Tools
 - **Customer Relationship Management**: Lead capture, tracking, and notes
 - **Admin Dashboard**: Comprehensive NEXUSCMD control panel
@@ -212,8 +227,9 @@ chat-mvp-merge/
 - [SDK_IMPROVEMENTS.md](./SDK_IMPROVEMENTS.md) - SDK development notes
 - [AGENT_SYSTEM.md](./docs/AGENT_SYSTEM.md) - Agent architecture
 - [GOOGLE_WORKSPACE_INTEGRATION.md](./docs/GOOGLE_WORKSPACE_INTEGRATION.md) - Workspace integration details
-- [VOICE_AI_SDK.md](./docs/VOICE_AI_SDK.md) - **Voice AI Unified SDK guide** ⭐ NEW
-- [VOICE_AI_RESEARCH.md](./docs/VOICE_AI_RESEARCH.md) - **Comprehensive voice AI provider research** ⭐ NEW
+- [VOICE_AI_SDK.md](./docs/VOICE_AI_SDK.md) - **Voice AI Unified SDK guide** ⭐
+- [VOICE_AI_RESEARCH.md](./docs/VOICE_AI_RESEARCH.md) - **Comprehensive voice AI provider research** ⭐
+- [sdk/learning/README.md](./sdk/learning/README.md) - **Learning SDK complete guide** ⭐ NEW
 
 ## 🌿 Branch Strategy
 
