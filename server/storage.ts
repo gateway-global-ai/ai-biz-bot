@@ -314,6 +314,19 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async getCallLog(id: string): Promise<CallLog | undefined> {
+    const [log] = await db.select().from(callLogs).where(eq(callLogs.id, id));
+    return log;
+  }
+
+  async updateCallLog(id: string, updates: Partial<InsertCallLog>): Promise<CallLog | undefined> {
+    const [updated] = await db.update(callLogs)
+      .set(updates)
+      .where(eq(callLogs.id, id))
+      .returning();
+    return updated;
+  }
+
   // Agent operations
   async getAgents(): Promise<Agent[]> {
     return db.select().from(agents).orderBy(desc(agents.createdAt));

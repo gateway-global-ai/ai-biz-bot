@@ -67,6 +67,10 @@ export const callLogs = pgTable("call_logs", {
   status: text("status").notNull(), // 'completed' | 'missed' | 'blocked' | 'failed'
   recordingUrl: text("recording_url"),
   callSid: text("call_sid"),
+  // Customer tracking fields
+  customerName: text("customer_name"),
+  customerEmail: text("customer_email"),
+  notes: text("notes"),
   timestamp: timestamp("timestamp").defaultNow(),
 });
 

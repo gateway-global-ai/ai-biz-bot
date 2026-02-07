@@ -44,6 +44,7 @@ const OPERATIONS_ITEMS = [
   { id: 'aibizbot', label: 'AI Biz Bot', path: '/aibizbot', icon: Bot },
   { id: 'gateway-admin', label: 'Gateway Admin', path: '/gateway-admin', icon: Globe },
   { id: 'telephony-mgr', label: 'Telephony', path: '/telephony', icon: Phone },
+  { id: 'call-tracking', label: 'Call Tracking', path: '/call-tracking', icon: Phone },
   { id: 'customers', label: 'Customer Manager', path: '/customers', icon: Users },
   { id: 'inquiries', label: 'Inquiries', path: '/inquiries', icon: MessageSquare },
   { id: 'billing', label: 'Billing', path: '/billing', icon: CreditCard },
