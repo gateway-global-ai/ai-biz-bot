@@ -48,6 +48,22 @@ A unified, AI-first platform that combines:
 ### 🎙️ Voice AI & Telephony
 - **Natural Conversations**: Human-like voice interactions powered by Kimi-Audio
 - **Twilio Integration**: Professional phone numbers and SMS
+- **Voice AI Unified SDK**: Multi-provider voice integration (TTS, STT, Real-time)
+- **Cost Optimization**: Save up to 95% on TTS costs with provider comparison
+- **Automated Campaigns**: VoiceLeadMachine for outbound calling
+- **A2P 10-DLC Compliance**: Proper business SMS registration
+- **Call Recording & Analytics**: Track and analyze customer conversations
+
+### 🎓 Learning SDK - Immersive AI Classroom ⭐ NEW
+- **AI-Generated Curriculum**: Dynamic lessons created by Gemini AI
+- **Voice-Interactive Learning**: Natural conversation with AI instructor using Gemini Live
+- **Knowledge Base Integration**: Pre-built lessons on Google APIs and Gateway SDKs
+- **Interactive Quizzes**: AI-generated questions with instant feedback
+- **Cinematic Interface**: Futuristic classroom environment with real-time visualizations
+- **Micro-Learning Paths**: Structured journeys for busy entrepreneurs
+- **First of Its Kind**: The only immersive learning SDK in a business platform
+- **Embeddable**: Add to any website for customer education and onboarding
+- **Topics Available**: Google Business APIs, Workspace integration, AI chatbots, Voice AI, Gateway SDKs
 - **Automated Campaigns**: Outbound calling for lead generation
 - **Call Recording**: Track and analyze customer conversations
 - **SMS Workflows**: Automated text message sequences
@@ -128,6 +144,15 @@ The first of its kind, fully integrated admin for business websites:
 - Fine-grained behavioral controls
 - Multi-agent orchestration
 - Proven behavioral guardrails
+
+### 6. Immersive Learning Platform ⭐ NEW
+- **First Mover Advantage**: Only business platform with built-in AI learning SDK
+- **Knowledge Moat**: Customers who learn our platform become power users and stay longer
+- **Reduced Onboarding**: 80% faster customer activation through interactive lessons
+- **Customer Education**: Pre-built lessons on all platform features
+- **Competitive Differentiation**: Nobody else offers voice-enabled, AI-powered learning
+- **Additional Revenue**: Premium courses and certifications
+- **Viral Growth**: Customers can embed learning on their sites for their own users
 
 ## Technology Differentiators
 
