@@ -325,7 +325,7 @@ Google Workspace offers free APIs for Gmail, Calendar, Drive, Docs, and Sheets.
     // 6. Add business intelligence for outbound campaigns
     console.log('💼 Creating business intelligence for outbound campaigns...');
     
-    const restaurantIntelligence = await knowledgeBaseService.storeKnowledge({
+    await knowledgeBaseService.storeKnowledge({
       category: 'business_intelligence',
       subcategory: 'restaurant',
       title: 'Restaurant Industry Challenges 2026',
