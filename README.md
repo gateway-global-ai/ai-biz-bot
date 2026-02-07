@@ -27,6 +27,8 @@ Gateway Global AI is the all-in-one platform for small business owners to launch
 
 ## 📋 Recent Updates
 
+**Voice AI SDK** (Feb 7, 2026): Integrated comprehensive Voice AI Unified SDK with support for multiple providers (OpenAI, Gemini, KIMI, ElevenLabs, Deepgram, Inworld). Includes cost optimization tools, Twilio integration, MCP server, and extensive examples. See [Voice AI SDK Documentation](docs/VOICE_AI_SDK.md) for details.
+
 **Repository Cleanup** (Feb 7, 2026): Updated documentation to reflect MVP focus and consolidated platform features. Created comprehensive GitHub strategy and product vision documents.
 
 **Chat Interface** (Feb 6, 2026): Implemented portable chat interface with three user modes (Customer, Owner, Developer). Features 100vh responsive design, full Google Maps/Places API integration, Google Workspace, Twilio telephony, and TTS voice capabilities. See [CHAT_IMPLEMENTATION_SUMMARY.md](./CHAT_IMPLEMENTATION_SUMMARY.md) for details.
@@ -80,8 +82,13 @@ chat-mvp-merge/
 ├── server/              # Express backend
 │   ├── routes.ts        # API routes
 │   └── index.ts         # Server entry point
+├── sdk/                 # SDKs and libraries
+│   ├── chat/            # Chat widget SDK
+│   └── voice-ai/        # Voice AI Unified SDK ⭐ NEW
 ├── shared/              # Shared types and utilities
 ├── docs/                # Documentation
+│   ├── VOICE_AI_SDK.md        # Voice AI SDK guide ⭐ NEW
+│   └── VOICE_AI_RESEARCH.md   # Comprehensive research report ⭐ NEW
 ├── dist/                # Build output (generated)
 └── script/              # Build scripts
 ```
@@ -104,8 +111,11 @@ chat-mvp-merge/
 - **24/7 Availability**: Never miss a customer inquiry
 
 ### 🎙️ Voice AI & Telephony
+- **Voice AI Unified SDK**: Multi-provider voice integration (TTS, STT, Real-time) - [See SDK docs](docs/VOICE_AI_SDK.md)
+- **Cost Optimization**: Save up to 95% on TTS costs with built-in provider comparison
 - **Natural Conversations**: Human-like voice interactions via Kimi-Audio (Replicate)
 - **Twilio Integration**: Professional phone numbers, SMS, and voice
+- **MCP Server**: Deploy and manage voice AI resources via Model Context Protocol
 - **Automated Campaigns**: Outbound calling for lead generation
 - **A2P 10-DLC Compliance**: Proper business SMS registration
 - **SMS Workflows**: Automated text message sequences
@@ -199,6 +209,8 @@ chat-mvp-merge/
 - [SDK_IMPROVEMENTS.md](./SDK_IMPROVEMENTS.md) - SDK development notes
 - [AGENT_SYSTEM.md](./docs/AGENT_SYSTEM.md) - Agent architecture
 - [GOOGLE_WORKSPACE_INTEGRATION.md](./docs/GOOGLE_WORKSPACE_INTEGRATION.md) - Workspace integration details
+- [VOICE_AI_SDK.md](./docs/VOICE_AI_SDK.md) - **Voice AI Unified SDK guide** ⭐ NEW
+- [VOICE_AI_RESEARCH.md](./docs/VOICE_AI_RESEARCH.md) - **Comprehensive voice AI provider research** ⭐ NEW
 
 ## 🌿 Branch Strategy
 
