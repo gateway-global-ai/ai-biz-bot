@@ -1706,7 +1706,17 @@ export const inquiries = pgTable("inquiries", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertInquirySchema = createInsertSchema(inquiries).omit({
+export const insertInquirySchema = createInsertSchema(inquiries, {
+  source: z
+    .enum(["website", "chat", "phone", "email", "sms"])
+    .default("website"),
+  status: z
+    .enum(["new", "viewed", "in_progress", "resolved", "closed"])
+    .default("new"),
+  priority: z
+    .enum(["low", "normal", "high", "urgent"])
+    .default("normal"),
+}).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
