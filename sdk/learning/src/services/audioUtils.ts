@@ -20,6 +20,15 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+/**
+ * Decode PCM16 audio data to AudioBuffer
+ * 
+ * @param data - Raw PCM16 audio data as Uint8Array
+ * @param ctx - Audio context for creating the buffer
+ * @param sampleRate - Sample rate in Hz (24000 for Gemini Live API output)
+ * @param numChannels - Number of audio channels (1 for mono, 2 for stereo)
+ * @returns Decoded AudioBuffer ready for playback
+ */
 export async function decodeAudioData(
   data: Uint8Array,
   ctx: AudioContext,
@@ -33,12 +42,19 @@ export async function decodeAudioData(
   for (let channel = 0; channel < numChannels; channel++) {
     const channelData = buffer.getChannelData(channel);
     for (let i = 0; i < frameCount; i++) {
+      // Convert PCM16 to float32 [-1.0, 1.0]
       channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
     }
   }
   return buffer;
 }
 
+/**
+ * Convert Float32Array audio data to PCM16 blob for Gemini Live API
+ * 
+ * @param data - Float32 audio samples [-1.0, 1.0]
+ * @returns PCM16 blob with 16kHz sample rate for Gemini Live API input
+ */
 export function createPcmBlob(data: Float32Array): Blob {
   const l = data.length;
   const int16 = new Int16Array(l);
@@ -49,6 +65,6 @@ export function createPcmBlob(data: Float32Array): Blob {
   }
   return {
     data: arrayBufferToBase64(int16.buffer),
-    mimeType: 'audio/pcm;rate=16000',
+    mimeType: 'audio/pcm;rate=16000', // Gemini Live API expects 16kHz mono PCM16
   };
 }

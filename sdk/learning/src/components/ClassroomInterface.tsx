@@ -42,12 +42,17 @@ const ClassroomInterface: React.FC<Props> = ({ plan, onEndClass }) => {
   const [analyserState, setAnalyserState] = useState<AnalyserNode | null>(null);
 
   useEffect(() => {
-    // Initialize Audio Context on mount
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    // Initialize Audio Context with consistent sample rate
+    // Using 24000 Hz to match Gemini Live API output
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ 
+      sampleRate: 24000,
+      latencyHint: 'interactive' // Optimize for low latency
+    });
     outputCtxRef.current = ctx;
     
     const analyser = ctx.createAnalyser();
-    analyser.fftSize = 64; 
+    analyser.fftSize = 128; // Increased for better visualization
+    analyser.smoothingTimeConstant = 0.8; // Smoother transitions
     analyser.connect(ctx.destination);
     analyserRef.current = analyser;
     setAnalyserState(analyser);
