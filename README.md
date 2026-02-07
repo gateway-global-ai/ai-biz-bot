@@ -137,6 +137,7 @@ chat-mvp-merge/
 - [docs/TELEPHONY_ARCHITECTURE.md](./docs/TELEPHONY_ARCHITECTURE.md) - Telephony system design
 
 ### Google Business Integration
+- [DEVELOPER_QUICKSTART.md](./DEVELOPER_QUICKSTART.md) - **5-minute developer quick start with API examples**
 - [GOOGLE_BUSINESS_QUICKSTART.md](./GOOGLE_BUSINESS_QUICKSTART.md) - **Quick start for small business owners**
 - [GOOGLE_BUSINESS_MCP_INTEGRATION.md](./GOOGLE_BUSINESS_MCP_INTEGRATION.md) - **Complete integration guide linking knowledge base with MCP server**
 - [Google Business Notes/GOOGLE_PLACES_INTEGRATION.md](./Google%20Business%20Notes/GOOGLE_PLACES_INTEGRATION.md) - Google Places API integration details

@@ -420,6 +420,140 @@ export async function registerRoutes(
     }
   });
 
+  // Google Places Search - for business discovery
+  app.post("/api/places/search", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { query, location, radius } = req.body;
+
+      if (!query) {
+        return res.status(400).json({ error: "Search query is required" });
+      }
+
+      // Use the new Places API (Text Search) for better results
+      const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.businessStatus,places.photos,places.primaryType'
+        },
+        body: JSON.stringify({
+          textQuery: query,
+          ...(location && { locationBias: { circle: { center: location, radius: radius || 5000 } } })
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('[Places Search] API error:', data);
+        return res.status(response.status).json({ error: data.error?.message || 'Search failed', places: [] });
+      }
+
+      // Transform the new API format to be more user-friendly
+      const places = (data.places || []).map((place: any) => ({
+        placeId: place.id,
+        name: place.displayName?.text || 'Unknown',
+        address: place.formattedAddress || '',
+        location: place.location,
+        rating: place.rating || 0,
+        userRatingCount: place.userRatingCount || 0,
+        types: place.types || [],
+        primaryType: place.primaryType,
+        businessStatus: place.businessStatus,
+        photos: place.photos?.map((p: any) => p.name) || []
+      }));
+
+      res.json({ places, count: places.length });
+    } catch (error: any) {
+      console.error("[Places Search] Error:", error.message);
+      res.status(500).json({ error: error.message, places: [] });
+    }
+  });
+
+  // Google Places Owner Report - competitive analysis
+  app.post("/api/places/owner-report", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { businessName, radiusMiles } = req.body;
+
+      if (!businessName) {
+        return res.status(400).json({ error: "Business name is required" });
+      }
+
+      const report = await generateOwnerReport(
+        { mode: 'owner', businessName, radiusMiles },
+        apiKey
+      );
+
+      res.json({
+        report,
+        formatted: {
+          sms: formatOwnerReportForSms(report),
+          chat: formatOwnerReportForChat(report)
+        }
+      });
+    } catch (error: any) {
+      console.error("[Owner Report] Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Google Places Marketing Search - market research
+  app.post("/api/places/marketing-search", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { address, latitude, longitude, category, radiusMiles, minRating, maxRating, priceLevels } = req.body;
+
+      if (!category) {
+        return res.status(400).json({ error: "Category is required" });
+      }
+
+      if (!address && (!latitude || !longitude)) {
+        return res.status(400).json({ error: "Either address or latitude/longitude is required" });
+      }
+
+      const report = await generateMarketingSearch(
+        { 
+          mode: 'marketing', 
+          address, 
+          latitude, 
+          longitude, 
+          category, 
+          radiusMiles,
+          minRating,
+          maxRating,
+          priceLevels
+        },
+        apiKey
+      );
+
+      res.json({
+        report,
+        formatted: {
+          sms: formatMarketingReportForSms(report),
+          chat: formatMarketingReportForChat(report)
+        }
+      });
+    } catch (error: any) {
+      console.error("[Marketing Search] Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ============ Google Workspace Integration ============
   
   // In-memory storage for Google Workspace credentials (per business)
