@@ -1272,3 +1272,139 @@ export const insertConsultationSchema = createInsertSchema(consultations).omit({
 
 export type InsertConsultation = z.infer<typeof insertConsultationSchema>;
 export type Consultation = typeof consultations.$inferSelect;
+
+// Agent Knowledge Base - Research and Documentation Storage
+export const agentKnowledgeBase = pgTable("agent_knowledge_base", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Topic/Category
+  category: text("category").notNull(), // 'google_api' | 'business_tools' | 'integration' | 'research'
+  subcategory: text("subcategory"), // e.g., 'places_api', 'workspace', 'gmail', etc.
+  title: text("title").notNull(),
+  
+  // Content
+  content: text("content").notNull(), // Main research/documentation content (markdown)
+  summary: text("summary"), // Short summary for quick reference
+  metadata: jsonb("metadata"), // Flexible JSON for API details, costs, access info, etc.
+  
+  // Source Information
+  sources: jsonb("sources"), // Array of {url, title, date, credibility}
+  researchedBy: text("researched_by"), // Agent or user who created this
+  lastVerified: timestamp("last_verified"), // When info was last verified
+  
+  // Tags and Search
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`),
+  keywords: text("keywords").array().default(sql`ARRAY[]::text[]`), // For search optimization
+  
+  // Usage Tracking
+  accessCount: integer("access_count").default(0),
+  lastAccessed: timestamp("last_accessed"),
+  
+  // Version Control
+  version: integer("version").default(1),
+  parentId: varchar("parent_id"), // For tracking document versions
+  
+  // Status
+  status: text("status").default("active"), // 'draft' | 'active' | 'archived' | 'outdated'
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAgentKnowledgeBaseSchema = createInsertSchema(agentKnowledgeBase).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertAgentKnowledgeBase = z.infer<typeof insertAgentKnowledgeBaseSchema>;
+export type AgentKnowledgeBase = typeof agentKnowledgeBase.$inferSelect;
+
+// API Documentation - Specific to Google Business APIs
+export const apiDocumentation = pgTable("api_documentation", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  knowledgeBaseId: varchar("knowledge_base_id").references(() => agentKnowledgeBase.id),
+  
+  // API Details
+  apiName: text("api_name").notNull(), // e.g., "Google Places API", "Google Workspace API"
+  apiType: text("api_type").notNull(), // 'rest' | 'graphql' | 'grpc' | 'sdk'
+  version: text("version"), // API version
+  
+  // Access Information
+  accessType: text("access_type"), // 'public' | 'private' | 'enterprise' | 'restricted'
+  authenticationMethod: text("authentication_method"), // 'api_key' | 'oauth' | 'service_account'
+  requiresApproval: boolean("requires_approval").default(false),
+  
+  // Pricing
+  pricingModel: text("pricing_model"), // 'free' | 'pay_per_use' | 'subscription' | 'enterprise'
+  pricingDetails: jsonb("pricing_details"), // Detailed pricing tiers and costs
+  freeTier: jsonb("free_tier"), // Free tier limits if applicable
+  
+  // Rate Limits
+  rateLimits: jsonb("rate_limits"), // {requests_per_second, daily_limit, etc.}
+  quotas: jsonb("quotas"), // Usage quotas and limits
+  
+  // Documentation Links
+  officialDocs: text("official_docs"),
+  apiReference: text("api_reference"),
+  quickstartGuide: text("quickstart_guide"),
+  sdkLinks: jsonb("sdk_links"), // Links to various SDK implementations
+  
+  // Alternatives Analysis
+  canBeMirrored: boolean("can_be_mirrored").default(false),
+  alternativeApis: jsonb("alternative_apis"), // Array of alternative solutions
+  
+  // Integration Status
+  currentlyUsed: boolean("currently_used").default(false),
+  integrationStatus: text("integration_status"), // 'not_started' | 'in_progress' | 'completed' | 'deprecated'
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertApiDocumentationSchema = createInsertSchema(apiDocumentation).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertApiDocumentation = z.infer<typeof insertApiDocumentationSchema>;
+export type ApiDocumentation = typeof apiDocumentation.$inferSelect;
+
+// Research Tasks - Track ongoing research projects
+export const researchTasks = pgTable("research_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Task Details
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  researchType: text("research_type").notNull(), // 'api_analysis' | 'competitor_research' | 'market_analysis' | 'technical_feasibility'
+  
+  // Assignment
+  assignedTo: text("assigned_to"), // Agent or user responsible
+  priority: text("priority").default("medium"), // 'low' | 'medium' | 'high' | 'urgent'
+  
+  // Findings
+  findings: jsonb("findings"), // Research results and insights
+  relatedKnowledgeIds: text("related_knowledge_ids").array().default(sql`ARRAY[]::text[]`), // Links to knowledge base entries
+  
+  // Status Tracking
+  status: text("status").default("pending"), // 'pending' | 'in_progress' | 'completed' | 'on_hold'
+  progress: integer("progress").default(0), // 0-100
+  
+  // Timeline
+  dueDate: timestamp("due_date"),
+  completedAt: timestamp("completed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertResearchTaskSchema = createInsertSchema(researchTasks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertResearchTask = z.infer<typeof insertResearchTaskSchema>;
+export type ResearchTask = typeof researchTasks.$inferSelect;
