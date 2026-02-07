@@ -383,7 +383,7 @@ When calling restaurants, emphasize:
       researchedBy: 'business_research_team'
     });
 
-    const retailIntelligence = await knowledgeBaseService.storeKnowledge({
+    await knowledgeBaseService.storeKnowledge({
       category: 'business_intelligence',
       subcategory: 'retail',
       title: 'Retail Business Trends 2026',
