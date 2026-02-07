@@ -349,13 +349,15 @@ export default function InquiryManagement() {
         <CardContent className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div>
-              <Input
-                placeholder="Search inquiries..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-slate-900 border-slate-700 text-white"
-                icon={<Search className="w-4 h-4 text-slate-400" />}
-              />
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Input
+                  placeholder="Search inquiries..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="bg-slate-900 border-slate-700 text-white pl-8"
+                />
+              </div>
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="bg-slate-900 border-slate-700 text-white">
