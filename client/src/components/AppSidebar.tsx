@@ -41,6 +41,7 @@ const AGENT_TOOLS = [
 ];
 
 const OPERATIONS_ITEMS = [
+  { id: 'transparency', label: 'Transparency', path: '/transparency', icon: Activity },
   { id: 'aibizbot', label: 'AI Biz Bot', path: '/aibizbot', icon: Bot },
   { id: 'gateway-admin', label: 'Gateway Admin', path: '/gateway-admin', icon: Globe },
   { id: 'telephony-mgr', label: 'Telephony', path: '/telephony', icon: Phone },

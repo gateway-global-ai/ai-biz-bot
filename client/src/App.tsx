@@ -47,6 +47,8 @@ import SitesAndLeads from "@/pages/SitesAndLeads";
 import CommandChat from "@/pages/CommandChat";
 import InquiryManagement from "@/pages/InquiryManagement";
 import CallTracking from "@/pages/CallTracking";
+import TransparencyDashboard from "@/pages/TransparencyDashboard";
+import ContactForm from "@/pages/ContactForm";
 import CustomerChatInterface from "@/pages/CustomerChatInterface";
 import OwnerChatInterface from "@/pages/OwnerChatInterface";
 import DeveloperChatInterface from "@/pages/DeveloperChatInterface";
@@ -311,6 +313,7 @@ function AppRouter() {
       <Route path="/sites-leads" component={SitesAndLeads} />
       <Route path="/inquiries" component={InquiryManagement} />
       <Route path="/call-tracking" component={CallTracking} />
+      <Route path="/transparency" component={TransparencyDashboard} />
       <Route path="/command-chat" component={CommandChat} /> {/* Admin tool - specialized UI */}
       <Route path="/aibizbot" component={AiBizBotAdmin} />
       <Route path="/google-analyst" component={GoogleApiAnalyst} />
@@ -380,6 +383,7 @@ function App() {
               <Route path="/business" component={BusinessPage} />
               <Route path="/demo" component={BusinessPage} />
               <Route path="/login" component={Login} />
+              <Route path="/contact" component={ContactForm} />
               <Route path="/v2" component={LandingV2} />
               <Route path="/kimi-audio" component={KimiAudioDemo} />
               <Route path="/sdk" component={SdkShowcase} />
