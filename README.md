@@ -29,6 +29,7 @@ Gateway Global AI is the all-in-one platform for small business owners to launch
 ## 📋 Recent Updates
 
 **Learning SDK** (Feb 7, 2026): Integrated immersive AI-powered virtual classroom SDK with voice-enabled lessons, interactive quizzes, and knowledge base integration. First learning SDK built into a business platform - creates micro-learning experiences for small business topics and Gateway SDK usage. See [Learning SDK Documentation](sdk/learning/README.md) for details.
+**Google Drive SDK** (Feb 7, 2026): Created comprehensive Google Drive SDK organized in `sdk/google-drive/` alongside Voice AI and Chat SDKs. Includes TypeScript implementation with full Drive API functionality, quickstart example, type definitions, and comprehensive documentation. See [Google Drive SDK Documentation](sdk/google-drive/README.md) for details.
 
 **Voice AI SDK** (Feb 7, 2026): Integrated comprehensive Voice AI Unified SDK with support for multiple providers (OpenAI, Gemini, KIMI, ElevenLabs, Deepgram, Inworld). Includes cost optimization tools, Twilio integration, MCP server, and extensive examples. See [Voice AI SDK Documentation](docs/VOICE_AI_SDK.md) for details.
 
@@ -87,8 +88,9 @@ chat-mvp-merge/
 │   └── index.ts         # Server entry point
 ├── sdk/                 # SDKs and libraries
 │   ├── chat/            # Chat widget SDK
-│   ├── voice-ai/        # Voice AI Unified SDK ⭐
 │   └── learning/        # Learning & Classroom SDK ⭐ NEW
+│   ├── google-drive/    # Google Drive SDK ⭐ NEW
+│   └── voice-ai/        # Voice AI Unified SDK ⭐ NEW
 ├── shared/              # Shared types and utilities
 ├── docs/                # Documentation
 │   ├── VOICE_AI_SDK.md        # Voice AI SDK guide ⭐
