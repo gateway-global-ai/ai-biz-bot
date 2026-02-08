@@ -83,10 +83,10 @@ const App: React.FC = () => {
     }
   }, [isConnected, isPttMode, setIsMuted]);
 
-  // Handle Response State Changes
+  // Handle Response State Changes: clear waiting state when model finishes (isStreaming becomes false)
   useEffect(() => {
     const lastMsg = chatHistory[chatHistory.length - 1];
-    if (lastMsg && lastMsg.role === 'model' && lastMsg.isStreaming) {
+    if (lastMsg && lastMsg.role === 'model' && !lastMsg.isStreaming) {
       setIsWaitingForResponse(false);
     }
   }, [chatHistory]);
