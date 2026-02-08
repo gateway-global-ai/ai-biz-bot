@@ -15,7 +15,7 @@ import {
   Bot, Plus, Globe, MessageSquare, Settings, Trash2,
   Send, Loader2, ExternalLink, Code, Copy, Check,
   Sparkles, Clock, Star, MapPin, Phone, Zap,
-  ShoppingCart, Headphones, Palette
+  ShoppingCart, Headphones, Palette, BookOpen, UserPlus
 } from 'lucide-react';
 import type { Agent, SiteConfig, BotTemplate } from '@shared/schema';
 
@@ -31,6 +31,204 @@ const TEMPLATE_ICONS: Record<string, any> = {
   Palette,
   Bot,
 };
+
+interface KnowledgeDoc {
+  id: string;
+  title: string;
+  content: string;
+  addedAt: string;
+}
+
+interface DemoLeadRow {
+  id: string;
+  phone: string | null;
+  name: string | null;
+  businessName: string;
+  businessAddress: string | null;
+  placeId: string | null;
+  status: string;
+  magicTokenUsed: boolean | null;
+  demoStartedAt: string | null;
+  demoReadyAt: string | null;
+  createdAt: string | null;
+  demoUrl: string;
+  siteId: string | null;
+}
+
+function KnowledgeLibraryTab({
+  siteId,
+  docs,
+  onUpdate,
+}: {
+  siteId: string;
+  docs: KnowledgeDoc[];
+  onUpdate: () => void;
+}) {
+  const { toast } = useToast();
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const addDoc = async () => {
+    if (!title.trim() || !content.trim()) {
+      toast({ title: 'Title and content required', variant: 'destructive' });
+      return;
+    }
+    setAdding(true);
+    try {
+      const res = await fetch(`/api/site-configs/${siteId}/knowledge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title.trim(), content: content.trim() }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setTitle('');
+      setContent('');
+      onUpdate();
+      toast({ title: 'Document added to knowledge library' });
+    } catch (e: any) {
+      toast({ title: 'Failed to add', description: e.message, variant: 'destructive' });
+    }
+    setAdding(false);
+  };
+
+  const deleteDoc = async (docId: string) => {
+    setDeletingId(docId);
+    try {
+      const res = await fetch(`/api/site-configs/${siteId}/knowledge/${docId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await res.text());
+      onUpdate();
+      toast({ title: 'Document removed' });
+    } catch (e: any) {
+      toast({ title: 'Failed to remove', variant: 'destructive' });
+    }
+    setDeletingId(null);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-4">
+        <p className="text-sm text-slate-300 mb-3">
+          Upload or paste content to train your site&apos;s AI. The chatbot will use this knowledge to answer questions. You can add research docs, menus, FAQs, or anything that helps the agent sound expert about your business.
+        </p>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-slate-300 text-xs mb-1 block">Document title</Label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Blueberry Hill AI training guide"
+              className="bg-slate-800 border-slate-700 text-white"
+              data-testid="input-knowledge-title"
+            />
+          </div>
+          <div>
+            <Label className="text-slate-300 text-xs mb-1 block">Content (markdown or plain text)</Label>
+            <Textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Paste or type content the AI should use to answer questions..."
+              className="min-h-[160px] bg-slate-800 border-slate-700 text-white font-mono text-sm"
+              data-testid="textarea-knowledge-content"
+            />
+          </div>
+          <Button onClick={addDoc} disabled={adding} size="sm" data-testid="button-knowledge-add">
+            {adding ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <BookOpen className="w-4 h-4 mr-1" />}
+            Add to library
+          </Button>
+        </div>
+      </div>
+      <div>
+        <Label className="text-slate-300 text-xs mb-2 block">Documents in library ({docs.length})</Label>
+        {docs.length === 0 ? (
+          <p className="text-slate-500 text-sm">No documents yet. Add one above to train the agent.</p>
+        ) : (
+          <ul className="space-y-2">
+            {docs.map((d) => (
+              <li
+                key={d.id}
+                className="flex items-center justify-between gap-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm text-white truncate">{d.title}</p>
+                  <p className="text-xs text-slate-500 truncate">{d.content.length > 80 ? d.content.slice(0, 80) + '…' : d.content}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 shrink-0"
+                  onClick={() => deleteDoc(d.id)}
+                  disabled={deletingId === d.id}
+                  data-testid={`button-knowledge-delete-${d.id}`}
+                >
+                  {deletingId === d.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DemoLeadsSidebar({
+  leads,
+  onSelectSite,
+  selectedSiteId,
+}: {
+  leads: DemoLeadRow[];
+  onSelectSite: (siteId: string) => void;
+  selectedSiteId: string | null;
+}) {
+  if (leads.length === 0) return null;
+  return (
+    <div className="space-y-2 mb-6">
+      <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+        <UserPlus className="w-3.5 h-3.5" />
+        Customers &amp; Demos
+      </h3>
+      <p className="text-[10px] text-slate-500 mb-2">New signups with demo links</p>
+      <ul className="space-y-2 max-h-48 overflow-y-auto">
+        {leads.slice(0, 20).map((lead) => (
+          <li
+            key={lead.id}
+            className="p-2.5 rounded-lg border border-slate-700 bg-slate-800/50 text-left"
+          >
+            <p className="font-medium text-xs text-white truncate">{lead.businessName}</p>
+            {lead.phone && <p className="text-[10px] text-slate-500 truncate">{lead.phone}</p>}
+            <p className="text-[10px] text-slate-500 mt-0.5">
+              {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : '—'}
+            </p>
+            <div className="flex items-center gap-1.5 mt-2">
+              <a
+                href={lead.demoUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300"
+              >
+                <ExternalLink className="w-3 h-3" /> Open demo
+              </a>
+              {lead.siteId && (
+                <button
+                  type="button"
+                  onClick={() => onSelectSite(lead.siteId!)}
+                  className={`inline-flex items-center gap-1 text-[10px] ${selectedSiteId === lead.siteId ? 'text-indigo-300' : 'text-slate-500 hover:text-slate-400'}`}
+                >
+                  <Globe className="w-3 h-3" /> View site
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+      {leads.length > 20 && (
+        <p className="text-[10px] text-slate-500">Showing 20 of {leads.length}</p>
+      )}
+    </div>
+  );
+}
 
 function SiteList({
   sites,
@@ -118,7 +316,7 @@ function AdminPanel({
   isUpdating: boolean;
 }) {
   const placeData = site.placeData as any;
-  const [activeTab, setActiveTab] = useState<'settings' | 'agent' | 'chat' | 'logs' | 'embed'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'agent' | 'chat' | 'logs' | 'embed' | 'knowledge'>('settings');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: site.greetingMessage || `Hi! I'm the AI assistant for ${site.name}. How can I help you?` }
   ]);
@@ -131,6 +329,12 @@ function AdminPanel({
     queryKey: ['/api/site-configs', site.id, 'chat-logs'],
     queryFn: () => fetch(`/api/site-configs/${site.id}/chat-logs`).then(r => r.json()),
     enabled: activeTab === 'logs',
+  });
+
+  const { data: knowledgeDocs = [], refetch: refetchKnowledge } = useQuery<{ id: string; title: string; content: string; addedAt: string }[]>({
+    queryKey: ['/api/site-configs', site.id, 'knowledge'],
+    queryFn: () => fetch(`/api/site-configs/${site.id}/knowledge`).then(r => r.json()),
+    enabled: activeTab === 'knowledge',
   });
 
   const { data: providers = [] } = useQuery<{ provider: string; model: string }[]>({
@@ -200,6 +404,7 @@ function AdminPanel({
   const tabs = [
     { id: 'settings' as const, label: 'Settings', icon: Settings },
     { id: 'agent' as const, label: 'Agent', icon: Bot },
+    { id: 'knowledge' as const, label: 'Knowledge', icon: BookOpen },
     { id: 'chat' as const, label: 'Test Chat', icon: MessageSquare },
     { id: 'logs' as const, label: 'Logs', icon: Clock },
     { id: 'embed' as const, label: 'Embed', icon: Code },
@@ -361,6 +566,10 @@ function AdminPanel({
               </Card>
             )}
           </div>
+        )}
+
+        {activeTab === 'knowledge' && (
+          <KnowledgeLibraryTab siteId={site.id} docs={knowledgeDocs} onUpdate={refetchKnowledge} />
         )}
 
         {activeTab === 'agent' && (
@@ -742,6 +951,10 @@ export default function AiBizBotAdmin() {
     queryKey: ['/api/bot-templates'],
   });
 
+  const { data: demoLeads = [] } = useQuery<DemoLeadRow[]>({
+    queryKey: ['/api/admin/demo-leads'],
+  });
+
   const createMutation = useMutation({
     mutationFn: (data: { name: string; domain?: string; placeId?: string }) =>
       apiRequest('POST', '/api/site-configs', data),
@@ -800,12 +1013,19 @@ export default function AiBizBotAdmin() {
               onCreate={(data) => createMutation.mutate(data)}
             />
           ) : (
-            <SiteList
-              sites={sites}
-              selectedId={selectedSiteId}
-              onSelect={setSelectedSiteId}
-              onCreateNew={() => setIsCreating(true)}
-            />
+            <>
+              <DemoLeadsSidebar
+                leads={demoLeads}
+                onSelectSite={setSelectedSiteId}
+                selectedSiteId={selectedSiteId}
+              />
+              <SiteList
+                sites={sites}
+                selectedId={selectedSiteId}
+                onSelect={setSelectedSiteId}
+                onCreateNew={() => setIsCreating(true)}
+              />
+            </>
           )}
         </div>
       </div>

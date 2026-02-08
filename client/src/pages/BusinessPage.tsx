@@ -21,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import OtpLoginModal from '@/components/OtpLoginModal';
 import ShareButton from '@/components/ShareButton';
 import { Code2 } from 'lucide-react';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 
 import Pidea_logo_header__7_ from "@assets/Pidea logo header (7).png";
 
@@ -377,13 +378,19 @@ export default function BusinessPage() {
   const [stage, setStage] = useState<OnboardingStage>('landing');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneError, setPhoneError] = useState('');
-  const [previewTimer, setPreviewTimer] = useState(60);
+  const [gateStep, setGateStep] = useState<'phone' | 'otp'>('phone');
+  const [otpCode, setOtpCode] = useState('');
+  const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
+  const [previewTimer, setPreviewTimer] = useState(24);
   const [trainingProgress, setTrainingProgress] = useState(0);
   const [demoLeadId, setDemoLeadId] = useState<string | null>(null);
   const [ownerName, setOwnerName] = useState('');
   const [nameError, setNameError] = useState('');
-  const [demoCountdown, setDemoCountdown] = useState(3600);
+  const [demoCountdown, setDemoCountdown] = useState(24);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [otpError, setOtpError] = useState('');
   const [generatingProgress, setGeneratingProgress] = useState(0);
   const [tokenError, setTokenError] = useState<string | null>(null);
 
@@ -595,9 +602,20 @@ export default function BusinessPage() {
     }, 200);
   }, [selectedPlace]);
 
+  const prevStageRef = useRef<OnboardingStage>(stage);
+  useEffect(() => {
+    if (prevStageRef.current !== 'phone-gate' && stage === 'phone-gate') {
+      setGateStep('phone');
+      setPendingLeadId(null);
+      setOtpCode('');
+      setOtpError('');
+    }
+    prevStageRef.current = stage;
+  }, [stage]);
+
   useEffect(() => {
     if (stage !== 'preview') return;
-    setPreviewTimer(30);
+    setPreviewTimer(24);
     const interval = setInterval(() => {
       setPreviewTimer(prev => {
         if (prev <= 1) {
@@ -628,7 +646,7 @@ export default function BusinessPage() {
 
   useEffect(() => {
     if (stage !== 'training') return;
-    setDemoCountdown(3600);
+    setDemoCountdown(24);
     const interval = setInterval(() => {
       setDemoCountdown(prev => {
         if (prev <= 1) {
@@ -642,7 +660,19 @@ export default function BusinessPage() {
     return () => clearInterval(interval);
   }, [stage]);
 
+  // Only show the platform SDK chat widget on landing. When user is in preview/full-access
+  // they get a single chat inside WebsitePreview; avoid two chat UIs.
   useEffect(() => {
+    const isPreviewOrFullAccess = stage === 'preview' || stage === 'full-access';
+    if (isPreviewOrFullAccess) {
+      if ((window as any).__gatewayChatWidget) {
+        (window as any).__gatewayChatWidget.destroy();
+        delete (window as any).__gatewayChatWidget;
+      }
+      const el = document.querySelector('script[data-gateway-sdk]');
+      if (el) el.remove();
+      return;
+    }
     const existingScript = document.querySelector('script[data-gateway-sdk]');
     if (existingScript) return;
     const script = document.createElement('script');
@@ -674,7 +704,7 @@ export default function BusinessPage() {
       const el = document.querySelector('script[data-gateway-sdk]');
       if (el) el.remove();
     };
-  }, []);
+  }, [stage]);
 
   const handleSendMagicLink = async () => {
     if (!phoneNumber.trim()) {
@@ -687,10 +717,11 @@ export default function BusinessPage() {
       return;
     }
     setPhoneError('');
-    setStage('sending-link');
+    setSendingCode(true);
+    setOtpError('');
 
     try {
-      const res = await fetch('/api/demo/create', {
+      const res = await fetch('/api/demo/request-access', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -703,16 +734,48 @@ export default function BusinessPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setDemoLeadId(data.leadId);
-        setMagicLinkSent(true);
-        setStage('training');
+        setPendingLeadId(data.leadId);
+        setGateStep('otp');
+        toast({ title: 'Code sent', description: `Check your phone for the 6-digit code (***${data.phone || ''}).` });
       } else {
         setPhoneError(data.error || 'Something went wrong. Please try again.');
-        setStage('phone-gate');
       }
     } catch {
       setPhoneError('Connection error. Please try again.');
-      setStage('phone-gate');
+    } finally {
+      setSendingCode(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const code = otpCode.replace(/\D/g, '');
+    if (code.length !== 6 || !pendingLeadId) {
+      setOtpError('Please enter the 6-digit code from your phone.');
+      return;
+    }
+    setOtpError('');
+    setVerifyingOtp(true);
+    try {
+      const res = await fetch('/api/demo/verify-and-enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: pendingLeadId, phone: phoneNumber, code }),
+      });
+      const data = await res.json();
+      if (data.success && data.token) {
+        customerLogin(data.token, data.user);
+        setDemoLeadId(pendingLeadId);
+        setStage('full-access');
+        setPendingLeadId(null);
+        setOtpCode('');
+        toast({ title: 'Welcome', description: 'Your demo is ready. The AI has been briefed on your business.' });
+      } else {
+        setOtpError(data.error || 'Invalid or expired code. Please try again or request a new code.');
+      }
+    } catch {
+      setOtpError('Connection error. Please try again.');
+    } finally {
+      setVerifyingOtp(false);
     }
   };
 
@@ -858,39 +921,87 @@ export default function BusinessPage() {
                     Your Website Is Ready
                   </h2>
                   <p className="text-slate-400 text-lg leading-relaxed">
-                    Enter your phone number and we'll send you a magic link to access your free website anytime.
+                    {gateStep === 'otp'
+                      ? "Enter the 6-digit verification code we sent to your phone."
+                      : "Enter your phone number and we'll send you a verification code to access your free website."}
                   </p>
                 </div>
                 <div className="max-w-sm mx-auto space-y-4">
-                  <div>
-                    <Input
-                      type="tel"
-                      placeholder="(555) 123-4567"
-                      value={phoneNumber}
-                      onChange={(e) => { setPhoneNumber(e.target.value); setPhoneError(''); }}
-                      className="bg-slate-800 border-slate-700 text-center text-lg h-12"
-                      data-testid="input-phone-gate"
-                      disabled={stage === 'sending-link'}
-                    />
-                    {phoneError && (
-                      <p className="text-sm text-red-400 mt-2" data-testid="text-phone-error">{phoneError}</p>
-                    )}
-                  </div>
-                  <Button
-                    onClick={handleSendMagicLink}
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 h-12 text-base"
-                    disabled={stage === 'sending-link'}
-                    data-testid="button-send-magic-link"
-                  >
-                    {stage === 'sending-link' ? (
-                      <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Sending...</>
-                    ) : (
-                      <><Send className="w-5 h-5 mr-2" /> Send Magic Link</>
-                    )}
-                  </Button>
-                  <p className="text-xs text-slate-600">
-                    We'll text you a link. No passwords, no apps, no credit card.
-                  </p>
+                  {gateStep === 'phone' ? (
+                    <>
+                      <div>
+                        <Input
+                          type="tel"
+                          placeholder="(555) 123-4567"
+                          value={phoneNumber}
+                          onChange={(e) => { setPhoneNumber(e.target.value); setPhoneError(''); }}
+                          className="bg-slate-800 border-slate-700 text-center text-lg h-12"
+                          data-testid="input-phone-gate"
+                          disabled={sendingCode}
+                        />
+                        {phoneError && (
+                          <p className="text-sm text-red-400 mt-2" data-testid="text-phone-error">{phoneError}</p>
+                        )}
+                      </div>
+                      <Button
+                        onClick={handleSendMagicLink}
+                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 h-12 text-base"
+                        disabled={sendingCode}
+                        data-testid="button-send-verification-code"
+                      >
+                        {sendingCode ? (
+                          <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Sending code...</>
+                        ) : (
+                          <><Send className="w-5 h-5 mr-2" /> Send verification code</>
+                        )}
+                      </Button>
+                      <p className="text-xs text-slate-600">
+                        We'll text you a 6-digit code. No passwords, no apps, no credit card.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-center">
+                        <InputOTP
+                          maxLength={6}
+                          value={otpCode}
+                          onChange={(v) => { setOtpCode(v); setOtpError(''); }}
+                          containerClassName="gap-1"
+                        >
+                          <InputOTPGroup className="bg-slate-800 border border-slate-700 rounded-lg p-2 gap-1">
+                            {[0, 1, 2, 3, 4, 5].map((i) => (
+                              <InputOTPSlot key={i} index={i} className="text-lg text-white border-slate-600" />
+                            ))}
+                          </InputOTPGroup>
+                        </InputOTP>
+                      </div>
+                      {otpError && (
+                        <p className="text-sm text-red-400" data-testid="text-otp-error">{otpError}</p>
+                      )}
+                      <Button
+                        onClick={handleVerifyOtp}
+                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 h-12 text-base"
+                        disabled={verifyingOtp || otpCode.replace(/\D/g, '').length !== 6}
+                        data-testid="button-verify-otp"
+                      >
+                        {verifyingOtp ? (
+                          <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Verifying...</>
+                        ) : (
+                          <><ShieldCheck className="w-5 h-5 mr-2" /> Verify code</>
+                        )}
+                      </Button>
+                      <p className="text-xs text-slate-600">
+                        Code not received? Go back and use "Send verification code" again.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => { setGateStep('phone'); setOtpCode(''); setOtpError(''); }}
+                        className="text-sm text-blue-400 hover:underline"
+                      >
+                        ← Back to phone number
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -904,13 +1015,13 @@ export default function BusinessPage() {
                   </h2>
                   <p className="text-slate-400 text-lg leading-relaxed max-w-md mx-auto">
                     We're training your team of AI agents to serve you and help you grow your business. 
-                    We'll have everything ready for you within 1 hour.
+                    We'll have everything ready for you in seconds.
                   </p>
                 </div>
                 {magicLinkSent && (
                   <div className="flex items-center justify-center gap-2 text-sm text-emerald-400">
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>Magic link sent to your phone</span>
+                    <span>Verification code sent to your phone</span>
                   </div>
                 )}
                 <TrainingProgressBar progress={trainingProgress} />

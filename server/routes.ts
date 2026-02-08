@@ -28,6 +28,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
 import { customerSendOtp, customerVerifyOtp, customerVerifySession, customerLogout, customerUpdateProfile, customerGetBusinesses, customerClaimBusiness } from "./customerAuth";
+import { runDemoEnrichment } from "./services/demo-enrichment";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
@@ -248,6 +249,178 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("[Demo] Create error:", error);
       res.status(500).json({ error: error.message || "Failed to create demo" });
+    }
+  });
+
+  const requestAccessSchema = z.object({
+    phone: z.string().min(7).max(20),
+    businessName: z.string().min(1).max(500),
+    businessAddress: z.string().max(500).optional().nullable(),
+    placeId: z.string().max(200).optional().nullable(),
+    placeData: z.any().optional().nullable(),
+  });
+
+  app.post("/api/demo/request-access", async (req, res) => {
+    try {
+      const parsed = requestAccessSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Phone number and business name are required" });
+      }
+      const { phone, businessName, businessAddress, placeId, placeData } = parsed.data;
+      const normalizedPhone = normalizePhone(phone);
+
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+      await storage.createOtpCode({ phone: normalizedPhone, code, expiresAt });
+
+      const magicToken = crypto.randomBytes(32).toString("hex");
+      const lead = await storage.createDemoLead({
+        phone: normalizedPhone,
+        businessName,
+        businessAddress: businessAddress || null,
+        placeId: placeId || null,
+        placeData: placeData || null,
+        magicToken,
+        magicTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        magicTokenUsed: false,
+        demoStartedAt: new Date(),
+        demoReadyAt: null,
+        status: "preview",
+        name: null,
+      });
+
+      let existingSite = placeId ? await storage.getSiteConfigByPlaceId(placeId) : null;
+      if (!existingSite) {
+        const customerAccount = await storage.getCustomerAccountByPhone(normalizedPhone);
+        const domain = businessName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 50);
+        await storage.createSiteConfig({
+          name: businessName,
+          domain,
+          placeId: placeId || null,
+          placeData: placeData || null,
+          ownerId: customerAccount?.id || null,
+          chatbotEnabled: true,
+          voiceConciergeEnabled: true,
+          widgetPosition: "bottom-right",
+          widgetColor: "#2563eb",
+          greetingMessage: `Welcome to ${businessName}! How can we help you today?`,
+          placeholderText: "Type a message...",
+          modelProvider: "kimi",
+        });
+      }
+
+      const fromNumber = await getTwilioFromPhoneNumber();
+      if (fromNumber) {
+        await sendSms(
+          normalizedPhone,
+          `Your Gateway verification code is: ${code}\n\nThis code expires in 5 minutes.`,
+          fromNumber
+        );
+      }
+
+      res.json({
+        success: true,
+        leadId: lead.id,
+        phone: normalizedPhone.slice(-4),
+      });
+    } catch (error: any) {
+      console.error("[Demo] Request access error:", error);
+      res.status(500).json({ error: error.message || "Failed to send code" });
+    }
+  });
+
+  const verifyAndEnrichSchema = z.object({
+    leadId: z.string(),
+    phone: z.string().min(7).max(20),
+    code: z.string().length(6),
+  });
+
+  app.post("/api/demo/verify-and-enrich", async (req, res) => {
+    try {
+      const parsed = verifyAndEnrichSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "leadId, phone, and 6-digit code are required" });
+      }
+      const { leadId, phone, code } = parsed.data;
+      const normalizedPhone = normalizePhone(phone);
+
+      const otpRecord = await storage.getValidOtpCode(normalizedPhone, code);
+      if (!otpRecord) {
+        return res.status(401).json({ error: "Invalid or expired verification code" });
+      }
+      await storage.markOtpUsed(otpRecord.id);
+
+      let account = await storage.getCustomerAccountByPhone(normalizedPhone);
+      if (!account) {
+        account = await storage.createCustomerAccount({ phone: normalizedPhone, plan: "free" });
+      }
+      if (!account.isActive) {
+        return res.status(403).json({ error: "Account deactivated" });
+      }
+
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await storage.createCustomerSession({ customerAccountId: account.id, token, expiresAt });
+      await storage.updateCustomerAccountLastLogin(account.id);
+
+      try {
+        const claimed = await storage.claimUnlinkedSitesByPhone(account.phone, account.id);
+        if (claimed > 0) console.log(`[Demo] Auto-claimed ${claimed} site(s) for customer ${account.id}`);
+      } catch (_) {}
+
+      const lead = await storage.getDemoLead(leadId);
+      if (!lead) {
+        return res.status(404).json({ error: "Demo not found" });
+      }
+
+      const placeData = (lead.placeData || {}) as any;
+      const site = lead.placeId ? await storage.getSiteConfigByPlaceId(lead.placeId) : null;
+      if (site && (placeData.name || lead.businessName)) {
+        const geo = placeData.geometry;
+        const primaryType =
+          placeData.types && Array.isArray(placeData.types)
+            ? placeData.types.filter(
+                (t: string) => t && t !== "point_of_interest" && t !== "establishment"
+              )[0]
+            : undefined;
+        const enriched = await runDemoEnrichment({
+          name: placeData.name || lead.businessName,
+          address: placeData.formatted_address || lead.businessAddress || undefined,
+          website: placeData.website || placeData.url,
+          types: placeData.types,
+          reviews: placeData.reviews,
+          formatted_phone_number: placeData.formatted_phone_number,
+          rating: placeData.rating,
+          user_ratings_total: placeData.user_ratings_total,
+          latitude: typeof geo?.lat === "number" ? geo.lat : undefined,
+          longitude: typeof geo?.lng === "number" ? geo.lng : undefined,
+          primaryType: primaryType || undefined,
+          placeId: lead.placeId || placeData.place_id || undefined,
+        });
+        const updatedPlaceData = { ...placeData, enriched };
+        await storage.updateSiteConfig(site.id, {
+          placeData: updatedPlaceData,
+          systemPromptOverride: enriched.systemPromptOverride,
+        } as any);
+      }
+
+      await storage.updateDemoLead(leadId, { status: "ready", demoReadyAt: new Date() } as any);
+
+      res.json({
+        success: true,
+        token,
+        user: {
+          id: account.id,
+          phone: account.phone,
+          name: account.name,
+          email: account.email,
+          plan: account.plan,
+          planStartedAt: account.planStartedAt,
+        },
+      });
+    } catch (error: any) {
+      console.error("[Demo] Verify-and-enrich error:", error);
+      res.status(500).json({ error: error.message || "Failed to verify" });
     }
   });
 
@@ -3853,7 +4026,21 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
   app.get("/api/bots/:siteConfigId/public", async (req, res) => {
     try {
-      const config = await storage.getSiteConfig(req.params.siteConfigId);
+      const siteConfigId = req.params.siteConfigId;
+      // Platform landing chat (BusinessPage, etc.) does not require a DB site config
+      if (siteConfigId === 'platform-landing' || siteConfigId === 'platform') {
+        return res.json({
+          id: siteConfigId,
+          name: 'Gateway AI',
+          ui_config: {
+            position: 'bottom-right',
+            primaryColor: '#6366f1',
+            greetingMessage: "Hi! I can help you learn about our free AI-powered websites, plans, and features. What would you like to know?",
+            placeholderText: 'Ask about our services...',
+          },
+        });
+      }
+      const config = await storage.getSiteConfig(siteConfigId);
       if (!config || !config.chatbotEnabled) {
         return res.status(404).json({ error: "Bot not found or disabled" });
       }
@@ -3998,10 +4185,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
         widgetPosition: z.string().optional(),
         widgetColor: z.string().optional(),
         greetingMessage: z.string().nullable().optional(),
+        knowledgeLibrary: z.array(z.object({ id: z.string(), title: z.string(), content: z.string(), addedAt: z.string() })).nullable().optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const updated = await storage.updateSiteConfig(req.params.id, parsed.data);
+      const updated = await storage.updateSiteConfig(req.params.id, parsed.data as any);
       if (!updated) return res.status(404).json({ error: "Site config not found" });
       res.json(updated);
     } catch (error: any) {
@@ -4023,6 +4211,89 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       const limit = parseInt(req.query.limit as string) || 50;
       const logs = await storage.getChatLogs(req.params.id, limit);
       res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/site-configs/:id/knowledge", async (req, res) => {
+    try {
+      const site = await storage.getSiteConfig(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const lib = (site as any).knowledgeLibrary;
+      res.json(Array.isArray(lib) ? lib : []);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/site-configs/:id/knowledge", async (req, res) => {
+    try {
+      const schema = z.object({ title: z.string().min(1).max(200), content: z.string().max(500000) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const site = await storage.getSiteConfig(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const existing = Array.isArray((site as any).knowledgeLibrary) ? (site as any).knowledgeLibrary : [];
+      const doc = {
+        id: crypto.randomUUID(),
+        title: parsed.data.title,
+        content: parsed.data.content,
+        addedAt: new Date().toISOString(),
+      };
+      const updated = await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: [...existing, doc] } as any);
+      res.json(updated?.knowledgeLibrary ?? [...existing, doc]);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/site-configs/:id/knowledge/:docId", async (req, res) => {
+    try {
+      const site = await storage.getSiteConfig(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const existing = Array.isArray((site as any).knowledgeLibrary) ? (site as any).knowledgeLibrary : [];
+      const next = existing.filter((d: any) => d.id !== req.params.docId);
+      await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: next } as any);
+      res.json({ success: true, knowledgeLibrary: next });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // List demo leads for chat admin (new customers + demo URLs)
+  app.get("/api/admin/demo-leads", async (req, res) => {
+    try {
+      const leads = await storage.getAllDemoLeads();
+      const host = req.headers.host || "localhost:5000";
+      const protocol = req.headers["x-forwarded-proto"] || "https";
+      const baseUrl = `${protocol}://${host}`;
+      const withUrls = await Promise.all(
+        leads.map(async (lead) => {
+          const demoUrl = `${baseUrl}/demo?token=${lead.magicToken}`;
+          let siteId: string | null = null;
+          if (lead.placeId) {
+            const site = await storage.getSiteConfigByPlaceId(lead.placeId);
+            siteId = site?.id ?? null;
+          }
+          return {
+            id: lead.id,
+            phone: lead.phone,
+            name: lead.name,
+            businessName: lead.businessName,
+            businessAddress: lead.businessAddress,
+            placeId: lead.placeId,
+            status: lead.status,
+            magicTokenUsed: lead.magicTokenUsed,
+            demoStartedAt: lead.demoStartedAt,
+            demoReadyAt: lead.demoReadyAt,
+            createdAt: lead.createdAt,
+            demoUrl,
+            siteId,
+          };
+        })
+      );
+      res.json(withUrls);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -4392,6 +4663,14 @@ ${businessContext}`;
         }
       }
 
+      const knowledgeLibrary = Array.isArray((siteConfig as any)?.knowledgeLibrary) ? (siteConfig as any).knowledgeLibrary as Array<{ id: string; title: string; content: string }> : [];
+      const KNOWLEDGE_CAP = 32000;
+      let knowledgeBlock = "";
+      if (knowledgeLibrary.length > 0) {
+        const combined = knowledgeLibrary.map((d) => `## ${d.title}\n${d.content}`).join("\n\n---\n\n");
+        knowledgeBlock = "\n\n--- KNOWLEDGE LIBRARY (use this to answer questions accurately) ---\n\n" + combined.slice(0, KNOWLEDGE_CAP) + (combined.length > KNOWLEDGE_CAP ? "\n\n[truncated]" : "");
+      }
+
       let systemPrompt: string;
       if (isPlatformChat) {
         systemPrompt = `You are Gateway AI, the helpful assistant for AI Biz Bot by Gateway Global AI. You help visitors understand the platform and its services.
@@ -4408,7 +4687,7 @@ Key information about the platform:
 
 Be friendly, concise, and helpful. Encourage visitors to try it out by searching for their business. Keep responses brief since this is a chat widget. If asked about technical details you don't know, suggest they contact us.`;
       } else {
-        systemPrompt = customSystemPrompt || `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
+        const basePrompt = customSystemPrompt || `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
 
 Business details:
 - Name: ${businessName || 'N/A'}
@@ -4416,6 +4695,7 @@ Business details:
 - Phone: ${businessPhone || 'N/A'}
 
 You are helpful, concise, and conversational. Answer questions about the business, help with directions, hours, and services. If you don't know something specific, suggest the visitor call or visit. Keep responses brief since this is a chat widget.`;
+        systemPrompt = basePrompt + knowledgeBlock;
       }
 
       const gatewayMessages = [

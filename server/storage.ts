@@ -189,6 +189,7 @@ export interface IStorage {
   deleteProjectTask(id: string): Promise<boolean>;
   
   createDemoLead(lead: InsertDemoLead): Promise<DemoLead>;
+  getDemoLead(id: string): Promise<DemoLead | undefined>;
   getDemoLeadByToken(token: string): Promise<DemoLead | undefined>;
   getDemoLeadByPhone(phone: string): Promise<DemoLead | undefined>;
   getAllDemoLeads(): Promise<DemoLead[]>;
@@ -861,6 +862,11 @@ export class DatabaseStorage implements IStorage {
   async createDemoLead(lead: InsertDemoLead): Promise<DemoLead> {
     const [created] = await db.insert(demoLeads).values(lead).returning();
     return created;
+  }
+
+  async getDemoLead(id: string): Promise<DemoLead | undefined> {
+    const [lead] = await db.select().from(demoLeads).where(eq(demoLeads.id, id));
+    return lead;
   }
 
   async getDemoLeadByToken(token: string): Promise<DemoLead | undefined> {

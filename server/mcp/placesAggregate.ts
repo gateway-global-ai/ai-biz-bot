@@ -117,6 +117,63 @@ export function milesToMeters(miles: number): number {
   return Math.round(miles * MILES_TO_METERS);
 }
 
+/** One nearby place with name and rating (for enrichment context). */
+export interface NearbyPlaceRating {
+  name: string;
+  rating: number;
+}
+
+/**
+ * Fetch nearby places of the same type with ratings; used to show "highest/lowest rated" examples.
+ * Uses Places API (New) searchText with locationBias. Returns up to 20, sorted by rating.
+ */
+export async function fetchNearbyPlacesWithRatings(
+  latitude: number,
+  longitude: number,
+  primaryType: string,
+  radiusMiles: number = 1,
+  apiKey?: string
+): Promise<NearbyPlaceRating[]> {
+  const key = apiKey || getApiKey();
+  const radiusMeters = Math.round(radiusMiles * MILES_TO_METERS);
+
+  const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': key,
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.rating'
+    },
+    body: JSON.stringify({
+      textQuery: primaryType.replace(/_/g, ' '),
+      locationBias: {
+        circle: {
+          center: { latitude, longitude },
+          radius: radiusMeters
+        }
+      },
+      maxResultCount: 20
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    console.error('[Places Nearby] API error:', response.status, errText);
+    return [];
+  }
+
+  const data = await response.json();
+  const places = (data.places || []) as Array<{ displayName?: { text?: string }; rating?: number }>;
+  const withRating = places
+    .filter((p) => p.rating != null && p.rating >= 0)
+    .map((p) => ({
+      name: p.displayName?.text || 'Unknown',
+      rating: p.rating!
+    }));
+  withRating.sort((a, b) => b.rating - a.rating);
+  return withRating;
+}
+
 export function metersToMiles(meters: number): number {
   return parseFloat((meters / MILES_TO_METERS).toFixed(1));
 }
@@ -201,6 +258,40 @@ async function countInsights(
   return parseInt(result.count || '0', 10);
 }
 
+/** Competitor counts within a radius (for enrichment / demo). */
+export interface CompetitorCounts {
+  total: number;
+  highRated: number;
+  lowRated: number;
+}
+
+/**
+ * Get competitor counts by location and category (e.g. 1 mile around business).
+ * Uses Area Insights API; does not return individual place names.
+ */
+export async function getCompetitorCounts(
+  latitude: number,
+  longitude: number,
+  primaryType: string,
+  radiusMiles: number = 1,
+  apiKey?: string
+): Promise<CompetitorCounts> {
+  const radiusMeters = milesToMeters(radiusMiles);
+  const locationFilter: LocationFilter = {
+    circle: { latLng: { latitude, longitude }, radius: radiusMeters }
+  };
+  const typeFilter: TypeFilter = { includedPrimaryTypes: [primaryType] };
+
+  const total = await countInsights(locationFilter, typeFilter, undefined, undefined, apiKey);
+  let highRated = 0;
+  let lowRated = 0;
+  if (total > 0) {
+    highRated = await countInsights(locationFilter, typeFilter, { minRating: 4.0, maxRating: 5.0 }, undefined, apiKey);
+    lowRated = await countInsights(locationFilter, typeFilter, { minRating: 1.0, maxRating: 2.99 }, undefined, apiKey);
+  }
+  return { total, highRated, lowRated };
+}
+
 export async function generateOwnerReport(
   params: OwnerReportRequest,
   apiKey?: string
@@ -213,22 +304,7 @@ export async function generateOwnerReport(
   }
 
   const category = place.primaryType || 'business';
-  const radiusMeters = milesToMeters(radiusMiles);
-
-  const locationFilter: LocationFilter = {
-    circle: { latLng: { latitude: place.latitude, longitude: place.longitude }, radius: radiusMeters }
-  };
-  const typeFilter: TypeFilter = { includedPrimaryTypes: [category] };
-
-  const total = await countInsights(locationFilter, typeFilter, undefined, undefined, apiKey);
-
-  let highRated = 0;
-  let lowRated = 0;
-
-  if (total > 0) {
-    highRated = await countInsights(locationFilter, typeFilter, { minRating: 4.0, maxRating: 5.0 }, undefined, apiKey);
-    lowRated = await countInsights(locationFilter, typeFilter, { minRating: 1.0, maxRating: 2.99 }, undefined, apiKey);
-  }
+  const counts = await getCompetitorCounts(place.latitude, place.longitude, category, radiusMiles, apiKey);
 
   return {
     businessName: place.displayName || businessName,
@@ -237,7 +313,7 @@ export async function generateOwnerReport(
     location: { latitude: place.latitude, longitude: place.longitude },
     radiusMiles,
     mode: 'owner',
-    competitors: { total, highRated, lowRated }
+    competitors: counts
   };
 }
 

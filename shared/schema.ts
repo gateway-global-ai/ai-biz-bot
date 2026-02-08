@@ -939,6 +939,8 @@ export const siteConfigs = pgTable("site_configs", {
   widgetColor: text("widget_color").default("#2563eb"),
   greetingMessage: text("greeting_message"),
   placeholderText: text("placeholder_text").default("Type a message..."),
+  /** Knowledge library: array of { id, title, content, addedAt } for agent training. */
+  knowledgeLibrary: jsonb("knowledge_library"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
