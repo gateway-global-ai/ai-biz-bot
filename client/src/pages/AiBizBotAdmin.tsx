@@ -339,6 +339,7 @@ function AdminPanel({
 
   const { data: providers = [] } = useQuery<{ provider: string; model: string }[]>({
     queryKey: ['/api/gateway/providers'],
+    queryFn: () => fetch('/api/gateway/providers').then(r => r.json()),
   });
 
   const sendTestChat = useCallback(async () => {
@@ -953,6 +954,7 @@ export default function AiBizBotAdmin() {
 
   const { data: demoLeads = [] } = useQuery<DemoLeadRow[]>({
     queryKey: ['/api/admin/demo-leads'],
+    queryFn: () => fetch('/api/admin/demo-leads').then(r => r.json()),
   });
 
   const createMutation = useMutation({

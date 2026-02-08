@@ -148,7 +148,7 @@ export async function fetchNearbyPlacesWithRatings(
       textQuery: primaryType.replace(/_/g, ' '),
       locationBias: {
         circle: {
-          center: { latitude, longitude },
+          latLng: { latitude, longitude },
           radius: radiusMeters
         }
       },
