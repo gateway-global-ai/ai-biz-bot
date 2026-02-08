@@ -67,6 +67,10 @@ export const callLogs = pgTable("call_logs", {
   status: text("status").notNull(), // 'completed' | 'missed' | 'blocked' | 'failed'
   recordingUrl: text("recording_url"),
   callSid: text("call_sid"),
+  // Customer tracking fields
+  customerName: text("customer_name"),
+  customerEmail: text("customer_email"),
+  notes: text("notes"),
   timestamp: timestamp("timestamp").defaultNow(),
 });
 
@@ -334,6 +338,11 @@ export const agents = pgTable("agents", {
   aiTemperature: integer("ai_temperature").default(60), // Stored as 0-100, divide by 100 for actual value
   aiMaxTokens: integer("ai_max_tokens").default(4096),
   hfToken: text("hf_token"), // User's HuggingFace token (encrypted)
+  // Voice AI Configuration (Google Gemini)
+  voiceModel: text("voice_model").default("gemini-2.5-flash-native-audio-preview-12-2025"), // Gemini model for voice
+  voiceRole: text("voice_role").default("AI Business Assistant"),
+  voiceCompanyName: text("voice_company_name").default("AI Biz Bot"),
+  voicePersona: text("voice_persona").default("friendly"), // professional, friendly, enthusiastic, calm, authoritative
   // Budget Configuration
   budgetAmountUsd: numeric("budget_amount_usd", { precision: 10, scale: 2 }).default("0"),
   budgetPeriod: text("budget_period").default("monthly"), // daily, weekly, monthly
@@ -1408,3 +1417,315 @@ export const insertResearchTaskSchema = createInsertSchema(researchTasks).omit({
 
 export type InsertResearchTask = z.infer<typeof insertResearchTaskSchema>;
 export type ResearchTask = typeof researchTasks.$inferSelect;
+
+// =========================================
+// Restaurant Menu & E-Commerce Features
+// =========================================
+
+// Menus - Restaurant menu management for businesses
+export const menus = pgTable("menus", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
+  ownerId: varchar("owner_id").references(() => customerAccounts.id).notNull(),
+  
+  // Menu Details
+  name: text("name").notNull(), // e.g., "Lunch Menu", "Dinner Menu", "Drinks"
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  displayOrder: integer("display_order").default(0),
+  
+  // Availability
+  availableDays: text("available_days").array().default(sql`ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']::text[]`),
+  availableStartTime: text("available_start_time"), // e.g., "11:00"
+  availableEndTime: text("available_end_time"), // e.g., "22:00"
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertMenuSchema = createInsertSchema(menus).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertMenu = z.infer<typeof insertMenuSchema>;
+export type Menu = typeof menus.$inferSelect;
+
+// Menu Categories - Organize menu items into categories
+export const menuCategories = pgTable("menu_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  menuId: varchar("menu_id").references(() => menus.id).notNull(),
+  
+  // Category Details
+  name: text("name").notNull(), // e.g., "Appetizers", "Entrees", "Desserts"
+  description: text("description"),
+  displayOrder: integer("display_order").default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertMenuCategorySchema = createInsertSchema(menuCategories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertMenuCategory = z.infer<typeof insertMenuCategorySchema>;
+export type MenuCategory = typeof menuCategories.$inferSelect;
+
+// Menu Items - Individual items on the menu
+export const menuItems = pgTable("menu_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  menuId: varchar("menu_id").references(() => menus.id).notNull(),
+  categoryId: varchar("category_id").references(() => menuCategories.id),
+  
+  // Item Details
+  name: text("name").notNull(),
+  description: text("description"),
+  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  imageUrl: text("image_url"),
+  
+  // Availability
+  isAvailable: boolean("is_available").default(true),
+  displayOrder: integer("display_order").default(0),
+  
+  // Additional Info
+  preparationTime: integer("preparation_time"), // in minutes
+  calories: integer("calories"),
+  allergens: text("allergens").array().default(sql`ARRAY[]::text[]`),
+  dietaryInfo: text("dietary_info").array().default(sql`ARRAY[]::text[]`), // e.g., vegetarian, vegan, gluten-free
+  
+  // Options & Customization
+  customizationOptions: jsonb("customization_options"), // {size: ['small', 'medium', 'large'], toppings: [...]}
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertMenuItemSchema = createInsertSchema(menuItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertMenuItem = z.infer<typeof insertMenuItemSchema>;
+export type MenuItem = typeof menuItems.$inferSelect;
+
+// Shopping Cart - Customer shopping carts
+export const carts = pgTable("carts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
+  
+  // Customer Info
+  customerId: varchar("customer_id").references(() => customers.id),
+  sessionId: text("session_id"), // For anonymous users
+  customerName: text("customer_name"),
+  customerEmail: text("customer_email"),
+  customerPhone: text("customer_phone"),
+  
+  // Cart Status
+  status: text("status").default("active"), // 'active', 'abandoned', 'converted', 'expired'
+  
+  // Delivery Info
+  deliveryAddress: text("delivery_address"),
+  deliveryInstructions: text("delivery_instructions"),
+  
+  // Pricing
+  subtotal: numeric("subtotal", { precision: 10, scale: 2 }).default("0"),
+  taxAmount: numeric("tax_amount", { precision: 10, scale: 2 }).default("0"),
+  deliveryFee: numeric("delivery_fee", { precision: 10, scale: 2 }).default("0"),
+  totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).default("0"),
+  
+  // Timestamps
+  lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
+  expiresAt: timestamp("expires_at"), // Cart expiration time
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCartSchema = createInsertSchema(carts).omit({
+  id: true,
+  createdAt: true,
+  lastUpdatedAt: true,
+});
+
+export type InsertCart = z.infer<typeof insertCartSchema>;
+export type Cart = typeof carts.$inferSelect;
+
+// Cart Items - Items in a shopping cart
+export const cartItems = pgTable("cart_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cartId: varchar("cart_id").references(() => carts.id).notNull(),
+  menuItemId: varchar("menu_item_id").references(() => menuItems.id).notNull(),
+  
+  // Item Details
+  quantity: integer("quantity").notNull().default(1),
+  unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
+  totalPrice: numeric("total_price", { precision: 10, scale: 2 }).notNull(),
+  
+  // Customizations
+  customizations: jsonb("customizations"), // Selected options and modifications
+  specialInstructions: text("special_instructions"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCartItemSchema = createInsertSchema(cartItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCartItem = z.infer<typeof insertCartItemSchema>;
+export type CartItem = typeof cartItems.$inferSelect;
+
+// Orders - Completed purchases
+export const orders = pgTable("orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
+  cartId: varchar("cart_id").references(() => carts.id),
+  customerId: varchar("customer_id").references(() => customers.id),
+  
+  // Order Number
+  orderNumber: text("order_number").notNull().unique(),
+  
+  // Customer Info
+  customerName: text("customer_name").notNull(),
+  customerEmail: text("customer_email"),
+  customerPhone: text("customer_phone").notNull(),
+  
+  // Order Type
+  orderType: text("order_type").notNull().default("delivery"), // 'delivery', 'pickup', 'dine-in'
+  
+  // Delivery Info
+  deliveryAddress: text("delivery_address"),
+  deliveryInstructions: text("delivery_instructions"),
+  
+  // Pricing
+  subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull(),
+  taxAmount: numeric("tax_amount", { precision: 10, scale: 2 }).default("0"),
+  deliveryFee: numeric("delivery_fee", { precision: 10, scale: 2 }).default("0"),
+  tipAmount: numeric("tip_amount", { precision: 10, scale: 2 }).default("0"),
+  totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull(),
+  
+  // Payment
+  paymentMethod: text("payment_method"), // 'card', 'cash', 'online'
+  paymentStatus: text("payment_status").default("pending"), // 'pending', 'paid', 'failed', 'refunded'
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  
+  // Order Status
+  status: text("status").default("pending"), // 'pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered', 'cancelled'
+  
+  // Fulfillment
+  estimatedReadyTime: timestamp("estimated_ready_time"),
+  estimatedDeliveryTime: timestamp("estimated_delivery_time"),
+  actualDeliveryTime: timestamp("actual_delivery_time"),
+  
+  // Notes
+  customerNotes: text("customer_notes"),
+  internalNotes: text("internal_notes"),
+  
+  // Timestamps
+  confirmedAt: timestamp("confirmed_at"),
+  completedAt: timestamp("completed_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOrderSchema = createInsertSchema(orders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertOrder = z.infer<typeof insertOrderSchema>;
+export type Order = typeof orders.$inferSelect;
+
+// Order Items - Items in a completed order
+export const orderItems = pgTable("order_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").references(() => orders.id).notNull(),
+  menuItemId: varchar("menu_item_id").references(() => menuItems.id).notNull(),
+  
+  // Item Details
+  itemName: text("item_name").notNull(), // Snapshot of item name at time of order
+  itemDescription: text("item_description"),
+  quantity: integer("quantity").notNull().default(1),
+  unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
+  totalPrice: numeric("total_price", { precision: 10, scale: 2 }).notNull(),
+  
+  // Customizations
+  customizations: jsonb("customizations"), // Selected options and modifications
+  specialInstructions: text("special_instructions"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertOrderItemSchema = createInsertSchema(orderItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
+export type OrderItem = typeof orderItems.$inferSelect;
+
+// Inquiries - Contact form submissions and customer inquiries
+export const inquiries = pgTable("inquiries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Customer Information
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  company: text("company"),
+  
+  // Inquiry Details
+  subject: text("subject"),
+  message: text("message").notNull(),
+  source: text("source").default("website"), // 'website', 'chat', 'phone', 'email', 'sms'
+  
+  // Status & Assignment
+  status: text("status").default("new"), // 'new', 'viewed', 'in_progress', 'resolved', 'closed'
+  priority: text("priority").default("normal"), // 'low', 'normal', 'high', 'urgent'
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  
+  // Response & Notes
+  response: text("response"),
+  internalNotes: text("internal_notes"),
+  
+  // Tracking
+  viewedAt: timestamp("viewed_at"),
+  respondedAt: timestamp("responded_at"),
+  resolvedAt: timestamp("resolved_at"),
+  
+  // Metadata
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  referrer: text("referrer"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertInquirySchema = createInsertSchema(inquiries, {
+  source: z
+    .enum(["website", "chat", "phone", "email", "sms"])
+    .default("website"),
+  status: z
+    .enum(["new", "viewed", "in_progress", "resolved", "closed"])
+    .default("new"),
+  priority: z
+    .enum(["low", "normal", "high", "urgent"])
+    .default("normal"),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertInquiry = z.infer<typeof insertInquirySchema>;
+export type Inquiry = typeof inquiries.$inferSelect;

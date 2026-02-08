@@ -5,6 +5,8 @@ import { registerVlmRoutes } from "./vlm-routes";
 import { registerAgentRoutes } from "./agents/agent-routes";
 import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding";
 import knowledgeRoutes from "./routes/knowledge-routes";
+import { registerMenuRoutes } from "./routes/menu-routes";
+import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -30,6 +32,7 @@ import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MOD
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
 import { getAvailableApis, calculateCosts, analyzeWithKimi, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
+import { placesCache, CACHE_TTL } from "./placesCache";
 import crypto from "crypto";
 
 const updateConfigSchema = z.object({
@@ -418,6 +421,194 @@ export async function registerRoutes(
       console.error("[Places Details] Error:", error.message);
       res.status(500).json({ error: error.message, reviews: [] });
     }
+  });
+
+  // Google Places Search - for business discovery (with caching)
+  app.post("/api/places/search", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { query, location, radius } = req.body;
+
+      if (!query) {
+        return res.status(400).json({ error: "Search query is required" });
+      }
+
+      // Validate location and radius if provided
+      if (location) {
+        if (typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
+          return res.status(400).json({ error: "Location must have valid latitude and longitude" });
+        }
+        if (radius !== undefined && (typeof radius !== 'number' || radius <= 0)) {
+          return res.status(400).json({ error: "Radius must be a positive number" });
+        }
+      }
+
+      // Use cache to reduce API calls
+      const cacheParams = { query, location, radius };
+      const result = await placesCache.getOrFetch(
+        'places-search',
+        cacheParams,
+        async () => {
+          // Use the new Places API (Text Search) for better results
+          const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': apiKey,
+              'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.businessStatus,places.photos,places.primaryType'
+            },
+            body: JSON.stringify({
+              textQuery: query,
+              ...(location && { locationBias: { circle: { center: location, radius: radius || 5000 } } })
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            console.error('[Places Search] API error:', data);
+            throw new Error(data.error?.message || 'Search failed');
+          }
+
+          // Transform the new API format to be more user-friendly
+          const places = (data.places || []).map((place: any) => ({
+            placeId: place.id,
+            name: place.displayName?.text || 'Unknown',
+            address: place.formattedAddress || '',
+            location: place.location,
+            rating: place.rating || 0,
+            userRatingCount: place.userRatingCount || 0,
+            types: place.types || [],
+            primaryType: place.primaryType,
+            businessStatus: place.businessStatus,
+            photos: place.photos?.map((p: any) => p.name) || []
+          }));
+
+          return { places, count: places.length };
+        },
+        CACHE_TTL.PLACE_SEARCH
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Places Search] Error:", error.message);
+      res.status(500).json({ error: error.message, places: [] });
+    }
+  });
+
+  // Google Places Owner Report - competitive analysis (with caching)
+  app.post("/api/places/owner-report", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { businessName, radiusMiles } = req.body;
+
+      if (!businessName) {
+        return res.status(400).json({ error: "Business name is required" });
+      }
+
+      // Use cache to reduce expensive report generation
+      const cacheParams = { businessName, radiusMiles };
+      const result = await placesCache.getOrFetch(
+        'owner-report',
+        cacheParams,
+        async () => {
+          const report = await generateOwnerReport(
+            { mode: 'owner', businessName, radiusMiles },
+            apiKey
+          );
+
+          return {
+            report,
+            formatted: {
+              sms: formatOwnerReportForSms(report),
+              chat: formatOwnerReportForChat(report)
+            }
+          };
+        },
+        CACHE_TTL.OWNER_REPORT
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Owner Report] Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Google Places Marketing Search - market research (with caching)
+  app.post("/api/places/marketing-search", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { address, latitude, longitude, category, radiusMiles, minRating, maxRating, priceLevels } = req.body;
+
+      if (!category) {
+        return res.status(400).json({ error: "Category is required" });
+      }
+
+      if (!address && (!latitude || !longitude)) {
+        return res.status(400).json({ error: "Either address or latitude/longitude is required" });
+      }
+
+      // Use cache to reduce API calls
+      const cacheParams = { address, latitude, longitude, category, radiusMiles, minRating, maxRating, priceLevels };
+      const result = await placesCache.getOrFetch(
+        'marketing-search',
+        cacheParams,
+        async () => {
+          const report = await generateMarketingSearch(
+            { 
+              mode: 'marketing', 
+              address, 
+              latitude, 
+              longitude, 
+              category, 
+              radiusMiles,
+              minRating,
+              maxRating,
+              priceLevels
+            },
+            apiKey
+          );
+
+          return {
+            report,
+            formatted: {
+              sms: formatMarketingReportForSms(report),
+              chat: formatMarketingReportForChat(report)
+            }
+          };
+        },
+        CACHE_TTL.MARKETING_SEARCH
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Marketing Search] Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Cache management endpoints
+  app.get("/api/places/cache/stats", (req, res) => {
+    const stats = placesCache.getStats();
+    res.json(stats);
+  });
+
+  app.post("/api/places/cache/clear", (req, res) => {
+    placesCache.clear();
+    res.json({ success: true, message: 'Cache cleared successfully' });
   });
 
   // ============ Google Workspace Integration ============
@@ -1115,11 +1306,12 @@ export async function registerRoutes(
         }
       }
       
-      const baseUrl = 'https://twilio.gatewayglobal.ai'; // Production webhook URL
+      const baseUrl = process.env.WEBHOOK_BASE_URL ||
+        (req.get('host') ? `https://${req.get('host')}` : 'https://twilio.gatewayglobal.ai');
       const voiceUrl = `${baseUrl}/webhook/voice`;
       const smsUrl = `${baseUrl}/webhook/sms`;
       const statusCallback = `${baseUrl}/webhook/voice/status`;
-      
+
       // If we have credentials and phoneSid, configure webhooks on Twilio
       if (twilioClient && phoneSid) {
         try {
@@ -2458,6 +2650,42 @@ export async function registerRoutes(
       }
       const log = await storage.createCallLog(parsed.data);
       res.json(log);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update call log with notes and customer info
+  app.patch("/api/telephony/calls/:id", async (req, res) => {
+    try {
+      const updateSchema = z.object({
+        notes: z.string().optional(),
+        customerName: z.string().optional(),
+        customerEmail: z.string().email().optional(),
+      });
+
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const updated = await storage.updateCallLog(req.params.id, parsed.data);
+      if (!updated) {
+        return res.status(404).json({ error: "Call log not found" });
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Unified call tracking endpoint - combines database logs
+  app.get("/api/call-tracking", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const logs = await storage.getCallLogs(undefined, limit);
+      res.json(logs);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -5145,12 +5373,12 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
-  // Kimi-Audio enhanced voice webhook - uses Media Streams for real-time AI voice
+  // Gemini voice webhook - uses Media Streams for real-time AI voice (KIMI not used for voice)
   app.post("/webhook/voice/kimi", validateTwilioSignature, async (req, res) => {
     try {
       const { From, To, CallSid, CallStatus } = req.body;
       
-      console.log(`[Kimi Voice] From: ${From}, To: ${To}, Status: ${CallStatus}`);
+      console.log(`[Voice] From: ${From}, To: ${To}, Status: ${CallStatus}`);
       
       // Log the call
       const config = await storage.getTelephonyConfig();
@@ -5171,7 +5399,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         );
         
         if (!isAllowed) {
-          console.log(`[Kimi Voice] Blocked caller: ${From}`);
+          console.log(`[Voice] Blocked caller: ${From}`);
           res.set('Content-Type', 'text/xml');
           return res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -5187,16 +5415,16 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       const wsProtocol = host.includes('localhost') ? 'ws' : 'wss';
       const streamUrl = `${wsProtocol}://${host}/ws/voice-stream`;
       
-      console.log(`[Kimi Voice] Stream URL: ${streamUrl}`);
+      console.log(`[Voice] Stream URL: ${streamUrl}`);
       
-      // Return TwiML with Media Streams
+      // Return TwiML with Media Streams (voice pipeline uses Gemini)
       res.set('Content-Type', 'text/xml');
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-F">Welcome to Gateway Global AI. I'm connecting you to Kimi, our AI assistant.</Say>
+  <Say voice="Google.en-US-Neural2-F">Welcome to Gateway Global AI. Connecting you to our AI assistant now.</Say>
   <Connect>
     <Stream url="${streamUrl}">
-      <Parameter name="agentName" value="Kimi"/>
+      <Parameter name="agentName" value="AI Assistant"/>
       <Parameter name="personality" value="helpful"/>
     </Stream>
   </Connect>
@@ -5204,7 +5432,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 </Response>`);
       
     } catch (error: any) {
-      console.error('[Kimi Voice] Error:', error);
+      console.error('[Voice] Error:', error);
       res.set('Content-Type', 'text/xml');
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -6477,6 +6705,245 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
+  // ============================================
+  // VOICE ADMIN API
+  // ============================================
+  
+  // Get voice configuration for an agent
+  app.get("/api/voice/config/:agentId", async (req, res) => {
+    try {
+      const { agentId } = req.params;
+      
+      const agent = await storage.getAgent(agentId);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      
+      res.json({
+        model: agent.voiceModel || 'gemini-2.5-flash-native-audio-preview',
+        voice: agent.voiceName || 'Puck',
+        role: agent.voiceRole || 'AI Business Assistant',
+        companyName: agent.voiceCompanyName || 'AI Biz Bot',
+        systemPrompt: agent.systemPrompt || 'You are a helpful AI assistant for small businesses.',
+        voicePersona: agent.voicePersona || 'friendly',
+      });
+    } catch (error: any) {
+      console.error("[Voice Admin] Get config error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Update voice configuration for an agent
+  app.post("/api/voice/config/:agentId", async (req, res) => {
+    try {
+      const { agentId } = req.params;
+      const { model, voice, role, companyName, systemPrompt, voicePersona } = req.body;
+      
+      // Validate inputs
+      const validModels = [
+        'gemini-2.5-flash-native-audio-preview-12-2025',
+        'gemini-2.5-flash-native-audio-preview',
+        'gemini-2.5-flash-latest',
+        'gemini-2.0-flash-native-audio',
+      ];
+      
+      if (model && !validModels.includes(model)) {
+        return res.status(400).json({ error: "Invalid model specified" });
+      }
+      
+      const agent = await storage.getAgent(agentId);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      
+      // Update voice configuration
+      const updates: any = {};
+      if (model !== undefined) updates.voiceModel = model;
+      if (voice !== undefined) updates.voiceName = voice;
+      if (role !== undefined) updates.voiceRole = role;
+      if (companyName !== undefined) updates.voiceCompanyName = companyName;
+      if (systemPrompt !== undefined) updates.systemPrompt = systemPrompt;
+      if (voicePersona !== undefined) updates.voicePersona = voicePersona;
+      
+      const updatedAgent = await storage.updateAgent(agentId, updates);
+      
+      res.json({
+        success: true,
+        config: {
+          model: updatedAgent.voiceModel,
+          voice: updatedAgent.voiceName,
+          role: updatedAgent.voiceRole,
+          companyName: updatedAgent.voiceCompanyName,
+          systemPrompt: updatedAgent.systemPrompt,
+          voicePersona: updatedAgent.voicePersona,
+        }
+      });
+    } catch (error: any) {
+      console.error("[Voice Admin] Update config error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Get available voices for a model
+  app.get("/api/voice/models/:modelId/voices", (req, res) => {
+    const { modelId } = req.params;
+    
+    const modelVoices: Record<string, Array<{ id: string; name: string; gender: string; description: string }>> = {
+      'gemini-2.5-flash-native-audio-preview-12-2025': [
+        { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
+        { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+        { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+      ],
+      'gemini-2.5-flash-native-audio-preview': [
+        { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
+        { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+        { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+      ],
+      'gemini-2.5-flash-latest': [
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+      ],
+      'gemini-2.0-flash-native-audio': [
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+      ],
+    };
+    
+    const voices = modelVoices[modelId] || modelVoices['gemini-2.5-flash-native-audio-preview-12-2025'];
+    res.json({ voices });
+  });
+  
+  // ============================================
+  // PUSH-TO-TALK API
+  // ============================================
+  
+  // Process PTT audio recording
+  app.post("/api/ptt/process", async (req, res) => {
+    try {
+      const { audioBase64, agentId, conversationHistory } = req.body;
+      
+      if (!audioBase64) {
+        return res.status(400).json({ error: "Audio data required" });
+      }
+      
+      // Get agent configuration
+      let config: any = {
+        agentId: agentId || 'default',
+        model: 'gemini-2.5-flash-native-audio-preview',
+        voice: 'Puck',
+        systemPrompt: 'You are a helpful AI assistant for small businesses.'
+      };
+      
+      if (agentId) {
+        const agent = await storage.getAgent(agentId);
+        if (agent) {
+          config = {
+            agentId,
+            model: agent.voiceModel || config.model,
+            voice: agent.voiceName || config.voice,
+            systemPrompt: agent.systemPrompt || config.systemPrompt
+          };
+        }
+      }
+      
+      // Convert base64 to buffer
+      const audioBuffer = Buffer.from(audioBase64, 'base64');
+      
+      // Process with PTT service
+      const { getPTTService } = await import('./pttService');
+      const pttService = getPTTService();
+      const result = await pttService.processPTTAudio(
+        audioBuffer,
+        config,
+        conversationHistory || []
+      );
+      
+      if (!result.success) {
+        return res.status(500).json({ error: result.error });
+      }
+      
+      res.json({
+        success: true,
+        transcript: result.transcript,
+        responseText: result.responseText,
+        responseAudio: result.responseAudio?.toString('base64')
+      });
+    } catch (error: any) {
+      console.error("[PTT] Process error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Transcribe audio only (STT)
+  app.post("/api/ptt/transcribe", async (req, res) => {
+    try {
+      const { audioBase64 } = req.body;
+      
+      if (!audioBase64) {
+        return res.status(400).json({ error: "Audio data required" });
+      }
+      
+      const audioBuffer = Buffer.from(audioBase64, 'base64');
+      
+      const { getPTTService } = await import('./pttService');
+      const pttService = getPTTService();
+      const result = await pttService.transcribeAudio(audioBuffer);
+      
+      if (!result.success) {
+        return res.status(500).json({ error: result.error });
+      }
+      
+      res.json({
+        success: true,
+        transcript: result.transcript
+      });
+    } catch (error: any) {
+      console.error("[PTT] Transcribe error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Generate speech from text (TTS)
+  app.post("/api/ptt/synthesize", async (req, res) => {
+    try {
+      const { text, voice } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ error: "Text required" });
+      }
+      
+      const { getPTTService } = await import('./pttService');
+      const pttService = getPTTService();
+      const result = await pttService.generateSpeech(text, voice || 'Puck');
+      
+      if (!result.success) {
+        return res.status(500).json({ error: result.error });
+      }
+      
+      res.json({
+        success: true,
+        audio: result.audio?.toString('base64')
+      });
+    } catch (error: any) {
+      console.error("[PTT] Synthesize error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   registerVlmRoutes(app);
 
   // Register Agent System routes
@@ -6487,6 +6954,12 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
   // Register Knowledge Base routes
   app.use("/api/knowledge", knowledgeRoutes);
+
+  // Register Menu and Cart routes
+  registerMenuRoutes(app);
+
+  // Register Inquiry routes
+  registerInquiryRoutes(app);
 
   return httpServer;
 }

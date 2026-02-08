@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Biz Bot — Demo</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 text-gray-100">
+  <div class="max-w-4xl mx-auto px-6 py-16">
+    <header class="text-center mb-16">
+      <h1 class="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400 mb-3">
+        AI Biz Bot Demo
+      </h1>
+      <p class="text-gray-400 text-lg">
+        Gateway Global Voice + Chat + Website
+      </p>
+    </header>
+
+    <div class="grid md:grid-cols-2 gap-8 mb-12">
+      <a
+        href="http://localhost:3000"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="group block p-8 rounded-2xl border border-gray-800 bg-gray-900/50 hover:bg-gray-800/50 hover:border-blue-500/50 transition-all duration-200"
+      >
+        <div class="w-14 h-14 rounded-xl bg-blue-500/20 flex items-center justify-center mb-5 group-hover:scale-105 transition-transform">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 013-3V5a3 3 0 116 0v6a3 3 0 013 3z" />
+          </svg>
+        </div>
+        <h2 class="text-xl font-bold text-white mb-2">Chat & Voice Interface</h2>
+        <p class="text-gray-400 text-sm leading-relaxed mb-4">
+          PTT, Realtime, and Chat modes. Visualizer, transcript strip, and shared history. Configure identity and start a session.
+        </p>
+        <span class="text-blue-400 text-sm font-medium group-hover:underline">Open on port 3000 →</span>
+      </a>
+
+      <a
+        href="http://localhost:3001"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="group block p-8 rounded-2xl border border-gray-800 bg-gray-900/50 hover:bg-gray-800/50 hover:border-purple-500/50 transition-all duration-200"
+      >
+        <div class="w-14 h-14 rounded-xl bg-purple-500/20 flex items-center justify-center mb-5 group-hover:scale-105 transition-transform">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 010-18m9 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h2 class="text-xl font-bold text-white mb-2">Website Builder</h2>
+        <p class="text-gray-400 text-sm leading-relaxed mb-4">
+          Generate a business site from Google Places. Hero, info grid, voice concierge, and chat.
+        </p>
+        <span class="text-purple-400 text-sm font-medium group-hover:underline">Open on port 3001 →</span>
+      </a>
+    </div>
+
+    <div class="rounded-2xl border border-gray-800 bg-gray-900/30 p-6 text-sm text-gray-400">
+      <h3 class="text-gray-200 font-semibold mb-3">How to run the demos</h3>
+      <ol class="list-decimal list-inside space-y-2">
+        <li><strong class="text-gray-300">Chat & Voice (port 3000):</strong> <code class="bg-gray-800 px-1.5 py-0.5 rounded">cd ai-biz-bot/ai-voice-sdk-v1</code> → copy <code class="bg-gray-800 px-1.5 py-0.5 rounded">.env.example</code> to <code class="bg-gray-800 px-1.5 py-0.5 rounded">.env.local</code> and set <code class="bg-gray-800 px-1.5 py-0.5 rounded">GEMINI_API_KEY</code> → <code class="bg-gray-800 px-1.5 py-0.5 rounded">npm install && npm run dev</code></li>
+        <li><strong class="text-gray-300">Website Builder (port 3001):</strong> <code class="bg-gray-800 px-1.5 py-0.5 rounded">cd ai-biz-bot/website-builder</code> → <code class="bg-gray-800 px-1.5 py-0.5 rounded">npm install && npm run dev</code></li>
+      </ol>
+      <p class="mt-4 text-gray-500">Then click either card above to open that demo in a new tab.</p>
+    </div>
+  </div>
+</body>
+</html>

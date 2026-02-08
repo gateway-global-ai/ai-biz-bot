@@ -98,6 +98,10 @@ export class VlmGoogleMapsService {
   async getPlaceDetails(placeId: string): Promise<GooglePlaceResult> {
     await this.delay(this.requestDelay);
 
+    // Request all useful fields for prospect enrichment. For AI-powered summaries
+    // (generativeSummary, editorialSummary, reviewSummary) the Places API (New) v1
+    // is required (Enterprise + Atmosphere SKU). This client uses the legacy endpoint;
+    // if you switch to the new API, add: generativeSummary, editorialSummary, reviewSummary.
     const response = await client.placeDetails({
       params: {
         place_id: placeId,
@@ -151,6 +155,11 @@ export class VlmGoogleMapsService {
       }
     }
 
+    // AI-powered summaries (Place Details New API v1): editorialSummary, generativeSummary, reviewSummary
+    const editorialSummary = (place as any).editorial_summary?.overview ?? (place as any).editorialSummary?.overview;
+    const generativeSummary = (place as any).generative_summary?.overview ?? (place as any).generativeSummary?.overview;
+    const reviewSummary = (place as any).review_summary?.overview ?? (place as any).reviewSummary?.overview;
+
     return {
       placeId,
       name: place.name || "",
@@ -161,6 +170,9 @@ export class VlmGoogleMapsService {
       rating: place.rating,
       userRatingsTotal: place.user_ratings_total,
       googleMapsUrl: place.url,
+      editorialSummary: editorialSummary || undefined,
+      generativeSummary: generativeSummary || undefined,
+      reviewSummary: reviewSummary || undefined,
       reviews,
       photos,
     };
