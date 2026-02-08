@@ -2,7 +2,7 @@ import { useState } from "react";
 import StandardizedChatInterface from "@/components/StandardizedChatInterface";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Settings, Users, Calendar, FileText, TrendingUp } from "lucide-react";
+import { Settings, Users, Calendar, FileText, TrendingUp, UtensilsCrossed } from "lucide-react";
 
 export default function OwnerChatInterface() {
   const [activeTab, setActiveTab] = useState("chat");
@@ -16,9 +16,9 @@ export default function OwnerChatInterface() {
             <TabsTrigger value="chat" className="data-[state=active]:bg-purple-600">
               AI Assistant
             </TabsTrigger>
-            <TabsTrigger value="settings" className="data-[state=active]:bg-purple-600">
-              <Settings className="w-4 h-4 mr-2" />
-              Settings
+            <TabsTrigger value="menu" className="data-[state=active]:bg-purple-600">
+              <UtensilsCrossed className="w-4 h-4 mr-2" />
+              Menu
             </TabsTrigger>
             <TabsTrigger value="customers" className="data-[state=active]:bg-purple-600">
               <Users className="w-4 h-4 mr-2" />
@@ -31,6 +31,10 @@ export default function OwnerChatInterface() {
             <TabsTrigger value="reports" className="data-[state=active]:bg-purple-600">
               <TrendingUp className="w-4 h-4 mr-2" />
               Reports
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="data-[state=active]:bg-purple-600">
+              <Settings className="w-4 h-4 mr-2" />
+              Settings
             </TabsTrigger>
           </TabsList>
         </div>
@@ -45,6 +49,45 @@ export default function OwnerChatInterface() {
                 fullscreen={true}
               />
             </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="menu" className="flex-1 m-0 p-6 overflow-auto">
+          <div className="max-w-7xl mx-auto space-y-6">
+            <Card className="bg-slate-900 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white">Menu Management</CardTitle>
+                <CardDescription>Create and manage your restaurant menus</CardDescription>
+              </CardHeader>
+              <CardContent className="text-slate-300">
+                <div className="space-y-4">
+                  <div className="p-6 bg-slate-800 rounded-lg border border-slate-700 text-center">
+                    <UtensilsCrossed className="w-12 h-12 mx-auto mb-4 text-purple-400" />
+                    <h3 className="font-semibold mb-2 text-white">Menu Builder</h3>
+                    <p className="text-sm text-slate-400 mb-4">
+                      Create menus, add items, set prices, and manage your restaurant offerings
+                    </p>
+                    <p className="text-sm text-slate-500">
+                      Menu management interface coming soon. For now, ask the AI Assistant to help you set up your menu.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 bg-slate-800 rounded-lg border border-slate-700">
+                      <h4 className="font-semibold mb-2">Categories</h4>
+                      <p className="text-sm text-slate-400">Organize items into categories like appetizers, entrees, desserts</p>
+                    </div>
+                    <div className="p-4 bg-slate-800 rounded-lg border border-slate-700">
+                      <h4 className="font-semibold mb-2">Pricing</h4>
+                      <p className="text-sm text-slate-400">Set prices, add modifiers, and manage special offers</p>
+                    </div>
+                    <div className="p-4 bg-slate-800 rounded-lg border border-slate-700">
+                      <h4 className="font-semibold mb-2">Orders</h4>
+                      <p className="text-sm text-slate-400">View and manage customer orders in real-time</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 

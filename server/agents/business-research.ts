@@ -3,7 +3,11 @@
  * 
  * Performs deep research on a business using Google Places API data
  * and generates comprehensive SWOT analysis to guide AI Biz Bot
+ * 
+ * Integrated with Knowledge Base for storing and retrieving business API research
  */
+
+import { knowledgeBaseService } from '../services/knowledge-base';
 
 export interface BusinessProfile {
   businessId: string;
@@ -490,6 +494,165 @@ Always emphasize our strengths and unique value propositions.
       console.error('SWOT completion and onboarding error:', error);
       throw error;
     }
+  }
+
+  /**
+   * Get Google API recommendations from knowledge base
+   * Uses stored research to provide business-specific API recommendations
+   */
+  async getApiRecommendations(businessProfile: BusinessProfile): Promise<{
+    recommendedApis: any[];
+    costEstimate: number;
+    integrationPlan: string[];
+  }> {
+    console.log(`[BusinessResearch] Getting API recommendations for ${businessProfile.name}`);
+
+    try {
+      // Retrieve Google API knowledge
+      const googleApis = await knowledgeBaseService.searchKnowledge({
+        category: 'google_api',
+        status: 'active'
+      });
+
+      // Get currently used APIs
+      const currentApis = await knowledgeBaseService.getCurrentApis();
+
+      // Get APIs that can be mirrored (alternatives)
+      const mirrorableApis = await knowledgeBaseService.getMirrorableApis();
+
+      // Analyze business needs
+      const recommendations = this.analyzeApiNeeds(
+        businessProfile,
+        googleApis,
+        currentApis,
+        mirrorableApis
+      );
+
+      return recommendations;
+    } catch (error: any) {
+      console.error('API recommendations error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Analyze which APIs would benefit this business
+   */
+  private analyzeApiNeeds(
+    businessProfile: BusinessProfile,
+    allKnowledge: any[],
+    currentApis: any[],
+    mirrorableApis: any[]
+  ): {
+    recommendedApis: any[];
+    costEstimate: number;
+    integrationPlan: string[];
+  } {
+    const recommendations = [];
+    let totalCost = 0;
+    const integrationPlan = [];
+
+    // Always recommend Places API for business discovery
+    recommendations.push({
+      apiName: 'Google Places API',
+      priority: 'high',
+      reason: 'Essential for business discovery, reviews, and local SEO',
+      estimatedCost: 50,
+      monthlyUsage: '~2000 requests'
+    });
+    totalCost += 50;
+    integrationPlan.push('Integrate Places API for business profile enhancement');
+
+    // Recommend Gmail API for customer communication
+    recommendations.push({
+      apiName: 'Gmail API',
+      priority: 'high',
+      reason: 'Automate customer email responses with AI',
+      estimatedCost: 0,
+      monthlyUsage: 'Free - rate limited'
+    });
+    integrationPlan.push('Set up Gmail API for automated email responses');
+
+    // Recommend Calendar API for scheduling
+    recommendations.push({
+      apiName: 'Google Calendar API',
+      priority: 'high',
+      reason: 'AI-powered appointment scheduling',
+      estimatedCost: 0,
+      monthlyUsage: 'Free'
+    });
+    integrationPlan.push('Integrate Calendar API for appointment booking');
+
+    // Recommend Business Profile API if business has Google listing
+    if (businessProfile.googlePlaceId) {
+      recommendations.push({
+        apiName: 'Google Business Profile API',
+        priority: 'medium',
+        reason: 'Manage Google My Business listing and reviews',
+        estimatedCost: 0,
+        monthlyUsage: 'Free with verification'
+      });
+      integrationPlan.push('Connect Business Profile API for review management');
+    }
+
+    // Add alternatives for expensive services
+    integrationPlan.push('Use open-source alternatives for document storage (vs Google Drive)');
+    integrationPlan.push('Implement custom analytics instead of Google Analytics 360');
+
+    return {
+      recommendedApis: recommendations,
+      costEstimate: totalCost,
+      integrationPlan
+    };
+  }
+
+  /**
+   * Generate enhanced agent training data with API knowledge
+   */
+  async generateEnhancedAgentTraining(
+    businessProfile: BusinessProfile,
+    swotAnalysis: SwotAnalysis
+  ): Promise<string> {
+    // Get API recommendations
+    const apiRecs = await this.getApiRecommendations(businessProfile);
+
+    // Generate comprehensive training prompt
+    const agentPrompt = await knowledgeBaseService.generateAgentPrompt([
+      'google_api',
+      'business_tools',
+      'integration'
+    ]);
+
+    return `
+# Agent Training for ${businessProfile.name}
+
+## Business Context
+${businessProfile.name} is a ${businessProfile.industry} business in ${businessProfile.location.city}.
+
+## Strengths
+${swotAnalysis.strengths.map(s => `- ${s.category}: ${s.description}`).join('\n')}
+
+## Recommended Google APIs
+${apiRecs.recommendedApis.map(api => `
+### ${api.apiName} (Priority: ${api.priority})
+- **Reason**: ${api.reason}
+- **Cost**: $${api.estimatedCost}/month
+- **Usage**: ${api.monthlyUsage}
+`).join('\n')}
+
+## Integration Plan
+${apiRecs.integrationPlan.map((step, i) => `${i + 1}. ${step}`).join('\n')}
+
+## Google Business API Knowledge
+${agentPrompt}
+
+## Instructions
+When talking to customers:
+1. Emphasize our AI-powered solutions
+2. Explain how we integrate with Google services
+3. Highlight cost savings vs buying Google services separately
+4. Show how our platform is easier to use
+`;
   }
 }
 

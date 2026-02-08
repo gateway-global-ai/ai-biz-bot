@@ -1,0 +1,7 @@
+{
+  "name": "GenAI Business Site (Chat SDK)",
+  "description": "SDK for GenAI Business Site. Displays SDK for modern, interactive business website components with AI-powered Voice and Chat assistance using Google Maps data.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
