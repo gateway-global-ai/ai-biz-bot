@@ -32,7 +32,9 @@ export class LiveVoiceClient {
   private isConnected = false;
   private isStreaming = false;
   private stopTimeout: number | null = null;
-  
+  /** Timeouts that reset output volume after each TTS chunk; cleared in disconnect() to avoid stale state updates. */
+  private outputVolumeTimeouts = new Set<number>();
+
   private nextStartTime = 0;
   private activeSources = new Set<AudioBufferSourceNode>();
   
@@ -223,7 +225,11 @@ export class LiveVoiceClient {
     const rms = Math.sqrt(sum / frameCount);
     this.onOutputVolumeChange(rms);
     const durationMs = (audioBuffer.duration * 1000) | 0;
-    setTimeout(() => this.onOutputVolumeChange(0), durationMs);
+    const timeoutId = window.setTimeout(() => {
+      this.outputVolumeTimeouts.delete(timeoutId);
+      if (this.isConnected) this.onOutputVolumeChange(0);
+    }, durationMs);
+    this.outputVolumeTimeouts.add(timeoutId);
 
     const source = this.outputAudioContext.createBufferSource();
     source.buffer = audioBuffer;
@@ -248,6 +254,12 @@ export class LiveVoiceClient {
   }
 
   disconnect() {
+    if (this.stopTimeout) {
+      window.clearTimeout(this.stopTimeout);
+      this.stopTimeout = null;
+    }
+    this.outputVolumeTimeouts.forEach(id => window.clearTimeout(id));
+    this.outputVolumeTimeouts.clear();
     if (this.sessionPromise) { this.sessionPromise.then((s: any) => s.close()); }
     this.currentStream?.getTracks().forEach(t => t.stop());
     this.activeSources.forEach(s => { try { s.stop(); } catch(e) {} });
