@@ -312,8 +312,12 @@ export function registerVlmRoutes(app: Express) {
           : undefined) ||
         (req.protocol && req.get("host") ? `${req.protocol}://${req.get("host")}` : undefined);
 
-      if (!baseUrl) {
-        console.warn("[VLM] No base URL configured; Gather action may fail. Set WEBHOOK_BASE_URL.");
+      if (!baseUrl || !baseUrl.trim()) {
+        console.error("[VLM] No base URL configured; returning error TwiML. Set WEBHOOK_BASE_URL so Gather action uses an absolute URL.");
+        res.type("text/xml").send(
+          `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Matthew">We're sorry, this service is temporarily unavailable. Goodbye.</Say><Hangup/></Response>`
+        );
+        return;
       }
 
       const campaign = await storage.getVlmCampaign(req.params.campaignId);
@@ -332,12 +336,13 @@ export function registerVlmRoutes(app: Express) {
       const twiml = callerService.generateTwiml(
         campaign || { scriptTemplate: null, industry: "general", city: "" } as any,
         dummyProspect,
-        baseUrl || ""
+        baseUrl.trim()
       );
 
       res.type("text/xml").send(twiml);
     } catch (error: any) {
-      res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say>An error occurred. Goodbye.</Say><Hangup/></Response>`);
+      console.error("[VLM] TwiML error:", error?.message);
+      res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Matthew">An error occurred. Goodbye.</Say><Hangup/></Response>`);
     }
   });
 

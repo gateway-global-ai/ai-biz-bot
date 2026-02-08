@@ -141,10 +141,18 @@ export class VlmOutboundCallerService {
   }
 
   /**
-   * Generate TwiML for the outbound call. Twilio requires absolute URLs for Gather action.
-   * @param baseUrl - Public base URL of the server (e.g. https://yourserver.com). Required for Gather to work.
+   * Generate TwiML for the outbound call. Twilio requires absolute URLs for Gather action;
+   * relative URLs cause Twilio to fail silently when POSTing gathered digits.
+   * @param baseUrl - Public base URL of the server (e.g. https://yourserver.com). Required.
    */
   generateTwiml(campaign: VlmCampaign, prospect: VlmProspect, baseUrl: string): string {
+    const base = (baseUrl || "").trim();
+    if (!base) {
+      throw new Error(
+        "baseUrl is required for Twilio Gather action. Set WEBHOOK_BASE_URL or ensure the request has protocol and host."
+      );
+    }
+
     const script =
       campaign.scriptTemplate ||
       `Hello, this is a call regarding AI-powered business solutions for ${prospect.industry} businesses. ` +
@@ -156,7 +164,7 @@ export class VlmOutboundCallerService {
       .replace(/\{industry\}/g, prospect.industry)
       .replace(/\{city\}/g, prospect.city || "your area");
 
-    const gatherAction = baseUrl ? `${baseUrl.replace(/\/$/, "")}/api/vlm/gather-response` : "/api/vlm/gather-response";
+    const gatherAction = `${base.replace(/\/$/, "")}/api/vlm/gather-response`;
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

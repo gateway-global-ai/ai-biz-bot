@@ -125,9 +125,10 @@ const valueProps = generateIndustryValueProposition(industry);
 
 Generates personalized call scripts using knowledge base insights.
 
-**Standard Script Generation**:
+**TwiML generation (for Twilio webhook)** — requires an absolute `baseUrl` for the Gather action:
 ```typescript
-const script = callerService.generateTwiml(campaign, prospect);
+const baseUrl = process.env.WEBHOOK_BASE_URL || `${req.protocol}://${req.get('host')}`;
+const twiml = callerService.generateTwiml(campaign, prospect, baseUrl);
 ```
 
 **Knowledge-Enhanced Script Generation**: ✨ NEW

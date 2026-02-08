@@ -80,19 +80,31 @@ export class LiveVoiceClient {
       Instruction: Keep responses brief and natural. 
     `;
 
+    let openResolve: () => void;
+    let openReject: (err: unknown) => void;
+    const openPromise = new Promise<void>((resolve, reject) => {
+      openResolve = resolve;
+      openReject = reject;
+    });
+
     this.sessionPromise = this.client.live.connect({
       model: 'gemini-2.5-flash-native-audio-preview-12-2025',
       callbacks: {
         onopen: () => {
           console.log('Live session opened');
+          this.isConnected = true;
           this.setupAudioProcessing();
+          openResolve!();
         },
         onmessage: (msg: LiveServerMessage) => this.handleMessage(msg),
         onclose: () => {
-            console.log('Live session closed');
-            this.disconnect();
+          console.log('Live session closed');
+          this.disconnect();
         },
-        onerror: (err) => console.error('Live session error', err),
+        onerror: (err) => {
+          console.error('Live session error', err);
+          openReject!(err);
+        },
       },
       config: {
         responseModalities: [Modality.AUDIO],
@@ -104,7 +116,7 @@ export class LiveVoiceClient {
       },
     });
 
-    this.isConnected = true;
+    await openPromise;
   }
 
   private setupAudioProcessing() {

@@ -64,8 +64,26 @@ const App: React.FC = () => {
 
   const voiceClient = useRef(new LiveVoiceClient());
   const dataRef = useRef<BusinessData | null>(null);
+  const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const checkDataIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearLoadingIntervals = useCallback(() => {
+    if (loadingIntervalRef.current) {
+      clearInterval(loadingIntervalRef.current);
+      loadingIntervalRef.current = null;
+    }
+    if (checkDataIntervalRef.current) {
+      clearInterval(checkDataIntervalRef.current);
+      checkDataIntervalRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => clearLoadingIntervals();
+  }, [clearLoadingIntervals]);
 
   const handlePlaceSelect = async (place: any) => {
+    clearLoadingIntervals();
     setViewState(ViewState.LOADING);
     setLoadingProgress(0);
     dataRef.current = null;
@@ -76,6 +94,7 @@ const App: React.FC = () => {
     }).catch(err => {
       console.error(err);
       setViewState(ViewState.ERROR);
+      clearLoadingIntervals();
     });
 
     // Start 30-second orchestrated loading
@@ -83,19 +102,27 @@ const App: React.FC = () => {
     const intervalTime = 100;
     const increment = (intervalTime / duration) * 100;
 
-    const timer = setInterval(() => {
+    loadingIntervalRef.current = setInterval(() => {
       setLoadingProgress(prev => {
         const next = prev + increment;
         if (next >= 100) {
-          clearInterval(timer);
-          // Only transition if data is also ready
-          const checkData = setInterval(() => {
-            if (dataRef.current) {
-              setBusinessData(dataRef.current);
-              setViewState(ViewState.GENERATED);
-              clearInterval(checkData);
-            }
-          }, 500);
+          if (loadingIntervalRef.current) {
+            clearInterval(loadingIntervalRef.current);
+            loadingIntervalRef.current = null;
+          }
+          // Only create the data-polling interval once (avoid multiple intervals if this callback re-runs)
+          if (!checkDataIntervalRef.current) {
+            checkDataIntervalRef.current = setInterval(() => {
+              if (dataRef.current) {
+                if (checkDataIntervalRef.current) {
+                  clearInterval(checkDataIntervalRef.current);
+                  checkDataIntervalRef.current = null;
+                }
+                setBusinessData(dataRef.current);
+                setViewState(ViewState.GENERATED);
+              }
+            }, 500);
+          }
           return 100;
         }
         return next;
