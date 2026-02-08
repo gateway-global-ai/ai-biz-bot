@@ -1,7 +1,7 @@
 
 import { TravelPackage, LocationType } from './types';
 
-export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyDa0EJi3hZBAKKJT61aCD9Qn3bSLO-DVro'; 
+export const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || ''; 
 
 // Approximate coordinates for key locations
 const COORDS = {

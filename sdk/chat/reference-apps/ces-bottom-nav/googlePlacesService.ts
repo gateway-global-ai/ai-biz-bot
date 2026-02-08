@@ -1,5 +1,5 @@
 
-const PLACES_API_KEY = 'AIzaSyDa0EJi3hZBAKKJT61aCD9Qn3bSLO-DVro';
+const PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_API_KEY || '';
 
 export interface GooglePlaceDetails {
   id: string;
@@ -16,6 +16,10 @@ export interface GooglePlaceDetails {
 }
 
 export const fetchPlaceDetailsByName = async (name: string): Promise<GooglePlaceDetails | null> => {
+  if (!PLACES_API_KEY) {
+    throw new Error('Google Places API key not configured. Please set GOOGLE_PLACES_API_KEY or GOOGLE_API_KEY environment variable.');
+  }
+  
   console.log(`Searching for POI: ${name}`);
   try {
     // Step 1: Search for the place to get its ID
