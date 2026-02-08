@@ -4,7 +4,9 @@ This guide configures a clean sync between:
 
 - **Cursor** (local) → your machine at `~/Documents/GitHub/chat-mvp-merge` (or your repo path)
 - **GitHub** → single source of truth: `https://github.com/gateway-global-ai/chat-mvp-merge`
-- **Server** → Hostinger VPS or Gateway Global VPS (e.g. aibizbot.gatewayglobal.ai)
+- **Server** → Hostinger VPS or Gateway Global VPS (e.g. aibizbot.gatewayglobal.ai for prod; optional staging hostname for **stage**)
+
+For **dev / stage / prod** (local, staging, production), see [ENVIRONMENTS_DEV_STAGE_PROD.md](ENVIRONMENTS_DEV_STAGE_PROD.md).
 
 ---
 
@@ -95,10 +97,11 @@ git pull origin main
 git push origin main
 ```
 
-**Branch strategy (optional):**
+**Branch strategy:**
 
-- Use `main` for production-ready code.
-- For bigger features you can use a branch (e.g. `feature/ptt-ui`), push it, open a PR, then merge to `main`. The server will pull `main` (see below).
+- **`main`** = production. The production server deploys from `main`.
+- **`stage`** = staging. Use for release candidates and final testing before prod. See **[ENVIRONMENTS_DEV_STAGE_PROD.md](ENVIRONMENTS_DEV_STAGE_PROD.md)** for the full dev / stage / prod flow.
+- For bigger features you can use a branch (e.g. `feature/ptt-ui`), merge into `stage` to test, then merge `stage` → `main` when ready for prod.
 
 ---
 
