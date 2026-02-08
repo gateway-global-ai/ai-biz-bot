@@ -1,10 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { VoiceDetail, VoiceTechnology } from '../types';
+import { getVoiceIdsForModel, isLiveApiModel, LIVE_API_VOICE_TECH } from '../config/modelVoiceConfig';
 import { Mic, User, Sparkles, Zap, Activity, Waves } from 'lucide-react';
 
 interface VoiceSelectorProps {
   selectedVoice: string;
   onVoiceChange: (voice: string) => void;
+  /** Current Gemini model; filters voices to those supported by this model (per docs). */
+  selectedModel?: string;
   disabled: boolean;
   mode?: 'compact' | 'grid';
 }
@@ -63,12 +66,29 @@ const TECH_INFO = {
   }
 };
 
-const VoiceSelector: React.FC<VoiceSelectorProps> = ({ selectedVoice, onVoiceChange, disabled, mode = 'compact' }) => {
-  const [activeTab, setActiveTab] = useState<VoiceTechnology>('Gemini');
+const VoiceSelector: React.FC<VoiceSelectorProps> = ({ selectedVoice, onVoiceChange, selectedModel = '', disabled, mode = 'compact' }) => {
+  const allowedVoiceIds = useMemo(() => getVoiceIdsForModel(selectedModel), [selectedModel]);
+  const liveApiOnly = isLiveApiModel(selectedModel);
+  const [activeTab, setActiveTab] = useState<VoiceTechnology>(LIVE_API_VOICE_TECH);
 
-  const filteredVoices = useMemo(() => 
-    ALL_VOICES.filter(v => v.technology === activeTab), 
-  [activeTab]);
+  // When model changes, only show Gemini tab for Live API models; keep active tab in sync
+  useEffect(() => {
+    if (liveApiOnly) setActiveTab(LIVE_API_VOICE_TECH);
+  }, [liveApiOnly]);
+
+  // Filter: by technology tab AND by model-allowed voice IDs (per README/docs)
+  const filteredVoices = useMemo(() => {
+    const byTech = ALL_VOICES.filter(v => v.technology === activeTab);
+    const byModel = allowedVoiceIds.length > 0 ? byTech.filter(v => allowedVoiceIds.includes(v.id)) : byTech;
+    return byModel;
+  }, [activeTab, allowedVoiceIds]);
+
+  // If current voice isn't allowed for this model, switch to first allowed
+  useEffect(() => {
+    if (allowedVoiceIds.length && !allowedVoiceIds.includes(selectedVoice)) {
+      onVoiceChange(allowedVoiceIds[0]);
+    }
+  }, [allowedVoiceIds, selectedVoice, onVoiceChange]);
 
   return (
     <div className="space-y-4">
@@ -79,9 +99,12 @@ const VoiceSelector: React.FC<VoiceSelectorProps> = ({ selectedVoice, onVoiceCha
         </label>
       </div>
 
-      {/* Technology Tabs */}
+      {/* Technology Tabs: only Gemini for Live API models (per docs); other tech is for separate STT/TTS */}
       <div className="flex p-1 bg-gray-950 border border-gray-800 rounded-xl overflow-x-auto custom-scrollbar">
-        {(Object.keys(TECH_INFO) as VoiceTechnology[]).map((tech) => (
+        {(liveApiOnly
+          ? [LIVE_API_VOICE_TECH]
+          : (Object.keys(TECH_INFO) as VoiceTechnology[])
+        ).map((tech) => (
           <button
             key={tech}
             onClick={() => setActiveTab(tech)}
@@ -103,9 +126,12 @@ const VoiceSelector: React.FC<VoiceSelectorProps> = ({ selectedVoice, onVoiceCha
         ))}
       </div>
 
-      {/* Technology Description Banner */}
+      {/* Technology Description Banner + model filter note */}
       <div className={`text-[10px] px-3 py-2 rounded-lg border ${TECH_INFO[activeTab].bg} ${TECH_INFO[activeTab].border} ${TECH_INFO[activeTab].color}`}>
          <span className="font-bold mr-1">Technology:</span> {TECH_INFO[activeTab].desc}
+         {liveApiOnly && filteredVoices.length > 0 && (
+           <span className="block mt-1 opacity-90">Voices below are filtered for the selected model (see README).</span>
+         )}
       </div>
       
       {/* Voice Grid */}
