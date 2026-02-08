@@ -44,3 +44,20 @@ export function getDefaultVoiceForModel(modelId: string): string {
 export function isLiveApiModel(modelId: string): boolean {
   return modelId in MODEL_VOICES;
 }
+
+/** Live API only accepts short names: Puck, Charon, Kore, Fenrir, Zephyr. Legacy IDs (e.g. en-US-Chirp3-HD-Kore) cause WebSocket errors. */
+const LIVE_API_VOICE_NAMES = ['Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'] as const;
+
+/**
+ * Normalizes any voice value to a short identifier accepted by the Gemini 2.5 Live API.
+ * Use this before passing voice to ai.live.connect() to avoid "Requested voice api_name 'en-US-Chirp3-HD-Kore' is not available".
+ */
+export function normalizeVoiceForLiveApi(voice: string): string {
+  const v = voice?.trim() || '';
+  if (LIVE_API_VOICE_NAMES.includes(v as (typeof LIVE_API_VOICE_NAMES)[number])) return v;
+  // Legacy IDs may contain the short name (e.g. en-US-Chirp3-HD-Kore -> Kore)
+  for (const name of LIVE_API_VOICE_NAMES) {
+    if (v.includes(name)) return name;
+  }
+  return LIVE_API_VOICE_NAMES[0]; // default Puck
+}
