@@ -1306,11 +1306,12 @@ export async function registerRoutes(
         }
       }
       
-      const baseUrl = 'https://twilio.gatewayglobal.ai'; // Production webhook URL
+      const baseUrl = process.env.WEBHOOK_BASE_URL ||
+        (req.get('host') ? `https://${req.get('host')}` : 'https://twilio.gatewayglobal.ai');
       const voiceUrl = `${baseUrl}/webhook/voice`;
       const smsUrl = `${baseUrl}/webhook/sms`;
       const statusCallback = `${baseUrl}/webhook/voice/status`;
-      
+
       // If we have credentials and phoneSid, configure webhooks on Twilio
       if (twilioClient && phoneSid) {
         try {

@@ -34,6 +34,8 @@ export class LiveVoiceClient {
   private stopTimeout: number | null = null;
   /** Timeouts that reset output volume after each TTS chunk; cleared in disconnect() to avoid stale state updates. */
   private outputVolumeTimeouts = new Set<number>();
+  /** In-flight disconnect promise so connect() and callbacks can await full cleanup. */
+  private disconnectPromise: Promise<void> | null = null;
 
   private nextStartTime = 0;
   private activeSources = new Set<AudioBufferSourceNode>();
@@ -58,6 +60,7 @@ export class LiveVoiceClient {
 
   async connect(businessData: BusinessData, agentConfig: AgentConfig, voiceName: string = 'Zephyr') {
     if (this.isConnected) return;
+    if (this.disconnectPromise) await this.disconnectPromise;
 
     try {
       this.currentStream = await navigator.mediaDevices.getUserMedia({ 
@@ -99,13 +102,15 @@ export class LiveVoiceClient {
           openResolve!();
         },
         onmessage: (msg: LiveServerMessage) => this.handleMessage(msg),
-        onclose: () => {
+        onclose: async () => {
           console.log('Live session closed');
-          this.disconnect();
+          await this.disconnect();
         },
-        onerror: (err) => {
+        onerror: async (err) => {
           console.error('Live session error', err);
+          this.isConnected = false;
           openReject!(err);
+          await this.disconnect();
         },
       },
       config: {
@@ -253,14 +258,40 @@ export class LiveVoiceClient {
     };
   }
 
-  disconnect() {
+  async disconnect(): Promise<void> {
+    if (this.disconnectPromise) return this.disconnectPromise;
+    const promise = this.runDisconnect();
+    this.disconnectPromise = promise;
+    try {
+      await promise;
+    } finally {
+      this.disconnectPromise = null;
+    }
+  }
+
+  private async runDisconnect(): Promise<void> {
     if (this.stopTimeout) {
       window.clearTimeout(this.stopTimeout);
       this.stopTimeout = null;
     }
     this.outputVolumeTimeouts.forEach(id => window.clearTimeout(id));
     this.outputVolumeTimeouts.clear();
-    if (this.sessionPromise) { this.sessionPromise.then((s: any) => s.close()); }
+    this.isConnected = false;
+    this.isStreaming = false;
+
+    if (this.sessionPromise) {
+      const p = this.sessionPromise;
+      this.sessionPromise = null;
+      try {
+        const session = await p;
+        if (session && typeof session.close === 'function') {
+          await session.close();
+        }
+      } catch (_) {
+        // Session may have already closed or failed to connect
+      }
+    }
+
     this.currentStream?.getTracks().forEach(t => t.stop());
     this.activeSources.forEach(s => { try { s.stop(); } catch(e) {} });
     this.activeSources.clear();
@@ -268,10 +299,8 @@ export class LiveVoiceClient {
     this.inputSource?.disconnect();
     this.inputAudioContext?.close();
     this.outputAudioContext?.close();
-    this.sessionPromise = null;
+    this.currentStream = null;
     this.inputAudioContext = null;
     this.outputAudioContext = null;
-    this.isConnected = false;
-    this.isStreaming = false;
   }
 }
