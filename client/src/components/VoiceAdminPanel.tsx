@@ -445,19 +445,5 @@ export const VoiceAdminPanel: React.FC<VoiceAdminPanelProps> = ({
     </div>
   );
 };
-          className="w-full sm:w-auto"
-        >
-          <Save className="w-4 h-4 mr-2" />
-          {isSaving ? 'Saving...' : 'Save Settings'}
-        </Button>
-        {!isPaid && (
-          <p className="mt-3 text-sm text-slate-500">
-            To customize these settings, please upgrade to a paid plan
-          </p>
-        )}
-      </div>
-    </div>
-  );
-};
 
 export default VoiceAdminPanel;
