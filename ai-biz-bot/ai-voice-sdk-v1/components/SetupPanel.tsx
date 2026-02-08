@@ -57,11 +57,12 @@ const SetupPanel: React.FC<SetupPanelProps> = ({
              />
            </div>
 
-           {/* Section 3: Voice */}
+           {/* Section 3: Voice (filtered by selected model per README) */}
            <div className="pt-4 border-t border-gray-800/50">
              <VoiceSelector 
                selectedVoice={selectedVoice}
                onVoiceChange={onVoiceChange}
+               selectedModel={selectedModel}
                disabled={disabled}
                mode="grid"
              />

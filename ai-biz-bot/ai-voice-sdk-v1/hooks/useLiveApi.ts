@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { LogEntry, ChatMessage } from '../types';
 import { createBlob, decode, decodeAudioData } from '../utils/audioUtils';
+import { normalizeVoiceForLiveApi } from '../config/modelVoiceConfig';
 
 // Input audio sample rate for the model
 const INPUT_SAMPLE_RATE = 16000;
@@ -260,7 +261,7 @@ export const useLiveApi = (model: string, voice: string, systemInstruction: stri
           inputAudioTranscription: {}, 
           outputAudioTranscription: {}, 
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } }
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: normalizeVoiceForLiveApi(voice) } }
           },
           systemInstruction: systemInstruction,
           generationConfig: {

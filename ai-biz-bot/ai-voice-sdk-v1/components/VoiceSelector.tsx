@@ -1,10 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { VoiceDetail, VoiceTechnology } from '../types';
+import { getVoiceIdsForModel, isLiveApiModel, LIVE_API_VOICE_TECH } from '../config/modelVoiceConfig';
 import { Mic, User, Sparkles, Zap, Activity, Waves } from 'lucide-react';
 
 interface VoiceSelectorProps {
   selectedVoice: string;
   onVoiceChange: (voice: string) => void;
+  /** Current Gemini model; filters voices to those supported by this model (per docs). */
+  selectedModel?: string;
   disabled: boolean;
   mode?: 'compact' | 'grid';
 }
@@ -63,12 +66,29 @@ const TECH_INFO = {
   }
 };
 
-const VoiceSelector: React.FC<VoiceSelectorProps> = ({ selectedVoice, onVoiceChange, disabled, mode = 'compact' }) => {
-  const [activeTab, setActiveTab] = useState<VoiceTechnology>('Gemini');
+const VoiceSelector: React.FC<VoiceSelectorProps> = ({ selectedVoice, onVoiceChange, selectedModel = '', disabled, mode = 'compact' }) => {
+  const allowedVoiceIds = useMemo(() => getVoiceIdsForModel(selectedModel), [selectedModel]);
+  const liveApiOnly = isLiveApiModel(selectedModel);
+  const [activeTab, setActiveTab] = useState<VoiceTechnology>(LIVE_API_VOICE_TECH);
 
-  const filteredVoices = useMemo(() => 
-    ALL_VOICES.filter(v => v.technology === activeTab), 
-  [activeTab]);
+  // When model changes, only show Gemini tab for Live API models; keep active tab in sync
+  useEffect(() => {
+    if (liveApiOnly) setActiveTab(LIVE_API_VOICE_TECH);
+  }, [liveApiOnly]);
+
+  // Filter: by technology tab AND by model-allowed voice IDs (per README/docs)
+  const filteredVoices = useMemo(() => {
+    const byTech = ALL_VOICES.filter(v => v.technology === activeTab);
+    const byModel = allowedVoiceIds.length > 0 ? byTech.filter(v => allowedVoiceIds.includes(v.id)) : byTech;
+    return byModel;
+  }, [activeTab, allowedVoiceIds]);
+
+  // If current voice isn't allowed for this model, switch to first allowed
+  useEffect(() => {
+    if (allowedVoiceIds.length && !allowedVoiceIds.includes(selectedVoice)) {
+      onVoiceChange(allowedVoiceIds[0]);
+    }
+  }, [allowedVoiceIds, selectedVoice, onVoiceChange]);
 
   return (
     <div className="space-y-4">
@@ -79,34 +99,48 @@ const VoiceSelector: React.FC<VoiceSelectorProps> = ({ selectedVoice, onVoiceCha
         </label>
       </div>
 
-      {/* Technology Tabs */}
-      <div className="flex p-1 bg-gray-950 border border-gray-800 rounded-xl overflow-x-auto custom-scrollbar">
-        {(Object.keys(TECH_INFO) as VoiceTechnology[]).map((tech) => (
-          <button
-            key={tech}
-            onClick={() => setActiveTab(tech)}
-            disabled={disabled}
-            className={`
-              flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap
-              ${activeTab === tech 
-                ? 'bg-gray-800 text-white shadow-sm' 
-                : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
-              }
-              ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
-            `}
-          >
-            <span className={activeTab === tech ? TECH_INFO[tech].color : ''}>
-               {TECH_INFO[tech].icon}
-            </span>
-            {tech}
-          </button>
-        ))}
-      </div>
-
-      {/* Technology Description Banner */}
-      <div className={`text-[10px] px-3 py-2 rounded-lg border ${TECH_INFO[activeTab].bg} ${TECH_INFO[activeTab].border} ${TECH_INFO[activeTab].color}`}>
-         <span className="font-bold mr-1">Technology:</span> {TECH_INFO[activeTab].desc}
-      </div>
+      {/* Technology Tabs: only Gemini for Live API models (per docs); other tech is for separate STT/TTS */}
+      {liveApiOnly ? (
+        /* When only Gemini is available, show full voice technology type + description (not just the word Gemini) */
+        <div className={`text-[11px] px-3 py-2.5 rounded-xl border flex items-center gap-3 ${TECH_INFO[LIVE_API_VOICE_TECH].bg} ${TECH_INFO[LIVE_API_VOICE_TECH].border} ${TECH_INFO[LIVE_API_VOICE_TECH].color}`}>
+          <span className="shrink-0">{TECH_INFO[LIVE_API_VOICE_TECH].icon}</span>
+          <div>
+            <span className="font-bold">Voice technology: Gemini</span>
+            <span className="opacity-90"> — {TECH_INFO[LIVE_API_VOICE_TECH].desc}</span>
+            {filteredVoices.length > 0 && (
+              <span className="block mt-1 opacity-80">Voices below are filtered for the selected model (see README).</span>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex p-1 bg-gray-950 border border-gray-800 rounded-xl overflow-x-auto custom-scrollbar">
+            {(Object.keys(TECH_INFO) as VoiceTechnology[]).map((tech) => (
+              <button
+                key={tech}
+                onClick={() => setActiveTab(tech)}
+                disabled={disabled}
+                className={`
+                  flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap
+                  ${activeTab === tech 
+                    ? 'bg-gray-800 text-white shadow-sm' 
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-gray-900'
+                  }
+                  ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+                `}
+              >
+                <span className={activeTab === tech ? TECH_INFO[tech].color : ''}>
+                  {TECH_INFO[tech].icon}
+                </span>
+                {tech}
+              </button>
+            ))}
+          </div>
+          <div className={`text-[10px] px-3 py-2 rounded-lg border ${TECH_INFO[activeTab].bg} ${TECH_INFO[activeTab].border} ${TECH_INFO[activeTab].color}`}>
+            <span className="font-bold mr-1">Technology:</span> {TECH_INFO[activeTab].desc}
+          </div>
+        </>
+      )}
       
       {/* Voice Grid */}
       <div className={`${mode === 'grid' ? 'grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4' : 'grid grid-cols-2 md:grid-cols-3 gap-2'}`}>

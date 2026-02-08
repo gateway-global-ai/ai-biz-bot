@@ -30,6 +30,9 @@ export enum Language {
 
 export type VisualizerType = 'bars' | 'wave' | 'orb';
 
+/** Conversation view: Chat (text), PTT (walkie-talkie), Realtime (VAD streaming). Shared history across all. */
+export type ChatInterfaceMode = 'chat' | 'ptt' | 'realtime';
+
 export interface LogEntry {
   timestamp: string;
   type: 'info' | 'error' | 'message' | 'tool';
