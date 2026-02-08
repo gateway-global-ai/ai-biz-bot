@@ -5372,12 +5372,12 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
-  // Kimi-Audio enhanced voice webhook - uses Media Streams for real-time AI voice
+  // Gemini voice webhook - uses Media Streams for real-time AI voice (KIMI not used for voice)
   app.post("/webhook/voice/kimi", validateTwilioSignature, async (req, res) => {
     try {
       const { From, To, CallSid, CallStatus } = req.body;
       
-      console.log(`[Kimi Voice] From: ${From}, To: ${To}, Status: ${CallStatus}`);
+      console.log(`[Voice] From: ${From}, To: ${To}, Status: ${CallStatus}`);
       
       // Log the call
       const config = await storage.getTelephonyConfig();
@@ -5398,7 +5398,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         );
         
         if (!isAllowed) {
-          console.log(`[Kimi Voice] Blocked caller: ${From}`);
+          console.log(`[Voice] Blocked caller: ${From}`);
           res.set('Content-Type', 'text/xml');
           return res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -5414,16 +5414,16 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       const wsProtocol = host.includes('localhost') ? 'ws' : 'wss';
       const streamUrl = `${wsProtocol}://${host}/ws/voice-stream`;
       
-      console.log(`[Kimi Voice] Stream URL: ${streamUrl}`);
+      console.log(`[Voice] Stream URL: ${streamUrl}`);
       
-      // Return TwiML with Media Streams
+      // Return TwiML with Media Streams (voice pipeline uses Gemini)
       res.set('Content-Type', 'text/xml');
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-F">Welcome to Gateway Global AI. I'm connecting you to Kimi, our AI assistant.</Say>
+  <Say voice="Google.en-US-Neural2-F">Welcome to Gateway Global AI. Connecting you to our AI assistant now.</Say>
   <Connect>
     <Stream url="${streamUrl}">
-      <Parameter name="agentName" value="Kimi"/>
+      <Parameter name="agentName" value="AI Assistant"/>
       <Parameter name="personality" value="helpful"/>
     </Stream>
   </Connect>
@@ -5431,7 +5431,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 </Response>`);
       
     } catch (error: any) {
-      console.error('[Kimi Voice] Error:', error);
+      console.error('[Voice] Error:', error);
       res.set('Content-Type', 'text/xml');
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>

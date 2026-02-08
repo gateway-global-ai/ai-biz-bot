@@ -1,19 +1,36 @@
 import React from 'react';
-import { Briefcase, User, Building, MessageSquare, ShieldCheck, Info } from 'lucide-react';
+import { Briefcase, User, Building, MessageSquare, ShieldCheck, Info, Radio, Activity, Image } from 'lucide-react';
+import type { ChatInterfaceMode } from '../types';
 
 interface ControlPanelProps {
   role: { company: string; position: string; task: string };
   setRole: (val: { company: string; position: string; task: string }) => void;
   manualInstruction: string;
   setManualInstruction: (val: string) => void;
+  /** Default conversation view when opening the chat/visualizer (owner config) */
+  defaultChatMode?: ChatInterfaceMode;
+  setDefaultChatMode?: (mode: ChatInterfaceMode) => void;
+  /** Main photo from Google Places hero (brands visualizer/chat background at ~25% opacity) */
+  heroImageUrl?: string;
+  setHeroImageUrl?: (url: string) => void;
   disabled: boolean;
 }
+
+const DEFAULT_MODES: { value: ChatInterfaceMode; label: string; icon: React.ReactNode }[] = [
+  { value: 'chat', label: 'Chat', icon: <MessageSquare size={16} /> },
+  { value: 'ptt', label: 'Push To Talk', icon: <Radio size={16} /> },
+  { value: 'realtime', label: 'Realtime Streaming', icon: <Activity size={16} /> },
+];
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
   role,
   setRole,
   manualInstruction,
   setManualInstruction,
+  defaultChatMode = 'ptt',
+  setDefaultChatMode,
+  heroImageUrl = '',
+  setHeroImageUrl,
   disabled
 }) => {
   return (
@@ -75,6 +92,50 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
                  </div>
               </div>
           </div>
+
+          {/* Hero image: brands visualizer/chat background (e.g. from Google Places website hero) */}
+          {setHeroImageUrl && (
+            <div className="mt-6 pt-6 border-t border-gray-800 space-y-2">
+              <label className="text-[10px] uppercase font-bold text-gray-500 ml-1 flex items-center gap-2">
+                <Image size={14} /> Hero image URL
+              </label>
+              <p className="text-[11px] text-gray-500 -mt-1 mb-2">Main photo from your Google Places–generated hero. Fades into the chat/visualizer background at 25% opacity.</p>
+              <input
+                type="url"
+                value={heroImageUrl}
+                onChange={(e) => setHeroImageUrl(e.target.value)}
+                placeholder="https://… (e.g. from your website hero)"
+                disabled={disabled}
+                className="w-full bg-gray-950 border border-gray-800 rounded-xl py-3 px-4 text-sm text-gray-100 placeholder-gray-600 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/30 focus:outline-none transition-all"
+              />
+            </div>
+          )}
+
+          {/* Default conversation view (owner config) */}
+          {setDefaultChatMode && (
+            <div className="mt-6 pt-6 border-t border-gray-800 space-y-2">
+              <label className="text-[10px] uppercase font-bold text-gray-500 ml-1">Default conversation view</label>
+              <p className="text-[11px] text-gray-500 -mt-1 mb-2">What visitors see when they open the chat.</p>
+              <div className="flex flex-wrap gap-2">
+                {DEFAULT_MODES.map((m) => (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setDefaultChatMode(m.value)}
+                    disabled={disabled}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border transition-all ${
+                      defaultChatMode === m.value
+                        ? 'bg-blue-500/20 border-blue-500/50 text-blue-400'
+                        : 'bg-gray-950 border-gray-800 text-gray-500 hover:text-gray-300 hover:border-gray-700'
+                    }`}
+                  >
+                    {m.icon}
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
        </div>
 
        {/* Context Card */}
