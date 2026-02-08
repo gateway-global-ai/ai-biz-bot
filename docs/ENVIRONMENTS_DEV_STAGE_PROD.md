@@ -14,6 +14,10 @@ Yes — **dev**, **stage**, and **prod** is the right configuration for shipping
 
 **Flow:** Develop locally (dev) → push to `stage` and deploy to staging → test → merge `stage` into `main` and deploy `main` to prod.
 
+**Deploy the current stable version (prod):** On the production server run  
+`cd /opt/gatewayglobal/aibizbot.gatewayglobal.ai && ./script/deploy-server.sh aibizbot.gatewayglobal.ai`  
+This pulls `main`, builds, and restarts the app at **https://aibizbot.gatewayglobal.ai** (port 3002).
+
 ---
 
 ## 2. What each environment is for
@@ -58,21 +62,23 @@ git push origin stage
 
 ---
 
-## 4. URLs and server layout (VPS)
+## 4. Subdomains, ports, and server layout (VPS)
 
-Use one subdomain per environment so each has a clear URL and its own `.env` (see [server_deployment.md](server_deployment.md)).
+Use one subdomain per environment. Each has its own port, app directory, and `.env` (see [server_deployment.md](server_deployment.md)).
 
-| Environment | Hostname (example) | Port (example) | App path (example) |
-|-------------|--------------------|----------------|--------------------|
+| Environment | Subdomain | Port | App path |
+|-------------|-----------|------|----------|
 | **Prod** | aibizbot.gatewayglobal.ai | 3002 | /opt/gatewayglobal/aibizbot.gatewayglobal.ai |
-| **Stage** | stage.gatewayglobal.ai or aibizbot-stage.gatewayglobal.ai | 3003 | /opt/gatewayglobal/stage.gatewayglobal.ai |
+| **Stage** | aibizbot-stage.gatewayglobal.ai | 3003 | /opt/gatewayglobal/aibizbot-stage.gatewayglobal.ai |
+| **Dev** (optional) | aibizbot-dev.gatewayglobal.ai | 3004 | /opt/gatewayglobal/aibizbot-dev.gatewayglobal.ai |
 
-- **Prod:** Already defined (see [DEPLOY_VPS_AIBIZBOT.md](DEPLOY_VPS_AIBIZBOT.md)).  
-- **Stage:** Create a second app directory, Nginx server block, and SSL for the staging hostname; use a different port (e.g. 3003) and set in staging `.env`:
-  - `PORT=3003`
-  - `NODE_ENV=production` (or `staging` if you ever branch on it in code)
-  - `WEBHOOK_BASE_URL=https://stage.gatewayglobal.ai` (or your chosen staging URL)
-  - Staging DB and test Twilio/SMS if you want to avoid touching prod.
+**DNS:** Point each subdomain (A record) to the VPS IP (e.g. 72.61.4.44). Then add an Nginx server block and run Certbot for each hostname.
+
+- **Prod:** Deploy from `main`. This is the current stable app (see [DEPLOY_VPS_AIBIZBOT.md](DEPLOY_VPS_AIBIZBOT.md)).
+- **Stage:** Deploy from `stage`. In staging `.env`: `PORT=3003`, `WEBHOOK_BASE_URL=https://aibizbot-stage.gatewayglobal.ai`, staging DB and test Twilio if desired.
+- **Dev:** Either (1) local only — run `npm run dev` on your machine (e.g. localhost:5000), or (2) optional shared dev server on VPS — deploy any branch to aibizbot-dev; in `.env`: `PORT=3004`, `WEBHOOK_BASE_URL=https://aibizbot-dev.gatewayglobal.ai`.
+
+**First-time setup (stage + dev on VPS):** [DEPLOY_STAGE_AND_DEV_CHECKLIST.md](DEPLOY_STAGE_AND_DEV_CHECKLIST.md) has step-by-step copy-paste commands.
 
 ---
 
@@ -87,8 +93,8 @@ Never commit `.env` files. Use [.env.example](../.env.example) as the single che
 | Variable | Dev | Stage | Prod |
 |----------|-----|--------|------|
 | NODE_ENV | development | production (or staging) | production |
-| PORT | 5000 (or your choice) | 3003 | 3002 |
-| WEBHOOK_BASE_URL | http://localhost:5000 | https://stage.gatewayglobal.ai | https://aibizbot.gatewayglobal.ai |
+| PORT | 5000 (local) or 3004 (VPS dev) | 3003 | 3002 |
+| WEBHOOK_BASE_URL | http://localhost:5000 or https://aibizbot-dev.gatewayglobal.ai | https://aibizbot-stage.gatewayglobal.ai | https://aibizbot.gatewayglobal.ai |
 | DATABASE_URL | local/dev DB | staging DB | prod DB |
 | Twilio / API keys | dev/test where possible | test keys / numbers | production keys |
 
@@ -96,26 +102,21 @@ Never commit `.env` files. Use [.env.example](../.env.example) as the single che
 
 ## 6. How to deploy stage vs prod
 
-- **Staging server** (e.g. `/opt/gatewayglobal/stage.gatewayglobal.ai`):  
-  - Clone once (or copy the repo), then run the **staging deploy script** so it always pulls the **`stage`** branch and restarts the staging PM2 app:
+- **Staging** (aibizbot-stage.gatewayglobal.ai, port 3003):  
+  - App path: `/opt/gatewayglobal/aibizbot-stage.gatewayglobal.ai`. Run the **staging deploy script** (pulls **`stage`** branch):
     ```bash
-    cd /opt/gatewayglobal/stage.gatewayglobal.ai
+    cd /opt/gatewayglobal/aibizbot-stage.gatewayglobal.ai
     chmod +x script/deploy-staging.sh
-    ./script/deploy-staging.sh stage.gatewayglobal.ai
-    ```
-  - Or do the steps manually:
-    ```bash
-    cd /opt/gatewayglobal/stage.gatewayglobal.ai
-    git fetch origin
-    git checkout stage
-    git pull origin stage
-    npm ci --omit=dev
-    npm run build
-    pm2 restart stage.gatewayglobal.ai
+    ./script/deploy-staging.sh aibizbot-stage.gatewayglobal.ai
     ```
 
-- **Production server** (e.g. `/opt/gatewayglobal/aibizbot.gatewayglobal.ai`):  
-  - Pull **`main`** only. Use the existing [deploy script](../script/deploy-server.sh) or the steps in [SETUP_GITHUB_HOSTINGER_CURSOR.md](SETUP_GITHUB_HOSTINGER_CURSOR.md).
+- **Production** (aibizbot.gatewayglobal.ai, port 3002):  
+  - App path: `/opt/gatewayglobal/aibizbot.gatewayglobal.ai`. Pull **`main`** only. Use the [deploy script](../script/deploy-server.sh):
+    ```bash
+    cd /opt/gatewayglobal/aibizbot.gatewayglobal.ai
+    ./script/deploy-server.sh aibizbot.gatewayglobal.ai
+    ```
+  - **To deploy the current stable version:** ensure `main` has the desired code, then run the command above on the prod server.
 
 ---
 
@@ -125,9 +126,9 @@ Never commit `.env` files. Use [.env.example](../.env.example) as the single che
 |--------|--------|----------------|
 | Develop | Cursor (local) | Work on `main` or a feature branch; `npm run dev` |
 | Put a release candidate on stage | Local | `git checkout stage && git merge main && git push origin stage` |
-| Deploy to staging | Staging server | `./script/deploy-staging.sh stage.gatewayglobal.ai` (see §6) |
+| Deploy to staging | Staging server | `cd /opt/gatewayglobal/aibizbot-stage.gatewayglobal.ai && ./script/deploy-staging.sh aibizbot-stage.gatewayglobal.ai` |
 | Promote to prod | Local | `git checkout main && git merge stage && git push origin main` |
-| Deploy to prod | Production server | `./script/deploy-server.sh aibizbot.gatewayglobal.ai` |
+| Deploy to prod (current stable) | Production server | `cd /opt/gatewayglobal/aibizbot.gatewayglobal.ai && ./script/deploy-server.sh aibizbot.gatewayglobal.ai` |
 
 ---
 

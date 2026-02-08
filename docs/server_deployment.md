@@ -65,12 +65,21 @@
    sudo certbot --nginx -d <hostname>
    ```
 
-### Port allocation (example)
+### Port allocation (dev / stage / prod)
 
-| Subdomain                    | Port |
-|-----------------------------|------|
-| aibizbot.gatewayglobal.ai   | 3002 |
-| (future apps)               | 3003–3009 |
+| Subdomain | Environment | Port | App path |
+|-----------|-------------|------|----------|
+| aibizbot.gatewayglobal.ai | **Prod** | 3002 | /opt/gatewayglobal/aibizbot.gatewayglobal.ai |
+| aibizbot-stage.gatewayglobal.ai | **Stage** | 3003 | /opt/gatewayglobal/aibizbot-stage.gatewayglobal.ai |
+| aibizbot-dev.gatewayglobal.ai | **Dev** (optional shared dev server) | 3004 | /opt/gatewayglobal/aibizbot-dev.gatewayglobal.ai |
+
+- **Prod**: Live app; deploy from `main`. Use this for the current stable release.
+- **Stage**: Pre-release testing; deploy from `stage`.
+- **Dev**: Optional. Either run locally only (`npm run dev` on your machine, no VPS), or a shared dev server on the VPS for the team. Local dev typically uses `localhost:5000` (or similar); the VPS dev subdomain uses port 3004.
+
+Additional apps (if needed): 3005–3009.
+
+**First-time setup for stage and dev:** See [DEPLOY_STAGE_AND_DEV_CHECKLIST.md](DEPLOY_STAGE_AND_DEV_CHECKLIST.md) for copy-paste commands (clone, .env, Nginx, Certbot, PM2).
 
 ---
 

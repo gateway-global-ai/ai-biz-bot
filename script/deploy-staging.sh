@@ -2,10 +2,10 @@
 # Run this ON THE STAGING SERVER in the staging app directory.
 # Deploys the 'stage' branch (not main). Use for release-candidate testing.
 # Usage: ./script/deploy-staging.sh [pm2-app-name]
-# Example (from repo root on staging server): ./script/deploy-staging.sh stage.gatewayglobal.ai
+# Example (from repo root on staging server): ./script/deploy-staging.sh aibizbot-stage.gatewayglobal.ai
 
 set -e
-APP_NAME="${1:-stage.gatewayglobal.ai}"
+APP_NAME="${1:-aibizbot-stage.gatewayglobal.ai}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
