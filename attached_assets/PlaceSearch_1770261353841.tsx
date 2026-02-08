@@ -17,8 +17,8 @@ const PlaceSearch: React.FC<Props> = ({ onPlaceSelect, isLoading }) => {
     }
 
     const script = document.createElement('script');
-    // Using the specific Google Places JS key provided by the user
-    const mapsKey = "AIzaSyBJfirFVIBMNvM0LQulSiV4f4MKrVKeL-M"; 
+    // Use environment variable for Google Maps API key
+    const mapsKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY || '';
     script.src = `https://maps.googleapis.com/maps/api/js?key=${mapsKey}&libraries=places`;
     script.async = true;
     script.defer = true;

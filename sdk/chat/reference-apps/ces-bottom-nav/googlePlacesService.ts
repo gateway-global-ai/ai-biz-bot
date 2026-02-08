@@ -1,5 +1,5 @@
 
-const PLACES_API_KEY = 'AIzaSyDa0EJi3hZBAKKJT61aCD9Qn3bSLO-DVro';
+const PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_API_KEY || '';
 
 export interface GooglePlaceDetails {
   id: string;
