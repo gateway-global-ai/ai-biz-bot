@@ -1,48 +1,36 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useLiveApi } from './hooks/useLiveApi';
-import { VoiceName, VisualizerType, Language, ChatInterfaceMode, ChatLayoutMode } from './types';
+import { VoiceName, VisualizerType, Language } from './types';
 import SetupPanel from './components/SetupPanel';
 import AudioPulseSettings from './components/AudioPulseSettings';
 import CodeBlock from './components/CodeBlock';
 import Logger from './components/Logger';
 import ChatHistory from './components/ChatHistory';
-import ChatHeader from './components/ChatHeader';
-import PTTChatFooter from './components/PTTChatFooter';
 import ControlPanel from './components/ControlPanel';
 import ArchitectureView from './components/ArchitectureView';
 import TelephonyView from './components/TelephonyView';
-import UnifiedChatInterface from './components/UnifiedChatInterface';
-import { Mic, Power, Sparkles, LayoutTemplate, Network, Sliders, Phone, Activity, X, Radio, MicOff, SendHorizontal, CheckCircle2, Loader2, ToggleLeft, ToggleRight, Monitor } from 'lucide-react';
-import { getDefaultVoiceForModel } from './config/modelVoiceConfig';
+import { Mic, Power, Sparkles, LayoutTemplate, Network, Sliders, Phone, Activity, ToggleLeft, ToggleRight, X, Radio, MicOff, SendHorizontal, CheckCircle2, Loader2, Monitor } from 'lucide-react';
 
 const DEFAULT_INSTRUCTION = "You are currently running inside a React demo application using the Gemini 2.5 Live API. Be helpful, professional, and clear.";
 const DEFAULT_MODEL = 'gemini-2.5-flash-native-audio-preview-12-2025';
 
-type Tab = 'voice' | 'identity' | 'visualizer' | 'chat' | 'architecture' | 'telephony';
+type Tab = 'voice' | 'identity' | 'visualizer' | 'architecture' | 'telephony';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('voice');
-  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
-  const [selectedVoice, setSelectedVoice] = useState<string>(() => getDefaultVoiceForModel(DEFAULT_MODEL));
+  const [selectedVoice, setSelectedVoice] = useState<string>(VoiceName.Zephyr);
   const [selectedLanguage, setSelectedLanguage] = useState<Language>(Language.English);
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL);
   const [manualInstruction, setManualInstruction] = useState(DEFAULT_INSTRUCTION);
   
-  // Visualizer & PTT State (working: isPttMode is a toggle; mute sync and finalize match uploaded working UI)
+  // Visualizer & PTT State
   const [visualizerType, setVisualizerType] = useState<VisualizerType>('bars');
   const [isPttMode, setIsPttMode] = useState(false);
   const [justSent, setJustSent] = useState(false);
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
+
+  // Desktop Detection
   const [isDesktop, setIsDesktop] = useState(false);
-  /** Owner-set default when configuring the voice agent (Identity) */
-  const [defaultChatMode, setDefaultChatMode] = useState<ChatInterfaceMode>('ptt');
-  const [heroImageUrl, setHeroImageUrl] = useState('');
-  // Chat interface (integrated: use and control voice from chat)
-  const [chatInterfaceMode, setChatInterfaceMode] = useState<ChatInterfaceMode>(() => defaultChatMode);
-  const [draftText, setDraftText] = useState('');
-  const [draftKey, setDraftKey] = useState<'ptt' | 'callback' | null>(null);
-  const [chatInput, setChatInput] = useState('');
-  const lastSentDraftRef = useRef('');
-  useEffect(() => { setChatInterfaceMode(defaultChatMode); }, [defaultChatMode]);
 
   useEffect(() => {
     const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024);
@@ -51,8 +39,11 @@ const App: React.FC = () => {
     return () => window.removeEventListener('resize', checkDesktop);
   }, []);
 
+  // Force PTT off on desktop to prevent usage where click/touch logic might differ or be less ideal
   useEffect(() => {
-    if (isDesktop && isPttMode) setIsPttMode(false);
+    if (isDesktop && isPttMode) {
+      setIsPttMode(false);
+    }
   }, [isDesktop, isPttMode]);
 
   // Refs for PTT logic
@@ -65,22 +56,6 @@ const App: React.FC = () => {
     position: "Support Specialist",
     task: "Help users with troubleshooting"
   });
-
-  // Unified chat widget: layout mode and bot config for SDK-style interface
-  const [chatLayoutMode, setChatLayoutMode] = useState<ChatLayoutMode>('floating');
-  const botConfig = useMemo(
-    () => ({
-      botId: 'local',
-      botConfigId: 'local',
-      agentProfile: {
-        name: role.company,
-        role: role.position,
-        discProfile: 'Helpful',
-        basePrompt: manualInstruction,
-      },
-    }),
-    [role.company, role.position, manualInstruction]
-  );
 
   // Synthesize System Instruction
   const systemInstruction = useMemo(() => {
@@ -101,18 +76,14 @@ const App: React.FC = () => {
     config
   );
 
-  // Sync mute: Standalone visualizer uses isPttMode; Chat tab uses chatInterfaceMode
+  // Sync mute state with PTT mode
   useEffect(() => {
-    if (!isConnected) return;
-    if (activeTab === 'chat') {
-      if (chatInterfaceMode === 'realtime') setIsMuted(false);
-      else setIsMuted(true); // chat or ptt = mic off until PTT press
-    } else {
-      setIsMuted(isPttMode); // standalone visualizer
+    if (isConnected) {
+      setIsMuted(isPttMode);
     }
-  }, [isConnected, isPttMode, activeTab, chatInterfaceMode, setIsMuted]);
+  }, [isConnected, isPttMode, setIsMuted]);
 
-  // Handle Response State Changes (working: clear waiting when model starts streaming)
+  // Handle Response State Changes
   useEffect(() => {
     const lastMsg = chatHistory[chatHistory.length - 1];
     if (lastMsg && lastMsg.role === 'model' && lastMsg.isStreaming) {
@@ -125,36 +96,32 @@ const App: React.FC = () => {
       disconnect();
     } else {
       connect();
-      setActiveTab('chat');
+      // Auto-switch tabs to improve UX
+      if (isPttMode) setActiveTab('visualizer');
+      else setActiveTab('identity');
     }
   };
 
   const finalizePttTurn = () => {
     const userMessages = chatHistory.filter(m => m.role === 'user');
     const latestUserMsg = userMessages[userMessages.length - 1];
-
-    if (pttTimerRef.current) {
-      clearTimeout(pttTimerRef.current);
-      pttTimerRef.current = null;
-    }
-
-    // Chat interface: hand transcript to footer (1s edit → submit); standalone: send immediately
-    if (activeTab === 'chat' && chatInterfaceMode === 'ptt' && latestUserMsg?.text?.trim()) {
-      setDraftText(latestUserMsg.text);
-      setDraftKey('ptt');
-      return;
-    }
+    
+    // Explicitly send the captured text to ensure the model responds to the full context
     if (latestUserMsg && latestUserMsg.text.trim()) {
       sendText(latestUserMsg.text);
       setJustSent(true);
       setIsWaitingForResponse(true);
       setTimeout(() => setJustSent(false), 3000);
     }
+    
+    if (pttTimerRef.current) {
+      clearTimeout(pttTimerRef.current);
+      pttTimerRef.current = null;
+    }
   };
 
   const handlePttDown = () => {
-    const inPtt = isPttMode || (activeTab === 'chat' && chatInterfaceMode === 'ptt');
-    if (inPtt && isConnected) {
+    if (isPttMode && isConnected) {
       setIsMuted(false);
       setJustSent(false);
       setIsWaitingForResponse(false);
@@ -166,8 +133,7 @@ const App: React.FC = () => {
   };
 
   const handlePttUp = () => {
-    const inPtt = isPttMode || (activeTab === 'chat' && chatInterfaceMode === 'ptt');
-    if (inPtt && isConnected) {
+    if (isPttMode && isConnected) {
       setIsMuted(true);
       
       // Delay finalization to allow the last transcription packets to arrive
@@ -182,28 +148,9 @@ const App: React.FC = () => {
     }
   };
 
-  const handleFooterSubmit = (text: string) => {
-    if (!text.trim() || isWaitingForResponse) return;
-    lastSentDraftRef.current = text;
-    sendText(text.trim());
-    setDraftText('');
-    setDraftKey(null);
-    setJustSent(true);
-    setIsWaitingForResponse(true);
-    setTimeout(() => setJustSent(false), 3000);
-  };
-  const handleFooterCallback = () => {
-    setDraftText(lastSentDraftRef.current);
-    setDraftKey('callback');
-  };
-  const handleDraftChange = (text: string) => {
-    setDraftText(text);
-  };
-
   // Keep finalization timer alive if transcription is still arriving
-  const inPttFinalize = isPttMode || (activeTab === 'chat' && chatInterfaceMode === 'ptt');
   useEffect(() => {
-    if (inPttFinalize && isMuted && pttTimerRef.current) {
+    if (isPttMode && isMuted && pttTimerRef.current) {
       const userMsg = chatHistory.filter(m => m.role === 'user').pop();
       const currentLen = userMsg?.text.length || 0;
       
@@ -215,7 +162,7 @@ const App: React.FC = () => {
         }, 1200);
       }
     }
-  }, [chatHistory, inPttFinalize, isMuted]);
+  }, [chatHistory, isPttMode, isMuted]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-4 md:p-8 font-sans selection:bg-blue-500/30 overflow-y-auto">
@@ -331,17 +278,6 @@ const App: React.FC = () => {
             3. VISUALIZER
           </button>
           <button
-            onClick={() => setActiveTab('chat')}
-            className={`px-6 py-3 text-sm font-bold tracking-wide flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
-              activeTab === 'chat' 
-                ? 'border-blue-500 text-blue-400 bg-blue-500/5' 
-                : 'border-transparent text-gray-500 hover:text-gray-300 hover:bg-gray-900'
-            }`}
-          >
-            <SendHorizontal size={16} />
-            4. CHAT
-          </button>
-          <button
             onClick={() => setActiveTab('architecture')}
             className={`px-6 py-3 text-sm font-bold tracking-wide flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'architecture' 
@@ -350,7 +286,7 @@ const App: React.FC = () => {
             }`}
           >
             <Network size={16} />
-            5. ARCHITECTURE
+            4. ARCHITECTURE
           </button>
           <button
             onClick={() => setActiveTab('telephony')}
@@ -361,7 +297,7 @@ const App: React.FC = () => {
             }`}
           >
             <Phone size={16} />
-            6. TELEPHONY
+            5. TELEPHONY
           </button>
         </div>
       </header>
@@ -412,10 +348,6 @@ const App: React.FC = () => {
                <ControlPanel 
                   role={role} setRole={setRole}
                   manualInstruction={manualInstruction} setManualInstruction={setManualInstruction}
-                  defaultChatMode={defaultChatMode}
-                  setDefaultChatMode={setDefaultChatMode}
-                  heroImageUrl={heroImageUrl}
-                  setHeroImageUrl={setHeroImageUrl}
                   disabled={isConnected}
                />
             </div>
@@ -439,62 +371,82 @@ const App: React.FC = () => {
 
         {activeTab === 'visualizer' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full min-h-[700px]">
+            
             <div className="lg:col-span-5 flex flex-col gap-6">
               <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 backdrop-blur-sm shadow-xl h-full flex flex-col">
                 <div className="flex items-center justify-between mb-6 border-b border-gray-800 pb-4">
-                  <div className="flex items-center gap-3 text-blue-400">
-                    <Activity size={24} />
-                    <h2 className="text-xl font-bold">Signal Analyzer</h2>
-                  </div>
-                  <div className="flex bg-gray-950 p-1 rounded-xl border border-gray-800">
-                    {(['bars', 'wave', 'orb'] as VisualizerType[]).map((type) => (
-                      <button
-                        key={type}
-                        onClick={() => setVisualizerType(type)}
-                        className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all ${
-                          visualizerType === type ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'
-                        }`}
-                      >
-                        {type.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
+                    <div className="flex items-center gap-3 text-blue-400">
+                      <Activity size={24} />
+                      <h2 className="text-xl font-bold">Signal Analyzer</h2>
+                    </div>
+                    <div className="flex bg-gray-950 p-1 rounded-xl border border-gray-800">
+                      {(['bars', 'wave', 'orb'] as VisualizerType[]).map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => setVisualizerType(type)}
+                          className={`px-3 py-1.5 text-[10px] font-black rounded-lg transition-all ${
+                            visualizerType === type 
+                            ? 'bg-blue-600 text-white shadow-lg' 
+                            : 'text-gray-500 hover:text-gray-300'
+                          }`}
+                        >
+                          {type.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
                 </div>
+
                 <div className="flex-1 flex flex-col">
-                  <AudioPulseSettings volume={volume} isConnected={isConnected} visualizerType={visualizerType} isMuted={isMuted} />
+                  <AudioPulseSettings 
+                    volume={volume} 
+                    isConnected={isConnected} 
+                    visualizerType={visualizerType} 
+                    isMuted={isMuted}
+                  />
+                  
                   <div className="mt-6 p-6 bg-gray-950/50 border border-gray-800 rounded-2xl flex flex-col items-center justify-center text-center">
                     {!isConnected ? (
                       <div className="py-4">
                         <Radio size={40} className="mx-auto mb-4 text-gray-700" />
                         <h3 className="font-bold text-gray-400 uppercase tracking-widest text-sm mb-2">PTT System Offline</h3>
                         <p className="text-xs text-gray-600 mb-6">Start a session above to enable Walkie-Talkie mode.</p>
+                        
                         {isDesktop ? (
                           <div className="flex flex-col items-center gap-2 bg-gray-900/50 p-4 rounded-xl border border-gray-800">
-                            <span className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase"><Monitor size={14} /> Desktop Mode Detected</span>
-                            <span className="text-[10px] text-gray-600 text-center max-w-[200px]">Push-to-Talk is disabled on desktop. Use mobile for PTT or standard Live Mode.</span>
+                             <span className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase">
+                               <Monitor size={14} />
+                               Desktop Mode Detected
+                             </span>
+                             <span className="text-[10px] text-gray-600 text-center max-w-[200px]">
+                               Push-to-Talk is disabled on desktop devices. Please use mobile for PTT or standard Live Mode.
+                             </span>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => setIsPttMode(!isPttMode)}
-                            className={`flex items-center gap-2 px-6 py-2 rounded-xl font-bold text-xs transition-all mx-auto ${isPttMode ? 'bg-orange-600 text-white shadow-orange-500/20 shadow-lg' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-                          >
-                            {isPttMode ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
-                            {isPttMode ? 'PTT ENABLED' : 'ENABLE PTT MODE'}
-                          </button>
+                            <button 
+                              onClick={() => setIsPttMode(!isPttMode)}
+                              className={`flex items-center gap-2 px-6 py-2 rounded-xl font-bold text-xs transition-all mx-auto ${
+                                  isPttMode ? 'bg-orange-600 text-white shadow-orange-500/20 shadow-lg' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                              }`}
+                            >
+                              {isPttMode ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
+                              {isPttMode ? 'PTT ENABLED' : 'ENABLE PTT MODE'}
+                            </button>
                         )}
                       </div>
                     ) : isPttMode ? (
                       <div className="w-full space-y-6">
                         <div className="relative group">
                           {justSent && (
-                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-black px-4 py-2 rounded-full shadow-xl flex items-center gap-2">
-                              <CheckCircle2 size={12} /> MESSAGE COMMITTED
+                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-black px-4 py-2 rounded-full shadow-xl flex items-center gap-2 animate-in slide-in-from-bottom-2 fade-in duration-300">
+                               <CheckCircle2 size={12} />
+                               MESSAGE COMMITTED
                             </div>
                           )}
                           {isWaitingForResponse && !justSent && (
-                            <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[10px] font-black px-4 py-2 rounded-full shadow-xl flex items-center gap-2">
-                              <Loader2 size={12} className="animate-spin" /> AI ANALYZING TRANSCRIPTION
-                            </div>
+                             <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[10px] font-black px-4 py-2 rounded-full shadow-xl flex items-center gap-2 animate-in slide-in-from-bottom-2 fade-in duration-300">
+                               <Loader2 size={12} className="animate-spin" />
+                               AI ANALYZING TRANSCRIPTION
+                             </div>
                           )}
                           <button
                             onMouseDown={handlePttDown}
@@ -502,79 +454,94 @@ const App: React.FC = () => {
                             onMouseLeave={handlePttUp}
                             onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }}
                             onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
-                            className={`w-full py-12 rounded-3xl font-black text-2xl flex flex-col items-center gap-4 transition-all transform active:scale-95 shadow-2xl select-none border-b-8 ${
-                              !isMuted ? 'bg-red-600 text-white border-red-900 ring-8 ring-red-600/20' : isWaitingForResponse ? 'bg-blue-600 text-white border-blue-900 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-900 shadow-emerald-600/20'
-                            }`}
+                            className={`
+                              w-full py-12 rounded-3xl font-black text-2xl flex flex-col items-center gap-4 transition-all transform active:scale-95 shadow-2xl select-none border-b-8
+                              ${!isMuted 
+                                ? 'bg-red-600 text-white border-red-900 ring-8 ring-red-600/20' 
+                                : isWaitingForResponse ? 'bg-blue-600 text-white border-blue-900 cursor-wait' : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-900 shadow-emerald-600/20'}
+                            `}
                           >
                             <div className={`p-4 rounded-full bg-white/10 ${!isMuted ? 'animate-pulse' : ''}`}>
                               {isWaitingForResponse ? <Loader2 size={48} className="animate-spin" /> : <Radio size={48} />}
                             </div>
                             <span className="tracking-tighter uppercase">
-                              {!isMuted ? 'RECORDING VOICE...' : isWaitingForResponse ? 'PROCESSING...' : 'PUSH TO TALK'}
+                              {!isMuted ? 'RECORDING VOICE...' : isWaitingForResponse ? 'PROCESSING...' : 'HOLD TO TALK'}
                             </span>
                           </button>
                         </div>
                         <div className="flex items-center justify-center gap-3 p-4 bg-black/40 rounded-xl border border-white/5">
-                          {!isMuted ? (
-                            <><Activity className="text-red-400 animate-pulse" size={16} /><span className="text-xs font-bold text-red-400 uppercase">Live Transcription below</span></>
-                          ) : isWaitingForResponse ? (
-                            <><Loader2 className="text-blue-400 animate-spin" size={16} /><span className="text-xs font-bold text-blue-400 uppercase">Finalizing Text Turn</span></>
-                          ) : (
-                            <><MicOff className="text-gray-500" size={16} /><span className="text-xs font-bold text-gray-500 uppercase">Radio Standby</span></>
-                          )}
+                           {!isMuted ? (
+                             <>
+                               <Activity className="text-red-400 animate-pulse" size={16} />
+                               <span className="text-xs font-bold text-red-400 uppercase">Live Transcription below</span>
+                             </>
+                           ) : isWaitingForResponse ? (
+                             <>
+                               <Loader2 className="text-blue-400 animate-spin" size={16} />
+                               <span className="text-xs font-bold text-blue-400 uppercase">Finalizing Text Turn</span>
+                             </>
+                           ) : (
+                             <>
+                               <MicOff className="text-gray-500" size={16} />
+                               <span className="text-xs font-bold text-gray-500 uppercase">Radio Standby</span>
+                             </>
+                           )}
                         </div>
                       </div>
                     ) : (
                       <div className="py-8">
-                        <Activity size={40} className="mx-auto mb-4 text-blue-500 animate-pulse" />
-                        <h3 className="font-bold text-blue-400 uppercase tracking-widest text-sm mb-2">VAD Active</h3>
-                        <p className="text-xs text-gray-500 max-w-xs mx-auto mb-4 leading-relaxed">Continuous conversation mode enabled. The AI will listen and respond automatically.</p>
-                        {!isDesktop && (
-                          <button onClick={() => setIsPttMode(true)} className="text-xs font-bold text-gray-500 underline hover:text-white transition-colors">Switch to Walkie-Talkie Mode</button>
-                        )}
+                         <Activity size={40} className="mx-auto mb-4 text-blue-500 animate-pulse" />
+                         <h3 className="font-bold text-blue-400 uppercase tracking-widest text-sm mb-2">VAD Active</h3>
+                         <p className="text-xs text-gray-500 max-w-xs mx-auto mb-4 leading-relaxed">Continuous conversation mode enabled. The AI will listen and respond automatically.</p>
+                         
+                         {!isDesktop && (
+                            <button 
+                                onClick={() => setIsPttMode(true)}
+                                className="text-xs font-bold text-gray-500 underline hover:text-white transition-colors"
+                            >
+                                Switch to Walkie-Talkie Mode
+                            </button>
+                         )}
                       </div>
                     )}
                   </div>
                 </div>
               </div>
             </div>
+
             <div className="lg:col-span-7 flex flex-col">
               <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 backdrop-blur-sm shadow-xl h-full flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between mb-6 border-b border-gray-800 pb-4">
-                  <div className="flex items-center gap-3 text-purple-400">
-                    <SendHorizontal size={24} />
-                    <div>
-                      <h2 className="text-xl font-bold">Transcription Canvas</h2>
-                      <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Real-time Voice to Text</p>
+                    <div className="flex items-center gap-3 text-purple-400">
+                      <SendHorizontal size={24} />
+                      <div>
+                        <h2 className="text-xl font-bold">Transcription Canvas</h2>
+                        <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Real-time Voice to Text</p>
+                      </div>
                     </div>
-                  </div>
-                  {chatHistory.length > 0 && (
-                    <div className="px-3 py-1 bg-purple-500/10 text-purple-400 rounded-lg text-[10px] font-black border border-purple-500/20">{chatHistory.length} ENTRIES</div>
-                  )}
+                    {chatHistory.length > 0 && (
+                      <div className="px-3 py-1 bg-purple-500/10 text-purple-400 rounded-lg text-[10px] font-black border border-purple-500/20">
+                        {chatHistory.length} ENTRIES
+                      </div>
+                    )}
                 </div>
+                
                 <ChatHistory messages={chatHistory} />
+                
                 <div className="mt-6 pt-4 border-t border-gray-800 flex items-start gap-3">
-                  <div className="p-2 bg-gray-800 rounded-lg text-gray-400 shrink-0"><Sparkles size={16} /></div>
-                  <p className="text-[11px] text-gray-500 leading-relaxed italic">
-                    {isPttMode ? 'Push-To-Talk: Releasing the button triggers a 1.2s buffer to capture the final transcription tokens before sending the full text to Gemini for an uninterrupted response.' : 'VAD Mode: Voice Activity Detection automatically identifies when you stop talking and provides a response based on the audio stream.'}
-                  </p>
+                   <div className="p-2 bg-gray-800 rounded-lg text-gray-400 shrink-0">
+                      <Sparkles size={16} />
+                   </div>
+                   <p className="text-[11px] text-gray-500 leading-relaxed italic">
+                     {isPttMode 
+                       ? "Push-To-Talk: Releasing the button triggers a 1.2s buffer to capture the final transcription tokens before sending the full text to Gemini for an uninterrupted response."
+                       : "VAD Mode: Voice Activity Detection automatically identifies when you stop talking and provides a response based on the audio stream."}
+                   </p>
                 </div>
               </div>
             </div>
-          </div>
-        )}
 
-        {activeTab === 'chat' && (
-          <UnifiedChatInterface
-            layoutMode={chatLayoutMode}
-            onLayoutChange={setChatLayoutMode}
-            botConfig={botConfig}
-            isOpen={true}
-            onClose={() => setActiveTab('voice')}
-            model={selectedModel}
-            voice={selectedVoice}
-            systemInstructionOverride={systemInstruction}
-          />
+          </div>
         )}
 
         {activeTab === 'architecture' && <ArchitectureView />}
