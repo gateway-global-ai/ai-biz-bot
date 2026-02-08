@@ -1,4 +1,4 @@
-import { ConversationMessage } from "./kimiAudio";
+import { ConversationMessage } from "./kimiAudioReplicate";
 
 export interface VoiceSession {
   callSid: string;
@@ -21,7 +21,7 @@ class VoiceSessionManager {
     this.cleanupInterval = setInterval(() => this.cleanupStaleSessions(), 60000);
   }
 
-  createSession(callSid: string, agentName: string = "Kimi", personality: string = "helpful"): VoiceSession {
+  createSession(callSid: string, agentName: string = "AI Assistant", personality: string = "helpful"): VoiceSession {
     const session: VoiceSession = {
       callSid,
       streamSid: null,

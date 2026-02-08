@@ -1,7 +1,18 @@
+/**
+ * browserVoice.ts - Browser voice AI using direct Kimi pipeline
+ * ASR: HuggingFace Whisper (direct) → AI: Moonshot Kimi 2.5 (direct) → TTS: HuggingFace (direct)
+ * No Replicate middleman. Replicate is ONLY used for Twilio phone voice.
+ */
 import { WebSocket, WebSocketServer } from "ws";
 import { Server } from "http";
 import { Express } from "express";
-import { generateSpeech, processAudioWithKimi, isKimiAudioConfigured, type ConversationMessage } from "./kimiAudio";
+import {
+  isDirectVoiceConfigured,
+  processVoiceDirect,
+  generateGreetingDirect,
+  synthesizeSpeechDirect,
+  type ConversationMessage,
+} from "./kimiAudioDirect";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -35,19 +46,24 @@ const sessions = new Map<string, BrowserVoiceSession>();
 export function setupBrowserVoiceRoutes(app: Express): void {
   app.post("/api/voice/greeting", async (_req, res) => {
     try {
-      if (!isKimiAudioConfigured()) {
-        return res.status(503).json({ error: "Voice AI not configured", audioUrl: "" });
+      if (!isDirectVoiceConfigured()) {
+        return res.status(503).json({ error: "Voice AI not configured (need HF_TOKEN + MOONSHOT_API_KEY)", audioUrl: "" });
       }
 
-      console.log("[BrowserVoice] Generating greeting audio...");
-      const audioUrl = await generateSpeech(GREETING_TEXT, "friendly");
+      console.log("[BrowserVoice] Generating greeting audio via direct TTS...");
+      const audioBuffer = await generateGreetingDirect(GREETING_TEXT);
 
-      if (!audioUrl) {
+      if (!audioBuffer) {
         return res.status(500).json({ error: "Failed to generate greeting audio", audioUrl: "" });
       }
 
-      console.log("[BrowserVoice] Greeting audio generated:", audioUrl);
-      res.json({ audioUrl, transcript: GREETING_TEXT });
+      console.log("[BrowserVoice] Greeting audio generated:", audioBuffer.length, "bytes");
+      res.setHeader("Content-Type", "audio/wav");
+      res.json({
+        audioBase64: audioBuffer.toString("base64"),
+        transcript: GREETING_TEXT,
+        provider: "direct-kimi",
+      });
     } catch (error: any) {
       console.error("[BrowserVoice] Greeting error:", error.message);
       res.status(500).json({ error: error.message, audioUrl: "" });
@@ -55,9 +71,15 @@ export function setupBrowserVoiceRoutes(app: Express): void {
   });
 
   app.get("/api/voice/status", (_req, res) => {
-    res.json({ 
-      configured: isKimiAudioConfigured(),
-      provider: "kimi-audio"
+    const configured = isDirectVoiceConfigured();
+    res.json({
+      configured,
+      provider: "direct-kimi",
+      details: {
+        hfToken: !!process.env.HF_TOKEN,
+        moonshotKey: !!process.env.MOONSHOT_API_KEY,
+        pipeline: "HuggingFace ASR → Moonshot Kimi 2.5 → HuggingFace TTS",
+      },
     });
   });
 }
@@ -65,10 +87,10 @@ export function setupBrowserVoiceRoutes(app: Express): void {
 export function setupBrowserVoiceWebSocket(server: Server): void {
   const wss = new WebSocketServer({
     server,
-    path: "/ws/browser-voice"
+    path: "/ws/browser-voice",
   });
 
-  console.log("[BrowserVoice] WebSocket server initialized on /ws/browser-voice");
+  console.log("[BrowserVoice] WebSocket server initialized on /ws/browser-voice (direct Kimi pipeline)");
 
   wss.on("connection", (ws: WebSocket) => {
     const sessionId = `browser-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -80,7 +102,7 @@ export function setupBrowserVoiceWebSocket(server: Server): void {
       createdAt: Date.now(),
     });
 
-    ws.send(JSON.stringify({ type: "connected", sessionId }));
+    ws.send(JSON.stringify({ type: "connected", sessionId, provider: "direct-kimi" }));
 
     ws.on("message", async (data: Buffer) => {
       try {
@@ -93,39 +115,79 @@ export function setupBrowserVoiceWebSocket(server: Server): void {
           console.log(`[BrowserVoice] Received audio from ${sessionId}, size: ${message.audio?.length || 0} bytes`);
 
           const audioBuffer = Buffer.from(message.audio, "base64");
-          const audioUrl = await uploadBrowserAudio(audioBuffer, sessionId);
-
-          if (!audioUrl) {
-            ws.send(JSON.stringify({ type: "error", message: "Failed to process audio" }));
-            return;
-          }
 
           ws.send(JSON.stringify({ type: "processing" }));
 
-          const response = await processAudioWithKimi(
-            audioUrl,
+          const response = await processVoiceDirect(
+            audioBuffer,
             session.conversationHistory,
             AIBIZBOT_SYSTEM_PROMPT
           );
 
-          if (response.success && response.audioUrl) {
+          if (response.success && response.audioBuffer) {
             session.conversationHistory.push(
-              { role: "user", type: "audio", content: audioUrl },
-              { role: "assistant", type: "audio", content: response.audioUrl }
+              { role: "user", type: "text", content: response.transcript },
+              { role: "assistant", type: "text", content: response.responseText }
             );
 
             ws.send(JSON.stringify({
               type: "response",
-              audioUrl: response.audioUrl,
-              transcript: response.transcript,
+              audioBase64: response.audioBuffer.toString("base64"),
+              transcript: response.responseText,
+              userTranscript: response.transcript,
+              provider: "direct-kimi",
             }));
           } else {
             const fallbackText = "I didn't quite catch that. Could you try again?";
-            const fallbackAudio = await generateSpeech(fallbackText, "friendly");
+            try {
+              const fallbackAudio = await synthesizeSpeechDirect(fallbackText);
+              ws.send(JSON.stringify({
+                type: "response",
+                audioBase64: fallbackAudio.toString("base64"),
+                transcript: fallbackText,
+                provider: "direct-kimi",
+              }));
+            } catch {
+              ws.send(JSON.stringify({
+                type: "response",
+                transcript: fallbackText,
+                error: response.error,
+                provider: "direct-kimi",
+              }));
+            }
+          }
+        } else if (message.type === "text") {
+          const session = sessions.get(sessionId);
+          if (!session || !session.isActive) return;
+
+          const { generateAIResponse } = await import("./kimiAudioDirect");
+
+          ws.send(JSON.stringify({ type: "processing" }));
+
+          const responseText = await generateAIResponse(
+            message.text,
+            session.conversationHistory,
+            AIBIZBOT_SYSTEM_PROMPT
+          );
+
+          session.conversationHistory.push(
+            { role: "user", type: "text", content: message.text },
+            { role: "assistant", type: "text", content: responseText }
+          );
+
+          try {
+            const responseAudio = await synthesizeSpeechDirect(responseText);
             ws.send(JSON.stringify({
               type: "response",
-              audioUrl: fallbackAudio || "",
-              transcript: fallbackText,
+              audioBase64: responseAudio.toString("base64"),
+              transcript: responseText,
+              provider: "direct-kimi",
+            }));
+          } catch {
+            ws.send(JSON.stringify({
+              type: "response",
+              transcript: responseText,
+              provider: "direct-kimi",
             }));
           }
         } else if (message.type === "end") {
@@ -146,34 +208,12 @@ export function setupBrowserVoiceWebSocket(server: Server): void {
   });
 }
 
-async function uploadBrowserAudio(audioBuffer: Buffer, sessionId: string): Promise<string | null> {
-  try {
-    const tmpDir = path.join(os.tmpdir(), "gateway-browser-audio");
-    if (!fs.existsSync(tmpDir)) {
-      fs.mkdirSync(tmpDir, { recursive: true });
-    }
-
-    const filename = `${sessionId}-${Date.now()}.webm`;
-    const filepath = path.join(tmpDir, filename);
-    fs.writeFileSync(filepath, audioBuffer);
-
-    const host = process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : "http://localhost:5000";
-
-    return `${host}/api/browser-audio-temp/${filename}`;
-  } catch (error) {
-    console.error("[BrowserVoice] Error uploading audio:", error);
-    return null;
-  }
-}
-
 export function setupBrowserAudioTempRoute(app: Express): void {
   app.get("/api/browser-audio-temp/:filename", (req, res) => {
     const tmpDir = path.join(os.tmpdir(), "gateway-browser-audio");
     const filepath = path.join(tmpDir, req.params.filename);
     if (fs.existsSync(filepath)) {
-      const ext = req.params.filename.endsWith('.webm') ? 'audio/webm' : 'audio/wav';
+      const ext = req.params.filename.endsWith(".webm") ? "audio/webm" : "audio/wav";
       res.setHeader("Content-Type", ext);
       res.sendFile(filepath);
     } else {

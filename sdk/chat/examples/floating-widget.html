@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gateway Chat - Floating Widget Example</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    .demo-header {
+      padding: 32px 24px 24px;
+      text-align: center;
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .demo-header h1 { font-size: 28px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .demo-header p { font-size: 15px; color: #94a3b8; line-height: 1.5; }
+    .demo-card {
+      max-width: 640px;
+      margin: 24px auto;
+      padding: 24px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+    }
+    .demo-card h2 { font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #fff; }
+    pre {
+      background: rgba(0,0,0,0.3);
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #93c5fd;
+      overflow-x: auto;
+      line-height: 1.6;
+    }
+    code { font-family: 'SF Mono', Monaco, Consolas, monospace; }
+    .label { display: inline-block; background: #2563eb; color: #fff; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+  <div class="demo-header">
+    <h1>Floating Chat Widget</h1>
+    <p>
+      The simplest integration pattern. A floating action button (FAB) in the corner
+      opens a chat card. No app changes needed - just add one script tag.
+    </p>
+  </div>
+
+  <div class="demo-card">
+    <span class="label">ONE-LINE INSTALL</span>
+    <h2>Script Tag (Auto-Init)</h2>
+    <pre><code>&lt;script
+  src="https://your-gateway.com/sdk/gateway-chat.js"
+  data-bot-id="your-bot-id"
+  data-color="#8b5cf6"
+  data-bot-name="Aria"
+  data-greeting="Hey there! Need help?"
+  data-voice="true"
+&gt;&lt;/script&gt;</code></pre>
+  </div>
+
+  <div class="demo-card">
+    <span class="label">PROGRAMMATIC</span>
+    <h2>JavaScript API</h2>
+    <pre><code>&lt;script src="https://your-gateway.com/sdk/gateway-chat.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  const chat = GatewayChat.init({
+    botId: 'your-bot-id',
+    apiBase: 'https://your-gateway.com',
+    theme: {
+      primaryColor: '#8b5cf6',
+      borderRadius: '20px',
+    },
+    voice: { enabled: true },
+    botName: 'Aria',
+    greetingMessage: 'Hey there! Need help?',
+    onMessage: (msg) => console.log('Message:', msg),
+  });
+
+  // Open chat programmatically
+  document.getElementById('help-btn').onclick = () => chat.open();
+&lt;/script&gt;</code></pre>
+  </div>
+
+  <div class="demo-card">
+    <span class="label">LIVE DEMO</span>
+    <h2>Click the button in the bottom-right corner</h2>
+    <p style="color: #94a3b8; font-size: 14px;">
+      The floating chat widget is rendered in Shadow DOM for complete CSS isolation.
+      It connects to the Gateway platform API for AI responses.
+    </p>
+  </div>
+
+  <!-- Gateway Chat Widget - Floating Widget Pattern -->
+  <script src="../src/gateway-chat.js"></script>
+  <script>
+    GatewayChat.init({
+      botId: 'demo-floating',
+      apiBase: window.location.origin,
+      position: 'bottom-right',
+      theme: {
+        primaryColor: '#8b5cf6',
+      },
+      voice: { enabled: true },
+      botName: 'Aria',
+      headerSubtitle: 'AI Assistant',
+      greetingMessage: 'Hello! I am Aria, your AI assistant. How can I help you today?',
+      placeholderText: 'Ask me anything...',
+    });
+  </script>
+
+</body>
+</html>

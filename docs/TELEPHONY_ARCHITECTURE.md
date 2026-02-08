@@ -466,3 +466,24 @@ This document describes the complete SMS and Voice communication architecture fo
 
 3. **Check Kimi-Audio/Replicate**
    - Verify REPLICATE_API_TOKEN is set
+
+---
+
+## Voice AI SDK
+
+For advanced voice AI capabilities including multi-provider support (OpenAI, Gemini, KIMI, ElevenLabs, Deepgram, Inworld), cost optimization, and production-ready integrations, see the **[Voice AI Unified SDK Documentation](VOICE_AI_SDK.md)**.
+
+The Voice AI SDK provides:
+- **Unified interface** for multiple voice providers
+- **Cost calculator** to optimize TTS/STT expenses (save up to 95%)
+- **Streaming support** for real-time audio
+- **Twilio integration** examples
+- **MCP server** for deployment management
+- **Production-ready examples** to avoid common mistakes
+
+**Quick Links:**
+- [Voice AI SDK Guide](VOICE_AI_SDK.md) - Complete SDK documentation
+- [Voice AI Research Report](VOICE_AI_RESEARCH.md) - Comprehensive provider analysis
+- [SDK Location](/sdk/voice-ai/) - Source code and examples
+
+---

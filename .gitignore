@@ -29,4 +29,6 @@ Thumbs.db
 
 # Temporary files
 /tmp
-*.tmp
+*.tmp# Website Builder SDK build artifacts and dependencies
+sdk/website-builder/node_modules/
+sdk/website-builder/dist/

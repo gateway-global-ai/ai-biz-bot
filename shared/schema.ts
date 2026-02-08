@@ -67,6 +67,10 @@ export const callLogs = pgTable("call_logs", {
   status: text("status").notNull(), // 'completed' | 'missed' | 'blocked' | 'failed'
   recordingUrl: text("recording_url"),
   callSid: text("call_sid"),
+  // Customer tracking fields
+  customerName: text("customer_name"),
+  customerEmail: text("customer_email"),
+  notes: text("notes"),
   timestamp: timestamp("timestamp").defaultNow(),
 });
 
@@ -334,6 +338,11 @@ export const agents = pgTable("agents", {
   aiTemperature: integer("ai_temperature").default(60), // Stored as 0-100, divide by 100 for actual value
   aiMaxTokens: integer("ai_max_tokens").default(4096),
   hfToken: text("hf_token"), // User's HuggingFace token (encrypted)
+  // Voice AI Configuration (Google Gemini)
+  voiceModel: text("voice_model").default("gemini-2.5-flash-native-audio-preview-12-2025"), // Gemini model for voice
+  voiceRole: text("voice_role").default("AI Business Assistant"),
+  voiceCompanyName: text("voice_company_name").default("AI Biz Bot"),
+  voicePersona: text("voice_persona").default("friendly"), // professional, friendly, enthusiastic, calm, authoritative
   // Budget Configuration
   budgetAmountUsd: numeric("budget_amount_usd", { precision: 10, scale: 2 }).default("0"),
   budgetPeriod: text("budget_period").default("monthly"), // daily, weekly, monthly
@@ -743,20 +752,193 @@ export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({
 export type InsertProjectTask = z.infer<typeof insertProjectTaskSchema>;
 export type ProjectTask = typeof projectTasks.$inferSelect;
 
+// Bot Templates - pre-configured bot personalities (from Gateway Bot Matrix)
+export const botTemplates = pgTable("bot_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  category: text("category").default("custom"),
+  defaultSystemPrompt: text("default_system_prompt").notNull(),
+  defaultModel: text("default_model").default("kimi"),
+  defaultTools: jsonb("default_tools").default({}),
+  defaultUiConfig: jsonb("default_ui_config").default({}),
+  icon: text("icon").default("Bot"),
+  isPublic: boolean("is_public").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertBotTemplateSchema = createInsertSchema(botTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertBotTemplate = z.infer<typeof insertBotTemplateSchema>;
+export type BotTemplate = typeof botTemplates.$inferSelect;
+
+// Customer Accounts - separate from admin users, for business owners
+export const customerAccounts = pgTable("customer_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phone: text("phone").notNull().unique(),
+  name: text("name"),
+  email: text("email"),
+  plan: text("plan").notNull().default("free"),
+  planStartedAt: timestamp("plan_started_at").defaultNow(),
+  stripeCustomerId: text("stripe_customer_id"),
+  isActive: boolean("is_active").default(true),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCustomerAccountSchema = createInsertSchema(customerAccounts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastLoginAt: true,
+});
+
+export type InsertCustomerAccount = z.infer<typeof insertCustomerAccountSchema>;
+export type CustomerAccount = typeof customerAccounts.$inferSelect;
+
+// Customer Sessions - separate from admin auth sessions
+export const customerSessions = pgTable("customer_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  customerAccountId: varchar("customer_account_id").references(() => customerAccounts.id).notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCustomerSessionSchema = createInsertSchema(customerSessions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCustomerSession = z.infer<typeof insertCustomerSessionSchema>;
+export type CustomerSession = typeof customerSessions.$inferSelect;
+
+export const PLAN_LIMITS = {
+  free: {
+    label: "Free",
+    price: 0,
+    maxBusinesses: 1,
+    tagline: "Try it out",
+    websiteTtsMinutes: 500,
+    liveVoiceMinutes: 0,
+    dedicatedNumber: false,
+    editWebsite: false,
+    reviewManagement: false,
+    reviewThresholds: false,
+    smsAdmin: false,
+    spanishSupport: false,
+    taskManagement: false,
+    projectManagement: false,
+    features: [
+      "Static AI-generated website",
+      "Last 5 reviews displayed",
+      "Shared SMS number",
+      "500 website voice minutes",
+      "AI chat concierge",
+    ],
+  },
+  pro: {
+    label: "Business",
+    price: 49,
+    maxBusinesses: 5,
+    tagline: "Fix my reviews",
+    websiteTtsMinutes: 500,
+    liveVoiceMinutes: 0,
+    dedicatedNumber: false,
+    editWebsite: true,
+    reviewManagement: true,
+    reviewThresholds: true,
+    smsAdmin: true,
+    spanishSupport: false,
+    taskManagement: false,
+    projectManagement: false,
+    features: [
+      "Edit website content",
+      "Review filtering & thresholds",
+      "Respond to reviews via SMS",
+      "SMS admin commands",
+      "500 website voice minutes",
+      "Up to 5 businesses",
+    ],
+  },
+  voice: {
+    label: "Business Voice",
+    price: 99,
+    maxBusinesses: 10,
+    tagline: "Stop wasting my time",
+    websiteTtsMinutes: 1000,
+    liveVoiceMinutes: 400,
+    dedicatedNumber: true,
+    editWebsite: true,
+    reviewManagement: true,
+    reviewThresholds: true,
+    smsAdmin: true,
+    spanishSupport: true,
+    taskManagement: false,
+    projectManagement: false,
+    features: [
+      "Dedicated phone number",
+      "400 live voice minutes (call screening)",
+      "1,000 website voice minutes",
+      "Spanish language recognition",
+      "Negative sentiment alerts",
+      "All Business features",
+    ],
+  },
+  enterprise: {
+    label: "Enterprise",
+    price: 299,
+    maxBusinesses: 999,
+    tagline: "Run my business",
+    websiteTtsMinutes: 3000,
+    liveVoiceMinutes: 1500,
+    dedicatedNumber: true,
+    editWebsite: true,
+    reviewManagement: true,
+    reviewThresholds: true,
+    smsAdmin: true,
+    spanishSupport: true,
+    taskManagement: true,
+    projectManagement: true,
+    features: [
+      "1,500 live voice minutes",
+      "3,000 website voice minutes",
+      "Autonomous task management",
+      "Project management",
+      "Unlimited businesses",
+      "All Business Voice features",
+    ],
+  },
+} as const;
+
+export type PlanType = keyof typeof PLAN_LIMITS;
+export type PlanInfo = typeof PLAN_LIMITS[PlanType];
+
 // Site Configurations - maps businesses to agent configs for AI Biz Bot
 export const siteConfigs = pgTable("site_configs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ownerId: varchar("owner_id").references(() => customerAccounts.id),
   name: text("name").notNull(),
   domain: text("domain"),
   placeId: text("place_id"),
   placeData: jsonb("place_data"),
   assignedAgentId: varchar("assigned_agent_id"),
+  botTemplateId: varchar("bot_template_id"),
   systemPromptOverride: text("system_prompt_override"),
+  modelProvider: text("model_provider").default("kimi"),
+  modelName: text("model_name"),
   chatbotEnabled: boolean("chatbot_enabled").default(true),
   voiceConciergeEnabled: boolean("voice_concierge_enabled").default(true),
   widgetPosition: text("widget_position").default("bottom-right"),
   widgetColor: text("widget_color").default("#2563eb"),
   greetingMessage: text("greeting_message"),
+  placeholderText: text("placeholder_text").default("Type a message..."),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -788,6 +970,148 @@ export const insertChatLogSchema = createInsertSchema(chatLogs).omit({
 export type InsertChatLog = z.infer<typeof insertChatLogSchema>;
 export type ChatLog = typeof chatLogs.$inferSelect;
 
+// =========================================
+// VoiceLeadMachine - Outbound Lead Generator
+// =========================================
+
+export type GoogleReviewData = {
+  authorName: string;
+  rating: number;
+  text: string;
+  time: number;
+  relativeTimeDescription: string;
+};
+
+export type GooglePhotoData = {
+  photoReference: string;
+  width: number;
+  height: number;
+  htmlAttributions?: string[];
+};
+
+export const vlmProspects = pgTable("vlm_prospects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  industry: text("industry").notNull(),
+  businessName: text("business_name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  website: text("website"),
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  postalCode: text("postal_code"),
+  googlePlaceId: text("google_place_id").unique(),
+  sourceUrl: text("source_url"),
+  qualityScore: integer("quality_score").default(0).notNull(),
+  status: text("status").default("new").notNull(),
+  rating: numeric("rating", { precision: 2, scale: 1 }),
+  reviewCount: integer("review_count"),
+  editorialSummary: text("editorial_summary"),
+  generativeSummary: text("generative_summary"),
+  reviewSummary: text("review_summary"),
+  reviews: jsonb("reviews").$type<GoogleReviewData[]>(),
+  photos: jsonb("photos").$type<GooglePhotoData[]>(),
+  websiteQualityScore: integer("website_quality_score"),
+  websiteQualityReport: jsonb("website_quality_report"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVlmProspectSchema = createInsertSchema(vlmProspects, {
+  industry: z.string().min(1),
+  businessName: z.string().min(1),
+  phone: z.string().optional(),
+  email: z.string().email().optional().or(z.literal("")),
+  website: z.string().url().optional().or(z.literal("")),
+  qualityScore: z.number().int().min(0).max(100).optional(),
+  status: z.enum(["new", "queued", "called", "won", "lost"]).optional(),
+  rating: z.string().optional(),
+  reviewCount: z.number().int().optional(),
+}).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVlmProspect = z.infer<typeof insertVlmProspectSchema>;
+export type VlmProspect = typeof vlmProspects.$inferSelect;
+
+export const vlmCampaigns = pgTable("vlm_campaigns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  industry: text("industry").notNull(),
+  city: text("city").notNull(),
+  status: text("status").default("draft").notNull(),
+  telephonyConfigId: varchar("telephony_config_id").references(() => telephonyConfigs.id),
+  callerIdNumber: text("caller_id_number"),
+  scriptTemplate: text("script_template"),
+  maxCallsPerDay: integer("max_calls_per_day").default(50),
+  callsPerHour: integer("calls_per_hour").default(10),
+  retryAttempts: integer("retry_attempts").default(3),
+  retryDelayHours: integer("retry_delay_hours").default(24),
+  totalProspects: integer("total_prospects").default(0),
+  totalCalled: integer("total_called").default(0),
+  totalConnected: integer("total_connected").default(0),
+  totalSales: integer("total_sales").default(0),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVlmCampaignSchema = createInsertSchema(vlmCampaigns, {
+  name: z.string().min(1),
+  industry: z.string().min(1),
+  city: z.string().min(1),
+  status: z.enum(["draft", "active", "paused", "completed"]).optional(),
+}).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVlmCampaign = z.infer<typeof insertVlmCampaignSchema>;
+export type VlmCampaign = typeof vlmCampaigns.$inferSelect;
+
+export const vlmCallAttempts = pgTable("vlm_call_attempts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: varchar("campaign_id").references(() => vlmCampaigns.id),
+  prospectId: varchar("prospect_id").references(() => vlmProspects.id).notNull(),
+  attemptNumber: integer("attempt_number").default(1).notNull(),
+  callSid: text("call_sid"),
+  status: text("status").default("pending").notNull(),
+  outcome: text("outcome"),
+  duration: integer("duration").default(0),
+  recordingUrl: text("recording_url"),
+  notes: text("notes"),
+  calledAt: timestamp("called_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVlmCallAttemptSchema = createInsertSchema(vlmCallAttempts, {
+  attemptNumber: z.number().int().min(1).max(10),
+  status: z.enum(["pending", "queued", "ringing", "in_progress", "completed", "failed", "no_answer", "busy"]).optional(),
+  outcome: z.enum(["connected", "voicemail", "no_answer", "rejected", "sale", "callback"]).optional(),
+}).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVlmCallAttempt = z.infer<typeof insertVlmCallAttemptSchema>;
+export type VlmCallAttempt = typeof vlmCallAttempts.$inferSelect;
+
+export type VlmLeadBuilderOptions = {
+  city: string;
+  industry: string;
+  maxResults?: number;
+  enrichEmail?: boolean;
+};
+
+export type VlmCampaignConfig = {
+  name: string;
+  industry: string;
+  city: string;
+  callerIdNumber?: string;
+  scriptTemplate?: string;
+};
+
 // A2P Use Case definitions (from TCR matrix)
 export const A2P_USE_CASES = [
   { value: 'CUSTOMER_CARE', label: 'Customer Care', description: 'Support and service messages' },
@@ -814,3 +1138,594 @@ export const A2P_VERTICALS = [
   'NON_PROFIT',
   'OTHER',
 ] as const;
+
+export const ogSettings = pgTable("og_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pagePath: text("page_path").notNull().unique(),
+  ogTitle: text("og_title").notNull(),
+  ogDescription: text("og_description").notNull(),
+  ogUrl: text("og_url"),
+  ogImage: text("og_image"),
+  ogType: text("og_type").default("website"),
+  ogSiteName: text("og_site_name"),
+  twitterCard: text("twitter_card").default("summary_large_image"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOgSettingsSchema = createInsertSchema(ogSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertOgSettings = z.infer<typeof insertOgSettingsSchema>;
+export type OgSettings = typeof ogSettings.$inferSelect;
+
+// =========================================
+// Google Workspace Integration
+// =========================================
+
+export const workspaceConfigurations = pgTable("workspace_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
+  
+  // Setup Type
+  setupType: text("setup_type").notNull(), // 'hosted' | 'integrated'
+  
+  // Hosted Email Configuration (gatewayglobal.ai)
+  hostedEmail: text("hosted_email"), // user@gatewayglobal.ai
+  hostedUserId: text("hosted_user_id"), // Google Workspace user ID
+  workspacePlan: text("workspace_plan"), // 'starter' | 'standard'
+  
+  // Integrated Email Configuration (existing email)
+  integratedEmail: text("integrated_email"),
+  
+  // OAuth Credentials (encrypted)
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiry: timestamp("token_expiry"),
+  
+  // Workspace Structure IDs
+  driveFolderId: text("drive_folder_id"), // Root business folder
+  clientsFolderId: text("clients_folder_id"),
+  operationsFolderId: text("operations_folder_id"),
+  marketingFolderId: text("marketing_folder_id"),
+  
+  // Template IDs
+  leadTrackingSheetId: text("lead_tracking_sheet_id"),
+  taskListId: text("task_list_id"),
+  calendarId: text("calendar_id"),
+  
+  // Setup Status
+  setupStatus: text("setup_status").default("pending"), // 'pending' | 'in_progress' | 'completed' | 'failed'
+  setupStep: text("setup_step"), // Current step in setup process
+  setupError: text("setup_error"),
+  
+  // SWOT Analysis Link
+  swotAnalysisId: text("swot_analysis_id"),
+  swotCompletedAt: timestamp("swot_completed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWorkspaceConfigurationSchema = createInsertSchema(workspaceConfigurations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertWorkspaceConfiguration = z.infer<typeof insertWorkspaceConfigurationSchema>;
+export type WorkspaceConfiguration = typeof workspaceConfigurations.$inferSelect;
+
+// SWOT Analysis Results
+export const swotAnalyses = pgTable("swot_analyses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
+  
+  // Analysis Data (stored as JSON)
+  strengths: jsonb("strengths").notNull(),
+  weaknesses: jsonb("weaknesses").notNull(),
+  opportunities: jsonb("opportunities").notNull(),
+  threats: jsonb("threats").notNull(),
+  
+  // Recommendations
+  recommendations: jsonb("recommendations"),
+  agentTrainingData: jsonb("agent_training_data"),
+  
+  // Metadata
+  analysisSource: text("analysis_source"), // 'google_places' | 'manual' | 'ai_generated'
+  confidence: integer("confidence"), // 0-100
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSwotAnalysisSchema = createInsertSchema(swotAnalyses).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSwotAnalysis = z.infer<typeof insertSwotAnalysisSchema>;
+export type SwotAnalysis = typeof swotAnalyses.$inferSelect;
+
+// AI Biz Bot Consultations
+export const consultations = pgTable("consultations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
+  workspaceConfigId: varchar("workspace_config_id").references(() => workspaceConfigurations.id),
+  swotAnalysisId: varchar("swot_analysis_id").references(() => swotAnalyses.id),
+  
+  // Consultation Data
+  conversationHistory: jsonb("conversation_history").notNull(), // Array of messages
+  consultationSummary: text("consultation_summary"),
+  insights: jsonb("insights"), // Extracted insights from conversation
+  
+  // Customization Results
+  customTools: jsonb("custom_tools"),
+  customizationApplied: boolean("customization_applied").default(false),
+  
+  // Status
+  status: text("status").default("in_progress"), // 'in_progress' | 'completed' | 'abandoned'
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertConsultationSchema = createInsertSchema(consultations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertConsultation = z.infer<typeof insertConsultationSchema>;
+export type Consultation = typeof consultations.$inferSelect;
+
+// Agent Knowledge Base - Research and Documentation Storage
+export const agentKnowledgeBase = pgTable("agent_knowledge_base", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Topic/Category
+  category: text("category").notNull(), // 'google_api' | 'business_tools' | 'integration' | 'research'
+  subcategory: text("subcategory"), // e.g., 'places_api', 'workspace', 'gmail', etc.
+  title: text("title").notNull(),
+  
+  // Content
+  content: text("content").notNull(), // Main research/documentation content (markdown)
+  summary: text("summary"), // Short summary for quick reference
+  metadata: jsonb("metadata"), // Flexible JSON for API details, costs, access info, etc.
+  
+  // Source Information
+  sources: jsonb("sources"), // Array of {url, title, date, credibility}
+  researchedBy: text("researched_by"), // Agent or user who created this
+  lastVerified: timestamp("last_verified"), // When info was last verified
+  
+  // Tags and Search
+  tags: text("tags").array().default(sql`ARRAY[]::text[]`),
+  keywords: text("keywords").array().default(sql`ARRAY[]::text[]`), // For search optimization
+  
+  // Usage Tracking
+  accessCount: integer("access_count").default(0),
+  lastAccessed: timestamp("last_accessed"),
+  
+  // Version Control
+  version: integer("version").default(1),
+  parentId: varchar("parent_id"), // For tracking document versions
+  
+  // Status
+  status: text("status").default("active"), // 'draft' | 'active' | 'archived' | 'outdated'
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAgentKnowledgeBaseSchema = createInsertSchema(agentKnowledgeBase).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertAgentKnowledgeBase = z.infer<typeof insertAgentKnowledgeBaseSchema>;
+export type AgentKnowledgeBase = typeof agentKnowledgeBase.$inferSelect;
+
+// API Documentation - Specific to Google Business APIs
+export const apiDocumentation = pgTable("api_documentation", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  knowledgeBaseId: varchar("knowledge_base_id").references(() => agentKnowledgeBase.id),
+  
+  // API Details
+  apiName: text("api_name").notNull(), // e.g., "Google Places API", "Google Workspace API"
+  apiType: text("api_type").notNull(), // 'rest' | 'graphql' | 'grpc' | 'sdk'
+  version: text("version"), // API version
+  
+  // Access Information
+  accessType: text("access_type"), // 'public' | 'private' | 'enterprise' | 'restricted'
+  authenticationMethod: text("authentication_method"), // 'api_key' | 'oauth' | 'service_account'
+  requiresApproval: boolean("requires_approval").default(false),
+  
+  // Pricing
+  pricingModel: text("pricing_model"), // 'free' | 'pay_per_use' | 'subscription' | 'enterprise'
+  pricingDetails: jsonb("pricing_details"), // Detailed pricing tiers and costs
+  freeTier: jsonb("free_tier"), // Free tier limits if applicable
+  
+  // Rate Limits
+  rateLimits: jsonb("rate_limits"), // {requests_per_second, daily_limit, etc.}
+  quotas: jsonb("quotas"), // Usage quotas and limits
+  
+  // Documentation Links
+  officialDocs: text("official_docs"),
+  apiReference: text("api_reference"),
+  quickstartGuide: text("quickstart_guide"),
+  sdkLinks: jsonb("sdk_links"), // Links to various SDK implementations
+  
+  // Alternatives Analysis
+  canBeMirrored: boolean("can_be_mirrored").default(false),
+  alternativeApis: jsonb("alternative_apis"), // Array of alternative solutions
+  
+  // Integration Status
+  currentlyUsed: boolean("currently_used").default(false),
+  integrationStatus: text("integration_status"), // 'not_started' | 'in_progress' | 'completed' | 'deprecated'
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertApiDocumentationSchema = createInsertSchema(apiDocumentation).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertApiDocumentation = z.infer<typeof insertApiDocumentationSchema>;
+export type ApiDocumentation = typeof apiDocumentation.$inferSelect;
+
+// Research Tasks - Track ongoing research projects
+export const researchTasks = pgTable("research_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Task Details
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  researchType: text("research_type").notNull(), // 'api_analysis' | 'competitor_research' | 'market_analysis' | 'technical_feasibility'
+  
+  // Assignment
+  assignedTo: text("assigned_to"), // Agent or user responsible
+  priority: text("priority").default("medium"), // 'low' | 'medium' | 'high' | 'urgent'
+  
+  // Findings
+  findings: jsonb("findings"), // Research results and insights
+  relatedKnowledgeIds: text("related_knowledge_ids").array().default(sql`ARRAY[]::text[]`), // Links to knowledge base entries
+  
+  // Status Tracking
+  status: text("status").default("pending"), // 'pending' | 'in_progress' | 'completed' | 'on_hold'
+  progress: integer("progress").default(0), // 0-100
+  
+  // Timeline
+  dueDate: timestamp("due_date"),
+  completedAt: timestamp("completed_at"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertResearchTaskSchema = createInsertSchema(researchTasks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertResearchTask = z.infer<typeof insertResearchTaskSchema>;
+export type ResearchTask = typeof researchTasks.$inferSelect;
+
+// =========================================
+// Restaurant Menu & E-Commerce Features
+// =========================================
+
+// Menus - Restaurant menu management for businesses
+export const menus = pgTable("menus", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
+  ownerId: varchar("owner_id").references(() => customerAccounts.id).notNull(),
+  
+  // Menu Details
+  name: text("name").notNull(), // e.g., "Lunch Menu", "Dinner Menu", "Drinks"
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  displayOrder: integer("display_order").default(0),
+  
+  // Availability
+  availableDays: text("available_days").array().default(sql`ARRAY['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']::text[]`),
+  availableStartTime: text("available_start_time"), // e.g., "11:00"
+  availableEndTime: text("available_end_time"), // e.g., "22:00"
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertMenuSchema = createInsertSchema(menus).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertMenu = z.infer<typeof insertMenuSchema>;
+export type Menu = typeof menus.$inferSelect;
+
+// Menu Categories - Organize menu items into categories
+export const menuCategories = pgTable("menu_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  menuId: varchar("menu_id").references(() => menus.id).notNull(),
+  
+  // Category Details
+  name: text("name").notNull(), // e.g., "Appetizers", "Entrees", "Desserts"
+  description: text("description"),
+  displayOrder: integer("display_order").default(0),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertMenuCategorySchema = createInsertSchema(menuCategories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertMenuCategory = z.infer<typeof insertMenuCategorySchema>;
+export type MenuCategory = typeof menuCategories.$inferSelect;
+
+// Menu Items - Individual items on the menu
+export const menuItems = pgTable("menu_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  menuId: varchar("menu_id").references(() => menus.id).notNull(),
+  categoryId: varchar("category_id").references(() => menuCategories.id),
+  
+  // Item Details
+  name: text("name").notNull(),
+  description: text("description"),
+  price: numeric("price", { precision: 10, scale: 2 }).notNull(),
+  imageUrl: text("image_url"),
+  
+  // Availability
+  isAvailable: boolean("is_available").default(true),
+  displayOrder: integer("display_order").default(0),
+  
+  // Additional Info
+  preparationTime: integer("preparation_time"), // in minutes
+  calories: integer("calories"),
+  allergens: text("allergens").array().default(sql`ARRAY[]::text[]`),
+  dietaryInfo: text("dietary_info").array().default(sql`ARRAY[]::text[]`), // e.g., vegetarian, vegan, gluten-free
+  
+  // Options & Customization
+  customizationOptions: jsonb("customization_options"), // {size: ['small', 'medium', 'large'], toppings: [...]}
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertMenuItemSchema = createInsertSchema(menuItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertMenuItem = z.infer<typeof insertMenuItemSchema>;
+export type MenuItem = typeof menuItems.$inferSelect;
+
+// Shopping Cart - Customer shopping carts
+export const carts = pgTable("carts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
+  
+  // Customer Info
+  customerId: varchar("customer_id").references(() => customers.id),
+  sessionId: text("session_id"), // For anonymous users
+  customerName: text("customer_name"),
+  customerEmail: text("customer_email"),
+  customerPhone: text("customer_phone"),
+  
+  // Cart Status
+  status: text("status").default("active"), // 'active', 'abandoned', 'converted', 'expired'
+  
+  // Delivery Info
+  deliveryAddress: text("delivery_address"),
+  deliveryInstructions: text("delivery_instructions"),
+  
+  // Pricing
+  subtotal: numeric("subtotal", { precision: 10, scale: 2 }).default("0"),
+  taxAmount: numeric("tax_amount", { precision: 10, scale: 2 }).default("0"),
+  deliveryFee: numeric("delivery_fee", { precision: 10, scale: 2 }).default("0"),
+  totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).default("0"),
+  
+  // Timestamps
+  lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
+  expiresAt: timestamp("expires_at"), // Cart expiration time
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCartSchema = createInsertSchema(carts).omit({
+  id: true,
+  createdAt: true,
+  lastUpdatedAt: true,
+});
+
+export type InsertCart = z.infer<typeof insertCartSchema>;
+export type Cart = typeof carts.$inferSelect;
+
+// Cart Items - Items in a shopping cart
+export const cartItems = pgTable("cart_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cartId: varchar("cart_id").references(() => carts.id).notNull(),
+  menuItemId: varchar("menu_item_id").references(() => menuItems.id).notNull(),
+  
+  // Item Details
+  quantity: integer("quantity").notNull().default(1),
+  unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
+  totalPrice: numeric("total_price", { precision: 10, scale: 2 }).notNull(),
+  
+  // Customizations
+  customizations: jsonb("customizations"), // Selected options and modifications
+  specialInstructions: text("special_instructions"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCartItemSchema = createInsertSchema(cartItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertCartItem = z.infer<typeof insertCartItemSchema>;
+export type CartItem = typeof cartItems.$inferSelect;
+
+// Orders - Completed purchases
+export const orders = pgTable("orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
+  cartId: varchar("cart_id").references(() => carts.id),
+  customerId: varchar("customer_id").references(() => customers.id),
+  
+  // Order Number
+  orderNumber: text("order_number").notNull().unique(),
+  
+  // Customer Info
+  customerName: text("customer_name").notNull(),
+  customerEmail: text("customer_email"),
+  customerPhone: text("customer_phone").notNull(),
+  
+  // Order Type
+  orderType: text("order_type").notNull().default("delivery"), // 'delivery', 'pickup', 'dine-in'
+  
+  // Delivery Info
+  deliveryAddress: text("delivery_address"),
+  deliveryInstructions: text("delivery_instructions"),
+  
+  // Pricing
+  subtotal: numeric("subtotal", { precision: 10, scale: 2 }).notNull(),
+  taxAmount: numeric("tax_amount", { precision: 10, scale: 2 }).default("0"),
+  deliveryFee: numeric("delivery_fee", { precision: 10, scale: 2 }).default("0"),
+  tipAmount: numeric("tip_amount", { precision: 10, scale: 2 }).default("0"),
+  totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull(),
+  
+  // Payment
+  paymentMethod: text("payment_method"), // 'card', 'cash', 'online'
+  paymentStatus: text("payment_status").default("pending"), // 'pending', 'paid', 'failed', 'refunded'
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  
+  // Order Status
+  status: text("status").default("pending"), // 'pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery', 'delivered', 'cancelled'
+  
+  // Fulfillment
+  estimatedReadyTime: timestamp("estimated_ready_time"),
+  estimatedDeliveryTime: timestamp("estimated_delivery_time"),
+  actualDeliveryTime: timestamp("actual_delivery_time"),
+  
+  // Notes
+  customerNotes: text("customer_notes"),
+  internalNotes: text("internal_notes"),
+  
+  // Timestamps
+  confirmedAt: timestamp("confirmed_at"),
+  completedAt: timestamp("completed_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOrderSchema = createInsertSchema(orders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertOrder = z.infer<typeof insertOrderSchema>;
+export type Order = typeof orders.$inferSelect;
+
+// Order Items - Items in a completed order
+export const orderItems = pgTable("order_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").references(() => orders.id).notNull(),
+  menuItemId: varchar("menu_item_id").references(() => menuItems.id).notNull(),
+  
+  // Item Details
+  itemName: text("item_name").notNull(), // Snapshot of item name at time of order
+  itemDescription: text("item_description"),
+  quantity: integer("quantity").notNull().default(1),
+  unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
+  totalPrice: numeric("total_price", { precision: 10, scale: 2 }).notNull(),
+  
+  // Customizations
+  customizations: jsonb("customizations"), // Selected options and modifications
+  specialInstructions: text("special_instructions"),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertOrderItemSchema = createInsertSchema(orderItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertOrderItem = z.infer<typeof insertOrderItemSchema>;
+export type OrderItem = typeof orderItems.$inferSelect;
+
+// Inquiries - Contact form submissions and customer inquiries
+export const inquiries = pgTable("inquiries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Customer Information
+  name: text("name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  company: text("company"),
+  
+  // Inquiry Details
+  subject: text("subject"),
+  message: text("message").notNull(),
+  source: text("source").default("website"), // 'website', 'chat', 'phone', 'email', 'sms'
+  
+  // Status & Assignment
+  status: text("status").default("new"), // 'new', 'viewed', 'in_progress', 'resolved', 'closed'
+  priority: text("priority").default("normal"), // 'low', 'normal', 'high', 'urgent'
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  
+  // Response & Notes
+  response: text("response"),
+  internalNotes: text("internal_notes"),
+  
+  // Tracking
+  viewedAt: timestamp("viewed_at"),
+  respondedAt: timestamp("responded_at"),
+  resolvedAt: timestamp("resolved_at"),
+  
+  // Metadata
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  referrer: text("referrer"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertInquirySchema = createInsertSchema(inquiries, {
+  source: z
+    .enum(["website", "chat", "phone", "email", "sms"])
+    .default("website"),
+  status: z
+    .enum(["new", "viewed", "in_progress", "resolved", "closed"])
+    .default("new"),
+  priority: z
+    .enum(["low", "normal", "high", "urgent"])
+    .default("normal"),
+}).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertInquiry = z.infer<typeof insertInquirySchema>;
+export type Inquiry = typeof inquiries.$inferSelect;

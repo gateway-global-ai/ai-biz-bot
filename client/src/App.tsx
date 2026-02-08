@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { CustomerAuthProvider } from "@/lib/customerAuth";
 import TelephonyPanel from "@/pages/TelephonyPanel";
 import GatewayAdmin from "@/pages/GatewayAdmin";
 import AgentTelephony from "@/pages/AgentTelephony";
@@ -37,6 +38,25 @@ import GoogleCalendarPage from "@/pages/GoogleCalendarPage";
 import GoogleTasksPage from "@/pages/GoogleTasksPage";
 import AiBizBotAdmin from "@/pages/AiBizBotAdmin";
 import Login from "@/pages/Login";
+import SdkShowcase from "@/pages/SdkShowcase";
+import GooglePlacesSdk from "@/pages/GooglePlacesSdk";
+import MyAccount from "@/pages/MyAccount";
+import CustomerSiteManager from "@/pages/CustomerSiteManager";
+import VoiceLeadMachine from "@/pages/VoiceLeadMachine";
+import SitesAndLeads from "@/pages/SitesAndLeads";
+import CommandChat from "@/pages/CommandChat";
+import InquiryManagement from "@/pages/InquiryManagement";
+import CallTracking from "@/pages/CallTracking";
+import TransparencyDashboard from "@/pages/TransparencyDashboard";
+import ContactForm from "@/pages/ContactForm";
+import CustomerChatInterface from "@/pages/CustomerChatInterface";
+import OwnerChatInterface from "@/pages/OwnerChatInterface";
+import DeveloperChatInterface from "@/pages/DeveloperChatInterface";
+import ChatEmbedShowcase from "@/pages/ChatEmbedShowcase";
+import AgentManagementPage from "@/pages/AgentManagementPage";
+import AgentTestingDashboard from "@/pages/AgentTestingDashboard";
+import ChatWithAgentPreview from "@/pages/ChatWithAgentPreview";
+import WidgetShowcasePage from "@/pages/WidgetShowcasePage";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
@@ -273,11 +293,36 @@ function AppRouter() {
       <Route path="/security" component={SecurityDashboard} />
       <Route path="/disc" component={DiscVisualizer} />
       <Route path="/developer" component={DeveloperPage} />
+      {/* 
+        ⭐ STANDARDIZED CHAT INTERFACES - PROTECTED ROUTES ⭐
+        
+        These routes use the StandardizedChatInterface component, which is the ONLY
+        approved base chat interface for the platform. See /CHAT_ARCHITECTURE.md.
+        
+        - /chat/owner: Business owner portal (requires auth for actual use)
+        - /chat/developer: Developer interface (requires auth for actual use)
+        - Public demo routes: /interface/owner and /interface/developer
+        
+        DO NOT create alternative chat implementations. Use StandardizedChatInterface
+        or FloatingChatWidget for all new chat features.
+      */}
+      <Route path="/chat/owner" component={OwnerChatInterface} />
+      <Route path="/chat/developer" component={DeveloperChatInterface} />
       {/* BusinessPage moved to public routes */}
+      <Route path="/lead-machine" component={VoiceLeadMachine} />
+      <Route path="/sites-leads" component={SitesAndLeads} />
+      <Route path="/inquiries" component={InquiryManagement} />
+      <Route path="/call-tracking" component={CallTracking} />
+      <Route path="/transparency" component={TransparencyDashboard} />
+      <Route path="/command-chat" component={CommandChat} /> {/* Admin tool - specialized UI */}
       <Route path="/aibizbot" component={AiBizBotAdmin} />
       <Route path="/google-analyst" component={GoogleApiAnalyst} />
       <Route path="/assessment" component={DiscAssessment} />
       <Route path="/conversation" component={MockConversation} />
+      <Route path="/agent-management" component={AgentManagementPage} />
+      <Route path="/agent-testing" component={AgentTestingDashboard} />
+      <Route path="/agent-preview" component={ChatWithAgentPreview} />
+      <Route path="/widget-showcase" component={WidgetShowcasePage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -331,18 +376,37 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <Switch>
-            {/* Public routes */}
-            <Route path="/" component={BusinessPage} />
-            <Route path="/business" component={BusinessPage} />
-            <Route path="/demo" component={BusinessPage} />
-            <Route path="/login" component={Login} />
-            <Route path="/v2" component={LandingV2} />
-            <Route path="/kimi-audio" component={KimiAudioDemo} />
-            <Route path="/chat/:agentId" component={AgentChat} />
-            {/* Protected routes with sidebar */}
-            <Route component={AppWithSidebar} />
-          </Switch>
+          <CustomerAuthProvider>
+            <Switch>
+              {/* Public routes */}
+              <Route path="/" component={BusinessPage} />
+              <Route path="/business" component={BusinessPage} />
+              <Route path="/demo" component={BusinessPage} />
+              <Route path="/login" component={Login} />
+              <Route path="/contact" component={ContactForm} />
+              <Route path="/v2" component={LandingV2} />
+              <Route path="/kimi-audio" component={KimiAudioDemo} />
+              <Route path="/sdk" component={SdkShowcase} />
+              <Route path="/sdk/google-places" component={GooglePlacesSdk} />
+              <Route path="/chat/customer" component={CustomerChatInterface} />
+              <Route path="/chat-showcase" component={ChatEmbedShowcase} />
+              {/* 
+                ⭐ STANDARDIZED CHAT INTERFACES - PUBLIC DEMO ROUTES ⭐
+                
+                These use StandardizedChatInterface, the approved base chat component.
+                See /CHAT_ARCHITECTURE.md for architectural standards.
+              */}
+              <Route path="/interface/customer" component={CustomerChatInterface} />
+              <Route path="/interface/owner" component={OwnerChatInterface} />
+              <Route path="/interface/developer" component={DeveloperChatInterface} />
+              <Route path="/chat/:agentId" component={AgentChat} /> {/* Agent-specific chat - specialized UI */}
+              {/* Customer account routes */}
+              <Route path="/my-account" component={MyAccount} />
+              <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />
+              {/* Protected admin routes with sidebar */}
+              <Route component={AppWithSidebar} />
+            </Switch>
+          </CustomerAuthProvider>
         </AuthProvider>
         <Toaster />
       </TooltipProvider>

@@ -1,0 +1,53 @@
+{
+  "name": "@gateway-global/learning-sdk",
+  "version": "1.0.0",
+  "description": "AI-powered immersive learning SDK for micro-learning experiences. Features interactive virtual classroom with voice, quizzes, and dynamic content generation.",
+  "main": "dist/gateway-learning.min.js",
+  "module": "src/index.ts",
+  "types": "src/types/index.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gateway-global-ai/chat-mvp-merge",
+    "directory": "sdk/learning"
+  },
+  "keywords": [
+    "learning",
+    "education",
+    "ai",
+    "classroom",
+    "voice",
+    "micro-learning",
+    "interactive",
+    "quiz",
+    "training",
+    "sdk",
+    "gateway"
+  ],
+  "files": [
+    "dist/",
+    "src/",
+    "examples/",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@google/genai": "^1.39.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  }
+}

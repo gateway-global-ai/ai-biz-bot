@@ -7,25 +7,29 @@ import {
   Briefcase, Zap, PhoneCall, CreditCard, ChevronRight,
   Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server,
   Search, MapPin, Star, ExternalLink, Loader2, ArrowRight, Sparkles,
-  Clock, Bot, Wand2, X, Eye, Send, User, KeyRound, LogIn, LogOut
+  Clock, Bot, Wand2, X, Eye, Send, User, LogIn, LogOut, KeyRound
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
-import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/lib/auth';
+import { useCustomerAuth } from '@/lib/customerAuth';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest } from '@/lib/queryClient';
+import OtpLoginModal from '@/components/OtpLoginModal';
+import ShareButton from '@/components/ShareButton';
+import { Code2 } from 'lucide-react';
+
+import Pidea_logo_header__7_ from "@assets/Pidea logo header (7).png";
 
 type VoiceState = 'idle' | 'loading' | 'greeting' | 'greeting_paused' | 'conversation' | 'processing' | 'responding' | 'error';
 
 type Sentiment = 'calm' | 'engaged' | 'helpful';
 
 const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label: string }> = {
-  calm: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: 'READY' },
+  calm: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: "LET'S TALK" },
   engaged: { primary: 'rgba(16, 185, 129, 0.8)', glow: 'rgba(16, 185, 129, 0.4)', label: 'LISTENING' },
   helpful: { primary: 'rgba(139, 92, 246, 0.8)', glow: 'rgba(139, 92, 246, 0.4)', label: 'SPEAKING' },
 };
@@ -34,7 +38,7 @@ const VoiceVisualizer = () => {
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [sentiment, setSentiment] = useState<Sentiment>('calm');
   const [pulse, setPulse] = useState(0);
-  const [showHelper, setShowHelper] = useState(true);
+  const [showHelper, setShowHelper] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -200,14 +204,6 @@ const VoiceVisualizer = () => {
   
   return (
     <div className="relative flex items-center justify-center mx-auto" style={{ marginTop: '-100px' }}>
-      {showHelper && voiceState === 'idle' && (
-        <div className="absolute -left-2 top-1/2 -translate-y-1/2 -translate-x-full flex items-center gap-1.5 animate-pulse z-20" data-testid="helper-click-talk">
-          <span className="text-sm font-semibold text-blue-400 text-center leading-tight bg-slate-900/80 px-3 py-1.5 rounded-full border border-blue-500/30">
-            Click,<br/>Let's Talk!
-          </span>
-          <ArrowRight className="w-5 h-5 text-blue-400 shrink-0" />
-        </div>
-      )}
       
       <div 
         className="relative w-32 h-32 flex items-center justify-center cursor-pointer select-none"
@@ -289,12 +285,35 @@ interface SelectedPlace {
   rating?: number;
   user_ratings_total?: number;
   formatted_phone_number?: string;
+  international_phone_number?: string;
   website?: string;
   types?: string[];
   photos?: any[];
   opening_hours?: { weekday_text?: string[]; isOpen?: () => boolean };
   place_id?: string;
+  url?: string;
   reviews?: any[];
+  geometry?: { lat: number; lng: number };
+  price_level?: number;
+  business_status?: string;
+  vicinity?: string;
+  utc_offset?: number;
+  editorial_summary?: string;
+  plus_code?: { global_code?: string; compound_code?: string };
+  address_components?: any[];
+  wheelchair_accessible_entrance?: boolean;
+  delivery?: boolean;
+  dine_in?: boolean;
+  takeout?: boolean;
+  curbside_pickup?: boolean;
+  reservable?: boolean;
+  serves_beer?: boolean;
+  serves_wine?: boolean;
+  serves_breakfast?: boolean;
+  serves_lunch?: boolean;
+  serves_dinner?: boolean;
+  serves_brunch?: boolean;
+  serves_vegetarian_food?: boolean;
 }
 
 const TrainingProgressBar = ({ progress }: { progress: number }) => (
@@ -369,72 +388,11 @@ export default function BusinessPage() {
   const [tokenError, setTokenError] = useState<string | null>(null);
 
   const { user, isAuthenticated, login: authLogin, logout: authLogout } = useAuth();
+  const { user: customerUser, isAuthenticated: isCustomerAuth, login: customerLogin, logout: customerLogout } = useCustomerAuth();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [loginStep, setLoginStep] = useState<'phone' | 'otp'>('phone');
-  const [loginPhone, setLoginPhone] = useState('');
-  const [loginOtp, setLoginOtp] = useState('');
-  const [loginMaskedPhone, setLoginMaskedPhone] = useState('');
-
-  const formatLoginPhone = (value: string) => {
-    const digits = value.replace(/\D/g, '');
-    if (digits.length <= 3) return digits;
-    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
-  };
-
-  const sendOtpMutation = useMutation({
-    mutationFn: async (phoneNumber: string) => {
-      const response = await apiRequest('POST', '/api/auth/send-otp', { phone: phoneNumber });
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setLoginMaskedPhone(data.phone);
-      setLoginStep('otp');
-      toast({ title: 'Code Sent', description: `Verification code sent to ***-***-${data.phone}` });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Error', description: error.message || 'Failed to send code', variant: 'destructive' });
-    },
-  });
-
-  const verifyOtpMutation = useMutation({
-    mutationFn: async ({ phone, code }: { phone: string; code: string }) => {
-      const response = await apiRequest('POST', '/api/auth/verify-otp', { phone, code });
-      return response.json();
-    },
-    onSuccess: (data) => {
-      authLogin(data.token, data.user);
-      setShowLoginModal(false);
-      setLoginStep('phone');
-      setLoginPhone('');
-      setLoginOtp('');
-      toast({ title: 'Welcome!', description: `Logged in as ${data.user.name || 'Admin'}` });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Verification Failed', description: error.message || 'Invalid or expired code', variant: 'destructive' });
-    },
-  });
-
-  const handleLoginPhoneSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const digits = loginPhone.replace(/\D/g, '');
-    if (digits.length !== 10) {
-      toast({ title: 'Invalid Phone', description: 'Please enter a valid 10-digit phone number', variant: 'destructive' });
-      return;
-    }
-    sendOtpMutation.mutate(loginPhone);
-  };
-
-  const handleLoginOtpSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (loginOtp.length !== 6) {
-      toast({ title: 'Invalid Code', description: 'Please enter the 6-digit verification code', variant: 'destructive' });
-      return;
-    }
-    verifyOtpMutation.mutate({ phone: loginPhone, code: loginOtp });
-  };
+  const [showCustomerLoginModal, setShowCustomerLoginModal] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -545,6 +503,22 @@ export default function BusinessPage() {
       const place = placePicker.value;
       if (place && (place.displayName || place.name)) {
         const placeId = place.id ?? place.place_id ?? undefined;
+        let geometry: { lat: number; lng: number } | undefined;
+        if (place.location) {
+          const loc = place.location;
+          const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
+          const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
+          if (typeof lat === 'number' && typeof lng === 'number') {
+            geometry = { lat, lng };
+          }
+        } else if (place.geometry?.location) {
+          const loc = place.geometry.location;
+          const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
+          const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
+          if (typeof lat === 'number' && typeof lng === 'number') {
+            geometry = { lat, lng };
+          }
+        }
         const placeData: SelectedPlace = {
           name: place.displayName || place.name || '',
           formatted_address: place.formattedAddress || place.formatted_address || '',
@@ -557,6 +531,7 @@ export default function BusinessPage() {
           photos: place.photos || [],
           opening_hours: place.regularOpeningHours ?? place.opening_hours ?? undefined,
           reviews: [],
+          geometry,
         };
         setSelectedPlace(placeData);
         setMapsError(null);
@@ -565,16 +540,36 @@ export default function BusinessPage() {
           try {
             const detailsRes = await fetch(`/api/places/details/${encodeURIComponent(placeId)}`);
             const details = await detailsRes.json();
-            if (details.reviews && details.reviews.length > 0) {
-              setSelectedPlace(prev => prev ? {
-                ...prev,
-                reviews: details.reviews,
-                user_ratings_total: details.user_ratings_total || prev.user_ratings_total,
-                rating: details.rating || prev.rating,
-              } : prev);
-            }
+            setSelectedPlace(prev => prev ? {
+              ...prev,
+              reviews: details.reviews?.length > 0 ? details.reviews : prev.reviews,
+              user_ratings_total: details.user_ratings_total || prev.user_ratings_total,
+              rating: details.rating || prev.rating,
+              price_level: details.price_level,
+              business_status: details.business_status,
+              url: details.url,
+              vicinity: details.vicinity,
+              utc_offset: details.utc_offset,
+              international_phone_number: details.international_phone_number,
+              address_components: details.address_components,
+              plus_code: details.plus_code,
+              editorial_summary: details.editorial_summary,
+              wheelchair_accessible_entrance: details.wheelchair_accessible_entrance,
+              delivery: details.delivery,
+              dine_in: details.dine_in,
+              takeout: details.takeout,
+              curbside_pickup: details.curbside_pickup,
+              reservable: details.reservable,
+              serves_beer: details.serves_beer,
+              serves_wine: details.serves_wine,
+              serves_breakfast: details.serves_breakfast,
+              serves_lunch: details.serves_lunch,
+              serves_dinner: details.serves_dinner,
+              serves_brunch: details.serves_brunch,
+              serves_vegetarian_food: details.serves_vegetarian_food,
+            } : prev);
           } catch (err) {
-            console.error('[Places] Failed to fetch reviews:', err);
+            console.error('[Places] Failed to fetch details:', err);
           }
         }
       }
@@ -646,6 +641,40 @@ export default function BusinessPage() {
     }, 1000);
     return () => clearInterval(interval);
   }, [stage]);
+
+  useEffect(() => {
+    const existingScript = document.querySelector('script[data-gateway-sdk]');
+    if (existingScript) return;
+    const script = document.createElement('script');
+    script.src = '/sdk/gateway-chat.js';
+    script.setAttribute('data-gateway-sdk', 'true');
+    script.onload = () => {
+      if ((window as any).GatewayChat) {
+        (window as any).__gatewayChatWidget = (window as any).GatewayChat.init({
+          botId: 'platform-landing',
+          apiBase: '',
+          position: 'bottom-right',
+          botName: 'Gateway AI',
+          greetingMessage: 'Hi! I can help you learn about our free AI-powered websites, plans, and features. What would you like to know?',
+          placeholderText: 'Ask about our services...',
+          headerSubtitle: 'Online',
+          voice: { enabled: true },
+          theme: {
+            primaryColor: '#6366f1',
+          },
+        });
+      }
+    };
+    document.body.appendChild(script);
+    return () => {
+      if ((window as any).__gatewayChatWidget) {
+        (window as any).__gatewayChatWidget.destroy();
+        delete (window as any).__gatewayChatWidget;
+      }
+      const el = document.querySelector('script[data-gateway-sdk]');
+      if (el) el.remove();
+    };
+  }, []);
 
   const handleSendMagicLink = async () => {
     if (!phoneNumber.trim()) {
@@ -732,8 +761,39 @@ export default function BusinessPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-center overflow-visible">
-        <img src={gatewayLogo} alt="Gateway Global AI" className="h-14 w-auto opacity-90 relative z-10 drop-shadow-lg" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))', marginTop: '14px', marginBottom: '-20px' }} />
+      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
+        <img src={Pidea_logo_header__7_} alt="Gateway Global AI" className="h-20 w-auto relative z-10" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' }} />
+        <div className="flex items-center gap-2 justify-end">
+          <ShareButton
+            shareTitle="Gateway Global AI - AI-Powered Business Websites"
+            shareText="Gateway Global AI creates professional AI-powered websites for businesses with voice concierge and chat support."
+            variant="dark"
+            testIdPrefix="main-share"
+          />
+          {isCustomerAuth ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-300 text-xs"
+              onClick={() => setLocation('/my-account')}
+              data-testid="button-my-account"
+            >
+              <User className="w-4 h-4 mr-1" />
+              My Account
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-300 text-xs"
+              onClick={() => setShowCustomerLoginModal(true)}
+              data-testid="button-customer-login"
+            >
+              <LogIn className="w-4 h-4 mr-1" />
+              Sign In
+            </Button>
+          )}
+        </div>
       </nav>
       {stage === 'generating' && (
         <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col items-center justify-center">
@@ -1158,13 +1218,13 @@ export default function BusinessPage() {
                     onValueChange={(value) => setFormState(prev => ({ ...prev, volume: value }))}
                   >
                     <SelectTrigger className="bg-slate-800 border-slate-700" data-testid="select-volume">
-                      <SelectValue placeholder="Expected Call Volume" />
+                      <SelectValue placeholder="Number of Locations" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="<100">&lt; 100 calls/month</SelectItem>
-                      <SelectItem value="100-500">100 - 500 calls/month</SelectItem>
-                      <SelectItem value="500-2000">500 - 2,000 calls/month</SelectItem>
-                      <SelectItem value=">2000">&gt; 2,000 calls/month</SelectItem>
+                      <SelectItem value="1">1 Location</SelectItem>
+                      <SelectItem value="2-5">2 - 5 Locations</SelectItem>
+                      <SelectItem value="6-20">6 - 20 Locations</SelectItem>
+                      <SelectItem value=">20">20+ Locations</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button 
@@ -1190,7 +1250,21 @@ export default function BusinessPage() {
           </Card>
         </div>
       </section>
-      <footer className="py-12 text-center text-sm border-t border-slate-900 space-y-3">
+      <footer className="py-12 text-center text-sm border-t border-slate-900 space-y-4">
+        <div className="flex items-center justify-center gap-4">
+          <Link href="/sdk">
+            <Button variant="ghost" size="sm" className="text-slate-500 text-xs" data-testid="button-developer-section">
+              <Code2 className="w-3 h-3 mr-1" />
+              Developers
+            </Button>
+          </Link>
+          <Link href="/sdk/google-places">
+            <Button variant="ghost" size="sm" className="text-slate-500 text-xs" data-testid="button-google-places-sdk">
+              <Globe className="w-3 h-3 mr-1" />
+              Google Places SDK
+            </Button>
+          </Link>
+        </div>
         <p className="text-slate-600">&copy; 2025 Gateway Global AI. Enterprise Division.</p>
         {isAuthenticated ? (
           <div className="flex items-center justify-center gap-3">
@@ -1210,7 +1284,7 @@ export default function BusinessPage() {
             variant="ghost"
             size="sm"
             className="text-slate-600 text-xs"
-            onClick={() => { setShowLoginModal(true); setLoginStep('phone'); setLoginPhone(''); setLoginOtp(''); }}
+            onClick={() => setShowLoginModal(true)}
             data-testid="button-admin-login"
           >
             <LogIn className="w-3 h-3 mr-1" />
@@ -1218,100 +1292,39 @@ export default function BusinessPage() {
           </Button>
         )}
       </footer>
-      {showLoginModal && (
-        <div className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4" onClick={() => setShowLoginModal(false)}>
-          <div className="bg-slate-900 border border-slate-700 rounded-md w-full max-w-sm p-6 space-y-5 relative" onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-3 right-3 text-slate-400"
-              onClick={() => setShowLoginModal(false)}
-              data-testid="button-close-login"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-
-            <div className="text-center space-y-2">
-              <div className="mx-auto w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-                <ShieldCheck className="w-6 h-6 text-blue-400" />
-              </div>
-              <h3 className="text-lg font-bold text-white">Admin Login</h3>
-              <p className="text-sm text-slate-400">
-                {loginStep === 'phone'
-                  ? 'Enter your phone number to receive a verification code'
-                  : `Enter the 6-digit code sent to ***-***-${loginMaskedPhone}`}
-              </p>
-            </div>
-
-            {loginStep === 'phone' ? (
-              <form onSubmit={handleLoginPhoneSubmit} className="space-y-4">
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400" />
-                  <Input
-                    data-testid="input-admin-phone"
-                    type="tel"
-                    placeholder="(555) 123-4567"
-                    value={loginPhone}
-                    onChange={(e) => setLoginPhone(formatLoginPhone(e.target.value))}
-                    className="pl-10 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
-                    disabled={sendOtpMutation.isPending}
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600"
-                  disabled={sendOtpMutation.isPending}
-                  data-testid="button-admin-send-code"
-                >
-                  {sendOtpMutation.isPending ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending...</>
-                  ) : (
-                    'Send Verification Code'
-                  )}
-                </Button>
-              </form>
-            ) : (
-              <form onSubmit={handleLoginOtpSubmit} className="space-y-4">
-                <div className="relative">
-                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400" />
-                  <Input
-                    data-testid="input-admin-otp"
-                    type="text"
-                    placeholder="123456"
-                    value={loginOtp}
-                    onChange={(e) => setLoginOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    className="pl-10 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500 text-center text-xl tracking-widest"
-                    disabled={verifyOtpMutation.isPending}
-                    maxLength={6}
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600"
-                  disabled={verifyOtpMutation.isPending}
-                  data-testid="button-admin-verify"
-                >
-                  {verifyOtpMutation.isPending ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...</>
-                  ) : (
-                    'Verify & Login'
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full text-slate-400"
-                  onClick={() => { setLoginStep('phone'); setLoginOtp(''); }}
-                  disabled={verifyOtpMutation.isPending}
-                  data-testid="button-admin-back"
-                >
-                  Use a different number
-                </Button>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
+      <OtpLoginModal
+        open={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onSuccess={(data) => {
+          authLogin(data.token, data.user);
+          setShowLoginModal(false);
+          toast({ title: 'Welcome!', description: `Logged in as ${data.user.name || 'Admin'}` });
+          window.location.href = "/dashboard";
+        }}
+        sendOtpEndpoint="/api/auth/send-otp"
+        verifyOtpEndpoint="/api/auth/verify-otp"
+        icon={ShieldCheck}
+        title="Admin Login"
+        accentColor="blue"
+        testIdPrefix="admin"
+      />
+      <OtpLoginModal
+        open={showCustomerLoginModal}
+        onClose={() => setShowCustomerLoginModal(false)}
+        onSuccess={(data) => {
+          customerLogin(data.token, data.user);
+          setShowCustomerLoginModal(false);
+          toast({ title: 'Welcome!', description: `Signed in as ${data.user.name || 'Business Owner'}` });
+        }}
+        sendOtpEndpoint="/api/customer/send-otp"
+        verifyOtpEndpoint="/api/customer/verify-otp"
+        icon={KeyRound}
+        title="Sign In"
+        phonePrompt="Enter your phone number to sign in or create an account"
+        subtitle="No account? One will be created automatically."
+        accentColor="purple"
+        testIdPrefix="customer"
+      />
     </div>
   );
 }

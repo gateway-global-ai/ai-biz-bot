@@ -1,6 +1,12 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { registerVlmRoutes } from "./vlm-routes";
+import { registerAgentRoutes } from "./agents/agent-routes";
+import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding";
+import knowledgeRoutes from "./routes/knowledge-routes";
+import { registerMenuRoutes } from "./routes/menu-routes";
+import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -16,15 +22,17 @@ import {
   getTwilioFromPhoneNumber,
   getTwilioClient
 } from "./twilio";
-import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
+import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, PLAN_LIMITS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
+import { customerSendOtp, customerVerifyOtp, customerVerifySession, customerLogout, customerUpdateProfile, customerGetBusinesses, customerClaimBusiness } from "./customerAuth";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
 import { getAvailableApis, calculateCosts, analyzeWithKimi, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
+import { placesCache, CACHE_TTL } from "./placesCache";
 import crypto from "crypto";
 
 const updateConfigSchema = z.object({
@@ -61,16 +69,87 @@ const webhooksUpdateSchema = z.object({
   smsFallbackUrl: z.string().url().optional().or(z.literal('')),
 });
 
+const SOCIAL_CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|LinkedInBot|WhatsApp|Slackbot|TelegramBot|Pinterest|Googlebot|bingbot|Discordbot|vkShare/i;
+
+const DEFAULT_OG: Record<string, string> = {
+  ogTitle: "Free Custom Websites, AI Voice and Chat Enabled",
+  ogDescription: "We support small business owners with free websites, enabled with voice AI agents, AI chat bots, and beautiful modern designs. Websites are free. No Credit card required.",
+  ogUrl: "http://aibizbot.gatewayglobal.ai",
+  ogImage: "http://aibizbot.gatewayglobal.ai/og-image.png",
+  ogType: "website",
+  ogSiteName: "AI Biz Bot by Gateway Global",
+  twitterCard: "summary_large_image",
+};
+
+function buildOgHtml(og: Record<string, string>): string {
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"/>
+<title>${og.ogTitle || DEFAULT_OG.ogTitle}</title>
+<meta name="description" content="${og.ogDescription || DEFAULT_OG.ogDescription}"/>
+<meta property="og:title" content="${og.ogTitle || DEFAULT_OG.ogTitle}"/>
+<meta property="og:description" content="${og.ogDescription || DEFAULT_OG.ogDescription}"/>
+<meta property="og:url" content="${og.ogUrl || DEFAULT_OG.ogUrl}"/>
+<meta property="og:image" content="${og.ogImage || DEFAULT_OG.ogImage}"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:type" content="${og.ogType || DEFAULT_OG.ogType}"/>
+<meta property="og:site_name" content="${og.ogSiteName || DEFAULT_OG.ogSiteName}"/>
+<meta name="twitter:card" content="${og.twitterCard || DEFAULT_OG.twitterCard}"/>
+<meta name="twitter:title" content="${og.ogTitle || DEFAULT_OG.ogTitle}"/>
+<meta name="twitter:description" content="${og.ogDescription || DEFAULT_OG.ogDescription}"/>
+<meta name="twitter:image" content="${og.ogImage || DEFAULT_OG.ogImage}"/>
+</head><body></body></html>`;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
-  // Auth routes
+
+  app.use(async (req, res, next) => {
+    const ua = req.headers["user-agent"] || "";
+    if (!SOCIAL_CRAWLER_UA.test(ua)) return next();
+    if (req.path.startsWith("/api/") || req.path.startsWith("/assets/") || req.path.match(/\.\w+$/)) return next();
+
+    try {
+      const pagePath = req.path === "/" ? "/" : req.path.replace(/\/$/, "");
+      const dbOg = await storage.getOgSettingsByPath(pagePath);
+      const og = dbOg ? {
+        ogTitle: dbOg.ogTitle,
+        ogDescription: dbOg.ogDescription,
+        ogUrl: dbOg.ogUrl || DEFAULT_OG.ogUrl,
+        ogImage: dbOg.ogImage || DEFAULT_OG.ogImage,
+        ogType: dbOg.ogType || DEFAULT_OG.ogType,
+        ogSiteName: dbOg.ogSiteName || DEFAULT_OG.ogSiteName,
+        twitterCard: dbOg.twitterCard || DEFAULT_OG.twitterCard,
+      } : DEFAULT_OG;
+      res.status(200).set({ "Content-Type": "text/html" }).end(buildOgHtml(og));
+    } catch (err) {
+      console.error("[OG] Crawler middleware error:", err);
+      res.status(200).set({ "Content-Type": "text/html" }).end(buildOgHtml(DEFAULT_OG));
+    }
+  });
+
+  // Admin Auth routes
   app.post("/api/auth/send-otp", sendOtp);
   app.post("/api/auth/verify-otp", verifyOtp);
   app.get("/api/auth/session", verifySession);
   app.post("/api/auth/logout", logout);
+
+  // Plans endpoint (public - accessible by AI agents, dashboard, and external consumers)
+  app.get("/api/plans", (_req, res) => {
+    res.json({ plans: PLAN_LIMITS });
+  });
+
+  // Customer Auth routes (separate from admin)
+  app.post("/api/customer/send-otp", customerSendOtp);
+  app.post("/api/customer/verify-otp", customerVerifyOtp);
+  app.get("/api/customer/session", customerVerifySession);
+  app.post("/api/customer/logout", customerLogout);
+  app.patch("/api/customer/profile", customerUpdateProfile);
+  app.get("/api/customer/businesses", customerGetBusinesses);
+  app.post("/api/customer/claim-business", customerClaimBusiness);
 
   // ============ Demo Lead / Magic Link Onboarding ============
 
@@ -115,6 +194,36 @@ export async function registerRoutes(
         status: "preview",
         name: null,
       });
+
+      let existingSite: any = null;
+      if (placeId) {
+        existingSite = await storage.getSiteConfigByPlaceId(placeId);
+      }
+      if (!existingSite) {
+        const customerAccount = await storage.getCustomerAccountByPhone(normalizedPhone);
+
+        const domain = businessName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 50);
+
+        const siteConfig = await storage.createSiteConfig({
+          name: businessName,
+          domain,
+          placeId: placeId || null,
+          placeData: placeData || null,
+          ownerId: customerAccount?.id || null,
+          chatbotEnabled: true,
+          voiceConciergeEnabled: true,
+          widgetPosition: "bottom-right",
+          widgetColor: "#2563eb",
+          greetingMessage: `Welcome to ${businessName}! How can we help you today?`,
+          placeholderText: "Type a message...",
+          modelProvider: "kimi",
+        });
+        console.log(`[Demo] Created site_config ${siteConfig.id} for "${businessName}"${customerAccount ? ` (linked to customer ${customerAccount.id})` : " (no customer account yet)"}`);
+      }
 
       const host = req.headers.host || "localhost:5000";
       const protocol = req.headers["x-forwarded-proto"] || "https";
@@ -179,6 +288,56 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/backfill-sites", async (req, res) => {
+    try {
+      const adminSession = req.headers["x-admin-token"];
+      if (!adminSession) {
+        const sessionCookie = req.headers.cookie?.split(";").find(c => c.trim().startsWith("admin_session="));
+        if (!sessionCookie) {
+          return res.status(401).json({ error: "Admin authentication required" });
+        }
+      }
+      const allLeads = await storage.getAllDemoLeads();
+      let created = 0;
+      let skipped = 0;
+      for (const lead of allLeads) {
+        if (lead.placeId) {
+          const existing = await storage.getSiteConfigByPlaceId(lead.placeId);
+          if (existing) {
+            skipped++;
+            continue;
+          }
+        }
+        const customerAccount = lead.phone ? await storage.getCustomerAccountByPhone(lead.phone) : null;
+        const domain = lead.businessName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 50);
+
+        await storage.createSiteConfig({
+          name: lead.businessName,
+          domain,
+          placeId: lead.placeId || null,
+          placeData: lead.placeData || null,
+          ownerId: customerAccount?.id || null,
+          chatbotEnabled: true,
+          voiceConciergeEnabled: true,
+          widgetPosition: "bottom-right",
+          widgetColor: "#2563eb",
+          greetingMessage: `Welcome to ${lead.businessName}! How can we help you today?`,
+          placeholderText: "Type a message...",
+          modelProvider: "kimi",
+        });
+        created++;
+      }
+      res.json({ success: true, created, skipped, total: allLeads.length });
+    } catch (error: any) {
+      console.error("[Backfill] Error:", error);
+      res.status(500).json({ error: error.message || "Backfill failed" });
+    }
+  });
+
   app.post("/api/demo/:id/update-name", async (req, res) => {
     try {
       const { id } = req.params;
@@ -205,7 +364,7 @@ export async function registerRoutes(
     res.json({ apiKey });
   });
 
-  // ============ Google Places Details (for reviews) ============
+  // ============ Google Places Details (comprehensive) ============
   app.get("/api/places/details/:placeId", async (req, res) => {
     try {
       const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
@@ -213,22 +372,243 @@ export async function registerRoutes(
         return res.status(500).json({ error: "Google API key not configured" });
       }
       const { placeId } = req.params;
+      const fields = [
+        'name', 'formatted_address', 'formatted_phone_number', 'international_phone_number',
+        'website', 'url', 'rating', 'user_ratings_total', 'price_level', 'business_status',
+        'types', 'opening_hours', 'geometry', 'vicinity', 'utc_offset',
+        'address_components', 'plus_code', 'icon', 'icon_mask_base_uri', 'icon_background_color',
+        'wheelchair_accessible_entrance', 'delivery', 'dine_in', 'takeout', 'curbside_pickup',
+        'reservable', 'serves_beer', 'serves_wine', 'serves_breakfast', 'serves_lunch',
+        'serves_dinner', 'serves_brunch', 'serves_vegetarian_food',
+        'editorial_summary', 'reviews', 'photos'
+      ].join(',');
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=reviews,user_ratings_total,rating&key=${apiKey}`
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=${fields}&key=${apiKey}`
       );
       const data = await response.json();
       if (data.status !== 'OK') {
         return res.status(400).json({ error: data.status, reviews: [] });
       }
+      const result = data.result || {};
       res.json({
-        reviews: data.result?.reviews || [],
-        user_ratings_total: data.result?.user_ratings_total || 0,
-        rating: data.result?.rating || 0,
+        reviews: result.reviews || [],
+        user_ratings_total: result.user_ratings_total || 0,
+        rating: result.rating || 0,
+        price_level: result.price_level,
+        business_status: result.business_status,
+        url: result.url,
+        vicinity: result.vicinity,
+        utc_offset: result.utc_offset,
+        international_phone_number: result.international_phone_number,
+        address_components: result.address_components,
+        plus_code: result.plus_code,
+        editorial_summary: result.editorial_summary?.overview || null,
+        wheelchair_accessible_entrance: result.wheelchair_accessible_entrance,
+        delivery: result.delivery,
+        dine_in: result.dine_in,
+        takeout: result.takeout,
+        curbside_pickup: result.curbside_pickup,
+        reservable: result.reservable,
+        serves_beer: result.serves_beer,
+        serves_wine: result.serves_wine,
+        serves_breakfast: result.serves_breakfast,
+        serves_lunch: result.serves_lunch,
+        serves_dinner: result.serves_dinner,
+        serves_brunch: result.serves_brunch,
+        serves_vegetarian_food: result.serves_vegetarian_food,
       });
     } catch (error: any) {
       console.error("[Places Details] Error:", error.message);
       res.status(500).json({ error: error.message, reviews: [] });
     }
+  });
+
+  // Google Places Search - for business discovery (with caching)
+  app.post("/api/places/search", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { query, location, radius } = req.body;
+
+      if (!query) {
+        return res.status(400).json({ error: "Search query is required" });
+      }
+
+      // Validate location and radius if provided
+      if (location) {
+        if (typeof location.latitude !== 'number' || typeof location.longitude !== 'number') {
+          return res.status(400).json({ error: "Location must have valid latitude and longitude" });
+        }
+        if (radius !== undefined && (typeof radius !== 'number' || radius <= 0)) {
+          return res.status(400).json({ error: "Radius must be a positive number" });
+        }
+      }
+
+      // Use cache to reduce API calls
+      const cacheParams = { query, location, radius };
+      const result = await placesCache.getOrFetch(
+        'places-search',
+        cacheParams,
+        async () => {
+          // Use the new Places API (Text Search) for better results
+          const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-Api-Key': apiKey,
+              'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.businessStatus,places.photos,places.primaryType'
+            },
+            body: JSON.stringify({
+              textQuery: query,
+              ...(location && { locationBias: { circle: { center: location, radius: radius || 5000 } } })
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            console.error('[Places Search] API error:', data);
+            throw new Error(data.error?.message || 'Search failed');
+          }
+
+          // Transform the new API format to be more user-friendly
+          const places = (data.places || []).map((place: any) => ({
+            placeId: place.id,
+            name: place.displayName?.text || 'Unknown',
+            address: place.formattedAddress || '',
+            location: place.location,
+            rating: place.rating || 0,
+            userRatingCount: place.userRatingCount || 0,
+            types: place.types || [],
+            primaryType: place.primaryType,
+            businessStatus: place.businessStatus,
+            photos: place.photos?.map((p: any) => p.name) || []
+          }));
+
+          return { places, count: places.length };
+        },
+        CACHE_TTL.PLACE_SEARCH
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Places Search] Error:", error.message);
+      res.status(500).json({ error: error.message, places: [] });
+    }
+  });
+
+  // Google Places Owner Report - competitive analysis (with caching)
+  app.post("/api/places/owner-report", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { businessName, radiusMiles } = req.body;
+
+      if (!businessName) {
+        return res.status(400).json({ error: "Business name is required" });
+      }
+
+      // Use cache to reduce expensive report generation
+      const cacheParams = { businessName, radiusMiles };
+      const result = await placesCache.getOrFetch(
+        'owner-report',
+        cacheParams,
+        async () => {
+          const report = await generateOwnerReport(
+            { mode: 'owner', businessName, radiusMiles },
+            apiKey
+          );
+
+          return {
+            report,
+            formatted: {
+              sms: formatOwnerReportForSms(report),
+              chat: formatOwnerReportForChat(report)
+            }
+          };
+        },
+        CACHE_TTL.OWNER_REPORT
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Owner Report] Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Google Places Marketing Search - market research (with caching)
+  app.post("/api/places/marketing-search", async (req, res) => {
+    try {
+      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "Google API key not configured" });
+      }
+
+      const { address, latitude, longitude, category, radiusMiles, minRating, maxRating, priceLevels } = req.body;
+
+      if (!category) {
+        return res.status(400).json({ error: "Category is required" });
+      }
+
+      if (!address && (!latitude || !longitude)) {
+        return res.status(400).json({ error: "Either address or latitude/longitude is required" });
+      }
+
+      // Use cache to reduce API calls
+      const cacheParams = { address, latitude, longitude, category, radiusMiles, minRating, maxRating, priceLevels };
+      const result = await placesCache.getOrFetch(
+        'marketing-search',
+        cacheParams,
+        async () => {
+          const report = await generateMarketingSearch(
+            { 
+              mode: 'marketing', 
+              address, 
+              latitude, 
+              longitude, 
+              category, 
+              radiusMiles,
+              minRating,
+              maxRating,
+              priceLevels
+            },
+            apiKey
+          );
+
+          return {
+            report,
+            formatted: {
+              sms: formatMarketingReportForSms(report),
+              chat: formatMarketingReportForChat(report)
+            }
+          };
+        },
+        CACHE_TTL.MARKETING_SEARCH
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("[Marketing Search] Error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Cache management endpoints
+  app.get("/api/places/cache/stats", (req, res) => {
+    const stats = placesCache.getStats();
+    res.json(stats);
+  });
+
+  app.post("/api/places/cache/clear", (req, res) => {
+    placesCache.clear();
+    res.json({ success: true, message: 'Cache cleared successfully' });
   });
 
   // ============ Google Workspace Integration ============
@@ -2274,6 +2654,42 @@ export async function registerRoutes(
     }
   });
 
+  // Update call log with notes and customer info
+  app.patch("/api/telephony/calls/:id", async (req, res) => {
+    try {
+      const updateSchema = z.object({
+        notes: z.string().optional(),
+        customerName: z.string().optional(),
+        customerEmail: z.string().email().optional(),
+      });
+
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const updated = await storage.updateCallLog(req.params.id, parsed.data);
+      if (!updated) {
+        return res.status(404).json({ error: "Call log not found" });
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Unified call tracking endpoint - combines database logs
+  app.get("/api/call-tracking", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const logs = await storage.getCallLogs(undefined, limit);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Update caller ID
   app.patch("/api/telephony/caller-id", async (req, res) => {
     try {
@@ -3364,6 +3780,163 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   });
 
   // ============================================
+  // BOT TEMPLATES API
+  // ============================================
+
+  app.get("/api/bot-templates", async (_req, res) => {
+    try {
+      const templates = await storage.getBotTemplates();
+      res.json(templates);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/bot-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.getBotTemplate(req.params.id);
+      if (!template) return res.status(404).json({ error: "Template not found" });
+      res.json(template);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/bot-templates", async (req, res) => {
+    try {
+      const { insertBotTemplateSchema } = await import("@shared/schema");
+      const parsed = insertBotTemplateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const template = await storage.createBotTemplate(parsed.data);
+      res.status(201).json(template);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/bot-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.updateBotTemplate(req.params.id, req.body);
+      if (!template) return res.status(404).json({ error: "Template not found" });
+      res.json(template);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/bot-templates/:id", async (req, res) => {
+    try {
+      await storage.deleteBotTemplate(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // AI GATEWAY INFO API
+  // ============================================
+
+  app.get("/api/gateway/providers", async (_req, res) => {
+    try {
+      const { getAvailableProviders } = await import('./ai-gateway');
+      res.json(getAvailableProviders());
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // PUBLIC BOT CONFIG & EMBED SCRIPT
+  // ============================================
+
+  app.get("/api/bots/:siteConfigId/public", async (req, res) => {
+    try {
+      const config = await storage.getSiteConfig(req.params.siteConfigId);
+      if (!config || !config.chatbotEnabled) {
+        return res.status(404).json({ error: "Bot not found or disabled" });
+      }
+      res.json({
+        id: config.id,
+        name: config.name,
+        ui_config: {
+          position: config.widgetPosition || 'bottom-right',
+          primaryColor: config.widgetColor || '#2563eb',
+          greetingMessage: config.greetingMessage || `Hi! How can I help you today?`,
+          placeholderText: config.placeholderText || 'Type a message...',
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/embed.js", (_req, res) => {
+    const baseUrl = `${_req.protocol}://${_req.get('host')}`;
+    const script = `(function(){
+  'use strict';
+  var API=window.GATEWAY_API_URL||'${baseUrl}';
+  var s=document.currentScript;
+  var botId=s&&s.dataset.botId;
+  if(!botId){console.error('[Gateway Bot] No bot-id');return;}
+  var config=null,isOpen=false,msgs=[],loading=false;
+  function esc(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+  function createHost(){
+    var h=document.createElement('div');h.id='gateway-bot-'+botId;document.body.appendChild(h);
+    var sh=h.attachShadow({mode:'open'});
+    var st=document.createElement('style');
+    st.textContent=':host{all:initial;font-family:system-ui,-apple-system,sans-serif}*{box-sizing:border-box;margin:0;padding:0}.gw{position:fixed;z-index:2147483647}.gw.br{bottom:16px;right:16px}.gw.bl{bottom:16px;left:16px}.gw.tr{top:16px;right:16px}.gw.tl{top:16px;left:16px}.gw-btn{width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.15);transition:transform .2s}.gw-btn:hover{transform:scale(1.05)}.gw-chat{position:absolute;bottom:72px;right:0;width:360px;max-width:calc(100vw - 32px);max-height:calc(100vh - 100px);background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.2);display:flex;flex-direction:column;overflow:hidden;animation:gw-in .2s ease-out}@keyframes gw-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}.gw-hdr{padding:16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #e5e7eb}.gw-av{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:16px}.gw-nm{font-weight:600;font-size:14px;color:#111827}.gw-st{font-size:12px;color:#10b981;display:flex;align-items:center;gap:4px}.gw-st::before{content:"";width:6px;height:6px;background:#10b981;border-radius:50%}.gw-cl{width:32px;height:32px;border:none;background:transparent;cursor:pointer;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#6b7280}.gw-cl:hover{background:#f3f4f6}.gw-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:300px;max-height:400px}.gw-msg{display:flex;gap:8px;max-width:85%}.gw-msg.u{align-self:flex-end}.gw-bbl{padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.5;word-break:break-word}.gw-msg.a .gw-bbl{background:#f3f4f6;color:#111827;border-bottom-left-radius:4px}.gw-msg.u .gw-bbl{color:#fff;border-bottom-right-radius:4px}.gw-typ{display:flex;gap:4px;padding:12px 14px;background:#f3f4f6;border-radius:16px;border-bottom-left-radius:4px;width:fit-content}.gw-dot{width:6px;height:6px;background:#9ca3af;border-radius:50%;animation:gw-b 1.4s infinite ease-in-out both}.gw-dot:nth-child(1){animation-delay:-.32s}.gw-dot:nth-child(2){animation-delay:-.16s}@keyframes gw-b{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}.gw-inp{padding:12px 16px;border-top:1px solid #e5e7eb;display:flex;gap:8px}.gw-inp input{flex:1;padding:10px 14px;border:1px solid #e5e7eb;border-radius:24px;font-size:14px;outline:none}.gw-inp button{width:40px;height:40px;border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center}.gw-inp button:disabled{opacity:.5;cursor:not-allowed}.gw-empty{text-align:center;padding:32px 16px;color:#9ca3af}@media(max-width:480px){.gw-chat{position:fixed;bottom:80px!important;right:16px!important;left:16px!important;width:auto!important}}';
+    sh.appendChild(st);return{host:h,shadow:sh};
+  }
+  async function fetchCfg(){
+    try{var r=await fetch(API+'/api/bots/'+botId+'/public');if(!r.ok)throw 0;config=await r.json();}
+    catch(e){config={name:'Bot',ui_config:{position:'bottom-right',primaryColor:'#2563eb',greetingMessage:'Hello! How can I help?',placeholderText:'Type a message...'}};}
+  }
+  async function send(txt,shadow){
+    if(!txt.trim()||loading)return;
+    msgs.push({role:'user',content:txt});loading=true;render(shadow);
+    try{
+      var r=await fetch(API+'/api/website-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:txt,siteConfigId:botId,visitorId:'embed-'+Date.now(),history:msgs.filter(function(m){return m.role!=='system';}).slice(-10)})});
+      var d=await r.json();msgs.push({role:'assistant',content:d.response||'Sorry, I could not respond.'});
+    }catch(e){msgs.push({role:'assistant',content:'Sorry, something went wrong.'});}
+    loading=false;render(shadow);
+  }
+  function render(shadow){
+    var w=shadow.querySelector('.gw')||document.createElement('div');
+    var pos=config&&config.ui_config&&config.ui_config.position||'bottom-right';
+    var posClass=pos==='bottom-left'?'bl':pos==='top-right'?'tr':pos==='top-left'?'tl':'br';
+    w.className='gw '+posClass;w.innerHTML='';
+    var pc=config&&config.ui_config&&config.ui_config.primaryColor||'#2563eb';
+    if(!isOpen){
+      w.innerHTML='<button class="gw-btn" style="background:'+pc+'"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>';
+      w.querySelector('.gw-btn').onclick=function(){isOpen=true;render(shadow);};
+    }else{
+      var gm=config&&config.ui_config&&config.ui_config.greetingMessage||'Hello!';
+      var ph=config&&config.ui_config&&config.ui_config.placeholderText||'Type a message...';
+      var nm=config&&config.name||'Bot';
+      var html='<div class="gw-chat"><div class="gw-hdr"><div class="gw-av" style="background:'+pc+'">'+nm[0].toUpperCase()+'</div><div style="flex:1"><div class="gw-nm">'+esc(nm)+'</div><div class="gw-st">Online</div></div><button class="gw-cl"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div><div class="gw-msgs">';
+      if(msgs.length===0){html+='<div class="gw-empty"><p>'+esc(gm)+'</p></div>';}
+      else{msgs.forEach(function(m){html+='<div class="gw-msg '+(m.role==='user'?'u':'a')+'"><div class="gw-bbl" style="'+(m.role==='user'?'background:'+pc:'')+'">'+ esc(m.content)+'</div></div>';});}
+      if(loading){html+='<div class="gw-msg a"><div class="gw-typ"><span class="gw-dot"></span><span class="gw-dot"></span><span class="gw-dot"></span></div></div>';}
+      html+='</div><div class="gw-inp"><input type="text" placeholder="'+esc(ph)+'"/><button style="background:'+pc+'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button></div></div>';
+      w.innerHTML=html;
+      w.querySelector('.gw-cl').onclick=function(){isOpen=false;render(shadow);};
+      var inp=w.querySelector('.gw-inp input');var btn=w.querySelector('.gw-inp button');
+      btn.onclick=function(){var v=inp.value.trim();if(v){inp.value='';send(v,shadow);}};
+      inp.onkeydown=function(e){if(e.key==='Enter')btn.click();};
+      var msgArea=w.querySelector('.gw-msgs');if(msgArea)msgArea.scrollTop=msgArea.scrollHeight;
+    }
+    if(!shadow.contains(w))shadow.appendChild(w);
+  }
+  async function init(){await fetchCfg();var c=createHost();render(c.shadow);}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();`;
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(script);
+  });
+
+  // ============================================
   // SITE CONFIG (AI BIZ BOT ADMIN) API
   // ============================================
 
@@ -3455,6 +4028,327 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   });
 
   // ============================================
+  // OG META TAG MANAGEMENT API
+  // ============================================
+
+  app.get("/api/admin/og-settings", async (_req, res) => {
+    try {
+      const settings = await storage.getAllOgSettings();
+      res.json({ settings, defaults: DEFAULT_OG });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/admin/og-settings", async (req, res) => {
+    try {
+      const { pagePath, ogTitle, ogDescription, ogUrl, ogImage, ogType, ogSiteName, twitterCard } = req.body;
+      if (!pagePath || !ogTitle || !ogDescription) {
+        return res.status(400).json({ error: "Page path, title, and description are required" });
+      }
+      const result = await storage.upsertOgSettings({
+        pagePath: pagePath.startsWith("/") ? pagePath : `/${pagePath}`,
+        ogTitle,
+        ogDescription,
+        ogUrl: ogUrl || null,
+        ogImage: ogImage || null,
+        ogType: ogType || "website",
+        ogSiteName: ogSiteName || null,
+        twitterCard: twitterCard || "summary_large_image",
+      });
+      res.json({ success: true, settings: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/admin/og-settings/:id", async (req, res) => {
+    try {
+      await storage.deleteOgSettings(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // SITES & LEADS ADMIN API
+  // ============================================
+
+  app.get("/api/admin/sites/summary", async (_req, res) => {
+    try {
+      const sites = await storage.getSiteConfigs();
+      const summaries = await Promise.all(sites.map(async (site) => {
+        const logs = await storage.getChatLogs(site.id, 10000);
+        const uniqueVisitors = new Set(logs.filter(l => l.visitorId).map(l => l.visitorId));
+        const lastActivity = logs.length > 0 ? logs[0].createdAt : null;
+        const placeData = site.placeData as any;
+        return {
+          id: site.id,
+          name: site.name,
+          domain: site.domain,
+          placeId: site.placeId,
+          chatbotEnabled: site.chatbotEnabled,
+          voiceConciergeEnabled: site.voiceConciergeEnabled,
+          createdAt: site.createdAt,
+          updatedAt: site.updatedAt,
+          totalVisitors: uniqueVisitors.size,
+          totalMessages: logs.length,
+          lastActivity,
+          businessPhone: placeData?.phone || null,
+          businessAddress: placeData?.address || null,
+          industry: placeData?.industry || null,
+          rating: placeData?.rating || null,
+          reviewCount: placeData?.reviewCount || null,
+        };
+      }));
+      summaries.sort((a, b) => (b.totalMessages || 0) - (a.totalMessages || 0));
+      res.json(summaries);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/admin/sites/:id/visitors", async (req, res) => {
+    try {
+      const logs = await storage.getChatLogs(req.params.id, 10000);
+      const visitorMap = new Map<string, { visitorId: string; messageCount: number; firstSeen: Date | null; lastSeen: Date | null }>();
+      for (const log of logs) {
+        const vid = log.visitorId || "anonymous";
+        if (!visitorMap.has(vid)) {
+          visitorMap.set(vid, { visitorId: vid, messageCount: 0, firstSeen: log.createdAt, lastSeen: log.createdAt });
+        }
+        const v = visitorMap.get(vid)!;
+        v.messageCount++;
+        if (log.createdAt && (!v.firstSeen || log.createdAt < v.firstSeen)) v.firstSeen = log.createdAt;
+        if (log.createdAt && (!v.lastSeen || log.createdAt > v.lastSeen)) v.lastSeen = log.createdAt;
+      }
+      const visitors = Array.from(visitorMap.values()).sort((a, b) => (b.lastSeen?.getTime() || 0) - (a.lastSeen?.getTime() || 0));
+      res.json(visitors);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/admin/sites/:id/chat-history", async (req, res) => {
+    try {
+      const visitorId = req.query.visitorId as string | undefined;
+      const logs = await storage.getChatLogs(req.params.id, 10000);
+      const filtered = visitorId ? logs.filter(l => l.visitorId === visitorId) : logs;
+      filtered.sort((a, b) => (a.createdAt?.getTime() || 0) - (b.createdAt?.getTime() || 0));
+      res.json(filtered);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/admin/sites/analytics", async (_req, res) => {
+    try {
+      const sites = await storage.getSiteConfigs();
+      let totalVisitors = 0;
+      let totalMessages = 0;
+      let activeSites = 0;
+      for (const site of sites) {
+        const logs = await storage.getChatLogs(site.id, 10000);
+        const uniqueVisitors = new Set(logs.filter(l => l.visitorId).map(l => l.visitorId));
+        totalVisitors += uniqueVisitors.size;
+        totalMessages += logs.length;
+        if (logs.length > 0) activeSites++;
+      }
+      res.json({ totalSites: sites.length, activeSites, totalVisitors, totalMessages });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/admin/sites/leads", async (_req, res) => {
+    try {
+      const sites = await storage.getSiteConfigs();
+      const prospects = await storage.getVlmProspects({ limit: 10000 });
+      const leads = sites.map(site => {
+        const placeData = site.placeData as any;
+        const matchedProspect = prospects.find(p => p.googlePlaceId && p.googlePlaceId === site.placeId);
+        return {
+          siteId: site.id,
+          siteName: site.name,
+          placeId: site.placeId,
+          domain: site.domain,
+          chatbotEnabled: site.chatbotEnabled,
+          voiceConciergeEnabled: site.voiceConciergeEnabled,
+          createdAt: site.createdAt,
+          businessPhone: placeData?.phone || matchedProspect?.phone || null,
+          businessAddress: placeData?.address || null,
+          industry: placeData?.industry || matchedProspect?.industry || null,
+          rating: placeData?.rating || null,
+          reviewCount: placeData?.reviewCount || null,
+          prospectId: matchedProspect?.id || null,
+          qualityScore: matchedProspect?.qualityScore || null,
+          prospectStatus: matchedProspect?.status || null,
+          smsSent: matchedProspect?.notes?.includes("SMS sent") || false,
+          siteGenerated: matchedProspect?.notes?.includes("Site generated") || false,
+        };
+      });
+      res.json(leads);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================
+  // ADMIN COMMAND CHAT API
+  // ============================================
+  app.post("/api/admin/command-chat", async (req, res) => {
+    try {
+      const chatSchema = z.object({
+        agentId: z.string().min(1),
+        message: z.string().min(1).max(4000),
+        history: z.array(z.object({
+          role: z.enum(['user', 'assistant']),
+          content: z.string(),
+        })).max(20).optional().default([]),
+      });
+
+      const parsed = chatSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const { agentId, message, history } = parsed.data;
+
+      const agent = await storage.getAgent(agentId);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+
+      // Gather live business context
+      let businessContext = '';
+      try {
+        const sites = await storage.getSiteConfigs();
+        const customers = await storage.getCustomers();
+        const allChatLogs: any[] = [];
+        for (const site of sites.slice(0, 50)) {
+          const logs = await storage.getChatLogs(site.id, 200);
+          allChatLogs.push(...logs);
+        }
+        const chatLogs = allChatLogs;
+        const prospects = await storage.getVlmProspects({ limit: 10000 });
+        const campaigns = await storage.getVlmCampaigns();
+
+        const activeSites = sites.filter(s => s.chatbotEnabled || s.voiceConciergeEnabled);
+        const totalVisitors = new Set(chatLogs.map((l: any) => l.visitorId).filter(Boolean)).size;
+        const totalMessages = chatLogs.length;
+        const wonProspects = prospects.filter(p => p.status === 'won');
+        const calledProspects = prospects.filter(p => p.status === 'called');
+        const newCustomers = customers.filter((c: any) => c.status === 'new');
+        const activeCustomers = customers.filter((c: any) => c.status === 'active');
+
+        businessContext = `\n\n--- ADMIN BUSINESS CONTEXT (LIVE DATA) ---
+SITES: ${sites.length} total, ${activeSites.length} active (with chatbot/voice enabled)
+VISITORS: ${totalVisitors} unique visitors across all sites
+MESSAGES: ${totalMessages} total chat messages
+CUSTOMERS: ${customers.length} total (${newCustomers.length} new, ${activeCustomers.length} active)
+LEADS/PROSPECTS: ${prospects.length} total, ${calledProspects.length} called, ${wonProspects.length} converted
+CAMPAIGNS: ${campaigns.length || 0} VLM campaigns
+
+Top Sites by Activity:`;
+
+        const sitesWithCounts = sites.map(s => {
+          const siteLogs = chatLogs.filter((l: any) => l.siteConfigId === s.id);
+          const visitors = new Set(siteLogs.map((l: any) => l.visitorId).filter(Boolean)).size;
+          return { name: s.name, visitors, messages: siteLogs.length, chatbot: s.chatbotEnabled, voice: s.voiceConciergeEnabled };
+        }).sort((a, b) => b.messages - a.messages).slice(0, 10);
+
+        sitesWithCounts.forEach(s => {
+          businessContext += `\n- ${s.name}: ${s.visitors} visitors, ${s.messages} messages${s.chatbot ? ' [Chat]' : ''}${s.voice ? ' [Voice]' : ''}`;
+        });
+
+        if (customers.length > 0) {
+          businessContext += `\n\nRecent Customers:`;
+          customers.slice(0, 5).forEach((c: any) => {
+            businessContext += `\n- ${c.name} (${c.status})${c.phone ? ' Ph:' + c.phone : ''}${c.email ? ' ' + c.email : ''}`;
+          });
+        }
+
+        if (prospects.length > 0) {
+          businessContext += `\n\nRecent Prospects:`;
+          prospects.slice(0, 5).forEach((p: any) => {
+            businessContext += `\n- ${p.businessName} (${p.status}, score:${p.qualityScore || 'N/A'})${p.phone ? ' Ph:' + p.phone : ''}`;
+          });
+        }
+
+        businessContext += `\n--- END BUSINESS CONTEXT ---`;
+      } catch (contextError) {
+        console.warn('Failed to gather business context:', contextError);
+        businessContext = '\n\n[Business context unavailable - some data could not be loaded]';
+      }
+
+      // Build admin-enhanced system prompt
+      const discProfile = `D:${agent.dominance} I:${agent.influence} S:${agent.steadiness} C:${agent.conscientiousness}`;
+      const systemPrompt = (agent.systemPrompt || `You are ${agent.name}, a helpful AI assistant with DISC profile: ${discProfile}. Voice style: ${agent.voiceName}.`) + `
+
+You are in ADMIN COMMAND MODE. The admin is using you to manage and monitor business operations. You have access to live business data below.
+
+Your capabilities in this mode:
+- Report on site analytics, visitor activity, and chat history
+- Analyze lead quality scores and conversion rates
+- Summarize customer status and pipeline health
+- Advise on VoiceLeadMachine campaign strategy
+- Help configure agent settings and telephony
+- Provide actionable business intelligence and recommendations
+
+Be direct, data-driven, and actionable. Reference specific numbers from the live data. If the admin asks about something not in the data, say what data you do have and suggest how to get more.
+${businessContext}`;
+
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        ...history.slice(-10).map((m: any) => ({
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+        })),
+        { role: 'user' as const, content: message },
+      ];
+
+      const agentModel = agent.aiModelId || 'kimi-k2-turbo-preview';
+      const agentTemp = agent.aiTemperature ? agent.aiTemperature / 100 : 0.7;
+      const agentMaxTokens = agent.aiMaxTokens || 4096;
+
+      let modelToUse: string;
+      if (agentModel === 'kimi-k2.5' || agentModel === 'kimi-k2-5') {
+        modelToUse = KIMI_MODELS.K2_5;
+      } else if (agentModel === 'kimi-k2-thinking') {
+        modelToUse = KIMI_MODELS.K2_THINKING;
+      } else if (agentModel.startsWith('kimi-') || agentModel.startsWith('moonshot-')) {
+        modelToUse = agentModel;
+      } else {
+        modelToUse = KIMI_MODELS.K2_TURBO;
+      }
+
+      let response: string;
+      try {
+        response = await chat({
+          model: modelToUse,
+          messages,
+          temperature: agentTemp,
+          max_tokens: agentMaxTokens,
+        });
+      } catch (firstError: any) {
+        console.warn('Admin command chat first attempt failed, retrying:', firstError.message);
+        response = await chat({
+          model: modelToUse,
+          messages,
+          temperature: agentTemp,
+          max_tokens: agentMaxTokens,
+        });
+      }
+
+      res.json({ response });
+    } catch (error: any) {
+      console.error('Admin command chat error:', error);
+      res.status(500).json({ error: error.message || 'Failed to generate response' });
+    }
+  });
+
+  // ============================================
   // PUBLIC AGENT CHAT API
   // ============================================
 
@@ -3481,7 +4375,39 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
       const { message, businessName, businessAddress, businessPhone, siteConfigId, visitorId, history } = parsed.data;
 
-      const systemPrompt = `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
+      let siteConfig: any = null;
+      let resolvedProvider: any = 'kimi';
+      let resolvedModel: string | undefined;
+      let customSystemPrompt: string | undefined;
+
+      const isPlatformChat = siteConfigId === 'platform-landing';
+
+      if (siteConfigId && !isPlatformChat) {
+        siteConfig = await storage.getSiteConfig(siteConfigId);
+        if (siteConfig) {
+          resolvedProvider = siteConfig.modelProvider || 'kimi';
+          resolvedModel = siteConfig.modelName || undefined;
+          customSystemPrompt = siteConfig.systemPromptOverride || undefined;
+        }
+      }
+
+      let systemPrompt: string;
+      if (isPlatformChat) {
+        systemPrompt = `You are Gateway AI, the helpful assistant for AI Biz Bot by Gateway Global AI. You help visitors understand the platform and its services.
+
+Key information about the platform:
+- We create FREE professional AI-powered websites for small businesses
+- Websites are generated from Google Maps/Places data automatically
+- Every website comes with an AI chat concierge and voice AI assistant
+- No credit card required for the free plan
+- Plans: Free (1 business, static site, shared SMS, 500 voice minutes), Business ($49/mo, 5 businesses, edit content, review management, SMS admin), Business Voice ($99/mo, dedicated phone, unlimited voice, custom voice persona), Enterprise (custom pricing, API access, white-label)
+- Websites are built using real Google Maps data: reviews, photos, hours, location
+- Business owners can manage their sites from the My Account dashboard
+- The platform uses Kimi 2.5 AI for intelligent responses
+
+Be friendly, concise, and helpful. Encourage visitors to try it out by searching for their business. Keep responses brief since this is a chat widget. If asked about technical details you don't know, suggest they contact us.`;
+      } else {
+        systemPrompt = customSystemPrompt || `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
 
 Business details:
 - Name: ${businessName || 'N/A'}
@@ -3489,31 +4415,33 @@ Business details:
 - Phone: ${businessPhone || 'N/A'}
 
 You are helpful, concise, and conversational. Answer questions about the business, help with directions, hours, and services. If you don't know something specific, suggest the visitor call or visit. Keep responses brief since this is a chat widget.`;
+      }
 
-      const messages = [
+      const gatewayMessages = [
         { role: 'system' as const, content: systemPrompt },
-        ...history.map(h => ({ role: h.role as 'user' | 'assistant', content: h.content })),
+        ...history.map(h => ({ role: h.role as 'user' | 'assistant' as const, content: h.content })),
         { role: 'user' as const, content: message },
       ];
 
-      const { chat, KIMI_MODELS } = await import('./kimi');
-      const response = await chat({
-        messages,
-        model: KIMI_MODELS.K2_TURBO,
+      const { gatewayChat } = await import('./ai-gateway');
+      const result = await gatewayChat({
+        messages: gatewayMessages,
+        provider: resolvedProvider,
+        model: resolvedModel,
         temperature: 0.7,
         max_tokens: 500,
       });
 
-      if (siteConfigId) {
+      if (siteConfigId && !isPlatformChat) {
         try {
           await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'user', content: message });
-          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'assistant', content: response });
+          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'assistant', content: result.response });
         } catch (logErr) {
           console.error("[Website Chat] Failed to log chat:", logErr);
         }
       }
 
-      res.json({ response });
+      res.json({ response: result.response, provider: result.provider, model: result.model });
     } catch (error: any) {
       console.error("[Website Chat] Error:", error.message);
       res.status(500).json({ error: "Failed to get response" });
@@ -4444,12 +5372,12 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
-  // Kimi-Audio enhanced voice webhook - uses Media Streams for real-time AI voice
+  // Gemini voice webhook - uses Media Streams for real-time AI voice (KIMI not used for voice)
   app.post("/webhook/voice/kimi", validateTwilioSignature, async (req, res) => {
     try {
       const { From, To, CallSid, CallStatus } = req.body;
       
-      console.log(`[Kimi Voice] From: ${From}, To: ${To}, Status: ${CallStatus}`);
+      console.log(`[Voice] From: ${From}, To: ${To}, Status: ${CallStatus}`);
       
       // Log the call
       const config = await storage.getTelephonyConfig();
@@ -4470,7 +5398,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         );
         
         if (!isAllowed) {
-          console.log(`[Kimi Voice] Blocked caller: ${From}`);
+          console.log(`[Voice] Blocked caller: ${From}`);
           res.set('Content-Type', 'text/xml');
           return res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -4486,16 +5414,16 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       const wsProtocol = host.includes('localhost') ? 'ws' : 'wss';
       const streamUrl = `${wsProtocol}://${host}/ws/voice-stream`;
       
-      console.log(`[Kimi Voice] Stream URL: ${streamUrl}`);
+      console.log(`[Voice] Stream URL: ${streamUrl}`);
       
-      // Return TwiML with Media Streams
+      // Return TwiML with Media Streams (voice pipeline uses Gemini)
       res.set('Content-Type', 'text/xml');
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-F">Welcome to Gateway Global AI. I'm connecting you to Kimi, our AI assistant.</Say>
+  <Say voice="Google.en-US-Neural2-F">Welcome to Gateway Global AI. Connecting you to our AI assistant now.</Say>
   <Connect>
     <Stream url="${streamUrl}">
-      <Parameter name="agentName" value="Kimi"/>
+      <Parameter name="agentName" value="AI Assistant"/>
       <Parameter name="personality" value="helpful"/>
     </Stream>
   </Connect>
@@ -4503,7 +5431,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 </Response>`);
       
     } catch (error: any) {
-      console.error('[Kimi Voice] Error:', error);
+      console.error('[Voice] Error:', error);
       res.set('Content-Type', 'text/xml');
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -5775,6 +6703,262 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ============================================
+  // VOICE ADMIN API
+  // ============================================
+  
+  // Get voice configuration for an agent
+  app.get("/api/voice/config/:agentId", async (req, res) => {
+    try {
+      const { agentId } = req.params;
+      
+      const agent = await storage.getAgent(agentId);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      
+      res.json({
+        model: agent.voiceModel || 'gemini-2.5-flash-native-audio-preview',
+        voice: agent.voiceName || 'Puck',
+        role: agent.voiceRole || 'AI Business Assistant',
+        companyName: agent.voiceCompanyName || 'AI Biz Bot',
+        systemPrompt: agent.systemPrompt || 'You are a helpful AI assistant for small businesses.',
+        voicePersona: agent.voicePersona || 'friendly',
+      });
+    } catch (error: any) {
+      console.error("[Voice Admin] Get config error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Update voice configuration for an agent
+  app.post("/api/voice/config/:agentId", async (req, res) => {
+    try {
+      const { agentId } = req.params;
+      const { model, voice, role, companyName, systemPrompt, voicePersona } = req.body;
+      
+      // Validate inputs
+      const validModels = [
+        'gemini-2.5-flash-native-audio-preview-12-2025',
+        'gemini-2.5-flash-native-audio-preview',
+        'gemini-2.5-flash-latest',
+        'gemini-2.0-flash-native-audio',
+      ];
+      
+      if (model && !validModels.includes(model)) {
+        return res.status(400).json({ error: "Invalid model specified" });
+      }
+      
+      const agent = await storage.getAgent(agentId);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      
+      // Update voice configuration
+      const updates: any = {};
+      if (model !== undefined) updates.voiceModel = model;
+      if (voice !== undefined) updates.voiceName = voice;
+      if (role !== undefined) updates.voiceRole = role;
+      if (companyName !== undefined) updates.voiceCompanyName = companyName;
+      if (systemPrompt !== undefined) updates.systemPrompt = systemPrompt;
+      if (voicePersona !== undefined) updates.voicePersona = voicePersona;
+      
+      const updatedAgent = await storage.updateAgent(agentId, updates);
+      
+      res.json({
+        success: true,
+        config: {
+          model: updatedAgent.voiceModel,
+          voice: updatedAgent.voiceName,
+          role: updatedAgent.voiceRole,
+          companyName: updatedAgent.voiceCompanyName,
+          systemPrompt: updatedAgent.systemPrompt,
+          voicePersona: updatedAgent.voicePersona,
+        }
+      });
+    } catch (error: any) {
+      console.error("[Voice Admin] Update config error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Get available voices for a model
+  app.get("/api/voice/models/:modelId/voices", (req, res) => {
+    const { modelId } = req.params;
+    
+    const modelVoices: Record<string, Array<{ id: string; name: string; gender: string; description: string }>> = {
+      'gemini-2.5-flash-native-audio-preview-12-2025': [
+        { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
+        { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+        { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+      ],
+      'gemini-2.5-flash-native-audio-preview': [
+        { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
+        { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+        { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+      ],
+      'gemini-2.5-flash-latest': [
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+      ],
+      'gemini-2.0-flash-native-audio': [
+        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
+        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
+        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
+        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
+      ],
+    };
+    
+    const voices = modelVoices[modelId] || modelVoices['gemini-2.5-flash-native-audio-preview-12-2025'];
+    res.json({ voices });
+  });
+  
+  // ============================================
+  // PUSH-TO-TALK API
+  // ============================================
+  
+  // Process PTT audio recording
+  app.post("/api/ptt/process", async (req, res) => {
+    try {
+      const { audioBase64, agentId, conversationHistory } = req.body;
+      
+      if (!audioBase64) {
+        return res.status(400).json({ error: "Audio data required" });
+      }
+      
+      // Get agent configuration
+      let config: any = {
+        agentId: agentId || 'default',
+        model: 'gemini-2.5-flash-native-audio-preview',
+        voice: 'Puck',
+        systemPrompt: 'You are a helpful AI assistant for small businesses.'
+      };
+      
+      if (agentId) {
+        const agent = await storage.getAgent(agentId);
+        if (agent) {
+          config = {
+            agentId,
+            model: agent.voiceModel || config.model,
+            voice: agent.voiceName || config.voice,
+            systemPrompt: agent.systemPrompt || config.systemPrompt
+          };
+        }
+      }
+      
+      // Convert base64 to buffer
+      const audioBuffer = Buffer.from(audioBase64, 'base64');
+      
+      // Process with PTT service
+      const { getPTTService } = await import('./pttService');
+      const pttService = getPTTService();
+      const result = await pttService.processPTTAudio(
+        audioBuffer,
+        config,
+        conversationHistory || []
+      );
+      
+      if (!result.success) {
+        return res.status(500).json({ error: result.error });
+      }
+      
+      res.json({
+        success: true,
+        transcript: result.transcript,
+        responseText: result.responseText,
+        responseAudio: result.responseAudio?.toString('base64')
+      });
+    } catch (error: any) {
+      console.error("[PTT] Process error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Transcribe audio only (STT)
+  app.post("/api/ptt/transcribe", async (req, res) => {
+    try {
+      const { audioBase64 } = req.body;
+      
+      if (!audioBase64) {
+        return res.status(400).json({ error: "Audio data required" });
+      }
+      
+      const audioBuffer = Buffer.from(audioBase64, 'base64');
+      
+      const { getPTTService } = await import('./pttService');
+      const pttService = getPTTService();
+      const result = await pttService.transcribeAudio(audioBuffer);
+      
+      if (!result.success) {
+        return res.status(500).json({ error: result.error });
+      }
+      
+      res.json({
+        success: true,
+        transcript: result.transcript
+      });
+    } catch (error: any) {
+      console.error("[PTT] Transcribe error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+  // Generate speech from text (TTS)
+  app.post("/api/ptt/synthesize", async (req, res) => {
+    try {
+      const { text, voice } = req.body;
+      
+      if (!text) {
+        return res.status(400).json({ error: "Text required" });
+      }
+      
+      const { getPTTService } = await import('./pttService');
+      const pttService = getPTTService();
+      const result = await pttService.generateSpeech(text, voice || 'Puck');
+      
+      if (!result.success) {
+        return res.status(500).json({ error: result.error });
+      }
+      
+      res.json({
+        success: true,
+        audio: result.audio?.toString('base64')
+      });
+    } catch (error: any) {
+      console.error("[PTT] Synthesize error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  registerVlmRoutes(app);
+
+  // Register Agent System routes
+  registerAgentRoutes(app);
+
+  // Register Workspace Onboarding routes
+  registerWorkspaceOnboardingRoutes(app);
+
+  // Register Knowledge Base routes
+  app.use("/api/knowledge", knowledgeRoutes);
+
+  // Register Menu and Cart routes
+  registerMenuRoutes(app);
+
+  // Register Inquiry routes
+  registerInquiryRoutes(app);
 
   return httpServer;
 }

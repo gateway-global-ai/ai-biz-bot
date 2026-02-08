@@ -1,0 +1,1 @@
+Google Cloud's Text-to-Speech service, which powers many of the GenAI audio capabilities, offers a wide selection of voices. You can choose from over 380 voices across more than 75 languages and variants . This includes various types like WaveNet, Neural2, and the newer Chirp 3 HD voices, along with specialized voices like Gemini-TTS for controlled speech generation.

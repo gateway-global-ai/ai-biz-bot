@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, CheckCircle2, Sparkles, MessageSquare, Clock, ArrowRight, Target, Users, Shield, Search, Mic, type LucideIcon } from 'lucide-react';
+import headerLogo from '@assets/Pidea_logo_header_(7)_1770381083770.png';
 import { apiRequest } from '@/lib/queryClient';
 
 type Step = 'input' | 'personality' | 'submitting' | 'success';
@@ -109,8 +110,8 @@ export default function MvpLanding() {
       </div>
 
       <nav className="relative z-20 border-b border-white/10 bg-black/20 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-          <span className="text-white font-bold text-lg">Gateway Global AI</span>
+        <div className="container mx-auto px-4 py-2 flex items-center justify-between gap-3">
+          <img src={headerLogo} alt="Gateway Global AI Biz Bot" className="h-16 object-contain" data-testid="img-header-logo" />
           <div className="flex items-center gap-3">
             <Link href="/kimi-audio">
               <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-voice-ai">

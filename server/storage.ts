@@ -43,10 +43,25 @@ import {
   type InsertProjectTask,
   type DemoLead,
   type InsertDemoLead,
+  type BotTemplate,
+  type InsertBotTemplate,
   type SiteConfig,
   type InsertSiteConfig,
   type ChatLog,
   type InsertChatLog,
+  type CustomerAccount,
+  type InsertCustomerAccount,
+  type CustomerSession,
+  type InsertCustomerSession,
+  type VlmProspect,
+  type InsertVlmProspect,
+  type VlmCampaign,
+  type InsertVlmCampaign,
+  type VlmCallAttempt,
+  type InsertVlmCallAttempt,
+  type Inquiry,
+  type InsertInquiry,
+  botTemplates,
   telephonyConfigs,
   callLogs,
   users,
@@ -70,7 +85,14 @@ import {
   projectTasks,
   demoLeads,
   siteConfigs,
-  chatLogs
+  chatLogs,
+  customerAccounts,
+  customerSessions,
+  vlmProspects,
+  vlmCampaigns,
+  vlmCallAttempts,
+  ogSettings,
+  inquiries
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
@@ -169,7 +191,15 @@ export interface IStorage {
   createDemoLead(lead: InsertDemoLead): Promise<DemoLead>;
   getDemoLeadByToken(token: string): Promise<DemoLead | undefined>;
   getDemoLeadByPhone(phone: string): Promise<DemoLead | undefined>;
+  getAllDemoLeads(): Promise<DemoLead[]>;
   updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined>;
+  
+  // Bot Template operations
+  getBotTemplates(): Promise<BotTemplate[]>;
+  getBotTemplate(id: string): Promise<BotTemplate | undefined>;
+  createBotTemplate(template: InsertBotTemplate): Promise<BotTemplate>;
+  updateBotTemplate(id: string, updates: Partial<InsertBotTemplate>): Promise<BotTemplate | undefined>;
+  deleteBotTemplate(id: string): Promise<boolean>;
   
   // Site Config operations
   getSiteConfigs(): Promise<SiteConfig[]>;
@@ -183,6 +213,49 @@ export interface IStorage {
   // Chat Log operations
   getChatLogs(siteConfigId: string, limit?: number): Promise<ChatLog[]>;
   createChatLog(log: InsertChatLog): Promise<ChatLog>;
+
+  // Customer Account operations
+  getCustomerAccountByPhone(phone: string): Promise<CustomerAccount | undefined>;
+  getCustomerAccountById(id: string): Promise<CustomerAccount | undefined>;
+  createCustomerAccount(account: InsertCustomerAccount): Promise<CustomerAccount>;
+  updateCustomerAccount(id: string, updates: Partial<InsertCustomerAccount>): Promise<CustomerAccount | undefined>;
+  updateCustomerAccountLastLogin(id: string): Promise<void>;
+
+  // Customer Session operations
+  createCustomerSession(session: InsertCustomerSession): Promise<CustomerSession>;
+  getValidCustomerSession(token: string): Promise<CustomerSession | undefined>;
+  deleteCustomerSession(token: string): Promise<void>;
+
+  // Site Config by owner
+  getSiteConfigsByOwner(ownerId: string): Promise<SiteConfig[]>;
+  claimUnlinkedSitesByPhone(phone: string, customerAccountId: string): Promise<number>;
+
+  // VLM Prospect operations
+  getVlmProspects(options?: { industry?: string; city?: string; status?: string; limit?: number }): Promise<VlmProspect[]>;
+  getVlmProspect(id: string): Promise<VlmProspect | undefined>;
+  getVlmProspectByPlaceId(placeId: string): Promise<VlmProspect | undefined>;
+  createVlmProspect(prospect: InsertVlmProspect): Promise<VlmProspect>;
+  createVlmProspects(prospects: InsertVlmProspect[]): Promise<VlmProspect[]>;
+  updateVlmProspect(id: string, updates: Partial<InsertVlmProspect>): Promise<VlmProspect | undefined>;
+  deleteVlmProspect(id: string): Promise<boolean>;
+
+  // VLM Campaign operations
+  getVlmCampaigns(): Promise<VlmCampaign[]>;
+  getVlmCampaign(id: string): Promise<VlmCampaign | undefined>;
+  createVlmCampaign(campaign: InsertVlmCampaign): Promise<VlmCampaign>;
+  updateVlmCampaign(id: string, updates: Partial<InsertVlmCampaign>): Promise<VlmCampaign | undefined>;
+  deleteVlmCampaign(id: string): Promise<boolean>;
+
+  // VLM Call Attempt operations
+  getVlmCallAttempts(options?: { campaignId?: string; prospectId?: string; limit?: number }): Promise<VlmCallAttempt[]>;
+  getVlmCallAttemptByCallSid(callSid: string): Promise<VlmCallAttempt | undefined>;
+  createVlmCallAttempt(attempt: InsertVlmCallAttempt): Promise<VlmCallAttempt>;
+  updateVlmCallAttempt(id: string, updates: Partial<InsertVlmCallAttempt>): Promise<VlmCallAttempt | undefined>;
+
+  getOgSettingsByPath(pagePath: string): Promise<any | undefined>;
+  getAllOgSettings(): Promise<any[]>;
+  upsertOgSettings(settings: any): Promise<any>;
+  deleteOgSettings(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -239,6 +312,19 @@ export class DatabaseStorage implements IStorage {
   async createCallLog(log: InsertCallLog): Promise<CallLog> {
     const [created] = await db.insert(callLogs).values(log).returning();
     return created;
+  }
+
+  async getCallLog(id: string): Promise<CallLog | undefined> {
+    const [log] = await db.select().from(callLogs).where(eq(callLogs.id, id));
+    return log;
+  }
+
+  async updateCallLog(id: string, updates: Partial<InsertCallLog>): Promise<CallLog | undefined> {
+    const [updated] = await db.update(callLogs)
+      .set(updates)
+      .where(eq(callLogs.id, id))
+      .returning();
+    return updated;
   }
 
   // Agent operations
@@ -790,9 +876,40 @@ export class DatabaseStorage implements IStorage {
     return lead;
   }
 
+  async getAllDemoLeads(): Promise<DemoLead[]> {
+    return db.select().from(demoLeads).orderBy(desc(demoLeads.createdAt));
+  }
+
   async updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined> {
     const [updated] = await db.update(demoLeads).set(updates).where(eq(demoLeads.id, id)).returning();
     return updated;
+  }
+
+  async getBotTemplates(): Promise<BotTemplate[]> {
+    return db.select().from(botTemplates).orderBy(desc(botTemplates.createdAt));
+  }
+
+  async getBotTemplate(id: string): Promise<BotTemplate | undefined> {
+    const [template] = await db.select().from(botTemplates).where(eq(botTemplates.id, id));
+    return template;
+  }
+
+  async createBotTemplate(template: InsertBotTemplate): Promise<BotTemplate> {
+    const [created] = await db.insert(botTemplates).values(template).returning();
+    return created;
+  }
+
+  async updateBotTemplate(id: string, updates: Partial<InsertBotTemplate>): Promise<BotTemplate | undefined> {
+    const [updated] = await db.update(botTemplates)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(botTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteBotTemplate(id: string): Promise<boolean> {
+    await db.delete(botTemplates).where(eq(botTemplates.id, id));
+    return true;
   }
 
   async getSiteConfigs(): Promise<SiteConfig[]> {
@@ -842,6 +959,243 @@ export class DatabaseStorage implements IStorage {
   async createChatLog(log: InsertChatLog): Promise<ChatLog> {
     const [created] = await db.insert(chatLogs).values(log).returning();
     return created;
+  }
+
+  async getCustomerAccountByPhone(phone: string): Promise<CustomerAccount | undefined> {
+    const [account] = await db.select().from(customerAccounts).where(eq(customerAccounts.phone, phone));
+    return account;
+  }
+
+  async getCustomerAccountById(id: string): Promise<CustomerAccount | undefined> {
+    const [account] = await db.select().from(customerAccounts).where(eq(customerAccounts.id, id));
+    return account;
+  }
+
+  async createCustomerAccount(account: InsertCustomerAccount): Promise<CustomerAccount> {
+    const [created] = await db.insert(customerAccounts).values(account).returning();
+    return created;
+  }
+
+  async updateCustomerAccount(id: string, updates: Partial<InsertCustomerAccount>): Promise<CustomerAccount | undefined> {
+    const [updated] = await db.update(customerAccounts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(customerAccounts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async updateCustomerAccountLastLogin(id: string): Promise<void> {
+    await db.update(customerAccounts)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(customerAccounts.id, id));
+  }
+
+  async createCustomerSession(session: InsertCustomerSession): Promise<CustomerSession> {
+    const [created] = await db.insert(customerSessions).values(session).returning();
+    return created;
+  }
+
+  async getValidCustomerSession(token: string): Promise<CustomerSession | undefined> {
+    const [session] = await db.select().from(customerSessions)
+      .where(
+        and(
+          eq(customerSessions.token, token),
+          gt(customerSessions.expiresAt, new Date())
+        )
+      );
+    return session;
+  }
+
+  async deleteCustomerSession(token: string): Promise<void> {
+    await db.delete(customerSessions).where(eq(customerSessions.token, token));
+  }
+
+  async getSiteConfigsByOwner(ownerId: string): Promise<SiteConfig[]> {
+    return db.select().from(siteConfigs)
+      .where(eq(siteConfigs.ownerId, ownerId))
+      .orderBy(desc(siteConfigs.createdAt));
+  }
+
+  async claimUnlinkedSitesByPhone(phone: string, customerAccountId: string): Promise<number> {
+    const leads = await db.select().from(demoLeads).where(eq(demoLeads.phone, phone));
+    let claimed = 0;
+    for (const lead of leads) {
+      if (lead.placeId) {
+        const site = await this.getSiteConfigByPlaceId(lead.placeId);
+        if (site && !site.ownerId) {
+          await this.updateSiteConfig(site.id, { ownerId: customerAccountId } as any);
+          claimed++;
+        }
+      }
+    }
+    return claimed;
+  }
+
+  async getVlmProspects(options?: { industry?: string; city?: string; status?: string; limit?: number }): Promise<VlmProspect[]> {
+    const conditions = [];
+    if (options?.industry) conditions.push(eq(vlmProspects.industry, options.industry));
+    if (options?.city) conditions.push(ilike(vlmProspects.city, `%${options.city}%`));
+    if (options?.status) conditions.push(eq(vlmProspects.status, options.status));
+    const query = db.select().from(vlmProspects);
+    if (conditions.length > 0) {
+      return (query as any).where(and(...conditions)).orderBy(desc(vlmProspects.qualityScore)).limit(options?.limit || 500);
+    }
+    return query.orderBy(desc(vlmProspects.qualityScore)).limit(options?.limit || 500);
+  }
+
+  async getVlmProspect(id: string): Promise<VlmProspect | undefined> {
+    const [prospect] = await db.select().from(vlmProspects).where(eq(vlmProspects.id, id));
+    return prospect;
+  }
+
+  async getVlmProspectByPlaceId(placeId: string): Promise<VlmProspect | undefined> {
+    const [prospect] = await db.select().from(vlmProspects).where(eq(vlmProspects.googlePlaceId, placeId));
+    return prospect;
+  }
+
+  async createVlmProspect(prospect: InsertVlmProspect): Promise<VlmProspect> {
+    const [created] = await db.insert(vlmProspects).values(prospect).returning();
+    return created;
+  }
+
+  async createVlmProspects(prospects: InsertVlmProspect[]): Promise<VlmProspect[]> {
+    if (prospects.length === 0) return [];
+    const created = await db.insert(vlmProspects).values(prospects).onConflictDoNothing({ target: vlmProspects.googlePlaceId }).returning();
+    return created;
+  }
+
+  async updateVlmProspect(id: string, updates: Partial<InsertVlmProspect>): Promise<VlmProspect | undefined> {
+    const [updated] = await db.update(vlmProspects).set(updates).where(eq(vlmProspects.id, id)).returning();
+    return updated;
+  }
+
+  async deleteVlmProspect(id: string): Promise<boolean> {
+    await db.delete(vlmProspects).where(eq(vlmProspects.id, id));
+    return true;
+  }
+
+  async getVlmCampaigns(): Promise<VlmCampaign[]> {
+    return db.select().from(vlmCampaigns).orderBy(desc(vlmCampaigns.createdAt));
+  }
+
+  async getVlmCampaign(id: string): Promise<VlmCampaign | undefined> {
+    const [campaign] = await db.select().from(vlmCampaigns).where(eq(vlmCampaigns.id, id));
+    return campaign;
+  }
+
+  async createVlmCampaign(campaign: InsertVlmCampaign): Promise<VlmCampaign> {
+    const [created] = await db.insert(vlmCampaigns).values(campaign).returning();
+    return created;
+  }
+
+  async updateVlmCampaign(id: string, updates: Partial<InsertVlmCampaign>): Promise<VlmCampaign | undefined> {
+    const [updated] = await db.update(vlmCampaigns).set(updates).where(eq(vlmCampaigns.id, id)).returning();
+    return updated;
+  }
+
+  async deleteVlmCampaign(id: string): Promise<boolean> {
+    await db.delete(vlmCampaigns).where(eq(vlmCampaigns.id, id));
+    return true;
+  }
+
+  async getVlmCallAttempts(options?: { campaignId?: string; prospectId?: string; limit?: number }): Promise<VlmCallAttempt[]> {
+    const conditions = [];
+    if (options?.campaignId) conditions.push(eq(vlmCallAttempts.campaignId, options.campaignId));
+    if (options?.prospectId) conditions.push(eq(vlmCallAttempts.prospectId, options.prospectId));
+    const query = db.select().from(vlmCallAttempts);
+    if (conditions.length > 0) {
+      return (query as any).where(and(...conditions)).orderBy(desc(vlmCallAttempts.createdAt)).limit(options?.limit || 200);
+    }
+    return query.orderBy(desc(vlmCallAttempts.createdAt)).limit(options?.limit || 200);
+  }
+
+  async getVlmCallAttemptByCallSid(callSid: string): Promise<VlmCallAttempt | undefined> {
+    const [attempt] = await db.select().from(vlmCallAttempts).where(eq(vlmCallAttempts.callSid, callSid));
+    return attempt;
+  }
+
+  async createVlmCallAttempt(attempt: InsertVlmCallAttempt): Promise<VlmCallAttempt> {
+    const [created] = await db.insert(vlmCallAttempts).values(attempt).returning();
+    return created;
+  }
+
+  async updateVlmCallAttempt(id: string, updates: Partial<InsertVlmCallAttempt>): Promise<VlmCallAttempt | undefined> {
+    const [updated] = await db.update(vlmCallAttempts).set(updates).where(eq(vlmCallAttempts.id, id)).returning();
+    return updated;
+  }
+
+  async getOgSettingsByPath(pagePath: string): Promise<any | undefined> {
+    const [settings] = await db.select().from(ogSettings).where(eq(ogSettings.pagePath, pagePath));
+    return settings;
+  }
+
+  async getAllOgSettings(): Promise<any[]> {
+    return db.select().from(ogSettings).orderBy(ogSettings.pagePath);
+  }
+
+  async upsertOgSettings(settings: any): Promise<any> {
+    const existing = await this.getOgSettingsByPath(settings.pagePath);
+    if (existing) {
+      const [updated] = await db.update(ogSettings)
+        .set({ ...settings, updatedAt: new Date() })
+        .where(eq(ogSettings.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(ogSettings).values(settings).returning();
+    return created;
+  }
+
+  async deleteOgSettings(id: string): Promise<boolean> {
+    const result = await db.delete(ogSettings).where(eq(ogSettings.id, id));
+    return true;
+  }
+
+  // Inquiry operations
+  async getInquiries(filters?: {
+    status?: string;
+    priority?: string;
+    source?: string;
+    assignedTo?: string;
+    limit?: number;
+  }): Promise<Inquiry[]> {
+    let query = db.select().from(inquiries);
+    
+    const conditions = [];
+    if (filters?.status) conditions.push(eq(inquiries.status, filters.status));
+    if (filters?.priority) conditions.push(eq(inquiries.priority, filters.priority));
+    if (filters?.source) conditions.push(eq(inquiries.source, filters.source));
+    if (filters?.assignedTo) conditions.push(eq(inquiries.assignedTo, filters.assignedTo));
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as any;
+    }
+    
+    const result = await query.orderBy(desc(inquiries.createdAt)).limit(filters?.limit || 100);
+    return result;
+  }
+
+  async getInquiry(id: string): Promise<Inquiry | undefined> {
+    const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, id));
+    return inquiry;
+  }
+
+  async createInquiry(inquiry: InsertInquiry): Promise<Inquiry> {
+    const [created] = await db.insert(inquiries).values(inquiry).returning();
+    return created;
+  }
+
+  async updateInquiry(id: string, updates: Partial<InsertInquiry>): Promise<Inquiry | undefined> {
+    const [updated] = await db.update(inquiries)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(inquiries.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteInquiry(id: string): Promise<boolean> {
+    await db.delete(inquiries).where(eq(inquiries.id, id));
+    return true;
   }
 }
 

@@ -2,11 +2,12 @@ import { WebSocket, WebSocketServer } from "ws";
 import { Server } from "http";
 import { AudioBuffer, convertWavToTwilioAudio } from "./audioCodec";
 import { voiceSessionManager } from "./voiceSession";
-import { processAudioWithKimi, generateSpeech, isKimiAudioConfigured } from "./kimiAudio";
-import { generateVoiceResponse } from "./kimi";
+import { generateVoiceResponseGemini, synthesizeGeminiTTS, transcribeWithGemini } from "./voiceGemini";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+
+// NOTE: KIMI is not used for voice (reserved for research and other tasks). Voice uses Gemini only.
 
 interface TwilioStreamMessage {
   event: "connected" | "start" | "media" | "mark" | "stop";
@@ -65,7 +66,7 @@ export function setupVoiceStreamWebSocket(server: Server): void {
               streamSid = message.start.streamSid;
               console.log(`[VoiceStream] Stream started - Call: ${callSid}, Stream: ${streamSid}`);
               
-              const agentName = message.start.customParameters?.agentName || "Kimi";
+              const agentName = message.start.customParameters?.agentName || "AI Assistant";
               const personality = message.start.customParameters?.personality || "helpful";
               
               let session = voiceSessionManager.getSession(callSid);
@@ -141,8 +142,7 @@ export function setupVoiceStreamWebSocket(server: Server): void {
 }
 
 async function sendGreeting(ws: WebSocket, streamSid: string, agentName: string): Promise<void> {
-  // Note: Greeting is handled by TwiML <Say> element before Media Streams starts
-  // This function is reserved for future custom audio greetings via Kimi-Audio TTS
+  // Greeting is handled by TwiML <Say> before Media Streams starts
   console.log(`[VoiceStream] Stream started for ${agentName}, TwiML greeting played`);
 }
 
@@ -203,83 +203,27 @@ async function processUserAudio(
   session: ReturnType<typeof voiceSessionManager.getSession>
 ): Promise<void> {
   if (!session) return;
-  
+
   voiceSessionManager.setProcessing(callSid, true);
-  
+
   try {
-    console.log(`[VoiceStream] Processing ${audioBuffer.getDuration().toFixed(1)}s of audio for call ${callSid}`);
-    
+    console.log(`[VoiceStream] Processing ${audioBuffer.getDuration().toFixed(1)}s of audio for call ${callSid} (Gemini voice)`);
+
     const wavBuffer = audioBuffer.getWavBuffer();
-    
-    if (isKimiAudioConfigured()) {
-      const audioUrl = await uploadAudioTemporarily(wavBuffer, callSid);
-      
-      if (audioUrl) {
-        console.log("[VoiceStream] Uploaded audio to:", audioUrl);
-        
-        const systemPrompt = voiceSessionManager.getSystemPrompt(session);
-        const response = await processAudioWithKimi(
-          audioUrl,
-          session.conversationHistory,
-          systemPrompt
-        );
-        
-        if (response.success) {
-          voiceSessionManager.addMessage(callSid, {
-            role: "user",
-            type: "audio",
-            content: audioUrl,
-          });
-          
-          if (response.transcript) {
-            voiceSessionManager.addMessage(callSid, {
-              role: "assistant",
-              type: "text",
-              content: response.transcript,
-            });
-          }
-          
-          // If we got audio response, download and send back to Twilio
-          if (response.audioUrl) {
-            console.log("[VoiceStream] Got Kimi-Audio response, downloading...");
-            try {
-              const audioResponse = await fetch(response.audioUrl);
-              if (audioResponse.ok) {
-                const responseWavBuffer = Buffer.from(await audioResponse.arrayBuffer());
-                const mulawPayload = convertWavToTwilioAudio(responseWavBuffer);
-                
-                // Send audio in chunks to avoid overwhelming the WebSocket
-                const chunkSize = 640; // 80ms of audio at 8kHz
-                for (let i = 0; i < mulawPayload.length; i += chunkSize) {
-                  const chunk = mulawPayload.slice(i, i + chunkSize);
-                  sendAudioToTwilio(ws, streamSid, chunk);
-                }
-                
-                // Send mark to know when playback is done
-                sendMarkToTwilio(ws, streamSid, `response-${Date.now()}`);
-                console.log("[VoiceStream] Sent Kimi-Audio response to caller");
-                return;
-              }
-            } catch (downloadError) {
-              console.error("[VoiceStream] Error downloading Kimi-Audio response:", downloadError);
-            }
-          }
-          
-          // If we have transcript but no audio, use text fallback
-          if (response.transcript) {
-            console.log("[VoiceStream] Using transcript for text fallback");
-          }
-          return;
-        }
-      }
+    const userTranscript = await transcribeWithGemini(wavBuffer);
+    if (userTranscript) {
+      voiceSessionManager.addMessage(callSid, {
+        role: "user",
+        type: "text",
+        content: userTranscript,
+      });
+      console.log("[VoiceStream] STT transcript:", userTranscript.substring(0, 60));
     }
-    
-    console.log("[VoiceStream] Falling back to text-based response");
-    await processWithTextFallback(ws, callSid, streamSid, session);
-    
+
+    await processWithGeminiVoice(ws, callSid, streamSid, session, userTranscript || undefined);
   } catch (error) {
     console.error("[VoiceStream] Error processing audio:", error);
-    await processWithTextFallback(ws, callSid, streamSid, session);
+    await processWithGeminiVoice(ws, callSid, streamSid, session, undefined);
   } finally {
     voiceSessionManager.setProcessing(callSid, false);
   }
@@ -307,40 +251,45 @@ async function uploadAudioTemporarily(wavBuffer: Buffer, callSid: string): Promi
   }
 }
 
-async function processWithTextFallback(
+/** Gemini voice path: generate response text + TTS and send audio to Twilio. */
+async function processWithGeminiVoice(
   ws: WebSocket,
   callSid: string,
   streamSid: string,
-  session: ReturnType<typeof voiceSessionManager.getSession>
+  session: ReturnType<typeof voiceSessionManager.getSession>,
+  userTranscript?: string
 ): Promise<void> {
   if (!session) return;
-  
+
   try {
     const systemPrompt = voiceSessionManager.getSystemPrompt(session);
-    const responseText = await generateVoiceResponse(
-      "I'm listening. Please continue.",
-      session.conversationHistory.map(m => ({
-        role: m.role,
-        content: typeof m.content === 'string' ? m.content : 'audio'
-      })),
-      {
-        D: 50,
-        I: 50,
-        S: 50,
-        C: 50
-      }
-    );
-    
-    console.log("[VoiceStream] Generated text response:", responseText.substring(0, 100));
-    
+    const history = session.conversationHistory.map((m) => ({
+      role: m.role,
+      content: typeof m.content === "string" ? m.content : "[audio]",
+    }));
+    const userMessage = userTranscript && userTranscript.trim() ? userTranscript.trim() : "The caller just spoke.";
+    const responseText = await generateVoiceResponseGemini(systemPrompt, history, userMessage);
+
+    console.log("[VoiceStream] Gemini response:", responseText.substring(0, 80));
+
     voiceSessionManager.addMessage(callSid, {
       role: "assistant",
       type: "text",
       content: responseText,
     });
-    
+
+    const audioBuffer = await synthesizeGeminiTTS(responseText, "Puck");
+    if (audioBuffer && audioBuffer.length > 0) {
+      const mulawPayload = convertWavToTwilioAudio(audioBuffer);
+      const chunkSize = 640;
+      for (let i = 0; i < mulawPayload.length; i += chunkSize) {
+        sendAudioToTwilio(ws, streamSid, mulawPayload.slice(i, i + chunkSize));
+      }
+      sendMarkToTwilio(ws, streamSid, `response-${Date.now()}`);
+      console.log("[VoiceStream] Sent Gemini TTS to caller");
+    }
   } catch (error) {
-    console.error("[VoiceStream] Text fallback error:", error);
+    console.error("[VoiceStream] Gemini voice error:", error);
   }
 }
 
