@@ -140,7 +140,11 @@ export class VlmOutboundCallerService {
     return baseScript;
   }
 
-  generateTwiml(campaign: VlmCampaign, prospect: VlmProspect): string {
+  /**
+   * Generate TwiML for the outbound call. Twilio requires absolute URLs for Gather action.
+   * @param baseUrl - Public base URL of the server (e.g. https://yourserver.com). Required for Gather to work.
+   */
+  generateTwiml(campaign: VlmCampaign, prospect: VlmProspect, baseUrl: string): string {
     const script =
       campaign.scriptTemplate ||
       `Hello, this is a call regarding AI-powered business solutions for ${prospect.industry} businesses. ` +
@@ -152,9 +156,11 @@ export class VlmOutboundCallerService {
       .replace(/\{industry\}/g, prospect.industry)
       .replace(/\{city\}/g, prospect.city || "your area");
 
+    const gatherAction = baseUrl ? `${baseUrl.replace(/\/$/, "")}/api/vlm/gather-response` : "/api/vlm/gather-response";
+
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather input="dtmf" numDigits="1" action="/api/vlm/gather-response" method="POST" timeout="10">
+  <Gather input="dtmf" numDigits="1" action="${this.escapeXml(gatherAction)}" method="POST" timeout="10">
     <Say voice="Polly.Matthew">${this.escapeXml(personalizedScript)}</Say>
   </Gather>
   <Say voice="Polly.Matthew">We didn't receive a response. Goodbye.</Say>

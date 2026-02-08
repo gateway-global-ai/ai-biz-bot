@@ -304,6 +304,18 @@ export function registerVlmRoutes(app: Express) {
 
   app.post("/api/vlm/twiml/:campaignId", async (req: Request, res: Response) => {
     try {
+      const baseUrl =
+        process.env.WEBHOOK_BASE_URL ||
+        process.env.REPLIT_DEPLOYMENT_URL ||
+        (process.env.REPL_SLUG && process.env.REPL_OWNER
+          ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+          : undefined) ||
+        (req.protocol && req.get("host") ? `${req.protocol}://${req.get("host")}` : undefined);
+
+      if (!baseUrl) {
+        console.warn("[VLM] No base URL configured; Gather action may fail. Set WEBHOOK_BASE_URL.");
+      }
+
       const campaign = await storage.getVlmCampaign(req.params.campaignId);
       const callSid = req.body.CallSid;
       let prospect = null;
@@ -319,7 +331,8 @@ export function registerVlmRoutes(app: Express) {
 
       const twiml = callerService.generateTwiml(
         campaign || { scriptTemplate: null, industry: "general", city: "" } as any,
-        dummyProspect
+        dummyProspect,
+        baseUrl || ""
       );
 
       res.type("text/xml").send(twiml);
