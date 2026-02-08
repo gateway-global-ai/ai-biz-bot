@@ -1,0 +1,20 @@
+{
+  "name": "google-drive-api-quickstart",
+  "version": "1.0.0",
+  "description": "Google Drive API JavaScript Quickstart Example",
+  "main": "index.html",
+  "scripts": {
+    "start": "http-server -p 8000"
+  },
+  "keywords": [
+    "google-drive",
+    "api",
+    "quickstart",
+    "javascript"
+  ],
+  "author": "Gateway Global AI",
+  "license": "MIT",
+  "dependencies": {
+    "http-server": "^14.1.1"
+  }
+}

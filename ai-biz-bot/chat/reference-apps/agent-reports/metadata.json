@@ -1,0 +1,7 @@
+{
+  "name": "AI Agent Behavioral Reports",
+  "description": "An advanced dashboard for monitoring  AI agent personalities using DISC behavioral profiles and ARCH communication patterns.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

@@ -1,6 +1,7 @@
 {
-  "name": "rest-express",
+  "name": "gateway-global-ai-platform",
   "version": "1.0.0",
+  "description": "AI-first platform for small business owners. Generate stunning websites with voice, chatbots, and SMS in 30 seconds. Autonomous agents, Twilio telephony, and Google Workspace integration.",
   "type": "module",
   "license": "MIT",
   "scripts": {

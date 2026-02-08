@@ -1,17 +1,45 @@
-# Gateway Global AI - Chat MVP
+# Gateway Global AI Platform
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6.3-blue)]()
 [![React](https://img.shields.io/badge/React-18.3.1-blue)]()
 [![Express](https://img.shields.io/badge/Express-5.0.1-green)]()
+[![License](https://img.shields.io/badge/license-MIT-blue)]()
 
-An SMS-first AI task completion platform with a comprehensive admin dashboard and AI-powered business analysis tools.
+> **Removing all friction from getting online with the latest AI tools.**
+
+The complete AI-first platform for small business owners. Generate stunning AI-powered websites with voice, chatbots, and SMS in 30 seconds. Leverage autonomous agents, Twilio telephony, and Google Workspace integration to run your business smarter.
+
+## 🎯 MVP Focus
+
+Gateway Global AI is the all-in-one platform for small business owners to launch and manage their AI-powered online presence. We've consolidated multiple projects into this unified platform that delivers:
+
+- ✨ **30-Second AI Websites** - Professional sites with voice concierge and live chat
+- 🤖 **AI Biz Bot** - Your digital business partner for website management and upselling
+- 🎙️ **Voice AI** - Natural language customer interactions via Kimi-Audio
+- 📱 **SMS Business Management** - Run your business via text with Twilio integration
+- 📊 **VoiceLeadMachine** - Automated outbound campaigns and lead generation
+- 💬 **Revolutionary Chat Interface** - Float, fix, or expand modes with full admin integration
+- 🎯 **DISC & ARCH Controls** - Advanced agent personality customization
+- 📁 **Google Workspace** - Seamless Drive, Calendar, Tasks, Docs, and Sheets integration
+- 🎓 **Learning SDK** - Immersive AI classroom for micro-learning experiences ⭐ NEW
+
+**For complete product vision**, see [PRODUCT_VISION.md](./PRODUCT_VISION.md) | **For GitHub strategy**, see [GITHUB_STRATEGY.md](./GITHUB_STRATEGY.md)
 
 ## 📋 Recent Updates
 
-**Latest Implementation** (Feb 6, 2026): Implemented portable chat interface with three user modes (Customer, Owner, Developer). The chat system features 100vh responsive design, full integration with Google Maps/Places API, Google Workspace, Twilio telephony, and TTS voice capabilities. See [CHAT_IMPLEMENTATION_SUMMARY.md](./CHAT_IMPLEMENTATION_SUMMARY.md) for details.
+**Website Builder SDK** (Feb 7, 2026): Consolidated website builder code into `sdk/website-builder/` as the canonical, production-ready version. Deprecated duplicate directories (`website-builder/` and `genai-business-site-generator (2)/`). The SDK version includes secure API handling, backend proxy support, and proper environment configuration. See [Website Builder SDK Documentation](sdk/website-builder/README.md) for details.
 
-**Previous Merge** (Feb 6, 2026): Successfully integrated AI chatbot functionality and Google Places API for business reviews. See [MERGE_SUMMARY.md](./MERGE_SUMMARY.md) for details.
+**Learning SDK** (Feb 7, 2026): Integrated immersive AI-powered virtual classroom SDK with voice-enabled lessons, interactive quizzes, and knowledge base integration. First learning SDK built into a business platform - creates micro-learning experiences for small business topics and Gateway SDK usage. See [Learning SDK Documentation](sdk/learning/README.md) for details.
+**Google Drive SDK** (Feb 7, 2026): Created comprehensive Google Drive SDK organized in `sdk/google-drive/` alongside Voice AI and Chat SDKs. Includes TypeScript implementation with full Drive API functionality, quickstart example, type definitions, and comprehensive documentation. See [Google Drive SDK Documentation](sdk/google-drive/README.md) for details.
+
+**Voice AI SDK** (Feb 7, 2026): Integrated comprehensive Voice AI Unified SDK with support for multiple providers (OpenAI, Gemini, KIMI, ElevenLabs, Deepgram, Inworld). Includes cost optimization tools, Twilio integration, MCP server, and extensive examples. See [Voice AI SDK Documentation](docs/VOICE_AI_SDK.md) for details.
+
+**Repository Cleanup** (Feb 7, 2026): Updated documentation to reflect MVP focus and consolidated platform features. Created comprehensive GitHub strategy and product vision documents.
+
+**Chat Interface** (Feb 6, 2026): Implemented portable chat interface with three user modes (Customer, Owner, Developer). Features 100vh responsive design, full Google Maps/Places API integration, Google Workspace, Twilio telephony, and TTS voice capabilities. See [CHAT_IMPLEMENTATION_SUMMARY.md](./CHAT_IMPLEMENTATION_SUMMARY.md) for details.
+
+**AI Chatbot Integration** (Feb 6, 2026): Successfully integrated AI chatbot functionality and Google Places API for business reviews. See [MERGE_SUMMARY.md](./MERGE_SUMMARY.md) for details.
 
 ## 🚀 Quick Start
 
@@ -60,47 +88,97 @@ chat-mvp-merge/
 ├── server/              # Express backend
 │   ├── routes.ts        # API routes
 │   └── index.ts         # Server entry point
+├── sdk/                 # SDKs and libraries
+│   ├── chat/            # Chat widget SDK
+│   ├── learning/        # Learning & Classroom SDK ⭐ NEW
+│   ├── google-drive/    # Google Drive SDK ⭐ NEW
+│   ├── voice-ai/        # Voice AI Unified SDK ⭐ NEW
+│   └── website-builder/ # AI Website Generator SDK ⭐ NEW
 ├── shared/              # Shared types and utilities
 ├── docs/                # Documentation
+│   ├── VOICE_AI_SDK.md        # Voice AI SDK guide ⭐
+│   └── VOICE_AI_RESEARCH.md   # Comprehensive research report ⭐
 ├── dist/                # Build output (generated)
 └── script/              # Build scripts
 ```
 
 ## 🔑 Key Features
 
-### Core Platform
-- **SMS-First Task Completion**: 24-hour AI task completion via SMS
-- **Multi-AI Integration**: Kimi 2.5 (primary), Google Gemini (fallback)
-- **Real-time Chat**: WebSocket-based live communication
+### 🚀 30-Second Website Generation
+- **Instant AI Websites**: Professional business sites generated in 30 seconds
+- **Voice Concierge**: Built-in AI voice assistant powered by Kimi-Audio
+- **Live Chat Support**: Integrated chat interface for customer service
+- **Google Maps Integration**: Automatic business details from Places API
+- **Mobile Responsive**: Perfect on all devices, SEO optimized
+
+### 🤖 AI Biz Bot - Your Digital Business Partner
+- **Multi-Channel**: Works in web admin panel and via SMS
+- **Website Management**: Make site changes through natural conversation
+- **Intelligent Upselling**: Suggests services and upgrades to customers
+- **Business Insights**: Google Places integration for market analysis
+- **Google Workspace**: Direct access to Drive, Calendar, Tasks, Docs, Sheets
+- **24/7 Availability**: Never miss a customer inquiry
+
+### 🎙️ Voice AI & Telephony
+- **Voice AI Unified SDK**: Multi-provider voice integration (TTS, STT, Real-time) - [See SDK docs](docs/VOICE_AI_SDK.md)
+- **Cost Optimization**: Save up to 95% on TTS costs with built-in provider comparison
+- **Natural Conversations**: Human-like voice interactions via Kimi-Audio (Replicate)
+- **Twilio Integration**: Professional phone numbers, SMS, and voice
+- **MCP Server**: Deploy and manage voice AI resources via Model Context Protocol
+- **Automated Campaigns**: Outbound calling for lead generation
+- **A2P 10-DLC Compliance**: Proper business SMS registration
+- **SMS Workflows**: Automated text message sequences
+- **Call Recording & Analytics**: Track and analyze customer conversations
+
+### 📊 VoiceLeadMachine - Outbound Campaign Tool
+- **Lead Discovery**: Find prospects via Google Maps
+- **Quality Scoring**: 0-100 algorithm rates lead quality (phone, email, website, ratings)
+- **Contact Enrichment**: Robots.txt compliant email scraping
+- **Auto-Dialer**: Automated voice campaigns via Twilio
+- **Website Generation**: Create free AI sites for prospects automatically
+- **Smart Follow-up**: SMS with website links when prospects press 1
+
+### 💬 Revolutionary Chat Interface
+- **Three Display Modes**: Float (bottom-right widget), Fix (sidebar), Expand (full window)
+- **Multi-User Types**: Customer, Owner, and Developer interfaces
+- **Embeddable**: Add to any website with simple code snippet
+- **Context Aware**: Understands business data and user needs
+- **Voice Enabled**: Seamless switch between text and voice
+- **100vh Responsive**: Perfect mobile and desktop experience
+
+### 🎯 Advanced Agent Controls
+- **DISC Personality System**: Customize agent behavior (Dominant, Influential, Steady, Compliant)
+- **ARCH Communication Model**: Fine-tune response styles
+- **Multi-Agent Support**: Different personalities for different tasks
+- **System Identity Prompts**: 6-section customization per agent
+- **Behavioral Guardrails**: Prevents fabricated data and exaggerated claims
+- **Agent Testing System**: Built-in validation tools
+
+### 📁 Google Workspace Integration
+- **Google Drive**: File browser, upload, folder management
+- **Google Calendar**: Event listing, creation, deletion with all-day event support
+- **Google Tasks**: Task listing, creation, completion toggle, deletion
+- **Google Docs & Sheets**: Document creation and management
+- **Unified Access**: All workspace tools in admin dashboard
+
+### 🎓 Learning SDK - Immersive AI Classroom ⭐ NEW
+- **AI-Generated Lessons**: Dynamic curriculum created by Gemini AI
+- **Voice-Interactive Learning**: Natural conversation with AI instructor using Gemini Live
+- **Knowledge Base Integration**: Pre-built lessons on Google APIs, Gateway SDKs, and business tools
+- **Interactive Quizzes**: AI-generated multiple-choice questions with instant feedback
+- **Cinematic UI**: Futuristic classroom environment with dynamic visuals
+- **Micro-Learning Focus**: Bite-sized lessons perfect for busy entrepreneurs
+- **Learning Paths**: Structured multi-lesson journeys (Getting Started, Google Integration, Voice Automation)
+- **Progress Tracking**: Monitor completion and award certificates
+- **Embeddable**: Add to any website with script tag or React component
+- **First of Its Kind**: The only immersive learning SDK built into a business platform
+
+### 🛠️ Business Management Tools
+- **Customer Relationship Management**: Lead capture, tracking, and notes
 - **Admin Dashboard**: Comprehensive NEXUSCMD control panel
-- **Portable Chat Interface**: Embeddable chat with 3 user modes (Customer, Owner, Developer)
-
-### AI Capabilities
-- **AI Biz Bot**: Intelligent business assistant with Google Places integration
-- **DISC Personality System**: Agent personalization and assessment
-- **Website Builder**: GenAI business site generator
-- **Voice AI**: Kimi-Audio integration for voice interactions
-- **Chat Modes**: Customer support, business management, and developer tools
-
-### Business Tools
-- **Customer Management**: Lead capture and tracking
-- **Telephony Management**: Twilio integration for SMS/voice
-- **A2P 10-DLC Compliance**: Automated business SMS registration
-- **Payment Processing**: Stripe integration
-- **Owner Portal**: Settings, customer tracking, project management, AI reports
-
-### Developer Tools
-- **Google Workspace Integration**: Drive, Calendar, Tasks, Docs, Sheets
-- **API Analytics**: Google Places Aggregate API analysis
-- **MCP Server**: Kimi K2 for agentic coding
-- **Developer Interface**: Page/app creation, agent deployment, technical management
-
-### Chat Interface Features
-- **100vh Fullscreen**: Responsive design for mobile and desktop
-- **Three User Modes**: Customer (public), Owner (business), Developer (technical)
-- **Embeddable**: React component or HTML/JS widget
-- **Customizable**: Brand colors, bot names, greetings
-- **Integrated**: Google Maps/Places, Workspace, Twilio, TTS voice
+- **Payment Processing**: Stripe integration for subscriptions and payments
+- **Analytics & Reports**: Business insights and performance metrics
+- **Real-time Communication**: WebSocket-based live updates
 
 ## 🛠️ Tech Stack
 
@@ -127,11 +205,34 @@ chat-mvp-merge/
 
 ## 📚 Documentation
 
+### Strategic Planning
+- [PRODUCT_VISION.md](./PRODUCT_VISION.md) - **Complete product vision and MVP focus**
+- [GITHUB_STRATEGY.md](./GITHUB_STRATEGY.md) - **Repository organization and SDK roadmap**
 - [STATUS.md](./STATUS.md) - Current build/test status and next steps
-- [MERGE_SUMMARY.md](./MERGE_SUMMARY.md) - Recent changes and commits
 - [BRANCH_GUIDE.md](./BRANCH_GUIDE.md) - Git workflow and branch strategy
-- [replit.md](./replit.md) - Detailed system architecture
+
+### Core Documentation
+- [CHAT_ARCHITECTURE.md](./CHAT_ARCHITECTURE.md) - **Chat interface architectural decisions and standards**
+- [CHAT_IMPLEMENTATION_SUMMARY.md](./CHAT_IMPLEMENTATION_SUMMARY.md) - Portable chat interface implementation
+- [replit.md](./replit.md) - Detailed system architecture and features
 - [docs/TELEPHONY_ARCHITECTURE.md](./docs/TELEPHONY_ARCHITECTURE.md) - Telephony system design
+
+### Google Business Integration
+- [GOOGLE_PLACES_TUTORIAL.md](./GOOGLE_PLACES_TUTORIAL.md) - **Step-by-step tutorial for developers (30-45 min)**
+- [DEVELOPER_QUICKSTART.md](./DEVELOPER_QUICKSTART.md) - **5-minute developer quick start with API examples**
+- [GOOGLE_BUSINESS_QUICKSTART.md](./GOOGLE_BUSINESS_QUICKSTART.md) - **Quick start for small business owners**
+- [GOOGLE_BUSINESS_MCP_INTEGRATION.md](./GOOGLE_BUSINESS_MCP_INTEGRATION.md) - **Complete integration guide linking knowledge base with MCP server**
+- [Google Business Notes/GOOGLE_PLACES_INTEGRATION.md](./Google%20Business%20Notes/GOOGLE_PLACES_INTEGRATION.md) - Google Places API integration details
+- [Google Business Notes/GOOGLE_PLACES_API_DETAILS.md](./Google%20Business%20Notes/GOOGLE_PLACES_API_DETAILS.md) - Technical API documentation
+
+### Development Documentation
+- [MERGE_SUMMARY.md](./MERGE_SUMMARY.md) - Recent changes and commits
+- [SDK_IMPROVEMENTS.md](./SDK_IMPROVEMENTS.md) - SDK development notes
+- [AGENT_SYSTEM.md](./docs/AGENT_SYSTEM.md) - Agent architecture
+- [GOOGLE_WORKSPACE_INTEGRATION.md](./docs/GOOGLE_WORKSPACE_INTEGRATION.md) - Workspace integration details
+- [VOICE_AI_SDK.md](./docs/VOICE_AI_SDK.md) - **Voice AI Unified SDK guide** ⭐
+- [VOICE_AI_RESEARCH.md](./docs/VOICE_AI_RESEARCH.md) - **Comprehensive voice AI provider research** ⭐
+- [sdk/learning/README.md](./sdk/learning/README.md) - **Learning SDK complete guide** ⭐ NEW
 
 ## 🌿 Branch Strategy
 
@@ -187,58 +288,105 @@ npm audit
 
 See [STATUS.md](./STATUS.md) for complete list and recommendations.
 
+## 🤝 Contributing
+
+We welcome contributions from the community! As we prepare for our MVP launch, we're establishing clear contribution guidelines.
+
+### Getting Started
+1. Fork the repository
+2. Create a feature branch from `feature/ongoing-development`
+3. Make your changes
+4. Ensure builds pass: `npm run build`
+5. Run type checking: `npm run check`
+6. Commit with descriptive messages
+7. Push and create a pull request
+
+### Development Workflow
+See [BRANCH_GUIDE.md](./BRANCH_GUIDE.md) for detailed Git workflow.
+
+### Code Standards
+- TypeScript for all new code
+- Follow existing code style
+- Add JSDoc comments for public APIs
+- Update documentation for feature changes
+
+### Reporting Issues
+- Use GitHub Issues for bug reports and feature requests
+- Include reproduction steps for bugs
+- Provide context and use cases for feature requests
+
+### SDK Development
+We're planning to release SDKs in Q2 2026. See [GITHUB_STRATEGY.md](./GITHUB_STRATEGY.md) for our SDK roadmap.
+
 ## 📝 Environment Variables
 
-Required environment variables:
+Required environment variables (see `.env.example` for complete list):
 
 ```env
 # Database
 DATABASE_URL=postgresql://...
 
 # AI Services
-KIMI_API_KEY=...
-GOOGLE_API_KEY=...
+KIMI_API_KEY=...              # Moonshot AI (Kimi 2.5)
+GOOGLE_API_KEY=...            # Google Gemini
+REPLICATE_API_TOKEN=...       # Kimi-Audio, Flux
 
-# Twilio
+# Twilio (Telephony)
 TWILIO_ACCOUNT_SID=...
 TWILIO_AUTH_TOKEN=...
+TWILIO_PHONE_NUMBER=...
 
-# Google Maps/Places
-GOOGLE_MAPS_API_KEY=...
+# Google Cloud Platform
+GOOGLE_MAPS_API_KEY=...       # Maps JavaScript API
+GOOGLE_CLOUD_PROJECT_ID=...   # For Places API, etc.
 
-# Stripe
+# Google Workspace (OAuth2)
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REDIRECT_URI=...
+
+# Stripe (Payments)
 STRIPE_SECRET_KEY=...
 STRIPE_PUBLISHABLE_KEY=...
 
-# Session
+# Application
 SESSION_SECRET=...
+NODE_ENV=development|production
+PORT=5000
 ```
 
-See attached_assets for example configurations.
-
-## 🤝 Contributing
-
-1. Create a feature branch from `feature/ongoing-development`
-2. Make your changes
-3. Ensure builds pass: `npm run build`
-4. Run type checking: `npm run check`
-5. Commit with descriptive messages
-6. Push and create a pull request
+See `attached_assets` directory for example configurations.
 
 ## 📄 License
 
 MIT License - See LICENSE file for details
 
-## 🔗 Links
+## 🔗 Links & Resources
 
 - **Repository**: [gateway-global-ai/chat-mvp-merge](https://github.com/gateway-global-ai/chat-mvp-merge)
+- **Organization**: [Gateway Global AI on GitHub](https://github.com/gateway-global-ai)
+- **Product Vision**: [PRODUCT_VISION.md](./PRODUCT_VISION.md)
+- **GitHub Strategy**: [GITHUB_STRATEGY.md](./GITHUB_STRATEGY.md)
 - **Documentation**: See `/docs` directory
-- **Issues**: GitHub Issues (when available)
+- **Issues**: GitHub Issues
+
+### Related Repositories
+- [twilio-telephony-voice-ai](https://github.com/gateway-global-ai/twilio-telephony-voice-ai) - Twilio integration (pending merge)
+- [identity-verification-mcp](https://github.com/gateway-global-ai/identity-verification-mcp-gateway-gobal-ai) - Authentication MCP (pending integration)
+  <!-- Note: Actual repo name has typo "gobal" -->
+- [.github](https://github.com/gateway-global-ai/.github) - Organization profile
+
+### Deprecated Repositories
+See [GITHUB_STRATEGY.md](./GITHUB_STRATEGY.md) for list of archived repositories and migration paths.
+
+**Archival Resources**:
+- [DEPRECATION_TEMPLATES.md](./DEPRECATION_TEMPLATES.md) - Standardized deprecation notices
+- [HOW_TO_APPLY_DEPRECATIONS.md](./HOW_TO_APPLY_DEPRECATIONS.md) - Step-by-step guide to apply templates
 
 ---
 
-**Last Updated**: February 6, 2026  
-**Version**: 1.0.0  
+**Last Updated**: February 7, 2026  
+**Version**: 1.0.0-MVP  
 **Maintainer**: Gateway Global AI Team
 
-For detailed system architecture and features, see [replit.md](./replit.md).
+For detailed system architecture and features, see [replit.md](./replit.md) and [PRODUCT_VISION.md](./PRODUCT_VISION.md).

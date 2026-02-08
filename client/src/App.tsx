@@ -45,11 +45,17 @@ import CustomerSiteManager from "@/pages/CustomerSiteManager";
 import VoiceLeadMachine from "@/pages/VoiceLeadMachine";
 import SitesAndLeads from "@/pages/SitesAndLeads";
 import CommandChat from "@/pages/CommandChat";
+import InquiryManagement from "@/pages/InquiryManagement";
+import CallTracking from "@/pages/CallTracking";
+import TransparencyDashboard from "@/pages/TransparencyDashboard";
+import ContactForm from "@/pages/ContactForm";
 import CustomerChatInterface from "@/pages/CustomerChatInterface";
 import OwnerChatInterface from "@/pages/OwnerChatInterface";
 import DeveloperChatInterface from "@/pages/DeveloperChatInterface";
 import ChatEmbedShowcase from "@/pages/ChatEmbedShowcase";
 import AgentManagementPage from "@/pages/AgentManagementPage";
+import AgentTestingDashboard from "@/pages/AgentTestingDashboard";
+import ChatWithAgentPreview from "@/pages/ChatWithAgentPreview";
 import WidgetShowcasePage from "@/pages/WidgetShowcasePage";
 import NotFound from "@/pages/not-found";
 import { Loader2 } from "lucide-react";
@@ -288,21 +294,34 @@ function AppRouter() {
       <Route path="/disc" component={DiscVisualizer} />
       <Route path="/developer" component={DeveloperPage} />
       {/* 
-        Standardized Chat Interfaces - Protected Routes
-        /chat/owner and /chat/developer require authentication for actual business use.
-        Public demo routes are at /interface/owner and /interface/developer for showcase purposes.
+        ⭐ STANDARDIZED CHAT INTERFACES - PROTECTED ROUTES ⭐
+        
+        These routes use the StandardizedChatInterface component, which is the ONLY
+        approved base chat interface for the platform. See /CHAT_ARCHITECTURE.md.
+        
+        - /chat/owner: Business owner portal (requires auth for actual use)
+        - /chat/developer: Developer interface (requires auth for actual use)
+        - Public demo routes: /interface/owner and /interface/developer
+        
+        DO NOT create alternative chat implementations. Use StandardizedChatInterface
+        or FloatingChatWidget for all new chat features.
       */}
       <Route path="/chat/owner" component={OwnerChatInterface} />
       <Route path="/chat/developer" component={DeveloperChatInterface} />
       {/* BusinessPage moved to public routes */}
       <Route path="/lead-machine" component={VoiceLeadMachine} />
       <Route path="/sites-leads" component={SitesAndLeads} />
-      <Route path="/command-chat" component={CommandChat} />
+      <Route path="/inquiries" component={InquiryManagement} />
+      <Route path="/call-tracking" component={CallTracking} />
+      <Route path="/transparency" component={TransparencyDashboard} />
+      <Route path="/command-chat" component={CommandChat} /> {/* Admin tool - specialized UI */}
       <Route path="/aibizbot" component={AiBizBotAdmin} />
       <Route path="/google-analyst" component={GoogleApiAnalyst} />
       <Route path="/assessment" component={DiscAssessment} />
       <Route path="/conversation" component={MockConversation} />
       <Route path="/agent-management" component={AgentManagementPage} />
+      <Route path="/agent-testing" component={AgentTestingDashboard} />
+      <Route path="/agent-preview" component={ChatWithAgentPreview} />
       <Route path="/widget-showcase" component={WidgetShowcasePage} />
       <Route component={NotFound} />
     </Switch>
@@ -364,17 +383,23 @@ function App() {
               <Route path="/business" component={BusinessPage} />
               <Route path="/demo" component={BusinessPage} />
               <Route path="/login" component={Login} />
+              <Route path="/contact" component={ContactForm} />
               <Route path="/v2" component={LandingV2} />
               <Route path="/kimi-audio" component={KimiAudioDemo} />
               <Route path="/sdk" component={SdkShowcase} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
               <Route path="/chat/customer" component={CustomerChatInterface} />
               <Route path="/chat-showcase" component={ChatEmbedShowcase} />
-              {/* Public demo routes for chat interfaces - no authentication required */}
+              {/* 
+                ⭐ STANDARDIZED CHAT INTERFACES - PUBLIC DEMO ROUTES ⭐
+                
+                These use StandardizedChatInterface, the approved base chat component.
+                See /CHAT_ARCHITECTURE.md for architectural standards.
+              */}
               <Route path="/interface/customer" component={CustomerChatInterface} />
               <Route path="/interface/owner" component={OwnerChatInterface} />
               <Route path="/interface/developer" component={DeveloperChatInterface} />
-              <Route path="/chat/:agentId" component={AgentChat} />
+              <Route path="/chat/:agentId" component={AgentChat} /> {/* Agent-specific chat - specialized UI */}
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
               <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />

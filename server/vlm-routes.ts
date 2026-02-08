@@ -304,6 +304,22 @@ export function registerVlmRoutes(app: Express) {
 
   app.post("/api/vlm/twiml/:campaignId", async (req: Request, res: Response) => {
     try {
+      const baseUrl =
+        process.env.WEBHOOK_BASE_URL ||
+        process.env.REPLIT_DEPLOYMENT_URL ||
+        (process.env.REPL_SLUG && process.env.REPL_OWNER
+          ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+          : undefined) ||
+        (req.protocol && req.get("host") ? `${req.protocol}://${req.get("host")}` : undefined);
+
+      if (!baseUrl || !baseUrl.trim()) {
+        console.error("[VLM] No base URL configured; returning error TwiML. Set WEBHOOK_BASE_URL so Gather action uses an absolute URL.");
+        res.type("text/xml").send(
+          `<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Matthew">We're sorry, this service is temporarily unavailable. Goodbye.</Say><Hangup/></Response>`
+        );
+        return;
+      }
+
       const campaign = await storage.getVlmCampaign(req.params.campaignId);
       const callSid = req.body.CallSid;
       let prospect = null;
@@ -319,12 +335,14 @@ export function registerVlmRoutes(app: Express) {
 
       const twiml = callerService.generateTwiml(
         campaign || { scriptTemplate: null, industry: "general", city: "" } as any,
-        dummyProspect
+        dummyProspect,
+        baseUrl.trim()
       );
 
       res.type("text/xml").send(twiml);
     } catch (error: any) {
-      res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say>An error occurred. Goodbye.</Say><Hangup/></Response>`);
+      console.error("[VLM] TwiML error:", error?.message);
+      res.type("text/xml").send(`<?xml version="1.0" encoding="UTF-8"?><Response><Say voice="Polly.Matthew">An error occurred. Goodbye.</Say><Hangup/></Response>`);
     }
   });
 
@@ -434,6 +452,7 @@ export function registerVlmRoutes(app: Express) {
         callScript: z.string().optional(),
         callerIdNumber: z.string().optional(),
         callDelayMs: z.number().int().min(0).optional().default(3000),
+        useKnowledgeBase: z.boolean().optional().default(true), // Enable by default
       });
 
       const parsed = schema.safeParse(req.body);
@@ -481,6 +500,40 @@ export function registerVlmRoutes(app: Express) {
       );
       res.json({ script });
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/vlm/auto-agent/generate-knowledge-script", async (req: Request, res: Response) => {
+    try {
+      const { prospectId, campaignId } = req.body;
+      
+      if (!prospectId) {
+        return res.status(400).json({ error: "prospectId required" });
+      }
+
+      const prospect = await storage.getVlmProspect(prospectId);
+      if (!prospect) {
+        return res.status(404).json({ error: "Prospect not found" });
+      }
+
+      let campaign = null;
+      if (campaignId) {
+        campaign = await storage.getVlmCampaign(campaignId);
+      }
+
+      const script = await callerService.generateKnowledgeEnhancedScript(prospect, campaign || undefined);
+      
+      res.json({ 
+        script,
+        prospect: {
+          businessName: prospect.businessName,
+          industry: prospect.industry,
+          city: prospect.city
+        }
+      });
+    } catch (error: any) {
+      console.error("[VLM] Knowledge script generation error:", error.message);
       res.status(500).json({ error: error.message });
     }
   });

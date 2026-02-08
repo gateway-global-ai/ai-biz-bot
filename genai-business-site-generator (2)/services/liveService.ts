@@ -25,7 +25,7 @@ export class LiveVoiceClient {
     this.currentStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     
     const config = {
-      model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+      model: 'gemini-2.5-flash-native-audio-preview',
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {

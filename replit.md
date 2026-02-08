@@ -1,7 +1,28 @@
-# Gateway Global AI - SMS-First AI Task Completion Platform
+# Gateway Global AI Platform
 
 ## Overview
-Gateway Global AI is an SMS-first AI task completion platform designed to complete user tasks within 24 hours using AI, delivered via SMS updates. It provides an app-free experience, focusing on simplicity and efficiency. The platform aims to be a leading AI task completion service that is accessible and reliable, utilizing Kimi 2.5 for AI reasoning and Twilio for communication. It also features an administrative backend (NEXUSCMD) for configuration and management, and capabilities for AI-powered website generation and business analysis.
+Gateway Global AI is the complete AI-first platform for small business owners to launch and manage their online presence. Our mission is **removing all friction from getting online with the latest AI tools**. 
+
+We empower small businesses to generate stunning AI-powered websites with voice, chatbots, and SMS in 30 seconds. The platform combines autonomous agents, Twilio telephony integration, Google Workspace APIs, and revolutionary chat interfaces to help business owners compete in the AI era.
+
+### Core Value Proposition
+- **30-Second AI Websites**: Professional business sites with voice concierge and live chat
+- **AI Biz Bot**: Digital business partner for website modifications and intelligent upselling
+- **Voice AI**: Natural language customer interactions via Kimi-Audio
+- **SMS Management**: Run your business via text with Twilio integration
+- **VoiceLeadMachine**: Outbound campaign tool for automated lead generation
+- **Revolutionary Chat Interface**: First of its kind, fully integrated admin with float/fix/expand modes
+- **DISC & ARCH Controls**: Advanced agent personality customization
+- **Google Workspace**: Seamless integration with Drive, Calendar, Tasks, Docs, Sheets
+
+For complete product vision and strategy, see [PRODUCT_VISION.md](./PRODUCT_VISION.md).
+
+## Platform Status
+**Version**: 1.0.0-MVP  
+**Phase**: Launch Preparation  
+**Target Market**: Small business owners (restaurants, salons, contractors, freelancers, retail, professional services)
+
+See [STATUS.md](./STATUS.md) for current build status and [ROADMAP.md](./ROADMAP.md) for development timeline.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
