@@ -535,7 +535,7 @@ const App: React.FC = () => {
                         >
                           {isWaitingForResponse ? <Loader2 size={40} className="animate-spin" /> : <Radio size={40} className={!isMuted ? 'animate-pulse' : ''} />}
                           <span className="uppercase tracking-tight text-sm">
-                            {!isMuted ? 'Recording…' : isWaitingForResponse ? 'Processing…' : 'Hold to talk'}
+                            {!isMuted ? 'Recording…' : isWaitingForResponse ? 'Processing…' : 'Push to talk'}
                           </span>
                         </button>
                         <div className="flex items-center justify-center gap-2 p-3 bg-black/40 rounded-xl border border-white/5">
@@ -563,7 +563,7 @@ const App: React.FC = () => {
                       onPTTUp={handlePttUp}
                       onSubmit={handleFooterSubmit}
                       onCallback={handleFooterCallback}
-                      isRecording={!isMuted && isPttMode}
+                      isRecording={isConnected && isPttMode && !isMuted}
                       isWaitingResponse={isWaitingForResponse}
                       canSubmit={!isWaitingForResponse}
                       allowAutoSubmit={draftKey === 'ptt'}

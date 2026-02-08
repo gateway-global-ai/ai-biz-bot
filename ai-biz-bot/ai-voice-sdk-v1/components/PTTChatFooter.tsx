@@ -2,7 +2,7 @@
  * PTTChatFooter — Walkie-talkie style chat footer (Gateway Global PTT protocol).
  *
  * Layout (mobile-first):
- * - Bottom 25% of chat: PTT button (hold to talk)
+ * - Bottom 25% of chat: PTT button (push to talk)
  * - Above that 25%: Transcription strip with editable text, Edit / Delete / + controls
  *
  * Timing:
@@ -281,7 +281,7 @@ export const PTTChatFooter: React.FC<PTTChatFooterProps> = ({
             <Radio size={32} className={isRecording ? 'animate-pulse' : ''} />
           )}
           <span className="uppercase tracking-tight text-sm">
-            {isRecording ? 'Recording…' : isWaitingResponse ? 'Waiting for response…' : 'Hold to talk'}
+            {isRecording ? 'Recording…' : isWaitingResponse ? 'Waiting for response…' : 'Push to talk'}
           </span>
         </button>
       </div>
