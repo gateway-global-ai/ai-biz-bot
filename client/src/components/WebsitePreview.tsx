@@ -105,6 +105,23 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const voiceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Chat panel size: floating → fixed sidebar → fullscreen (template-style)
+  type ChatLayoutMode = 'floating' | 'fixed' | 'fullscreen';
+  const [chatLayoutMode, setChatLayoutMode] = useState<ChatLayoutMode>('floating');
+  const cycleChatLayout = useCallback(() => {
+    setChatLayoutMode((prev) =>
+      prev === 'floating' ? 'fixed' : prev === 'fixed' ? 'fullscreen' : 'floating'
+    );
+  }, []);
+
+  // PTT (Push-To-Talk) state: hold to record, release to transcribe & send
+  const [isPTTRecording, setIsPTTRecording] = useState(false);
+  const [isPTTFinalizing, setIsPTTFinalizing] = useState(false);
+  const [pttPreviewText, setPttPreviewText] = useState('');
+  const pttMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const pttStreamRef = useRef<MediaStream | null>(null);
+  const pttChunksRef = useRef<Blob[]>([]);
+
   const sendChatMessage = useCallback(async () => {
     const msg = chatInput.trim();
     if (!msg || chatLoading) return;
@@ -152,6 +169,9 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
     if (isVoiceMode) {
       setIsVoiceMode(false);
       setVoiceIntensity(0);
+      setPttPreviewText('');
+      setIsPTTRecording(false);
+      setIsPTTFinalizing(false);
       if (voiceIntervalRef.current) {
         clearInterval(voiceIntervalRef.current);
         voiceIntervalRef.current = null;
@@ -159,10 +179,119 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
     } else {
       setIsVoiceMode(true);
       voiceIntervalRef.current = setInterval(() => {
-        setVoiceIntensity(Math.random() * 100);
+        setVoiceIntensity((v) => (v + (Math.random() * 40 - 15) + 50) % 100);
       }, 150);
     }
   }, [isVoiceMode]);
+
+  const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = (reader.result as string)?.split(',')[1];
+        resolve(base64 || '');
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+  const handlePTTStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    if (isPTTRecording || isPTTFinalizing) return;
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        pttStreamRef.current = stream;
+        const recorder = new MediaRecorder(stream);
+        pttMediaRecorderRef.current = recorder;
+        pttChunksRef.current = [];
+        recorder.ondataavailable = (ev) => {
+          if (ev.data.size > 0) pttChunksRef.current.push(ev.data);
+        };
+        recorder.onstop = () => {};
+        recorder.start();
+        setIsPTTRecording(true);
+        setPttPreviewText('');
+      } catch (err) {
+        console.error('PTT start failed', err);
+      }
+    })();
+  }, [isPTTRecording, isPTTFinalizing]);
+
+  const handlePTTEnd = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    if (!isPTTRecording) return;
+    const recorder = pttMediaRecorderRef.current;
+    const stream = pttStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+      pttStreamRef.current = null;
+    }
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+      pttMediaRecorderRef.current = null;
+    }
+    setIsPTTRecording(false);
+    setIsPTTFinalizing(true);
+    setPttPreviewText('Processing...');
+
+    const chunks = pttChunksRef.current;
+    if (chunks.length === 0) {
+      setIsPTTFinalizing(false);
+      setPttPreviewText('');
+      return;
+    }
+    const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+    blobToBase64(audioBlob)
+      .then((audioBase64) =>
+        fetch('/api/ptt/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audioBase64 }),
+        })
+      )
+      .then((r) => (r.ok ? r.json() : { transcript: '' }))
+      .then((data) => {
+        const transcript = (data.transcript || '').trim();
+        setPttPreviewText(transcript || '');
+        if (!transcript) {
+          setIsPTTFinalizing(false);
+          return;
+        }
+        const newUserMsg = { role: 'user' as const, content: transcript };
+        setChatMessages((prev) => [...prev, newUserMsg]);
+        setChatLoading(true);
+        const historyWithNew = [...chatMessages, newUserMsg].slice(-10);
+        return fetch('/api/website-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: transcript,
+            businessName: place.name,
+            businessAddress: place.formatted_address,
+            businessPhone: place.formatted_phone_number,
+            history: historyWithNew,
+          }),
+        });
+      })
+      .then((res) => {
+        if (res && res.ok) return res.json();
+        return { response: 'Sorry, something went wrong.' };
+      })
+      .then((data) => {
+        if (data && data.response) {
+          setChatMessages((prev) => [...prev, { role: 'assistant', content: data.response }]);
+        }
+      })
+      .catch(() => {
+        setChatMessages((prev) => [...prev, { role: 'assistant', content: 'Sorry, I couldn’t process that. Please try again.' }]);
+      })
+      .finally(() => {
+        setIsPTTFinalizing(false);
+        setChatLoading(false);
+        setPttPreviewText('');
+      });
+  }, [isPTTRecording, place, chatMessages]);
 
   const heroImage = place.photos && place.photos.length > 0 ? getPhotoUrl(place.photos[0]) : null;
   const galleryImages = (place.photos || []).slice(1, 4).map(p => getPhotoUrl(p, 600)).filter(Boolean) as string[];
@@ -917,13 +1046,31 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
       )}
 
       {isChatOpen && (
-        <div className="fixed bottom-24 right-6 w-96 max-w-[calc(100vw-3rem)] h-[500px] bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200 z-50">
-          <div className="bg-blue-600 p-4 flex justify-between items-center gap-2 text-white">
+        <div
+          className={`fixed z-50 flex flex-col overflow-hidden bg-white shadow-2xl border border-slate-200 transition-all duration-300 ${
+            chatLayoutMode === 'fullscreen'
+              ? 'inset-0 w-full h-full rounded-none border-none'
+              : chatLayoutMode === 'fixed'
+                ? 'top-0 bottom-0 right-0 w-[450px] max-w-[100vw] rounded-none border-l'
+                : 'bottom-24 right-6 w-96 max-w-[calc(100vw-3rem)] h-[500px] rounded-3xl'
+          }`}
+        >
+          <div className="bg-blue-600 p-4 flex justify-between items-center gap-2 text-white shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-blue-400 flex items-center justify-center text-sm font-bold shrink-0">AI</div>
               <span className="font-semibold">AI Biz Bot</span>
             </div>
             <div className="flex items-center gap-1">
+              <button
+                onClick={cycleChatLayout}
+                className="hover:bg-blue-500 p-1.5 rounded-full shrink-0 hidden sm:flex items-center justify-center"
+                title="Switch view (floating / sidebar / fullscreen)"
+                aria-label="Resize chat"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75v4.5m0-4.5h-4.5m4.5 0L15 9m5.25 11.25v-4.5m0 4.5h-4.5m4.5 0L15 15" />
+                </svg>
+              </button>
               <button
                 onClick={() => { setIsAdminOpen(true); }}
                 className="hover:bg-blue-500 p-1.5 rounded-full shrink-0 flex items-center gap-1 text-white/90 hover:text-white text-xs font-medium"
@@ -944,56 +1091,93 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
             {isVoiceMode ? (
-              <div className="flex flex-col items-center justify-center h-full gap-6">
-                <div className="relative flex items-center justify-center">
-                  <div
-                    className="absolute rounded-full bg-blue-500/20 animate-ping"
-                    style={{
-                      width: `${80 + voiceIntensity * 0.8}px`,
-                      height: `${80 + voiceIntensity * 0.8}px`,
-                      animationDuration: '2s',
-                    }}
-                  />
-                  <div
-                    className="absolute rounded-full bg-blue-500/30 animate-pulse"
-                    style={{
-                      width: `${70 + voiceIntensity * 0.6}px`,
-                      height: `${70 + voiceIntensity * 0.6}px`,
-                    }}
-                  />
-                  <div
-                    className="relative w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-lg shadow-blue-500/30 transition-transform duration-150"
-                    style={{ transform: `scale(${0.9 + (voiceIntensity / 100) * 0.3})` }}
+              <div className="h-full flex flex-col bg-[#0a0f1c] text-white -m-4 rounded-b-2xl overflow-hidden">
+                <div className="p-5 border-b border-white/10 flex justify-between items-center bg-[#0d1321] shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/40">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-black text-sm uppercase tracking-widest">Voice Engine</h3>
+                      <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Secure PTT Mode</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={toggleVoiceMode}
+                    className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border border-white/10"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-white">
-                      <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
-                      <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
-                    </svg>
+                    Text Mode
+                  </button>
+                </div>
+                <div className="flex-1 p-5 flex flex-col gap-6 overflow-y-auto">
+                  <div className="bg-[#111827] border border-slate-800 rounded-3xl p-6 shadow-2xl shrink-0">
+                    <div className="flex justify-between items-center mb-6">
+                      <h4 className="flex items-center gap-2 text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                        <span className={`w-2 h-2 rounded-full ${isPTTRecording ? 'bg-red-500 animate-pulse' : isPTTFinalizing ? 'bg-amber-500 animate-pulse' : 'bg-blue-500'}`} />
+                        {isPTTRecording ? 'Capturing Signal...' : isPTTFinalizing ? 'Finalizing...' : 'Standby'}
+                      </h4>
+                      <div className="w-16 h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: isPTTRecording ? '100%' : '20%' }} />
+                      </div>
+                    </div>
+                    <div className="h-20 flex items-center justify-center gap-2">
+                      {[...Array(12)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="w-2.5 bg-gradient-to-t from-blue-700 to-blue-400 rounded-full transition-all duration-75"
+                          style={{ height: `${isPTTRecording ? Math.max(12, voiceIntensity * 0.2 + 20) : 6}px` }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div className="bg-[#111827] border border-slate-800 rounded-3xl p-6 flex flex-col relative min-h-[120px] shadow-lg shrink-0">
+                    <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest mb-4">Transcription Preview</h4>
+                    <div className={`flex-1 text-base leading-relaxed transition-opacity duration-300 ${(isPTTRecording || isPTTFinalizing) ? 'opacity-100' : 'opacity-40'}`}>
+                      {(isPTTRecording || isPTTFinalizing) ? (
+                        <p className="text-white font-medium italic">
+                          "{pttPreviewText || (isPTTFinalizing ? 'Processing signal...' : "I'm listening...")}"
+                        </p>
+                      ) : (
+                        <p className="text-slate-500 text-sm">Hold the button below to capture audio.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="text-center">
-                  <p className="text-sm font-semibold text-slate-700" data-testid="text-voice-status">Listening...</p>
-                  <p className="text-xs text-slate-400 mt-1">Speak to the AI concierge</p>
+                <div className="p-8 pb-10 bg-[#0d1321] border-t border-white/5 shrink-0">
+                  <button
+                    onMouseDown={handlePTTStart}
+                    onMouseUp={handlePTTEnd}
+                    onMouseLeave={(e) => { if (isPTTRecording) handlePTTEnd(e); }}
+                    onTouchStart={handlePTTStart}
+                    onTouchEnd={handlePTTEnd}
+                    className={`w-full py-7 rounded-[2.5rem] font-black text-sm uppercase tracking-[0.25em] transition-all flex flex-col items-center justify-center gap-2 shadow-2xl touch-none select-none ${
+                      isPTTRecording
+                        ? 'bg-red-600 text-white scale-[0.98] shadow-red-900/40 ring-4 ring-red-600/20'
+                        : 'bg-white text-slate-900 hover:bg-slate-100 shadow-slate-900/20'
+                    }`}
+                    data-testid="button-voice-ptt"
+                  >
+                    {isPTTRecording ? (
+                      <>
+                        <span className="w-3 h-3 bg-white rounded-full animate-ping" />
+                        Capturing...
+                      </>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-5 h-5 text-blue-600">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+                        </svg>
+                        Hold to Record
+                      </>
+                    )}
+                  </button>
+                  <div className="mt-5 flex items-center justify-between text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+                    <span className={`w-2 h-2 rounded-full ${isVoiceMode ? 'bg-green-500' : 'bg-slate-700'}`} />
+                    {isVoiceMode ? 'Online' : 'Offline'}
+                  </div>
                 </div>
-                <div className="flex gap-1 items-end h-12">
-                  {Array.from({ length: 20 }).map((_, i) => {
-                    const barHeight = Math.max(4, Math.sin((i / 20) * Math.PI + voiceIntensity * 0.05) * voiceIntensity * 0.4 + Math.random() * 8);
-                    return (
-                      <div
-                        key={i}
-                        className="w-1.5 bg-blue-500 rounded-full transition-all duration-100"
-                        style={{ height: `${barHeight}px`, opacity: 0.4 + (barHeight / 48) * 0.6 }}
-                      />
-                    );
-                  })}
-                </div>
-                <button
-                  onClick={toggleVoiceMode}
-                  className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-full transition-colors"
-                  data-testid="button-voice-stop"
-                >
-                  End Voice
-                </button>
               </div>
             ) : (
               <>
@@ -1021,44 +1205,43 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
               </>
             )}
           </div>
-          <div className="p-4 bg-white border-t border-slate-100">
-            <form onSubmit={(e) => { e.preventDefault(); sendChatMessage(); }} className="flex gap-2">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 px-4 py-2 bg-slate-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-                data-testid="input-preview-chat"
-                disabled={chatLoading || isVoiceMode}
-              />
-              <button
-                type="button"
-                onClick={toggleVoiceMode}
-                className={`p-2 rounded-full transition-colors shrink-0 ${
-                  isVoiceMode
-                    ? 'bg-red-500 text-white hover:bg-red-600'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'
-                }`}
-                data-testid="button-preview-voice-toggle"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                  <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
-                  <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
-                </svg>
-              </button>
-              <button 
-                type="submit"
-                disabled={chatLoading || !chatInput.trim() || isVoiceMode} 
-                className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0" 
-                data-testid="button-preview-chat-send"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                </svg>
-              </button>
-            </form>
-          </div>
+          {!isVoiceMode && (
+            <div className="p-4 bg-white border-t border-slate-100 shrink-0">
+              <form onSubmit={(e) => { e.preventDefault(); sendChatMessage(); }} className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Type a message..."
+                  className="flex-1 px-4 py-2 bg-slate-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
+                  data-testid="input-preview-chat"
+                  disabled={chatLoading}
+                />
+                <button
+                  type="button"
+                  onClick={toggleVoiceMode}
+                  className="p-2 rounded-full shrink-0 bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition-colors"
+                  data-testid="button-preview-voice-toggle"
+                  title="Voice (Hold to Record)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                    <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+                    <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
+                  </svg>
+                </button>
+                <button 
+                  type="submit"
+                  disabled={chatLoading || !chatInput.trim()} 
+                  className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 transition-colors shrink-0" 
+                  data-testid="button-preview-chat-send"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                  </svg>
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       )}
 
