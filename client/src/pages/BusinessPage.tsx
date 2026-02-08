@@ -381,12 +381,12 @@ export default function BusinessPage() {
   const [gateStep, setGateStep] = useState<'phone' | 'otp'>('phone');
   const [otpCode, setOtpCode] = useState('');
   const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
-  const [previewTimer, setPreviewTimer] = useState(24);
+  const [previewTimer, setPreviewTimer] = useState(600); // 10 minutes to view preview and complete OTP
   const [trainingProgress, setTrainingProgress] = useState(0);
   const [demoLeadId, setDemoLeadId] = useState<string | null>(null);
   const [ownerName, setOwnerName] = useState('');
   const [nameError, setNameError] = useState('');
-  const [demoCountdown, setDemoCountdown] = useState(24);
+  const [demoCountdown, setDemoCountdown] = useState(3600); // 1 hour (production)
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [sendingCode, setSendingCode] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
@@ -615,7 +615,7 @@ export default function BusinessPage() {
 
   useEffect(() => {
     if (stage !== 'preview') return;
-    setPreviewTimer(24);
+    setPreviewTimer(600); // 10 minutes
     const interval = setInterval(() => {
       setPreviewTimer(prev => {
         if (prev <= 1) {
@@ -646,7 +646,7 @@ export default function BusinessPage() {
 
   useEffect(() => {
     if (stage !== 'training') return;
-    setDemoCountdown(24);
+    setDemoCountdown(3600); // 1 hour
     const interval = setInterval(() => {
       setDemoCountdown(prev => {
         if (prev <= 1) {
