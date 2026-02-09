@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "twilio": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@twilio-alpha/mcp",
+        "YOUR_ACCOUNT_SID/YOUR_API_KEY:YOUR_API_SECRET"
+      ]
+    },
+    "user-twilio-telephony": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@twilio-alpha/mcp",
+        "YOUR_ACCOUNT_SID/YOUR_API_KEY:YOUR_API_SECRET",
+        "--services",
+        "twilio_api_v2010",
+        "--tags",
+        "Api20100401IncomingPhoneNumber"
+      ]
+    }
+  }
+}

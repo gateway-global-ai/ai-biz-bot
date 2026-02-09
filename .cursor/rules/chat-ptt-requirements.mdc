@@ -1,0 +1,39 @@
+---
+description: Non-negotiable chat and PTT interface requirements. Do not remove or replace without explicit product approval.
+globs: 
+  - "client/src/components/WebsitePreview.tsx"
+  - "client/src/pages/customer/BusinessPage.tsx"
+  - "platform/chat/**"
+  - "client/src/components/**/Chat*.tsx"
+  - "client/src/components/**/Floating*.tsx"
+---
+
+# Chat and PTT Interface Requirements (Non-Negotiable)
+
+## Standardized chat interface
+
+- The **standardized chat interface** must support **single-click** switching between three layout modes: **floating** (card), **fixed** (sidebar), and **fullscreen**.
+- One control (e.g. a header button) must cycle: floating → fixed → fullscreen → floating. No removal of this behavior.
+
+## PTT (Push-To-Talk)
+
+- **PTT** must be integrated: hold to record, release to transcribe and send.
+- The voice view must show: **Secure PTT Mode**, **Transcription Preview**, and a **Hold to Record** button (or equivalent).
+- Voice and text views must be switchable (e.g. "Text Concierge" / "Voice Concierge" in a menu or tabs).
+
+## Customer-facing entry points
+
+- Customer-facing website UI must provide:
+  - **Voice Concierge** entry (opens chat in voice/PTT view).
+  - **Chat Concierge** entry (opens chat in text view).
+  - A floating FAB or equivalent to open the chat panel.
+- The chat panel header must show **agent name + role** (e.g. "Ava CONCIERGE"), not a generic label only.
+- A menu (e.g. hamburger) must allow switching Text Concierge / Voice Concierge and accessing Admin when applicable.
+
+## Do not
+
+- Do not remove or replace the layout cycle (floating/fixed/fullscreen) with a single fixed layout.
+- Do not replace PTT with a different voice UX (e.g. always-on listening) without explicit product approval.
+- Do not ship a customer chat that lacks either text or voice/PTT entry and the standardized panel.
+
+See [docs/mvp/CHAT_AND_PTT_REQUIREMENTS.md](../../docs/mvp/CHAT_AND_PTT_REQUIREMENTS.md) for the full spec.
