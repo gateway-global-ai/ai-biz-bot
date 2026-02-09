@@ -1,10 +1,8 @@
 # Website Builder SDK
 
-**⚠️ This is the canonical, production-ready version of the website builder.**
+**Canonical deployable copy:** The platform uses **`platform/website-builder/`** as the single source for the running app. This directory (`sdk/website-builder/`) is kept for SDK packaging and reference; sync from or to **`platform/website-builder/`** when updating the live builder. See **`platform/README.md`** in the repo root.
 
 AI-powered website generator that creates professional business websites from Google Maps data.
-
-**Location:** `sdk/website-builder/` (consolidated from multiple previous locations)
 
 ## 🎉 NEW: Advanced Features Integrated (Feb 7, 2026)
 

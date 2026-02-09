@@ -1,10 +1,8 @@
-# Website Builder SDK
+# Website Builder SDK (AI Biz Bot reference)
 
-**⚠️ This is the canonical, production-ready version of the website builder.**
+**Canonical deployable copy:** The main platform uses **`platform/website-builder/`** as the single source for the running app. This directory is a **reference copy** for the AI Biz Bot flow; for production deployment use **`platform/website-builder/`**. See repo root **`platform/README.md`**.
 
 AI-powered website generator that creates professional business websites from Google Maps data. In the **AI Biz Bot** integration flow it is **third**: **1) AI Voice first** → **2) Chat second** → **3) Website builder** (which uses the MCP-defined components and inserts voice + chat into site templates).
-
-**Location (AI Biz Bot):** `ai-biz-bot/website-builder/` — also available at `sdk/website-builder/` (consolidated from multiple previous locations).
 
 ## 🎉 NEW: Advanced Features Integrated (Feb 7, 2026)
 

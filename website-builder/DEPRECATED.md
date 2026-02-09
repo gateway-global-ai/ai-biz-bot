@@ -4,10 +4,11 @@
 
 ## New Location
 
-This website builder has been moved to:
+The **canonical** deployable website builder is now:
 ```
-sdk/website-builder/
+platform/website-builder/
 ```
+A copy also exists at `sdk/website-builder/` for SDK packaging; the running app uses **platform/**.
 
 ## Why Was This Moved?
 
@@ -15,8 +16,8 @@ As part of the repository cleanup and SDK consolidation effort, all SDK componen
 
 ## What Should You Do?
 
-- **For Development**: Use `sdk/website-builder/` instead
-- **For Production**: Reference `sdk/website-builder/` in your deployment scripts
+- **For Development**: Use **`platform/website-builder/`** (or `sdk/website-builder/`) as the source
+- **For Production**: The platform serves from **`platform/`**; see repo root `platform/README.md`
 - **For Documentation**: Update any references to point to the new location
 
 ## Timeline
@@ -33,7 +34,7 @@ website-builder/
 
 To:
 ```
-sdk/website-builder/
+platform/website-builder/
 ```
 
 All functionality remains identical - this is just a location change for better organization.

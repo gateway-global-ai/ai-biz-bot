@@ -1,5 +1,7 @@
 # Gateway Chat SDK
 
+**Canonical deployable copy:** The server serves embed script from **`platform/chat/src/`** at `/sdk/*`. This directory (`sdk/chat/`) is kept for SDK packaging and reference; the running app uses **`platform/chat/`**. See repo root **`platform/README.md`**.
+
 **Frontend-only SDK for embedding AI-powered chat widgets.** All backend logic is handled by the Gateway Global AI platform APIs. The SDK is purely client-side JavaScript.
 
 ---

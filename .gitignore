@@ -37,4 +37,4 @@ sdk/website-builder/dist/
 
 # Optional: zip assets used during build (e.g. Voice Lead Machine source)
 *.zip
-attached_assets/*.zip
+reference/attached_assets/*.zip

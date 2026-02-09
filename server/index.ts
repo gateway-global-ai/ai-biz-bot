@@ -506,8 +506,8 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // Serve SDK files statically at /sdk/*
-  const sdkPath = path.resolve(import.meta.dirname, '..', 'sdk', 'chat', 'src');
+  // Serve SDK files statically at /sdk/* (canonical: platform/chat)
+  const sdkPath = path.resolve(import.meta.dirname, '..', 'platform', 'chat', 'src');
   app.use('/sdk', express.static(sdkPath));
 
   // importantly only setup vite in development and after
