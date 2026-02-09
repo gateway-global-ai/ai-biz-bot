@@ -14,7 +14,7 @@ git checkout main
 git pull origin main
 
 echo "==> Installing deps and building..."
-npm ci --omit=dev
+npm ci
 npm run build
 
 if command -v pm2 &>/dev/null; then
