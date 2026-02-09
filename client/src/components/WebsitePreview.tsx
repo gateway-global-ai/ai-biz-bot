@@ -91,6 +91,9 @@ interface ChatMessage {
 export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
+  const agentName = 'Ava';
+  const agentRole = 'CONCIERGE';
   
   const [adminTab, setAdminTab] = useState<'data' | 'reviews' | 'ai'>('data');
   const [mapsApiKey, setMapsApiKey] = useState<string | null>(null);
@@ -237,6 +240,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
 
     const chunks = pttChunksRef.current;
     if (chunks.length === 0) {
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: "Couldn't hear that. Try again." }]);
       setIsPTTFinalizing(false);
       setPttPreviewText('');
       return;
@@ -255,7 +259,9 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
         const transcript = (data.transcript || '').trim();
         setPttPreviewText(transcript || '');
         if (!transcript) {
+          setChatMessages((prev) => [...prev, { role: 'assistant', content: "Couldn't hear that. Try again." }]);
           setIsPTTFinalizing(false);
+          setPttPreviewText('');
           return;
         }
         const newUserMsg = { role: 'user' as const, content: transcript };
@@ -284,7 +290,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
         }
       })
       .catch(() => {
-        setChatMessages((prev) => [...prev, { role: 'assistant', content: 'Sorry, I couldn’t process that. Please try again.' }]);
+        setChatMessages((prev) => [...prev, { role: 'assistant', content: "Couldn't hear that. Try again." }]);
       })
       .finally(() => {
         setIsPTTFinalizing(false);
@@ -327,6 +333,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
             testIdPrefix="preview-share"
           />
           <button
+            onClick={() => { setIsChatOpen(true); setIsVoiceMode(false); }}
             className="p-2 sm:px-4 sm:py-2 text-sm font-medium rounded-full transition-colors flex items-center gap-2 shadow-lg bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20"
             data-testid="button-preview-concierge"
           >
@@ -373,7 +380,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                   </span>
                 </button>
                 <button
-                  onClick={() => setIsChatOpen(true)}
+                  onClick={() => { setIsChatOpen(true); setIsVoiceMode(false); }}
                   className="flex items-center justify-center gap-2 px-8 py-4 bg-white/5 hover:bg-white/10 text-white rounded-full font-semibold transition-all backdrop-blur-sm border border-white/10 hover:border-white/20"
                   data-testid="button-preview-chat"
                 >
@@ -1058,7 +1065,10 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
           <div className="bg-blue-600 p-4 flex justify-between items-center gap-2 text-white shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-blue-400 flex items-center justify-center text-sm font-bold shrink-0">AI</div>
-              <span className="font-semibold">AI Biz Bot</span>
+              <div>
+                <span className="font-semibold block leading-tight">{agentName}</span>
+                <span className="text-[10px] opacity-90 uppercase tracking-wider font-bold">{agentRole}</span>
+              </div>
             </div>
             <div className="flex items-center gap-1">
               <button
@@ -1072,7 +1082,17 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                 </svg>
               </button>
               <button
-                onClick={() => { setIsAdminOpen(true); }}
+                onClick={() => setIsChatMenuOpen(!isChatMenuOpen)}
+                className="hover:bg-blue-500 p-1.5 rounded-full shrink-0 flex items-center justify-center"
+                title="Menu"
+                aria-label="Chat menu"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+              </button>
+              <button
+                onClick={() => { setIsAdminOpen(true); setIsChatMenuOpen(false); }}
                 className="hover:bg-blue-500 p-1.5 rounded-full shrink-0 flex items-center gap-1 text-white/90 hover:text-white text-xs font-medium"
                 title="Admin Dashboard"
                 data-testid="button-preview-admin-from-chat"
@@ -1082,13 +1102,41 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                 </svg>
                 <span className="hidden sm:inline">Admin</span>
               </button>
-              <button onClick={() => { setIsChatOpen(false); if (isVoiceMode) toggleVoiceMode(); }} className="hover:bg-blue-500 p-1 rounded-full shrink-0" data-testid="button-preview-chat-close">
+              <button onClick={() => { setIsChatOpen(false); setIsChatMenuOpen(false); if (isVoiceMode) toggleVoiceMode(); }} className="hover:bg-blue-500 p-1 rounded-full shrink-0" data-testid="button-preview-chat-close">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
           </div>
+          {isChatMenuOpen && (
+            <div className="absolute inset-0 z-50 bg-slate-50 animate-in slide-in-from-right duration-200 flex flex-col">
+              <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white shadow-sm">
+                <h3 className="font-bold text-slate-800 text-lg">System Options</h3>
+                <button onClick={() => setIsChatMenuOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                <button onClick={() => { setIsVoiceMode(false); setIsChatMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all text-left">
+                  <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
+                  </div>
+                  <div><span className="block font-bold text-slate-900 text-sm">Text Concierge</span><span className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Standard Chat</span></div>
+                </button>
+                <button onClick={() => { setIsVoiceMode(true); setIsChatMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 bg-slate-900 border border-slate-900 rounded-xl shadow-md hover:bg-slate-800 transition-all text-left">
+                  <div className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" /></svg>
+                  </div>
+                  <div><span className="block font-bold text-white text-sm">Voice Concierge</span><span className="text-[10px] text-blue-400 uppercase font-black tracking-widest">Push to Talk</span></div>
+                </button>
+                <button onClick={() => { setIsAdminOpen(true); setIsChatMenuOpen(false); }} className="w-full flex items-center gap-3 p-3 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors text-left mt-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                  <span className="font-bold text-xs uppercase tracking-widest">Admin Dashboard</span>
+                </button>
+              </div>
+            </div>
+          )}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
             {isVoiceMode ? (
               <div className="h-full flex flex-col bg-[#0a0f1c] text-white -m-4 rounded-b-2xl overflow-hidden">
@@ -1174,8 +1222,11 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                     )}
                   </button>
                   <div className="mt-5 flex items-center justify-between text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
-                    <span className={`w-2 h-2 rounded-full ${isVoiceMode ? 'bg-green-500' : 'bg-slate-700'}`} />
-                    {isVoiceMode ? 'Online' : 'Offline'}
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${isVoiceMode ? 'bg-green-500' : 'bg-slate-700'}`} />
+                      {isVoiceMode ? 'Online' : 'Offline'}
+                    </div>
+                    <button type="button" onClick={() => { toggleVoiceMode(); setTimeout(() => toggleVoiceMode(), 150); }} className="text-blue-500 hover:text-blue-400 transition-colors">Restart Connection</button>
                   </div>
                 </div>
               </div>
@@ -1212,7 +1263,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Type a message..."
+                  placeholder="Ask me anything..."
                   className="flex-1 px-4 py-2 bg-slate-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
                   data-testid="input-preview-chat"
                   disabled={chatLoading}

@@ -4,7 +4,7 @@ import twilio from 'twilio';
 let cachedClient: any = null;
 let cachedPhoneNumber: string | null = null;
 
-function getCredentials() {
+function getCredentials(): { accountSid: string; authToken: string; phoneNumber: string | undefined } {
   // First try direct environment variables
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
@@ -15,11 +15,21 @@ function getCredentials() {
       accountSid,
       authToken,
       phoneNumber,
-      useDirectAuth: true
     };
   }
 
   throw new Error('Twilio credentials not configured. Please set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN secrets.');
+}
+
+/** Returns credentials or null when Twilio is not configured (so callers can return 503 instead of throwing). */
+function getCredentialsOrNull(): { accountSid: string; authToken: string; phoneNumber: string | undefined } | null {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const phoneNumber = process.env.TWILIO_ACCOUNT_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER_BOT;
+  if (accountSid && authToken) {
+    return { accountSid, authToken, phoneNumber };
+  }
+  return null;
 }
 
 export async function getTwilioClient() {
@@ -29,9 +39,9 @@ export async function getTwilioClient() {
   return cachedClient;
 }
 
-export async function getTwilioFromPhoneNumber() {
+export async function getTwilioFromPhoneNumber(): Promise<string | null> {
   if (cachedPhoneNumber) return cachedPhoneNumber;
-  
+
   // First try database config (Gateway Global number)
   try {
     const { storage } = await import('./storage');
@@ -43,11 +53,11 @@ export async function getTwilioFromPhoneNumber() {
   } catch (e) {
     // Fallback to env vars if storage fails
   }
-  
-  // Fallback to environment variables
-  const { phoneNumber } = getCredentials();
-  cachedPhoneNumber = phoneNumber || null;
-  return phoneNumber;
+
+  // Fallback to environment variables; return null if not configured (no throw)
+  const creds = getCredentialsOrNull();
+  cachedPhoneNumber = creds?.phoneNumber ?? null;
+  return cachedPhoneNumber;
 }
 
 export async function getAccountSid() {

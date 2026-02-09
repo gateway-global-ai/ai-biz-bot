@@ -26,6 +26,16 @@ Gateway Global AI is the all-in-one platform for small business owners to launch
 
 **For complete product vision**, see [PRODUCT_VISION.md](./PRODUCT_VISION.md) | **For GitHub strategy**, see [GITHUB_STRATEGY.md](./GITHUB_STRATEGY.md)
 
+## Core product requirements (non-negotiable)
+
+The following are required for all customer-facing chat surfaces; do not remove or replace without explicit product approval:
+
+- **Standardized chat interface** — Single-click layout cycle: **floating** → **fixed** (sidebar) → **fullscreen**. One control in the chat header cycles these modes.
+- **PTT (Push-To-Talk)** — Hold to record, release to transcribe and send; voice view shows Secure PTT Mode, transcription preview, and Hold to Record. Restart Connection available in voice footer.
+- **Entry points** — **Voice Concierge** (opens in voice/PTT view), **Chat Concierge** (opens in text view), and a floating FAB or Concierge button. Chat header shows agent name + role (e.g. "Ava CONCIERGE"). In-panel menu for Text Concierge / Voice Concierge / Admin.
+
+See [docs/mvp/CHAT_AND_PTT_REQUIREMENTS.md](docs/mvp/CHAT_AND_PTT_REQUIREMENTS.md) for the full spec.
+
 ## 📋 Recent Updates
 
 **Website Builder SDK** (Feb 7, 2026): Consolidated website builder code into `sdk/website-builder/` as the canonical, production-ready version. Deprecated duplicate directories (`website-builder/` and `genai-business-site-generator (2)/`). The SDK version includes secure API handling, backend proxy support, and proper environment configuration. See [Website Builder SDK Documentation](sdk/website-builder/README.md) for details.
@@ -47,6 +57,8 @@ Gateway Global AI is the all-in-one platform for small business owners to launch
 - Node.js 20+ 
 - PostgreSQL database
 - Environment variables configured (see `.env.example`)
+- **Cursor MCP (optional):** To use Twilio/telephony and other MCP servers in Cursor, see [.cursor/MCP_SETUP.md](.cursor/MCP_SETUP.md).
+- **Secrets (recommended):** We use [Doppler](https://www.doppler.com/) for dev/staging/prod. See [docs/deployment/SECRET_MANAGER_SETUP.md](docs/deployment/SECRET_MANAGER_SETUP.md) to set it up; then run `npm run dev:doppler` for local dev.
 
 ### Installation
 

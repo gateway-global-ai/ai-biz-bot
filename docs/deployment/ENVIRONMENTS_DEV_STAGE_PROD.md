@@ -27,6 +27,8 @@ This pulls `main`, builds, and restarts the app at **https://aibizbot.gatewayglo
   - Use `.env` (or `.env.local`) with dev credentials; point at local or shared dev DB if needed.  
   - No formal “deploy”; you pull/push via Git and run locally.
 
+  - **Secrets:** See [SECRETS_AND_ENV.md](SECRETS_AND_ENV.md) for safe storage and sharing across dev/stage/prod.
+
 - **Stage (staging)**  
   - Mirrors production (same stack, similar config) but with a **staging URL** and **staging data** (e.g. staging DB, test Twilio number).  
   - Used for final testing, QA, and stakeholder sign-off before going live.  
