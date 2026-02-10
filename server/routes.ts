@@ -7,6 +7,7 @@ import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding
 import knowledgeRoutes from "./routes/knowledge-routes";
 import { registerMenuRoutes } from "./routes/menu-routes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
+import { registerB2BRoutes } from "./routes/b2b-routes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -151,6 +152,9 @@ export async function registerRoutes(
   app.patch("/api/customer/profile", customerUpdateProfile);
   app.get("/api/customer/businesses", customerGetBusinesses);
   app.post("/api/customer/claim-business", customerClaimBusiness);
+
+  // B2B Data API routes
+  registerB2BRoutes(app);
 
   // ============ Demo Lead / Magic Link Onboarding ============
 

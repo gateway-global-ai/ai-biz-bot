@@ -2,6 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    /* BACKGROUNDS: Enforcing the white-base rule */
+    --bg-primary: #FFFFFF;
+    --bg-secondary: #F9FAFB;
+    
+    /* BRAND COLORS: Pink Accents */
+    --color-primary: #E91E63;
+    --color-primary-hover: #C2185B;
+    
+    /* THEME LOCK: Mandatory light mode */
+    color-scheme: light !important;
+  }
+
+  body {
+    background-color: var(--bg-primary) !important;
+    color: #111827 !important; /* High-contrast text */
+    @apply font-sans antialiased;
+  }
+}
+
+/* Custom Component Shorthands */
+@layer components {
+  .btn-primary {
+    @apply bg-brand-pink hover:bg-brand-darkPink text-white px-6 py-2 rounded-full font-bold transition-all shadow-lg shadow-brand-pink/20;
+  }
+  
+  .card-clean {
+    @apply bg-surface-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow;
+  }
+}
+
 html {
   scrollbar-width: none;
 }

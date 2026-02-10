@@ -1,13 +1,15 @@
 
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Save, Trash2, Calendar, CheckSquare, Edit3, Ticket, Plus, BedDouble, Utensils, Plane, Activity, MoreHorizontal, Briefcase, MapPin, Star, X, Share2, FileText, Mail, Loader2, Link, Car, Footprints, Bus, Bike, DollarSign, PieChart, Home, Zap, ShoppingCart, Coffee, ClipboardList, Check } from 'lucide-react';
-import { Booking, TripFocus, GoogleAuthToken, TransportMode, TripBudget, Expense, ExpenseCategory, Task } from '../types';
+import { Save, Trash2, Calendar, CheckSquare, Edit3, Ticket, Plus, BedDouble, Utensils, Plane, Activity, MoreHorizontal, Briefcase, MapPin, Star, X, Share2, FileText, Mail, Loader2, Link, Car, Footprints, Bus, Bike, DollarSign, PieChart, Home, Zap, ShoppingCart, Coffee, ClipboardList, Check, ShieldCheck } from 'lucide-react';
+import { Booking, TripFocus, GoogleAuthToken, TransportMode, TripBudget, Expense, ExpenseCategory, Task, DayItinerary } from '../types';
 import { createGoogleDoc, formatItineraryForExport, sendGmail } from '../services/googleWorkspace';
+import { ItineraryExportService } from '../../../../src/services/ItineraryExportService';
 
 interface ItineraryCanvasProps {
   content: string;
   bookings: Booking[];
+  days: DayItinerary[];
   tripFocus: TripFocus | null;
   tripBudget: TripBudget;
   tripTasks: Task[];
@@ -23,6 +25,7 @@ interface ItineraryCanvasProps {
 export const ItineraryCanvas: React.FC<ItineraryCanvasProps> = ({ 
     content, 
     bookings, 
+    days,
     tripFocus, 
     tripBudget, 
     tripTasks,
@@ -200,6 +203,37 @@ export const ItineraryCanvas: React.FC<ItineraryCanvasProps> = ({
       }
   };
 
+  const handleExportWhitelabelProposal = async () => {
+      if (!googleToken) {
+          onLoginRequest();
+          return;
+      }
+      setIsProcessing(true);
+      setIsShareMenuOpen(false);
+      
+      try {
+          const agentBranding = { 
+              name: "Gateway Global Partner", 
+              contact: "partner@gatewayglobal.ai" 
+          };
+
+          const result = await ItineraryExportService.exportToGoogleDocs(
+              googleToken.access_token,
+              { days, focus: tripFocus },
+              agentBranding
+          );
+          
+          if (result && (result as any).success) {
+              alert("B2B Whitelabel Proposal generated successfully!");
+          }
+      } catch (error) {
+          console.error("Export Error:", error);
+          alert("Failed to generate proposal. Please verify your connection.");
+      } finally {
+          setIsProcessing(false);
+      }
+  };
+
   const handleOpenEmailModal = () => {
       if (!googleToken) {
           onLoginRequest();
@@ -344,19 +378,35 @@ export const ItineraryCanvas: React.FC<ItineraryCanvasProps> = ({
                  </button>
                  
                  {isShareMenuOpen && (
-                     <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in duration-200">
+                     <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in duration-200">
+                         <button 
+                            onClick={handleExportWhitelabelProposal}
+                            disabled={isProcessing}
+                            className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-indigo-50 flex items-center gap-3 border-b border-slate-50"
+                         >
+                             {isProcessing ? (
+                                 <Loader2 className="animate-spin" size={16} /> 
+                             ) : (
+                                 <ShieldCheck size={16} className="text-emerald-500" />
+                             )}
+                             <div>
+                                 <p className="font-bold">Client Proposal</p>
+                                 <p className="text-[10px] text-slate-500 uppercase tracking-tighter">Whitelabel (No Net Rates)</p>
+                             </div>
+                         </button>
+
                          <button 
                             onClick={handleSaveToDocs}
                             disabled={isProcessing}
-                            className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-b border-slate-50"
+                            className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-50"
                          >
-                             {isProcessing ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} className="text-blue-500" />}
-                             Save to Google Doc
+                             <FileText size={16} className="text-blue-500" />
+                             Save Full Working Doc
                          </button>
                          <button 
                             onClick={handleOpenEmailModal}
                             disabled={isProcessing}
-                            className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                            className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-3"
                          >
                              <Mail size={16} className="text-red-500" />
                              Email Itinerary

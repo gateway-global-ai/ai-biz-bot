@@ -53,8 +53,10 @@ export async function sendOtp(req: Request, res: Response): Promise<void> {
       expiresAt,
     });
 
+    const isMock = process.env.MOCK_TWILIO_SMS === 'true';
     const fromNumber = await getTwilioFromPhoneNumber();
-    if (!fromNumber) {
+    
+    if (!fromNumber && !isMock) {
       res.status(500).json({ error: "SMS service not configured" });
       return;
     }
@@ -62,7 +64,7 @@ export async function sendOtp(req: Request, res: Response): Promise<void> {
     await sendSms(
       normalizedPhone,
       `Your Gateway Global AI login code is: ${code}\n\nThis code expires in 5 minutes.`,
-      fromNumber
+      fromNumber || undefined
     );
 
     res.json({ 

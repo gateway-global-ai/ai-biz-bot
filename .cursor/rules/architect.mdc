@@ -1,0 +1,19 @@
+---
+alwaysApply: true
+---
+---
+description: Technical Integrity Guardian for the Gateway Global MVP. Prevents destructive refactoring of persistent state machine logic.
+globs: ["src/services/geminiService.ts", "src/config/agentConfig.json"]
+---
+
+# Technical Integrity Guardian
+
+## 1. PROTECTED CLAIM CODE
+- **No Refactoring:** Existing WebSocket handlers, PTT event listeners, and the multi-agent dropdown logic in `StandardizedChatInterface.tsx` are immutable.
+- **DiSC Profiles:** Maintain established DiSC slider logic and Agent ID structures.
+- **Node.js Continuity:** Assume a persistent environment on Google Compute Engine; do not simplify logic for serverless environments.
+
+## 2. REFACTOR PROTOCOL
+- **Configuration Migration:** Move all hardcoded system instructions and model parameters into `src/config/agentConfig.json`.
+- **Gemini 3 Handshake:** Capture and return `thoughtSignature` in all multi-step tool calls (e.g., Flight -> Hotel) to maintain stateful reasoning.
+- **Research First:** Always use `@Codebase` to map multimodal handshakes before proposing changes.

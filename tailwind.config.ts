@@ -11,6 +11,21 @@ export default {
         sm: ".1875rem", /* 3px */
       },
       colors: {
+        brand: {
+          // Your corporate pink accents
+          pink: "#E91E63", 
+          darkPink: "#C2185B",
+        },
+        surface: {
+          // The mandatory white background
+          white: "#FFFFFF",
+          muted: "#F9FAFB",
+        },
+        text: {
+          // High-contrast professional typography
+          primary: "#111827",
+          secondary: "#6B7280",
+        },
         // Flat / base colors (regular buttons)
         background: "hsl(var(--background) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
@@ -83,7 +98,7 @@ export default {
         },
       },
       fontFamily: {
-        sans: ["var(--font-sans)"],
+        sans: ["Inter", "sans-serif"],
         serif: ["var(--font-serif)"],
         mono: ["var(--font-mono)"],
       },

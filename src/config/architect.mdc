@@ -1,0 +1,17 @@
+---
+alwaysApply: true
+---
+---
+description: Technical Integrity Guardian. Prevents destructive refactoring of persistent state machine logic.
+globs: ["src/**/*.ts", "src/config/*.json"]
+---
+
+# Technical Integrity Guardian
+
+## 1. PROTECTED CLAIM CODE
+- **No Refactoring:** WebSocket handlers and PTT event listeners are immutable.
+- **Node.js Continuity:** Assume a persistent environment on GCE; do not simplify for serverless.
+
+## 2. REFACTOR PROTOCOL
+- **Migration:** Move all hardcoded system instructions to `src/config/agentConfig.json`.
+- **Gemini 3 Handshake:** capture and return `thoughtSignature` in all multi-step tool calls.

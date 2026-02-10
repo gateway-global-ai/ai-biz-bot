@@ -60,7 +60,19 @@ import {
   type VlmCallAttempt,
   type InsertVlmCallAttempt,
   type Inquiry,
-  type InsertInquiry,
+  type   InsertInquiry,
+  hotels,
+  flights,
+  itineraries,
+  agentMarkups,
+  type Hotel,
+  type InsertHotel,
+  type Flight,
+  type InsertFlight,
+  type Itinerary,
+  type InsertItinerary,
+  type AgentMarkup,
+  type InsertAgentMarkup,
   botTemplates,
   telephonyConfigs,
   callLogs,
@@ -257,6 +269,15 @@ export interface IStorage {
   getAllOgSettings(): Promise<any[]>;
   upsertOgSettings(settings: any): Promise<any>;
   deleteOgSettings(id: string): Promise<boolean>;
+
+  // B2B Itinerary operations
+  getItinerary(id: number): Promise<Itinerary | undefined>;
+  createItinerary(itinerary: InsertItinerary): Promise<Itinerary>;
+  updateItinerary(id: number, updates: Partial<InsertItinerary>): Promise<Itinerary | undefined>;
+  
+  // Agent Markup operations
+  getAgentMarkup(agentId: number): Promise<AgentMarkup | undefined>;
+  upsertAgentMarkup(markup: InsertAgentMarkup): Promise<AgentMarkup>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1202,6 +1223,44 @@ export class DatabaseStorage implements IStorage {
   async deleteInquiry(id: string): Promise<boolean> {
     await db.delete(inquiries).where(eq(inquiries.id, id));
     return true;
+  }
+
+  // B2B Itinerary operations
+  async getItinerary(id: number): Promise<Itinerary | undefined> {
+    const [itinerary] = await db.select().from(itineraries).where(eq(itineraries.id, id));
+    return itinerary;
+  }
+
+  async createItinerary(itinerary: InsertItinerary): Promise<Itinerary> {
+    const [created] = await db.insert(itineraries).values(itinerary).returning();
+    return created;
+  }
+
+  async updateItinerary(id: number, updates: Partial<InsertItinerary>): Promise<Itinerary | undefined> {
+    const [updated] = await db.update(itineraries)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(itineraries.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Agent Markup operations
+  async getAgentMarkup(agentId: number): Promise<AgentMarkup | undefined> {
+    const [markup] = await db.select().from(agentMarkups).where(eq(agentMarkups.agentId, agentId));
+    return markup;
+  }
+
+  async upsertAgentMarkup(markup: InsertAgentMarkup): Promise<AgentMarkup> {
+    const existing = await this.getAgentMarkup(markup.agentId);
+    if (existing) {
+      const [updated] = await db.update(agentMarkups)
+        .set(markup)
+        .where(eq(agentMarkups.agentId, markup.agentId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(agentMarkups).values(markup).returning();
+    return created;
   }
 }
 

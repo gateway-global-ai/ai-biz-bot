@@ -1731,3 +1731,87 @@ export const insertInquirySchema = createInsertSchema(inquiries, {
 
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
 export type Inquiry = typeof inquiries.$inferSelect;
+
+// =========================================
+// Unified B2B Schema: GRN Connect & SerpAPI
+// =========================================
+
+// 1. HOTELS TABLE: Linking GRN to Google Maps
+export const hotels = pgTable('hotels', {
+  id: serial('id').primaryKey(),
+  grnCode: varchar('grn_code', { length: 50 }).unique().notNull(), // GRN Hotel Code
+  googlePlaceId: varchar('google_place_id', { length: 255 }), // Captured via Spatial Join
+  name: text('name').notNull(),
+  address: text('address'),
+  rating: doublePrecision('rating'),
+  geolocation: jsonb('geolocation').notNull(), // Store Lat/Lng for grounding
+  lastFetchedRates: jsonb('last_fetched_rates'), // Cache for the 20-min window
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const insertHotelSchema = createInsertSchema(hotels).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertHotel = z.infer<typeof insertHotelSchema>;
+export type Hotel = typeof hotels.$inferSelect;
+
+// 2. FLIGHTS TABLE: Mapping SerpAPI Results
+export const flights = pgTable('flights', {
+  id: serial('id').primaryKey(),
+  bookingToken: text('booking_token').unique(), // SerpAPI deep-link token
+  airline: varchar('airline', { length: 100 }),
+  departureAirport: varchar('departure_airport', { length: 3 }), // IATA
+  arrivalAirport: varchar('arrival_airport', { length: 3 }), // IATA
+  netPrice: doublePrecision('net_price').notNull(),
+  currency: varchar('currency', { length: 3 }).default('USD'),
+  stops: integer('stops').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const insertFlightSchema = createInsertSchema(flights).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertFlight = z.infer<typeof insertFlightSchema>;
+export type Flight = typeof flights.$inferSelect;
+
+// 3. ITINERARIES TABLE: The "Stateful" Anchor
+export const itineraries = pgTable('itineraries', {
+  id: serial('id').primaryKey(),
+  agentId: integer('agent_id').notNull(),
+  clientName: text('client_name'),
+  tripAnchorName: text('trip_anchor_name'), // e.g., "The Venetian"
+  thoughtSignature: text('thought_signature'), // Gemini reasoning state
+  days: jsonb('days').notNull(), // Full structured DayItinerary array
+  isPublished: boolean('is_published').default(false),
+  updatedAt: timestamp('updated_at').defaultNow(),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
+export const insertItinerarySchema = createInsertSchema(itineraries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertItinerary = z.infer<typeof insertItinerarySchema>;
+export type Itinerary = typeof itineraries.$inferSelect;
+
+// 4. AGENT MARKUPS: Commission Persistence
+export const agentMarkups = pgTable('agent_markups', {
+  agentId: serial('id').primaryKey(),
+  markupType: varchar('markup_type', { length: 20 }).default('percentage'), // percentage vs flat
+  markupValue: doublePrecision('markup_value').default(15.0),
+  preferredCurrency: varchar('preferred_currency', { length: 3 }).default('INR'), // Asia market focus
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+export const insertAgentMarkupSchema = createInsertSchema(agentMarkups).omit({
+  updatedAt: true,
+});
+
+export type InsertAgentMarkup = z.infer<typeof insertAgentMarkupSchema>;
+export type AgentMarkup = typeof agentMarkups.$inferSelect;
