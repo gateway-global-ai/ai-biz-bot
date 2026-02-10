@@ -68,6 +68,13 @@ git remote set-url origin git@github.com:gateway-global-ai/chat-mvp-merge.git
 git remote -v
 ```
 
+**For deploy keys (automated systems, agents, servers):**
+
+Deploy keys are SSH keys that grant access to a single repository. See [DEPLOY_KEYS.md](DEPLOY_KEYS.md) for:
+- Managing deploy keys for servers and agents
+- Cursor agent deploy key details (`.cursor/DEPLOY_KEY.md`)
+- Best practices and troubleshooting
+
 ---
 
 ## 3. Daily workflow: Cursor ↔ GitHub

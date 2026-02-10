@@ -123,3 +123,5 @@ If a server still shows “No server info found,” check:
 - [Cursor MCP docs](https://docs.cursor.com/context/mcp)
 - [Twilio Alpha MCP](https://github.com/twilio-labs/mcp) — use `@twilio-alpha/mcp` and the credential format above
 - [Twilio API keys](https://www.twilio.com/docs/iam/api-keys)
+- [Deploy Key](./DEPLOY_KEY.md) — SSH deploy key for cursor agent GitHub access
+- [Deploy Keys Reference](../docs/deployment/DEPLOY_KEYS.md) — Complete deploy keys documentation
