@@ -246,6 +246,13 @@ chat-mvp-merge/
 - [VOICE_AI_RESEARCH.md](./docs/VOICE_AI_RESEARCH.md) - **Comprehensive voice AI provider research** ⭐
 - [sdk/learning/README.md](./sdk/learning/README.md) - **Learning SDK complete guide** ⭐ NEW
 
+### Deployment & Infrastructure
+- [docs/deployment/DEPLOY_KEYS.md](./docs/deployment/DEPLOY_KEYS.md) - **SSH deploy keys management** ⭐
+- [docs/deployment/SETUP_GITHUB_HOSTINGER_CURSOR.md](./docs/deployment/SETUP_GITHUB_HOSTINGER_CURSOR.md) - GitHub and VPS setup
+- [docs/deployment/server_deployment.md](./docs/deployment/server_deployment.md) - Server deployment standard
+- [docs/deployment/SECRET_MANAGER_SETUP.md](./docs/deployment/SECRET_MANAGER_SETUP.md) - Secrets management with Doppler
+- [.cursor/DEPLOY_KEY.md](./.cursor/DEPLOY_KEY.md) - Cursor agent deploy key
+
 ## 🌿 Branch Strategy
 
 ### Main Branches
