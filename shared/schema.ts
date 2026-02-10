@@ -1731,3 +1731,97 @@ export const insertInquirySchema = createInsertSchema(inquiries, {
 
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
 export type Inquiry = typeof inquiries.$inferSelect;
+
+// ==========================================
+// B2B Travel OS – GRN Connect Hotels & SerpAPI Flights (System of Record)
+// ==========================================
+
+/** GRN Connect hotels: hotel_code + google_place_id from Spatial Join for re-fetching live rates */
+export const b2bHotels = pgTable("b2b_hotels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hotelCode: text("hotel_code").notNull(), // GRN identifier
+  googlePlaceId: text("google_place_id"), // from Spatial Join; used to re-fetch
+  name: text("name"),
+  rawResponse: jsonb("raw_response"), // full GRN response for replay/audit
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertB2bHotelSchema = createInsertSchema(b2bHotels).omit({ id: true, createdAt: true });
+export type InsertB2bHotel = z.infer<typeof insertB2bHotelSchema>;
+export type B2bHotel = typeof b2bHotels.$inferSelect;
+
+/** SerpAPI flights: booking_token + IATA for Continental Handshake (arrival → hotel check-in) */
+export const b2bFlights = pgTable("b2b_flights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingToken: text("booking_token").notNull(), // SerpAPI
+  departureId: text("departure_id").notNull(), // IATA
+  arrivalId: text("arrival_id").notNull(), // IATA
+  rawResponse: jsonb("raw_response"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertB2bFlightSchema = createInsertSchema(b2bFlights).omit({ id: true, createdAt: true });
+export type InsertB2bFlight = z.infer<typeof insertB2bFlightSchema>;
+export type B2bFlight = typeof b2bFlights.$inferSelect;
+
+/** Agent-specific markup rules for AgentMarkupComponent (percentage vs flat fee) */
+export const b2bAgentMarkups = pgTable("b2b_agent_markups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").references(() => agents.id),
+  agentRef: text("agent_ref"), // name or external id if no agents.id
+  type: text("type").notNull(), // 'percentage' | 'flat_fee'
+  value: numeric("value", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertB2bAgentMarkupSchema = createInsertSchema(b2bAgentMarkups).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertB2bAgentMarkup = z.infer<typeof insertB2bAgentMarkupSchema>;
+export type B2bAgentMarkup = typeof b2bAgentMarkups.$inferSelect;
+
+/** In-progress / completed itineraries per client and Trip Anchor (orchestrator state) */
+export const b2bItineraries = pgTable("b2b_itineraries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientRef: text("client_ref").notNull(), // client or session identifier
+  tripAnchor: text("trip_anchor"), // e.g. place name or ID for "Continental Handshake"
+  status: text("status").notNull().default("in_progress"), // 'in_progress' | 'completed'
+  thoughtState: jsonb("thought_state"), // orchestrator thought_signature / selections
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertB2bItinerarySchema = createInsertSchema(b2bItineraries).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertB2bItinerary = z.infer<typeof insertB2bItinerarySchema>;
+export type B2bItinerary = typeof b2bItineraries.$inferSelect;
+
+/** Leads (hotel or flight) added to an itinerary; links to b2b_hotels or b2b_flights */
+export const b2bItineraryItems = pgTable("b2b_itinerary_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  itineraryId: varchar("itinerary_id").references(() => b2bItineraries.id).notNull(),
+  leadType: text("lead_type").notNull(), // 'hotel' | 'flight'
+  hotelId: varchar("hotel_id").references(() => b2bHotels.id),
+  flightId: varchar("flight_id").references(() => b2bFlights.id),
+  markupApplied: numeric("markup_applied", { precision: 10, scale: 2 }),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertB2bItineraryItemSchema = createInsertSchema(b2bItineraryItems).omit({ id: true, createdAt: true });
+export type InsertB2bItineraryItem = z.infer<typeof insertB2bItineraryItemSchema>;
+export type B2bItineraryItem = typeof b2bItineraryItems.$inferSelect;
+
+/** Curation audit: every drag/add/markup change in Agent Curation Panel (lead scoring for GRN) */
+export const b2bCurationEvents = pgTable("b2b_curation_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  itineraryId: varchar("itinerary_id").references(() => b2bItineraries.id),
+  leadType: text("lead_type").notNull(),
+  leadId: text("lead_id").notNull(), // hotel_id or flight_id
+  eventType: text("event_type").notNull(), // 'added' | 'removed' | 'markup_changed'
+  agentId: varchar("agent_id").references(() => agents.id),
+  payload: jsonb("payload"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertB2bCurationEventSchema = createInsertSchema(b2bCurationEvents).omit({ id: true, createdAt: true });
+export type InsertB2bCurationEvent = z.infer<typeof insertB2bCurationEventSchema>;
+export type B2bCurationEvent = typeof b2bCurationEvents.$inferSelect;

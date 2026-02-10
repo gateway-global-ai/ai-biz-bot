@@ -1,5 +1,7 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
+import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -7,6 +9,11 @@ import { startTaskScheduler } from "./taskScheduler";
 import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
 import { setupBrowserVoiceRoutes, setupBrowserVoiceWebSocket, setupBrowserAudioTempRoute } from "./browserVoice";
 import { storage } from "./storage";
+
+const runtimeDirname =
+  typeof __dirname !== "undefined"
+    ? __dirname
+    : path.dirname(fileURLToPath(import.meta.url));
 
 // Seed default admin user on startup (ensures admin exists in production)
 async function seedDefaultAdmin() {
@@ -507,7 +514,7 @@ app.use((req, res, next) => {
   });
 
   // Serve SDK files statically at /sdk/* (canonical: platform/chat)
-  const sdkPath = path.resolve(import.meta.dirname, '..', 'platform', 'chat', 'src');
+  const sdkPath = path.resolve(runtimeDirname, "..", "platform", "chat", "src");
   app.use('/sdk', express.static(sdkPath));
 
   // importantly only setup vite in development and after

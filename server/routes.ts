@@ -7,6 +7,7 @@ import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding
 import knowledgeRoutes from "./routes/knowledge-routes";
 import { registerMenuRoutes } from "./routes/menu-routes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
+import { registerB2bRoutes } from "./routes/b2b-routes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -7240,6 +7241,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
   // Register Inquiry routes
   registerInquiryRoutes(app);
+
+  // B2B Travel OS: itineraries, GRN/SerpAPI leads, markups, curation events
+  registerB2bRoutes(app);
 
   return httpServer;
 }
