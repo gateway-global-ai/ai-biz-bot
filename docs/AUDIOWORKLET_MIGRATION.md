@@ -330,13 +330,35 @@ registerProcessor('clear-voice-processor', ClearVoiceProcessor);
 
 **Error:**
 ```
+AbortError: Unable to load a worklet's module.
 Failed to load worklet module: 404 Not Found
 ```
 
 **Solution:**
-Ensure `clear-voice-processor.js` is in the `public/` folder and accessible at:
+Ensure `clear-voice-processor.js` is in the **Vite public directory**:
+
+```
+my-project/
+├── client/
+│   └── public/
+│       └── clear-voice-processor.js  <-- MUST be here (not root /public/)
+├── vite.config.ts (root: "client/")
+└── package.json
+```
+
+The file will be copied to `dist/public/` during build and served at:
 ```
 https://your-domain.com/clear-voice-processor.js
+```
+
+**Verification:**
+```bash
+# Check build output
+ls dist/public/clear-voice-processor.js
+
+# Test HTTP access
+curl -I https://your-domain.com/clear-voice-processor.js
+# Should return: HTTP/1.1 200 OK
 ```
 
 ### Issue: Audio still glitches
