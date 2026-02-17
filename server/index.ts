@@ -11,6 +11,7 @@ import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
 import { setupBrowserVoiceRoutes, setupBrowserVoiceWebSocket, setupBrowserAudioTempRoute } from "./browserVoice";
 import { setupGeminiLiveWebSocket } from "./geminiVoice";
 import { storage } from "./storage";
+import { validateGeminiConfig } from "./config/geminiLiveProtocol";
 
 const runtimeDirname =
   typeof __dirname !== "undefined"
@@ -566,6 +567,14 @@ app.use((req, res, next) => {
   // Seed default admin and core agents before starting server
   await seedDefaultAdmin();
   await seedCoreAgents();
+
+  // Validate Gemini Live API configuration
+  try {
+    validateGeminiConfig();
+  } catch (error) {
+    console.error('Server startup aborted due to invalid configuration');
+    process.exit(1);
+  }
 
   httpServer
     .listen(port, "0.0.0.0", () => {
