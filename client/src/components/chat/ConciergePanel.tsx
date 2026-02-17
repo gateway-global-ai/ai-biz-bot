@@ -97,10 +97,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     const initEngine = async () => {
       setConnectionStatus('connecting');
       try {
-        console.log('[ConciergePanel] Initializing voice engine:', voiceConfig.mode);
+        console.log('[ConciergePanel] Initializing voice engine:', currentVoiceConfig.mode);
         
         // 1. Factory creates the right engine (Standard vs Clear Voice)
-        const newClient = VoiceClientFactory.createClient(voiceConfig);
+        const newClient = VoiceClientFactory.createClient(currentVoiceConfig);
         
         // 2. Setup Listeners
         newClient.onMessage((msg) => {
@@ -126,7 +126,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         });
 
         // 3. Connect
-        await newClient.connect(business, agent, voiceConfig);
+        await newClient.connect(business, agent, currentVoiceConfig);
         setClient(newClient);
         setConnectionStatus('connected');
         
@@ -142,11 +142,11 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
     initEngine();
 
+    // Cleanup on unmount or config change
     return () => {
-      console.log('[ConciergePanel] Cleaning up voice engine');
       client?.disconnect();
     };
-  }, [isOpen, voiceConfig.mode]); // Re-init if mode changes
+  }, [isOpen, currentVoiceConfig, business, agent]); // ✅ Added currentVoiceConfig dependency
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -467,14 +467,12 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           }
         }}
         onConfigChange={(newConfig) => {
+          // Update config - useEffect will auto-restart the engine
           setCurrentVoiceConfig({
             ...currentVoiceConfig,
             ...newConfig
           });
-          // Reinitialize client with new config
-          client?.disconnect();
-          setConnectionStatus('disconnected');
-          // The useEffect will pick up the new config and reinit
+          addMessage('system', `Settings updated: Buffer ${newConfig.bufferDelay}ms. Reconnecting...`);
         }}
       />
     </div>

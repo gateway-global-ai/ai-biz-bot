@@ -114,11 +114,17 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
     };
     onConfigChange(newConfig);
     addSystemLog(`✓ Settings applied: Buffer=${bufferDelay}ms, Threshold=${silenceThreshold}dB`);
+    addSystemLog(`🔄 Auto-restarting voice engine with new configuration...`);
+    
+    // Auto-close settings panel after 2 seconds to show the restart
+    setTimeout(() => {
+      onClose();
+    }, 2000);
   };
 
   const resetToDefaults = () => {
     const defaults = selectedEngine === 'stream' 
-      ? { buffer: 500, threshold: -45 }
+      ? { buffer: 800, threshold: -45 }  // ✅ Updated to 800ms optimal
       : { buffer: 1000, threshold: -40 };
     
     setBufferDelay(defaults.buffer);
@@ -149,7 +155,8 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
   // --- Buffer Delay Presets ---
   const bufferPresets = [
     { value: 250, label: 'Aggressive', desc: '~0.95s response', risk: 'High' },
-    { value: 500, label: 'Optimal', desc: '~1.2s response', risk: 'Low' },
+    { value: 500, label: 'Fast', desc: '~1.2s response', risk: 'Medium' },
+    { value: 800, label: 'Optimal', desc: '~1.5s response', risk: 'None' },
     { value: 1000, label: 'Balanced', desc: '~1.7s response', risk: 'None' },
     { value: 2000, label: 'Conservative', desc: '~2.7s response', risk: 'None' }
   ];
