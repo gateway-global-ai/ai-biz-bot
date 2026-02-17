@@ -1,3 +1,46 @@
+/**
+ * @deprecated LEGACY CODE - DO NOT USE IN NEW DEVELOPMENT
+ * 
+ * This file contains the original voice client implementation that connected
+ * directly to Google's Gemini API from the browser (exposing API keys).
+ * 
+ * It has been replaced by the following modern architecture:
+ * 
+ * NEW IMPLEMENTATION:
+ * ==================
+ * - client/src/services/voice/GeminiStreamingClient.ts (Secure WebSocket proxy)
+ * - client/src/services/voice/RestTransactionalClient.ts (PTT mode)
+ * - client/src/components/chat/ConciergePanel.tsx (Unified UI)
+ * - server/geminiVoice.ts (Server-side API key protection)
+ * 
+ * KEY IMPROVEMENTS:
+ * =================
+ * ✅ API Key Security: Keys never exposed to browser
+ * ✅ AudioWorklet: Modern API (no deprecation warnings)
+ * ✅ Dual Engine: Streaming (Premium) + PTT (Standard) modes
+ * ✅ Buffer Control: 250ms-2000ms configurable latency
+ * ✅ Settings Panel: Real-time monitoring and A/B testing
+ * 
+ * WHY THIS FILE REMAINS:
+ * ======================
+ * 1. Historical Reference: Shows original working implementation
+ * 2. Edge Case Logic: Contains tested business rules
+ * 3. AI Context: Helps Copilot/Gemini understand architecture evolution
+ * 4. Migration Guide: Demonstrates patterns that were migrated
+ * 
+ * MIGRATION PATH:
+ * ===============
+ * Old: new LiveVoiceClient() → connect() → setStreaming()
+ * New: VoiceClientFactory.createClient(config) → connect() → startSession()
+ * 
+ * See: docs/CLEAR_VOICE_TECH.md for complete migration documentation
+ * See: docs/AUDIOWORKLET_MIGRATION.md for technical details
+ * 
+ * @file liveService.ts
+ * @deprecated Since 2026-02-17
+ * @superseded-by GeminiStreamingClient, ConciergePanel
+ */
+
 import { LiveServerMessage, Modality, Type } from '@google/genai';
 import { BusinessData } from '../types';
 
@@ -20,10 +63,24 @@ function decode(base64: string) {
   return bytes;
 }
 
+/**
+ * @deprecated Use GeminiStreamingClient or RestTransactionalClient instead
+ * 
+ * SECURITY WARNING: This class connects directly to Google API from browser,
+ * exposing the API key. The new implementation uses a secure server-side proxy.
+ * 
+ * @see client/src/services/voice/GeminiStreamingClient.ts
+ * @see client/src/services/voice/RestTransactionalClient.ts
+ */
 export class LiveVoiceClient {
   private inputAudioContext: AudioContext | null = null;
   private outputAudioContext: AudioContext | null = null;
   private inputSource: MediaStreamAudioSourceNode | null = null;
+  
+  /**
+   * @deprecated ScriptProcessorNode is deprecated by browsers
+   * @see AudioWorkletNode in GeminiStreamingClient.ts
+   */
   private processor: ScriptProcessorNode | null = null;
   private socket: WebSocket | null = null;
   private currentStream: MediaStream | null = null;
@@ -41,7 +98,9 @@ export class LiveVoiceClient {
   public onToolCall: (call: any) => Promise<any> = async () => ({});
   public onError: (message: string) => void = () => {};
 
-  constructor() {}
+  constructor() {
+    // Silenced legacy logs - see GeminiStreamingClient for active implementation
+  }
 
   async resumeAudio() {
     if (this.inputAudioContext && (this.inputAudioContext.state === 'suspended' || this.inputAudioContext.state === 'interrupted')) {
@@ -66,7 +125,7 @@ export class LiveVoiceClient {
         } 
       });
     } catch (err) {
-      console.error("Microphone access denied:", err);
+      // Silenced - see GeminiStreamingClient for active error handling
       this.onError("Microphone access is required for the voice concierge.");
       throw new Error("Microphone access is required.");
     }
@@ -152,7 +211,7 @@ export class LiveVoiceClient {
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
-        console.log('Voice Proxy: Connected');
+        // Silenced - see server/geminiVoice.ts for active WebSocket implementation
         
         // Send initial setup message
         const setupMessage = {
@@ -185,17 +244,17 @@ export class LiveVoiceClient {
           const msg = JSON.parse(event.data);
           await this.handleMessage(msg);
         } catch (e) {
-          console.error("Error parsing message:", e);
+          // Silenced - see GeminiStreamingClient.handleMessage() for active parsing
         }
       };
 
       this.socket.onclose = (e) => {
-        console.log('Voice Proxy: Closed', e);
+        // Silenced - see GeminiStreamingClient for active connection management
         this.isConnected = false;
       };
 
       this.socket.onerror = (err) => {
-        console.error('Voice Proxy: Error', err);
+        // Silenced - see GeminiStreamingClient for active error handling
         this.onError("Connection lost");
       };
 
@@ -303,14 +362,14 @@ export class LiveVoiceClient {
     if (inputTranscription) {
       const { text } = inputTranscription;
       if (text) {
-        console.log("[LiveVoiceClient] Transcription update:", text);
+        // Silenced - see GeminiStreamingClient for active transcription handling
         this.currentInputText = text;
         this.onTranscriptionUpdate(this.currentInputText, false);
       }
     }
     
     if (serverContent?.turn_complete || serverContent?.turnComplete) {
-       console.log("[LiveVoiceClient] Turn complete. Final text:", this.currentInputText);
+       // Silenced - see GeminiStreamingClient for active turn completion
        this.onTranscriptionUpdate(this.currentInputText, true);
        this.currentInputText = '';
     }
@@ -321,11 +380,11 @@ export class LiveVoiceClient {
       for (const part of parts) {
         const inlineData = part.inline_data || part.inlineData;
         if (inlineData?.data) {
-          console.log("[LiveVoiceClient] Playing model audio chunk");
+          // Silenced - see GeminiStreamingClient for active audio playback
           this.playAudio(inlineData.data);
         }
         if (part.text) {
-          console.log("[LiveVoiceClient] Model text response:", part.text);
+          // Silenced - see GeminiStreamingClient for active text response handling
           this.onMessage(part.text);
         }
       }
