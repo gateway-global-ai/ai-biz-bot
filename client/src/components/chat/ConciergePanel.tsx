@@ -19,6 +19,7 @@ import {
 import { VoiceClientFactory } from '../../services/voice/VoiceClientFactory';
 import { IVoiceClient } from '../../services/voice/IVoiceClient';
 import { VoiceConfig, BusinessContext, AgentConfig, ChatMessage as VoiceChatMessage } from '../../types/voice';
+import { VoiceSettings } from '../voice/VoiceSettings';
 
 // --- Types ---
 interface ConciergePanelProps {
@@ -76,6 +77,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [volumeLevel, setVolumeLevel] = useState(0);
+  
+  // Settings State
+  const [showSettings, setShowSettings] = useState(false);
+  const [currentVoiceConfig, setCurrentVoiceConfig] = useState(voiceConfig);
   
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -269,15 +274,13 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-1">
-          {onOpenSettings && (
-            <button 
-              onClick={onOpenSettings} 
-              className="p-2 hover:bg-gray-50 rounded-full text-gray-400 transition-colors"
-              title="Settings"
-            >
-              <Settings size={16} />
-            </button>
-          )}
+          <button 
+            onClick={() => setShowSettings(true)} 
+            className="p-2 hover:bg-gray-50 rounded-full text-gray-400 transition-colors"
+            title="Voice AI Settings"
+          >
+            <Settings size={16} />
+          </button>
           {onCycleLayout && (
             <button 
               onClick={onCycleLayout} 
@@ -448,6 +451,32 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           </div>
         )}
       </div>
+
+      {/* Voice Settings Modal */}
+      <VoiceSettings
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        currentMode={voiceConfig.mode}
+        currentConfig={{
+          bufferDelay: currentVoiceConfig.bufferDelay || 500,
+          silenceThreshold: currentVoiceConfig.silenceThreshold || -45,
+          analysis: currentVoiceConfig.analysis || {
+            detectEmotion: false,
+            detectSentiment: false,
+            detectDISC: false
+          }
+        }}
+        onConfigChange={(newConfig) => {
+          setCurrentVoiceConfig({
+            ...currentVoiceConfig,
+            ...newConfig
+          });
+          // Reinitialize client with new config
+          client?.disconnect();
+          setConnectionStatus('disconnected');
+          // The useEffect will pick up the new config and reinit
+        }}
+      />
     </div>
   );
 };

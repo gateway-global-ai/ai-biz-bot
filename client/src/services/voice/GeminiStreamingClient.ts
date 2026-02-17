@@ -243,8 +243,8 @@ export class GeminiStreamingClient implements IVoiceClient {
       this.streaming = true;
       this.resumeAudioContexts();
     } else {
-      // Smart buffer: Base delay is 500ms, but can extend if speech detected
-      const baseDelay = this.config.bufferDelay || 500;
+      // Smart buffer: Base delay is 250ms for maximum responsiveness
+      const baseDelay = this.config.bufferDelay || 250;
       
       this.stopTimeout = window.setTimeout(() => {
         this.streaming = false;
