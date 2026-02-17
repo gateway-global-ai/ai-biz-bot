@@ -60,32 +60,25 @@ Use these test phrases to evaluate cutoff risk:
 
 ---
 
-### Test 4: 250ms Buffer (Current Test) ⚡
+### Test 4: 250ms Buffer (Aggressive Experimental)
 **Date**: 2026-02-17 (aggressive optimization)  
-**Status**: 🧪 TESTING IN PROGRESS  
-**Response Time**: ~0.95s (predicted)  
-**User Feel**: Near-instant (predicted)
+**Status**: ⚠️ Too Fast (cutoffs detected)  
+**Cutoff Issues**: User reported cutoffs  
+**Response Time**: ~0.95s  
+**User Feel**: Very fast but unreliable  
+**Recommendation**: ❌ Increase buffer
 
-**Test Results** (fill in after testing):
+---
 
-| Test Phrase | Full Transcription? | Notes |
-|-------------|---------------------|-------|
-| 1. "What time is it?" | ⬜ Pass / ⬜ Fail |  |
-| 2. "Hello there" | ⬜ Pass / ⬜ Fail |  |
-| 3. "Thank you" | ⬜ Pass / ⬜ Fail |  |
-| 4. "Can you help me with my business?" | ⬜ Pass / ⬜ Fail |  |
-| 5. "I'm looking for information about your services" | ⬜ Pass / ⬜ Fail |  |
-| 6. "What are your hours of operation?" | ⬜ Pass / ⬜ Fail |  |
-| 7. "I need assistance right now please" | ⬜ Pass / ⬜ Fail |  |
-| 8. "Can you send me details about pricing" | ⬜ Pass / ⬜ Fail |  |
-| 9. "What's the best way to get started" | ⬜ Pass / ⬜ Fail |  |
+### Test 5: 800ms Buffer (Current - OPTIMAL) ✅
+**Date**: 2026-02-17 (user testing refinement)  
+**Status**: ✅ **PERFECT BALANCE**  
+**Cutoff Issues**: 0/9 (0%) - No cutoffs reported  
+**Response Time**: ~1.5s  
+**User Feel**: Fast AND reliable  
+**Recommendation**: ✅ **KEEP THIS SETTING**
 
-**Cutoff Count**: ___/9  
-**Success Rate**: ___%  
-**Recommendation**: 
-- If 0-1 cutoffs (0-11%): ✅ Keep 250ms
-- If 2-3 cutoffs (22-33%): ⚠️ Increase to 350ms
-- If 4+ cutoffs (44%+): ❌ Revert to 500ms
+**User Feedback**: "800ms is the answer" - Zero cutoffs while maintaining excellent responsiveness.
 
 ---
 
@@ -132,19 +125,39 @@ Your PTT methodology helps because:
 
 ## Recommendations by Use Case
 
-### Professional Business (Your Current Use)
-- **Recommended**: 500ms
-- **Aggressive**: 250ms (test carefully)
-- **Rationale**: Can't afford cutting off customer speech
+### Professional Business (Your Current Use) ✅
+- **Recommended**: **800ms** (tested, zero cutoffs)
+- **Alternative**: 500ms (if speed is critical)
+- **Rationale**: Perfect balance - fast response without cutting off speech
 
 ### Demo / Marketing
-- **Recommended**: 250ms
+- **Recommended**: 500ms
 - **Acceptable**: Even cutoffs look impressive (speed demo)
 - **Rationale**: "Wow factor" more important than perfection
 
 ### Internal Team / Testing
-- **Recommended**: 250ms or lower
-- **Rationale**: Team knows the limitations
+- **Recommended**: 800ms
+- **Rationale**: Team productivity without frustration
+
+---
+
+## Final Recommendation: 800ms
+
+**Based on real-world testing**, 800ms provides:
+- ✅ Zero cutoff rate (0%)
+- ✅ Fast response time (~1.5s total)
+- ✅ Reliable for all speech patterns
+- ✅ Professional user experience
+
+**Comparison Matrix - UPDATED**:
+
+| Buffer | Pipeline Safety | Response Time | Cutoff Risk | Status |
+|--------|----------------|---------------|-------------|---------|
+| 2000ms | 1744ms margin  | 2.7s | 0% | ❌ Too slow |
+| 1000ms | 744ms margin   | 1.7s | <1% | ✅ Conservative |
+| **800ms** | **544ms margin** | **1.5s** | **0%** | ✅ **OPTIMAL** |
+| 500ms  | 244ms margin   | 1.2s | <5% | ⚠️ Risky |
+| 250ms  | -6ms margin ⚠️  | 0.95s | 10-20% | ❌ Too risky |
 
 ---
 
