@@ -38,7 +38,7 @@ export class GeminiStreamingClient implements IVoiceClient {
   private inputAudioContext: AudioContext | null = null;
   private outputAudioContext: AudioContext | null = null;
   private inputSource: MediaStreamAudioSourceNode | null = null;
-  private processor: ScriptProcessorNode | null = null;
+  private workletNode: AudioWorkletNode | null = null; // ✅ Modern replacement
   private socket: WebSocket | null = null;
   private currentStream: MediaStream | null = null;
   private connected = false;
@@ -171,7 +171,7 @@ export class GeminiStreamingClient implements IVoiceClient {
     this.currentStream?.getTracks().forEach(t => t.stop());
     this.activeSources.forEach(s => { try { s.stop(); } catch(e) {} });
     this.activeSources.clear();
-    this.processor?.disconnect();
+    this.workletNode?.disconnect(); // ✅ Updated
     this.inputSource?.disconnect();
     this.inputAudioContext?.close();
     this.outputAudioContext?.close();
@@ -261,35 +261,45 @@ export class GeminiStreamingClient implements IVoiceClient {
     }
   }
 
-  private setupAudioProcessing() {
+  private async setupAudioProcessing() {
     if (!this.currentStream || !this.inputAudioContext) return;
     
-    this.inputSource = this.inputAudioContext.createMediaStreamSource(this.currentStream);
-    this.processor = this.inputAudioContext.createScriptProcessor(4096, 1, 1);
-
-    this.processor.onaudioprocess = (e) => {
-      const inputData = e.inputBuffer.getChannelData(0);
+    try {
+      // ✅ Step 1: Load the AudioWorklet module (runs on background thread)
+      await this.inputAudioContext.audioWorklet.addModule('/clear-voice-processor.js');
       
-      let sum = 0;
-      for (let i = 0; i < inputData.length; i++) {
-        sum += inputData[i] * inputData[i];
-      }
-      const rms = Math.sqrt(sum / inputData.length);
+      // ✅ Step 2: Create the source from microphone
+      this.inputSource = this.inputAudioContext.createMediaStreamSource(this.currentStream);
       
-      // Scale RMS for visualizer (0.0 to 1.0 range usually, but can be higher)
-      this.volumeCallback(rms);
+      // ✅ Step 3: Create the AudioWorklet node
+      this.workletNode = new AudioWorkletNode(this.inputAudioContext, 'clear-voice-processor');
 
-      if (this.streaming && this.socket && this.socket.readyState === WebSocket.OPEN) {
-        const pcmBlob = this.createPcmBlob(inputData);
-        this.socket.send(JSON.stringify({
-          type: 'audio',
-          data: pcmBlob.data
-        }));
-      }
-    };
+      // ✅ Step 4: Listen for audio data from the background thread
+      this.workletNode.port.onmessage = (event) => {
+        const { audioData, volume } = event.data;
+        
+        // Update volume visualizer
+        this.volumeCallback(volume);
 
-    this.inputSource.connect(this.processor);
-    this.processor.connect(this.inputAudioContext.destination);
+        // Send audio to server if streaming
+        if (this.streaming && this.socket && this.socket.readyState === WebSocket.OPEN) {
+          const pcmBlob = this.createPcmBlob(audioData);
+          this.socket.send(JSON.stringify({
+            type: 'audio',
+            data: pcmBlob.data
+          }));
+        }
+      };
+
+      // ✅ Step 5: Connect the nodes (Microphone → Worklet → Output)
+      this.inputSource.connect(this.workletNode);
+      this.workletNode.connect(this.inputAudioContext.destination);
+      
+      console.log('[GeminiStreamingClient] ✅ AudioWorklet initialized (zero UI interference)');
+    } catch (err) {
+      console.error('[GeminiStreamingClient] ❌ AudioWorklet failed, ensure clear-voice-processor.js is in /public:', err);
+      throw err;
+    }
   }
 
   private async handleMessage(message: any) {
