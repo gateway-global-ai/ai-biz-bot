@@ -47,7 +47,7 @@ export class VoiceClientFactory {
       return {
         mode: 'transactional',
         latency: 'standard',
-        bufferDelay: 2000, // 2 second buffer for PTT
+        bufferDelay: 1000, // 1 second buffer for PTT (faster response)
         enableAnalysis: { 
           emotion: true, 
           sentiment: true, 

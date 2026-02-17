@@ -254,7 +254,7 @@ export class GeminiStreamingClient implements IVoiceClient {
           });
           this.currentInputText = '';
         }
-      }, this.config.bufferDelay || 2000);
+      }, this.config.bufferDelay || 1000);
     }
   }
 
