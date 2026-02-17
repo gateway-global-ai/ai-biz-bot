@@ -54,7 +54,7 @@ function getModelConfig(customHfToken?: string): AIModelConfig {
     };
   }
   
-  console.log("[Kimi K2] Using Moonshot API fallback");
+  // Legacy: Using Moonshot API fallback for old MCP server
   return {
     provider: "moonshot",
     model: MOONSHOT_MODEL,

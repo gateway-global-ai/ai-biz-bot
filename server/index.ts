@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -8,6 +9,7 @@ import { createServer } from "http";
 import { startTaskScheduler } from "./taskScheduler";
 import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
 import { setupBrowserVoiceRoutes, setupBrowserVoiceWebSocket, setupBrowserAudioTempRoute } from "./browserVoice";
+import { setupGeminiLiveWebSocket } from "./geminiVoice";
 import { storage } from "./storage";
 
 const runtimeDirname =
@@ -486,7 +488,15 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
-  
+
+  // Mount Hotel MCP Server at /mcp/hotels (POST, GET, DELETE for Streamable HTTP)
+  const { attachHotelMcpRoutes } = await import("./mcp-hotels");
+  attachHotelMcpRoutes(app, "/mcp/hotels");
+
+  // Mount Voice Transcribe REST API for PTT (Standard tier)
+  const voiceTranscribeRouter = (await import("./routes/voiceTranscribe")).default;
+  app.use(voiceTranscribeRouter);
+
   // Set up audio temp route for serving temporary audio files
   setupAudioTempRoute(app);
   
@@ -499,6 +509,13 @@ app.use((req, res, next) => {
   
   // Set up WebSocket for browser-based voice AI
   setupBrowserVoiceWebSocket(httpServer);
+
+  // Set up WebSocket for Gemini Multimodal Live Proxy (Clear Voice Premium)
+  setupGeminiLiveWebSocket(httpServer);
+
+  // Initialize the WebSocket router (must be AFTER all routes are registered)
+  const { setupWebSocketRouter } = await import("./websocketRouter");
+  setupWebSocketRouter(httpServer);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -516,6 +533,20 @@ app.use((req, res, next) => {
   // Serve SDK files statically at /sdk/* (canonical: platform/chat)
   const sdkPath = path.resolve(runtimeDirname, "..", "platform", "chat", "src");
   app.use('/sdk', express.static(sdkPath));
+
+  // Serve Hotel Search UI at /hotel-search (v2 - latest version)
+  const hotelSearchPath = path.resolve(runtimeDirname, "..", "user_uploads", "new", "v2", "hotel-search-ui", "dist");
+  if (fs.existsSync(hotelSearchPath)) {
+    app.use('/hotel-search', express.static(hotelSearchPath));
+    log(`Hotel Search UI v2 available at /hotel-search`);
+  }
+
+  // Serve NurseNest Lodging Partners demo at /nursenest
+  const nursenestPath = path.resolve(runtimeDirname, "..", "nursnest-lodging-partners", "dist");
+  if (fs.existsSync(nursenestPath)) {
+    app.use('/nursenest', express.static(nursenestPath));
+    log(`NurseNest Lodging Partners available at /nursenest`);
+  }
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
@@ -536,18 +567,18 @@ app.use((req, res, next) => {
   await seedDefaultAdmin();
   await seedCoreAgents();
 
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
+  httpServer
+    .listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
-      
       // Start the task scheduler for 24-hour SMS automation
-      // Checks every 5 minutes for tasks that need updates
       startTaskScheduler(5);
-    },
-  );
+    })
+    .on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE") {
+        console.error(`[express] Port ${port} is already in use. Kill the process using it or set PORT to another value.`);
+      } else {
+        console.error("[express] Server error:", err.message);
+      }
+      process.exit(1);
+    });
 })();

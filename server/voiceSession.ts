@@ -6,6 +6,7 @@ export interface VoiceSession {
   createdAt: Date;
   lastActivity: Date;
   conversationHistory: ConversationMessage[];
+  interactionId: string | null;
   agentName: string;
   personality: string;
   isProcessing: boolean;
@@ -28,6 +29,7 @@ class VoiceSessionManager {
       createdAt: new Date(),
       lastActivity: new Date(),
       conversationHistory: [],
+      interactionId: null,
       agentName,
       personality,
       isProcessing: false,

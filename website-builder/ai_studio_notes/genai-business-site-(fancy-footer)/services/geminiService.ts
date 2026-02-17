@@ -1,6 +1,8 @@
 
-import { GoogleGenAI, FunctionDeclaration, Type } from "@google/genai";
-import { BusinessData, Review, Agent, MenuSection, InventoryType } from "../types";
+import { GoogleGenAI } from "@google/genai";
+import { BusinessData, Review, Agent, InventoryType } from "../types";
+import { getSystemInstruction } from "./promptFactory";
+import { getToolsForAgent } from "./toolRegistry";
 
 // Always initialize GoogleGenAI with a named apiKey parameter from process.env.API_KEY
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -149,99 +151,15 @@ export const enrichBusinessData = async (placeData: any): Promise<BusinessData> 
   }
 };
 
-const recommendItemTool: FunctionDeclaration = {
-  name: 'recommendItem',
-  description: 'Recommends a specific item from the menu, services catalog, or product list to the user.',
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      name: { type: Type.STRING },
-      description: { type: Type.STRING },
-      price: { type: Type.STRING }
-    },
-    required: ['name', 'description', 'price']
-  }
-};
-
-const searchBusinessTool: FunctionDeclaration = {
-  name: 'searchBusiness',
-  description: 'Searches for a business on Google Maps using a search query.',
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      query: { type: Type.STRING, description: 'The business name or website.' }
-    },
-    required: ['query']
-  }
-};
-
-const triggerWebsiteGenerationTool: FunctionDeclaration = {
-  name: 'triggerWebsiteGeneration',
-  description: 'Starts the website creation process.',
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      placeId: { type: Type.STRING, description: 'The Google Place ID.' }
-    },
-    required: ['placeId']
-  }
-};
-
 export const createAgentSession = (businessContext: BusinessData, agent: Agent) => {
-  const tools: any[] = [];
-  
-  if (agent.roleType === 'customer') {
-    tools.push({ functionDeclarations: [recommendItemTool] });
-  } else if (agent.roleType === 'owner') {
-    // Biz Machine for owner management
-    tools.push({ functionDeclarations: [searchBusinessTool, triggerWebsiteGenerationTool] });
-  }
-
-  const isGenerated = businessContext.name !== "BizFlow AI";
-  const inventoryLabel = businessContext.categoryType === 'menu' ? 'Menu' : (businessContext.categoryType === 'services' ? 'Services' : 'Catalog');
-
-  const systemInstruction = agent.roleType === 'owner' 
-    ? `
-      Identity: You are the "AI Biz Bot" Strategic Technical Advisor for "${businessContext.name}".
-      Personality: ${agent.discProfile}.
-      
-      CORE KNOWLEDGE:
-      ${isGenerated ? `The website for ${businessContext.name} has been SUCCESSFULLY GENERATED and is now live in the demo view.` : 'You are helping the user build a website.'}
-      - Business Name: ${businessContext.name}
-      - Rating: ${businessContext.rating}
-      - Address: ${businessContext.address}
-      - Hours: ${businessContext.hours.join(', ')}
-      - Inventory (${inventoryLabel}): ${JSON.stringify(businessContext.menu)}
-      
-      CORE GOAL:
-      ${isGenerated 
-        ? `Acknowledge that the website is already created. Focus on advising the owner on business strategy, optimizing their ${inventoryLabel}, and scaling their online presence. You can discuss the content they see on the page right now.`
-        : `Help the user find their business on Google Maps so we can build the site.`
-      }
-      
-      Be professional, high-energy, and data-driven.
-    `
-    : `
-      Identity: You are ${agent.name}, the AI Concierge for "${businessContext.name}".
-      Personality: ${agent.discProfile}.
-      
-      CORE KNOWLEDGE:
-      - Name: ${businessContext.name}
-      - Description: ${businessContext.description}
-      - Hours: ${businessContext.hours.join(', ')}
-      - Inventory (${inventoryLabel}): ${JSON.stringify(businessContext.menu)}
-
-      CORE GOAL:
-      Greet visitors to the business website. Provide specific details about products, services, and logistics.
-      NEVER tell users to "check the website" for info—you ARE the website's voice. Give them the info directly.
-      Use the "recommendItem" tool if they seem undecided.
-    `;
+  const systemInstruction = getSystemInstruction(agent, businessContext);
+  const tools = getToolsForAgent(agent, businessContext);
 
   const chat = ai.chats.create({
     model: "gemini-3-flash-preview",
     config: { 
       systemInstruction,
-      tools: tools.length > 0 ? tools : undefined
+      tools
     }
   });
 

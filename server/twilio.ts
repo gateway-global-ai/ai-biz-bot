@@ -8,7 +8,10 @@ function getCredentials(): { accountSid: string; authToken: string; phoneNumber:
   // First try direct environment variables
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const phoneNumber = process.env.TWILIO_ACCOUNT_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER_BOT;
+  const phoneNumber =
+    process.env.TWILIO_ACCOUNT_PHONE_NUMBER ||
+    process.env.TWILIO_PHONE_NUMBER_BOT ||
+    process.env.TWILIO_PHONE_NUMBER;
 
   if (accountSid && authToken) {
     return {
@@ -25,7 +28,10 @@ function getCredentials(): { accountSid: string; authToken: string; phoneNumber:
 function getCredentialsOrNull(): { accountSid: string; authToken: string; phoneNumber: string | undefined } | null {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const phoneNumber = process.env.TWILIO_ACCOUNT_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER_BOT;
+  const phoneNumber =
+    process.env.TWILIO_ACCOUNT_PHONE_NUMBER ||
+    process.env.TWILIO_PHONE_NUMBER_BOT ||
+    process.env.TWILIO_PHONE_NUMBER;
   if (accountSid && authToken) {
     return { accountSid, authToken, phoneNumber };
   }

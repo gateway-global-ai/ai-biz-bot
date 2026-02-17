@@ -36,6 +36,20 @@ export const b2bStorage = {
   getHotelByCode(hotelCode: string) {
     return db.select().from(b2bHotels).where(eq(b2bHotels.hotelCode, hotelCode)).then(([r]) => r);
   },
+  /** Match B2B hotel by Google Place ID (place.id from Places API, with or without "places/" prefix) */
+  async getHotelByGooglePlaceId(googlePlaceId: string): Promise<B2bHotel | undefined> {
+    if (!googlePlaceId?.trim()) return undefined;
+    const asIs = await db.select().from(b2bHotels).where(eq(b2bHotels.googlePlaceId, googlePlaceId)).then((r) => r[0]);
+    if (asIs) return asIs;
+    const normalized = googlePlaceId.replace(/^places\//i, "");
+    const withoutPrefix = await db.select().from(b2bHotels).where(eq(b2bHotels.googlePlaceId, normalized)).then((r) => r[0]);
+    if (withoutPrefix) return withoutPrefix;
+    const withPrefix = normalized.startsWith("ChIJ") ? `places/${normalized}` : normalized;
+    return db.select().from(b2bHotels).where(eq(b2bHotels.googlePlaceId, withPrefix)).then((r) => r[0]);
+  },
+  listHotels(limit = 50): Promise<B2bHotel[]> {
+    return db.select().from(b2bHotels).orderBy(desc(b2bHotels.createdAt)).limit(limit);
+  },
 
   // --- Flights (SerpAPI) ---
   createFlight(data: InsertB2bFlight): Promise<B2bFlight> {
@@ -43,6 +57,9 @@ export const b2bStorage = {
   },
   getFlight(id: string) {
     return db.select().from(b2bFlights).where(eq(b2bFlights.id, id)).then(([r]) => r);
+  },
+  listFlights(limit = 50): Promise<B2bFlight[]> {
+    return db.select().from(b2bFlights).orderBy(desc(b2bFlights.createdAt)).limit(limit);
   },
 
   // --- Agent markups ---

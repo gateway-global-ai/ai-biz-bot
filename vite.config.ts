@@ -36,5 +36,12 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
+    // When running Vite standalone (e.g. client-only dev), proxy /api to backend
+    proxy: process.env.VITE_API_PROXY !== "false" ? {
+      "/api": {
+        target: process.env.API_BASE || process.env.VITE_API_TARGET || "http://localhost:5000",
+        changeOrigin: true,
+      },
+    } : undefined,
   },
 });

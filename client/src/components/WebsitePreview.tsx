@@ -1,5 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import ShareButton from '@/components/ShareButton';
+import { LiveVoiceClient } from '@/services/liveService';
+import { ConciergePanel } from '@/components/chat/ConciergePanel';
+import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 
 interface PlaceData {
   name: string;
@@ -95,6 +98,13 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
   const agentName = 'Ava';
   const agentRole = 'CONCIERGE';
   
+  // --- NEW: ConciergePanel State ---
+  const [chatLayout, setChatLayout] = useState<'floating' | 'fixed' | 'fullscreen'>('fixed');
+  const [initialView, setInitialView] = useState<'chat' | 'voice'>('chat');
+  
+  // Voice configuration - default to Premium (Clear Voice) for preview
+  const voiceConfig = VoiceClientFactory.getDefaultConfig('premium');
+  
   const [adminTab, setAdminTab] = useState<'data' | 'reviews' | 'ai'>('data');
   const [mapsApiKey, setMapsApiKey] = useState<string | null>(null);
   const [activeMapTab, setActiveMapTab] = useState<'map' | 'streetview' | 'satellite'>('map');
@@ -105,6 +115,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
   const [chatLoading, setChatLoading] = useState(false);
   const [isVoiceMode, setIsVoiceMode] = useState(false);
   const [voiceIntensity, setVoiceIntensity] = useState(0);
+  const voiceClient = useRef(new LiveVoiceClient());
   const chatEndRef = useRef<HTMLDivElement>(null);
   const voiceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -158,6 +169,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
       if (voiceIntervalRef.current) {
         clearInterval(voiceIntervalRef.current);
       }
+      voiceClient.current.disconnect();
     };
   }, []);
 
@@ -179,13 +191,41 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
         clearInterval(voiceIntervalRef.current);
         voiceIntervalRef.current = null;
       }
+      voiceClient.current.disconnect();
     } else {
       setIsVoiceMode(true);
       voiceIntervalRef.current = setInterval(() => {
         setVoiceIntensity((v) => (v + (Math.random() * 40 - 15) + 50) % 100);
       }, 150);
+
+      // Connect to Gemini Live Proxy
+      const agentConfig = {
+        name: agentName,
+        role: agentRole,
+        discProfile: 'Steadiness (Supportive, Patient)',
+        roleType: 'customer'
+      };
+      
+      voiceClient.current.onVolumeChange = (v) => setVoiceIntensity(v * 500);
+      voiceClient.current.onTranscriptionUpdate = (text, isFinal) => {
+        setPttPreviewText(text);
+        if (isFinal && text) {
+          setChatMessages(prev => [...prev, { role: 'user', content: text }]);
+        }
+      };
+      voiceClient.current.onMessage = (text) => {
+        if (text) {
+          setChatMessages(prev => [...prev, { role: 'assistant', content: text }]);
+        }
+      };
+      
+      voiceClient.current.connect(place as any, agentConfig, 'Zephyr')
+        .catch(err => {
+          console.error("Voice connection error:", err);
+          setIsVoiceMode(false);
+        });
     }
-  }, [isVoiceMode]);
+  }, [isVoiceMode, place, agentName, agentRole]);
 
   const blobToBase64 = (blob: Blob): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -198,106 +238,22 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
       reader.readAsDataURL(blob);
     });
 
-  const handlePTTStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
+  const handlePTTStart = useCallback(async (e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) e.preventDefault();
     if (isPTTRecording || isPTTFinalizing) return;
-    (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        pttStreamRef.current = stream;
-        const recorder = new MediaRecorder(stream);
-        pttMediaRecorderRef.current = recorder;
-        pttChunksRef.current = [];
-        recorder.ondataavailable = (ev) => {
-          if (ev.data.size > 0) pttChunksRef.current.push(ev.data);
-        };
-        recorder.onstop = () => {};
-        recorder.start();
-        setIsPTTRecording(true);
-        setPttPreviewText('');
-      } catch (err) {
-        console.error('PTT start failed', err);
-      }
-    })();
+
+    setIsPTTRecording(true);
+    setPttPreviewText('');
+    voiceClient.current.setStreaming(true);
   }, [isPTTRecording, isPTTFinalizing]);
 
-  const handlePTTEnd = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault();
+  const handlePTTEnd = useCallback(async (e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) e.preventDefault();
     if (!isPTTRecording) return;
-    const recorder = pttMediaRecorderRef.current;
-    const stream = pttStreamRef.current;
-    if (stream) {
-      stream.getTracks().forEach((t) => t.stop());
-      pttStreamRef.current = null;
-    }
-    if (recorder && recorder.state !== 'inactive') {
-      recorder.stop();
-      pttMediaRecorderRef.current = null;
-    }
-    setIsPTTRecording(false);
-    setIsPTTFinalizing(true);
-    setPttPreviewText('Processing...');
 
-    const chunks = pttChunksRef.current;
-    if (chunks.length === 0) {
-      setChatMessages((prev) => [...prev, { role: 'assistant', content: "Couldn't hear that. Try again." }]);
-      setIsPTTFinalizing(false);
-      setPttPreviewText('');
-      return;
-    }
-    const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-    blobToBase64(audioBlob)
-      .then((audioBase64) =>
-        fetch('/api/ptt/transcribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audioBase64 }),
-        })
-      )
-      .then((r) => (r.ok ? r.json() : { transcript: '' }))
-      .then((data) => {
-        const transcript = (data.transcript || '').trim();
-        setPttPreviewText(transcript || '');
-        if (!transcript) {
-          setChatMessages((prev) => [...prev, { role: 'assistant', content: "Couldn't hear that. Try again." }]);
-          setIsPTTFinalizing(false);
-          setPttPreviewText('');
-          return;
-        }
-        const newUserMsg = { role: 'user' as const, content: transcript };
-        setChatMessages((prev) => [...prev, newUserMsg]);
-        setChatLoading(true);
-        const historyWithNew = [...chatMessages, newUserMsg].slice(-10);
-        return fetch('/api/website-chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message: transcript,
-            businessName: place.name,
-            businessAddress: place.formatted_address,
-            businessPhone: place.formatted_phone_number,
-            history: historyWithNew,
-          }),
-        });
-      })
-      .then((res) => {
-        if (res && res.ok) return res.json();
-        return { response: 'Sorry, something went wrong.' };
-      })
-      .then((data) => {
-        if (data && data.response) {
-          setChatMessages((prev) => [...prev, { role: 'assistant', content: data.response }]);
-        }
-      })
-      .catch(() => {
-        setChatMessages((prev) => [...prev, { role: 'assistant', content: "Couldn't hear that. Try again." }]);
-      })
-      .finally(() => {
-        setIsPTTFinalizing(false);
-        setChatLoading(false);
-        setPttPreviewText('');
-      });
-  }, [isPTTRecording, place, chatMessages]);
+    setIsPTTRecording(false);
+    voiceClient.current.setStreaming(false);
+  }, [isPTTRecording]);
 
   const heroImage = place.photos && place.photos.length > 0 ? getPhotoUrl(place.photos[0]) : null;
   const galleryImages = (place.photos || []).slice(1, 4).map(p => getPhotoUrl(p, 600)).filter(Boolean) as string[];
@@ -1052,7 +1008,54 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
         </div>
       )}
 
-      {isChatOpen && (
+      {/* --- REPLACED: Old chat UI with new ConciergePanel --- */}
+      <ConciergePanel
+        business={{
+          placeId: place.place_id || '',
+          name: place.name,
+          address: place.formatted_address || '',
+          hours: place.opening_hours?.weekday_text?.join(', '),
+          services: place.types,
+          primaryColor: '#3b82f6'
+        }}
+        agent={{
+          role: agentRole,
+          personality: 'Helpful, professional, and friendly',
+          objectives: [
+            `Represent ${place.name} and assist customers`,
+            'Answer questions about services, hours, and location',
+            'Help customers book appointments or place orders'
+          ],
+          constraints: [
+            'Be polite and professional',
+            'Stay on topic about the business',
+            'Provide accurate information from business context'
+          ]
+        }}
+        voiceConfig={voiceConfig}
+        agentName={agentName}
+        isOpen={isChatOpen}
+        onClose={() => {
+          setIsChatOpen(false);
+          setIsChatMenuOpen(false);
+        }}
+        initialView={initialView}
+        layoutMode={chatLayout}
+        onCycleLayout={() => {
+          const modes: Array<'floating' | 'fixed' | 'fullscreen'> = ['floating', 'fixed', 'fullscreen'];
+          const currentIndex = modes.indexOf(chatLayout);
+          const nextMode = modes[(currentIndex + 1) % modes.length];
+          setChatLayout(nextMode);
+        }}
+        onOpenSettings={() => {
+          console.log('[WebsitePreview] Open voice settings');
+          // TODO: Open settings modal
+        }}
+        zIndex={50}
+      />
+
+      {/* OLD CHAT UI REMOVED - Now using ConciergePanel above */}
+      {false && isChatOpen && (
         <div
           className={`fixed z-50 flex flex-col overflow-hidden bg-white shadow-2xl border border-slate-200 transition-all duration-300 ${
             chatLayoutMode === 'fullscreen'
@@ -1175,7 +1178,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                         <div
                           key={i}
                           className="w-2.5 bg-gradient-to-t from-blue-700 to-blue-400 rounded-full transition-all duration-75"
-                          style={{ height: `${isPTTRecording ? Math.max(12, voiceIntensity * 0.2 + 20) : 6}px` }}
+                          style={{ height: `${isPTTRecording ? Math.max(12, voiceIntensity * (0.5 + Math.random() * 0.5) + 20) : 6}px` }}
                         />
                       ))}
                     </div>
@@ -1297,15 +1300,38 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
       )}
 
       {!isChatOpen && !isAdminOpen && (
-        <button
-          onClick={() => setIsChatOpen(true)}
-          className="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-xl hover:bg-blue-500 transition-transform hover:scale-105 flex items-center justify-center z-40"
-          data-testid="button-preview-chat-fab"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-          </svg>
-        </button>
+        <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
+          {/* Voice FAB */}
+          <button
+            onClick={() => {
+              setInitialView('voice');
+              setIsChatOpen(true);
+            }}
+            className="w-14 h-14 bg-gradient-to-br from-purple-600 to-blue-600 text-white rounded-full shadow-xl hover:shadow-2xl transition-all hover:scale-105 flex items-center justify-center"
+            data-testid="button-preview-voice-fab"
+            title="Start voice conversation"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+              <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+              <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
+            </svg>
+          </button>
+          
+          {/* Chat FAB */}
+          <button
+            onClick={() => {
+              setInitialView('chat');
+              setIsChatOpen(true);
+            }}
+            className="w-14 h-14 bg-blue-600 text-white rounded-full shadow-xl hover:bg-blue-500 transition-transform hover:scale-105 flex items-center justify-center"
+            data-testid="button-preview-chat-fab"
+            title="Start text chat"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+            </svg>
+          </button>
+        </div>
       )}
     </div>
   );

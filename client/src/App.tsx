@@ -57,6 +57,9 @@ import AgentManagementPage from "@/pages/agents/AgentManagementPage";
 import AgentTestingDashboard from "@/pages/agents/AgentTestingDashboard";
 import ChatWithAgentPreview from "@/pages/customer/ChatWithAgentPreview";
 import WidgetShowcasePage from "@/pages/showcase/WidgetShowcasePage";
+import TestB2b from "@/pages/showcase/TestB2b";
+import OlympicB2b from "@/pages/showcase/OlympicB2b";
+import AgentPortal from "@/pages/showcase/AgentPortal";
 import NotFound from "@/pages/admin/not-found";
 import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
@@ -323,6 +326,9 @@ function AppRouter() {
       <Route path="/agent-testing" component={AgentTestingDashboard} />
       <Route path="/agent-preview" component={ChatWithAgentPreview} />
       <Route path="/widget-showcase" component={WidgetShowcasePage} />
+      <Route path="/test-b2b" component={AgentPortal} />
+      <Route path="/test-b2b-olympic" component={OlympicB2b} />
+      <Route path="/test-b2b-wireframe" component={TestB2b} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -400,6 +406,10 @@ function App() {
               <Route path="/interface/owner" component={OwnerChatInterface} />
               <Route path="/interface/developer" component={DeveloperChatInterface} />
               <Route path="/chat/:agentId" component={AgentChat} /> {/* Agent-specific chat - specialized UI */}
+              {/* B2B Agent Portal – public for demo (GRN Connect) */}
+              <Route path="/test-b2b" component={AgentPortal} />
+              <Route path="/test-b2b-olympic" component={OlympicB2b} />
+              <Route path="/test-b2b-wireframe" component={TestB2b} />
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
               <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />

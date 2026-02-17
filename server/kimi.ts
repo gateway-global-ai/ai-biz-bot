@@ -320,4 +320,5 @@ VOICE CALL RULES:
   });
 }
 
-console.log('Kimi client module loaded');
+// Legacy module - used by old voice endpoints (browserVoice, voiceStream)
+// New dual-engine system uses Gemini Multimodal Live API exclusively

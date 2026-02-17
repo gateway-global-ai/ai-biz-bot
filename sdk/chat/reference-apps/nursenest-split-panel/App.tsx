@@ -71,6 +71,9 @@ function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [lastSaved, setLastSaved] = useState<number | null>(null);
 
+  // Interactions API session (stateful context)
+  const [interactionId, setInteractionId] = useState<string | null>(null);
+
   // Auto-scroll chat
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -87,6 +90,7 @@ function App() {
             if (data.tripBudget) setTripBudget(data.tripBudget);
             if (data.tripTasks) setTripTasks(data.tripTasks);
             if (data.userPhoneNumber) setUserPhoneNumber(data.userPhoneNumber);
+            if (data.interactionId) setInteractionId(data.interactionId);
             console.log("Data loaded from local storage");
         } catch (e) {
             console.error("Failed to load saved data", e);
@@ -107,14 +111,15 @@ function App() {
             tripFocus,
             tripBudget,
             tripTasks,
-            userPhoneNumber
+            userPhoneNumber,
+            interactionId
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
         setLastSaved(Date.now());
     }, 1000); // Debounce saves by 1 second
 
     return () => clearTimeout(timeoutId);
-  }, [messages, canvasContent, bookings, tripFocus, tripBudget, tripTasks, userPhoneNumber, isDataLoaded]);
+  }, [messages, canvasContent, bookings, tripFocus, tripBudget, tripTasks, userPhoneNumber, interactionId, isDataLoaded]);
 
   useEffect(() => {
     // Request Geolocation on mount
@@ -202,6 +207,7 @@ function App() {
 
   const handleNewTrip = () => {
       if (window.confirm("Start a new trip? This will clear your current chat, itinerary, tasks, and budget.")) {
+          setInteractionId(null);
           localStorage.removeItem(STORAGE_KEY);
           window.location.reload();
       }
@@ -230,9 +236,15 @@ function App() {
 
     try {
         const history = [...messages, userMessage];
-        // Pass tripFocus and userPhoneNumber to the service
-        const result = await sendMessageToGemini(history, userLocation, tripFocus, userPhoneNumber);
-        
+        const result = await sendMessageToGemini(
+          history,
+          userLocation,
+          tripFocus,
+          userPhoneNumber,
+          interactionId
+        );
+        if (result.interactionId) setInteractionId(result.interactionId);
+
         const botMessage: Message = {
             id: (Date.now() + 1).toString(),
             role: 'model',

@@ -3,6 +3,7 @@ import { Server } from "http";
 import { AudioBuffer, convertWavToTwilioAudio } from "./audioCodec";
 import { voiceSessionManager } from "./voiceSession";
 import { generateVoiceResponseGemini, synthesizeGeminiTTS, transcribeWithGemini } from "./voiceGemini";
+import { registerWebSocketRoute } from "./websocketRouter";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -36,10 +37,10 @@ interface TwilioStreamMessage {
 }
 
 export function setupVoiceStreamWebSocket(server: Server): void {
-  const wss = new WebSocketServer({ 
-    server,
-    path: "/ws/voice-stream"
-  });
+  const wss = new WebSocketServer({ noServer: true });
+
+  // Register with the central router
+  registerWebSocketRoute('/ws/voice-stream', wss, 'VoiceStream');
 
   console.log("[VoiceStream] WebSocket server initialized on /ws/voice-stream");
 
@@ -268,10 +269,18 @@ async function processWithGeminiVoice(
       content: typeof m.content === "string" ? m.content : "[audio]",
     }));
     const userMessage = userTranscript && userTranscript.trim() ? userTranscript.trim() : "The caller just spoke.";
-    const responseText = await generateVoiceResponseGemini(systemPrompt, history, userMessage);
+    const { text: responseText, interactionId } = await generateVoiceResponseGemini(
+      systemPrompt,
+      history,
+      userMessage,
+      session.interactionId
+    );
 
     console.log("[VoiceStream] Gemini response:", responseText.substring(0, 80));
 
+    if (interactionId) {
+      voiceSessionManager.updateSession(callSid, { interactionId });
+    }
     voiceSessionManager.addMessage(callSid, {
       role: "assistant",
       type: "text",

@@ -1,6 +1,8 @@
 
-import { GoogleGenAI, LiveServerMessage, Modality, Type } from '@google/genai';
-import { BusinessData } from '../types';
+import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
+import { Agent, BusinessData } from '../types';
+import { getSystemInstruction } from './promptFactory';
+import { getToolsForAgent } from './toolRegistry';
 
 function encode(bytes: Uint8Array) {
   let binary = '';
@@ -52,7 +54,7 @@ export class LiveVoiceClient {
     }
   }
 
-  async connect(businessData: BusinessData, agentConfig: any, voiceName: string = 'Zephyr', userContext: string = '') {
+  async connect(businessData: BusinessData, agentConfig: Agent, voiceName: string = 'Zephyr', userContext: string = '') {
     if (this.isConnected) {
         this.disconnect();
     }
@@ -78,68 +80,8 @@ export class LiveVoiceClient {
     this.nextStartTime = 0;
     this.currentInputText = '';
     
-    const isGenerated = businessData.name !== "BizFlow AI";
-    const inventoryLabel = businessData.categoryType === 'menu' ? 'Menu' : (businessData.categoryType === 'services' ? 'Services' : 'Catalog');
-
-    const systemInstruction = agentConfig.roleType === 'owner'
-      ? `
-        Identity: You are the "Talking Machine" Biz Bot for "${businessData.name}".
-        Personality: ${agentConfig.discProfile}.
-        
-        CORE GOAL:
-        ${isGenerated 
-          ? `The website for ${businessData.name} is ALREADY BUILT and visible on the user's screen right now. 
-             Acknowledge this! Greet the owner. Focus on business strategy, their ${inventoryLabel} (which contains ${JSON.stringify(businessData.menu)}), 
-             and how they like the generated design. You are their strategic advisor.`
-          : `Help the user build their business website by finding it on Google Maps. 
-             If the user mentions their business, call "searchBusiness". 
-             Once confirmed, call "triggerWebsiteGeneration".`
-        }
-        
-        Keep responses brief, technical, and high-energy.
-      `
-      : `
-        Identity: You are ${agentConfig.name}, the AI Concierge for "${businessData.name}".
-        Personality: ${agentConfig.discProfile}.
-        
-        BUSINESS CONTEXT:
-        - Name: ${businessData.name}
-        - Address: ${businessData.address}
-        - Description: ${businessData.description}
-        - Inventory (${inventoryLabel}): ${JSON.stringify(businessData.menu)}
-
-        CORE GOAL:
-        You are representing "${businessData.name}". The website is ALREADY BUILT.
-        Do NOT ask the user for their business name or offer to build a site.
-        Greet visitors to "${businessData.name}" and help them with questions about services, hours, or products.
-        NEVER refer them to "the website"—YOU are the interface. Give them prices and descriptions directly.
-        
-        Keep responses natural and concise.
-      `;
-
-    const tools = [];
-    if (agentConfig.roleType === 'owner' && !isGenerated) {
-        tools.push({
-            functionDeclarations: [
-                {
-                    name: 'searchBusiness',
-                    parameters: {
-                        type: Type.OBJECT,
-                        properties: { query: { type: Type.STRING } },
-                        required: ['query']
-                    }
-                },
-                {
-                    name: 'triggerWebsiteGeneration',
-                    parameters: {
-                        type: Type.OBJECT,
-                        properties: { placeId: { type: Type.STRING } },
-                        required: ['placeId']
-                    }
-                }
-            ]
-        });
-    }
+    const systemInstruction = getSystemInstruction(agentConfig, businessData, { userContext });
+    const tools = getToolsForAgent(agentConfig, businessData);
 
     try {
       this.sessionPromise = ai.live.connect({

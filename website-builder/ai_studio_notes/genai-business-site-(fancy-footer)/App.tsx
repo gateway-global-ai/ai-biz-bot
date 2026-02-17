@@ -9,6 +9,7 @@ import MenuSection from './components/MenuSection';
 import StandardizedChatInterface from './components/StandardizedChatInterface';
 import TechGuide from './components/TechGuide';
 import PlaceSearch from './components/PlaceSearch';
+import NavigationDock from './components/NavigationDock';
 import { type Chat } from '@google/genai';
 
 const PLATFORM_BUSINESS_DATA: BusinessData = {
@@ -73,52 +74,6 @@ const MachineVisualizer = ({ volume, active, isRecording }: { volume: number, ac
            style={{ transform: `translate(-50%, -50%) scale(${1 + volume * 1.5})` }}></div>
       <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] rounded-full border border-indigo-500/20 transition-transform duration-150 ${isRecording ? 'scale-115 border-red-500/30' : 'scale-100'}`}
            style={{ transform: `translate(-50%, -50%) scale(${1 + volume * 2.5})` }}></div>
-    </div>
-  );
-};
-
-// Crystal Design PTT Button
-const ModernFooterPtt = ({ recording, active, volume, role }: { recording: boolean, active: boolean, volume: number, role: AgentRole }) => {
-  return (
-    <div className={`
-      relative w-full h-full rounded-full flex items-center justify-center overflow-hidden transition-all duration-200
-      ${recording 
-        ? 'bg-emerald-900/80 border-emerald-400 shadow-[0_0_50px_rgba(16,185,129,0.5),inset_0_0_20px_rgba(16,185,129,0.3)] scale-[0.98]' 
-        : 'bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20 shadow-lg backdrop-blur-md'
-      }
-      border-[1.5px] group
-    `}>
-      {/* Crystal Shine Effects */}
-      <div className="absolute inset-x-0 top-0 h-[40%] bg-gradient-to-b from-white/20 to-transparent opacity-50 pointer-events-none"></div>
-      <div className="absolute inset-x-0 bottom-0 h-[30%] bg-gradient-to-t from-black/40 to-transparent opacity-50 pointer-events-none"></div>
-      
-      {/* Content Container */}
-      <div className="relative z-10 flex flex-col items-center justify-center gap-1.5">
-         <span className={`
-            text-[11px] font-black uppercase tracking-[0.25em] transition-colors duration-200
-            ${recording ? 'text-white text-shadow-glow drop-shadow-md' : 'text-slate-400 group-hover:text-white'}
-         `}>
-            {recording ? 'Transmitting' : 'Push to Talk'}
-         </span>
-         
-         {/* Visualizer Bars (Subtle) */}
-         <div className="flex items-end justify-center gap-1 h-3">
-            {[...Array(16)].map((_, i) => {
-                // Randomize height slightly based on volume if recording, otherwise minimal height
-                const height = recording 
-                  ? Math.max(20, Math.min(100, Math.random() * 150 * (volume * 8))) 
-                  : 15;
-                  
-                return (
-                  <div 
-                    key={i} 
-                    className={`w-0.5 rounded-full transition-all duration-75 ${recording ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-slate-600/50 group-hover:bg-slate-500'}`}
-                    style={{ height: `${height}%` }}
-                  />
-                )
-            })}
-         </div>
-      </div>
     </div>
   );
 };
@@ -436,78 +391,21 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* FIXED FOOTER ONBOARDING INTERFACE - GENERATED SITE ONLY */}
+      {/* Fixed footer: Back, PTT + Role, Buy — NavigationDock (S-Class module) */}
       {viewState === ViewState.GENERATED && businessData && (
-        <footer className="fixed bottom-0 left-0 w-full h-[18vh] min-h-[140px] bg-slate-950/90 backdrop-blur-2xl border-t border-white/10 z-[100] flex items-center shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
-           
-           {/* Left Column: Back Button (Strictly Attached to Left Edge) */}
-           <div className="flex-1 flex justify-start h-full items-center">
-              <button 
-                onClick={handleReset}
-                className="h-full px-12 flex flex-col items-center justify-center gap-1 group hover:bg-white/5 transition-all border-r border-white/5"
-              >
-                <div className="w-8 h-8 flex items-center justify-center text-slate-500 group-hover:text-white transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-                  </svg>
-                </div>
-                <span className="text-[11px] font-black uppercase tracking-[0.4em] text-slate-500 group-hover:text-white transition-colors">Back</span>
-              </button>
-           </div>
-
-           {/* Center Column: PTT Capsule (Fixed 50% Width) */}
-           <div className="w-[50%] h-full flex flex-col items-center justify-center gap-3">
-              {/* Role Switcher above PTT */}
-              <div className="flex bg-white/5 rounded-full p-0.5 border border-white/10 backdrop-blur-md scale-90">
-                 <button 
-                   onClick={() => switchRole('customer')}
-                   className={`px-6 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] transition-all duration-300 ${activeRole === 'customer' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-500 hover:text-slate-300'}`}
-                 >
-                   Customer
-                 </button>
-                 <button 
-                   onClick={() => switchRole('owner')}
-                   className={`px-6 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] transition-all duration-300 ${activeRole === 'owner' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/20' : 'text-slate-500 hover:text-slate-300'}`}
-                 >
-                   Owner
-                 </button>
-              </div>
-
-              <div className="w-full max-md h-20 relative">
-                <div 
-                  onMouseDown={handlePTTStart}
-                  onMouseUp={handlePTTEnd}
-                  onMouseLeave={handlePTTEnd}
-                  onTouchStart={handlePTTStart}
-                  onTouchEnd={handlePTTEnd}
-                  className="w-full h-full cursor-pointer select-none"
-                >
-                  <ModernFooterPtt active={isVoiceActive} recording={isRecording} volume={voiceVolume} role={activeRole} />
-                </div>
-                {!isVoiceActive && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="text-[8px] font-black text-white/10 uppercase tracking-[1em] animate-pulse">Neural Input</span>
-                  </div>
-                )}
-              </div>
-           </div>
-
-           {/* Right Column: Buy Now Button */}
-           <div className="flex-1 flex justify-end h-full items-center pr-12 md:pr-24">
-              <button 
-                onClick={handleBuyNow}
-                className="flex flex-col items-center justify-center gap-2 group hover:scale-105 transition-all"
-              >
-                <div className="w-12 h-12 rounded-full bg-blue-500 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:bg-blue-400 transition-colors">
-                   <span className="font-bold text-lg">$</span>
-                </div>
-                <div className="text-center">
-                  <span className="text-[9px] block font-bold text-slate-500 uppercase tracking-[0.2em] mb-0.5">Ready to Launch?</span>
-                  <span className="text-[12px] font-black uppercase tracking-[0.2em] text-white group-hover:text-blue-400 transition-colors">Buy Now</span>
-                </div>
-              </button>
-           </div>
-        </footer>
+        <NavigationDock
+          viewState={viewState}
+          activeRole={activeRole}
+          isVoiceActive={isVoiceActive}
+          isRecording={isRecording}
+          voiceVolume={voiceVolume}
+          onReset={handleReset}
+          onSwitchRole={switchRole}
+          onPTTStart={handlePTTStart}
+          onPTTEnd={handlePTTEnd}
+          onEnableVoice={() => setIsVoiceActive(true)}
+          onBuy={handleBuyNow}
+        />
       )}
 
       {/* PRICING MODAL */}

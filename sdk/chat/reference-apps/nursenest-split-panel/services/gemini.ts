@@ -1,47 +1,41 @@
 
 
-import { GoogleGenAI, GroundingMetadata } from "@google/genai";
+import { GroundingMetadata } from "@google/genai";
 import { Coordinates, Message, TripFocus } from "../types";
 
-// Initialize Gemini Client
-// We assume process.env.API_KEY is available as per instructions.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
+const MODEL_NAME = "gemini-3.0-flash";
 
-const MODEL_NAME = 'gemini-2.5-flash';
+function getApiKey(): string {
+  const key = process.env.API_KEY || process.env.GEMINI_API_KEY;
+  if (!key) throw new Error("API_KEY or GEMINI_API_KEY not configured");
+  return key;
+}
 
 export const sendMessageToGemini = async (
   history: Message[],
   userLocation: Coordinates | null,
   tripFocus: TripFocus | null,
-  userPhoneNumber?: string | null
-): Promise<{ text: string; groundingMetadata?: GroundingMetadata }> => {
+  userPhoneNumber?: string | null,
+  previousInteractionId?: string | null
+): Promise<{ text: string; groundingMetadata?: GroundingMetadata; interactionId?: string | null }> => {
   try {
-    // Convert app history to Gemini chat format
-    // We only send text history to maintain context
-    
     const lastUserMessage = history[history.length - 1];
-    if (!lastUserMessage || lastUserMessage.role !== 'user') {
-        throw new Error("Invalid history state");
+    if (!lastUserMessage || lastUserMessage.role !== "user") {
+      throw new Error("Invalid history state");
     }
 
-    const contents = history.map(msg => ({
-        role: msg.role,
-        parts: [{ text: msg.text }]
-    }));
-
-    const toolConfig: any = {};
-    
-    // Inject location if available for better local results
+    const apiKey = getApiKey();
+    const toolConfig: Record<string, unknown> = {};
     if (userLocation) {
-        toolConfig.retrievalConfig = {
-            latLng: {
-                latitude: userLocation.latitude,
-                longitude: userLocation.longitude
-            }
-        };
+      toolConfig.retrievalConfig = {
+        latLng: {
+          latitude: userLocation.latitude,
+          longitude: userLocation.longitude,
+        },
+      };
     }
 
-    // Construct a dynamic system instruction based on the trip focus
     let systemInstruction = `You are "NurseNest", a specialized AI housing coordinator for traveling nurses.
     Your mission is to find the perfect extended-stay accommodation near their hospital assignment.
 
@@ -89,28 +83,60 @@ export const sendMessageToGemini = async (
         }
         
         systemInstruction += `\nCRITICAL INSTRUCTION:
-        For EVERY location recommendation you provide, you MUST calculate and state the approximate travel time from the Trip Anchor ("${tripFocus.name}") using the mode: ${tripFocus.transportMode || 'Driving'}.`;
+        For EVERY location recommendation you provide, you MUST calculate and state the approximate travel time from the Trip Anchor ("${tripFocus.name}") using the mode: ${tripFocus.transportMode || "Driving"}.`;
     }
 
-    const response = await ai.models.generateContent({
+    const body: Record<string, unknown> = {
       model: MODEL_NAME,
-      contents: contents,
-      config: {
-        systemInstruction: systemInstruction,
-        tools: [{ googleMaps: {} }],
-        toolConfig: Object.keys(toolConfig).length > 0 ? toolConfig : undefined,
-      }
+      system_instruction: systemInstruction,
+      tools: [{ googleMaps: {} }],
+      generation_config: { max_output_tokens: 2048, temperature: 0.8 },
+    };
+    if (Object.keys(toolConfig).length > 0) {
+      body.tool_config = toolConfig;
+    }
+
+    if (previousInteractionId) {
+      body.previous_interaction_id = previousInteractionId;
+      body.input = lastUserMessage.text;
+    } else {
+      body.input = history.map((msg) => ({
+        role: msg.role,
+        content: msg.text,
+      }));
+    }
+
+    const res = await fetch(INTERACTIONS_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify(body),
     });
 
-    const candidate = response.candidates?.[0];
-    const text = candidate?.content?.parts?.map(p => p.text).join('') || "I couldn't find that information.";
-    const groundingMetadata = candidate?.groundingMetadata as GroundingMetadata | undefined;
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Interactions API error:", res.status, errText);
+      throw new Error("Gemini API request failed");
+    }
+
+    const data = (await res.json()) as {
+      id?: string;
+      outputs?: Array<{ type: string; text?: string; annotations?: unknown; groundingMetadata?: GroundingMetadata }>;
+      groundingMetadata?: GroundingMetadata;
+    };
+    const outputs = data.outputs ?? [];
+    const textOutput = outputs.find((o) => o.type === "text");
+    const text = textOutput?.text?.trim() || "I couldn't find that information.";
+    const groundingMetadata =
+      data.groundingMetadata ?? (textOutput as { groundingMetadata?: GroundingMetadata })?.groundingMetadata;
 
     return {
       text,
-      groundingMetadata
+      groundingMetadata,
+      interactionId: data.id ?? previousInteractionId ?? null,
     };
-
   } catch (error) {
     console.error("Gemini API Error:", error);
     return {

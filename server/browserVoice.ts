@@ -13,6 +13,7 @@ import {
   synthesizeSpeechDirect,
   type ConversationMessage,
 } from "./kimiAudioDirect";
+import { registerWebSocketRoute } from "./websocketRouter";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -37,6 +38,7 @@ const GREETING_TEXT = `Hey there! I'm the AI Biz Bot and I was built for small b
 
 interface BrowserVoiceSession {
   conversationHistory: ConversationMessage[];
+  interactionId: string | null;
   isActive: boolean;
   createdAt: number;
 }
@@ -85,10 +87,10 @@ export function setupBrowserVoiceRoutes(app: Express): void {
 }
 
 export function setupBrowserVoiceWebSocket(server: Server): void {
-  const wss = new WebSocketServer({
-    server,
-    path: "/ws/browser-voice",
-  });
+  const wss = new WebSocketServer({ noServer: true });
+
+  // Register with the central router
+  registerWebSocketRoute('/ws/browser-voice', wss, 'BrowserVoice');
 
   console.log("[BrowserVoice] WebSocket server initialized on /ws/browser-voice (direct Kimi pipeline)");
 
@@ -98,6 +100,7 @@ export function setupBrowserVoiceWebSocket(server: Server): void {
 
     sessions.set(sessionId, {
       conversationHistory: [],
+      interactionId: null,
       isActive: true,
       createdAt: Date.now(),
     });

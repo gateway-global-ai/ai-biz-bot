@@ -1,0 +1,28 @@
+# Gemini 3.0 Flash Development Rules
+
+## Model Standards
+- **Primary Model:** Always use `gemini-3.0-flash` (Gemini 3.0 Flash).
+- **No Fallbacks:** DO NOT fallback to `gemini-1.5-flash`, `gemini-1.5-pro`, or `gemini-2.0-flash`. The system relies on 3.0-specific features.
+- **Deprecation:** Legacy models (1.5/2.0) use incompatible state patterns and must not be mixed with 3.0 code paths.
+
+## State Management
+Gemini 3.0 Flash uses stateful architectures. Do not use stateless "send full history" patterns for complex flows.
+
+### 1. Interactions API (Preferred for Agents/Voice)
+- **Endpoint:** `/v1beta/interactions`
+- **State:** Use `previous_interaction_id` to maintain context.
+- **Server-Side Storage:** The model stores history, thoughts, and tool calls. Do not manage history manually on the client if using this API.
+
+### 2. Generate Content (REST/SDK)
+- **Thought Signatures:** For multi-turn or agentic loops using `generateContent`, you MUST capture `thought_signature` from the response and pass it in the next request.
+  - *Response:* `candidates[0].thought_signature`
+  - *Request:* Include `thought_signature` parameter (if supported by SDK/REST schema) to resume state.
+- **Context:** Use `thought_signature` instead of re-sending large history buffers when possible.
+
+## Error Handling
+- **Specific Errors:** Surface actual Gemini errors (e.g., `400 Invalid Argument`, `429 Resource Exhausted`) rather than generic "Request failed".
+- **Metadata:** Check for missing `thought_signature` or `interaction_id` in logs if context is lost.
+
+## Coding Restrictions
+- **Do NOT** modify working Gemini 3.0 code to support older models.
+- **Do NOT** introduce "compatibility" layers that strip 3.0 features (like thought tokens or interaction IDs).
