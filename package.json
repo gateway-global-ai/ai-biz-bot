@@ -19,6 +19,7 @@
     "check-keys": "doppler run -- npx tsx scripts/check-google-key-permissions.ts",
     "doppler:sync-ports": "./scripts/sync-doppler-ports.sh",
     "doppler:copy-config": "./scripts/doppler-copy-config.sh",
+    "mcp:generate": "./scripts/gen-cursor-mcp.sh",
     "prepare": "husky"
   },
   "dependencies": {
