@@ -3,6 +3,7 @@
  * 
  * Handles hotel search and enrichment with GRN Connect API.
  * Integrates Google Maps discovery, static database matching, and live rate pricing.
+ * Matched hotels are persisted to b2b_hotels with platformId + googlePlaceId links.
  */
 
 import axios from 'axios';
@@ -14,6 +15,7 @@ import {
   getGrnAvailability,
 } from '../mcp-hotels-logic.js';
 import { smallBusinessInjector } from './smallBusinessInjector.js';
+import { b2bStorage } from '../b2b-storage.js';
 
 /**
  * Search GRN hotels by destination code and dates
@@ -60,7 +62,9 @@ export async function handleSearchGrnHotels(args: {
 }
 
 /**
- * Enrich hotels with live rates (Discover → Match → Price)
+ * Enrich hotels with live rates (Discover → Match → Price).
+ * When platformId is supplied, matched hotels are upserted into b2b_hotels
+ * so they can be re-fetched later via platform_id or google_place_id.
  */
 export async function handleEnrichHotelsWithRates(args: {
   location: string;
@@ -69,6 +73,8 @@ export async function handleEnrichHotelsWithRates(args: {
   checkout: string;
   currency?: string;
   rooms?: Array<{ adults: number; childrenAges?: number[] }>;
+  /** Optional: stable UUID from platform_business_map to link enrichment results. */
+  platformId?: string;
 }): Promise<unknown> {
   try {
     // Phase 1: Discover via Google Maps
@@ -104,24 +110,44 @@ export async function handleEnrichHotelsWithRates(args: {
       { currency: args.currency || 'USD' }
     );
 
-    // Final Merge
-    const enrichedResults = validMatches.map((match) => {
-      const liveData = availability.hotels?.find(
-        (h: any) => h.hotel_code === toGrnApiCode(match.grn?.grn_hotel_id)
-      );
-      return {
-        google: match.google,
-        grn: match.grn,
-        matchScore: match.matchScore,
-        availability: liveData
-          ? {
-              available: true,
-              minRate: liveData.min_rate,
-              rates: liveData.rates,
-            }
-          : { available: false },
-      };
-    });
+    // Final Merge + optional persistence
+    const enrichedResults = await Promise.all(
+      validMatches.map(async (match) => {
+        const apiCode = toGrnApiCode(match.grn?.grn_hotel_id);
+        const liveData = availability.hotels?.find(
+          (h: any) => h.hotel_code === apiCode
+        );
+        const googlePlaceId = (match.google as any)?.placeId ?? undefined;
+
+        // Persist to b2b_hotels if we have a GRN code and a platform or place anchor
+        if (apiCode && (args.platformId || googlePlaceId)) {
+          try {
+            await b2bStorage.upsertHotelByCode({
+              hotelCode: apiCode,
+              ...(googlePlaceId !== undefined && { googlePlaceId }),
+              ...(args.platformId !== undefined && { platformId: args.platformId }),
+              name: match.grn?.hotel_name ?? (match.google as any)?.name ?? undefined,
+              rawResponse: liveData ?? undefined,
+            });
+          } catch (persistErr: any) {
+            console.warn('[GRN Hotels] Persist warning:', persistErr.message);
+          }
+        }
+
+        return {
+          google: match.google,
+          grn: match.grn,
+          matchScore: match.matchScore,
+          availability: liveData
+            ? {
+                available: true,
+                minRate: liveData.min_rate,
+                rates: liveData.rates,
+              }
+            : { available: false },
+        };
+      })
+    );
 
     return {
       success: true,

@@ -1824,12 +1824,18 @@ export type Inquiry = typeof inquiries.$inferSelect;
 /** GRN Connect hotels: hotel_code + google_place_id from Spatial Join for re-fetching live rates */
 export const b2bHotels = pgTable("b2b_hotels", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  hotelCode: text("hotel_code").notNull(), // GRN identifier
-  googlePlaceId: text("google_place_id"), // from Spatial Join; used to re-fetch
+  hotelCode: text("hotel_code").notNull(), // GRN identifier (H! prefix stripped for API calls)
+  googlePlaceId: text("google_place_id"), // Google Places ID linked via Spatial Join / matching
+  /** FK to platform_business_map(platform_id). Links GRN hotel to our internal platform identity. */
+  platformId: uuid("platform_id"),
   name: text("name"),
   rawResponse: jsonb("raw_response"), // full GRN response for replay/audit
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+},
+(table) => [
+  index("idx_b2b_hotels_platform_id").on(table.platformId),
+  index("idx_b2b_hotels_hotel_code").on(table.hotelCode),
+]);
 
 export const insertB2bHotelSchema = createInsertSchema(b2bHotels).omit({ id: true, createdAt: true });
 export type InsertB2bHotel = z.infer<typeof insertB2bHotelSchema>;
