@@ -22,6 +22,8 @@ import OtpLoginModal from '@/components/OtpLoginModal';
 import ShareButton from '@/components/ShareButton';
 import { Code2 } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
+import { ConciergePanel } from '@/components/chat/ConciergePanel';
+import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 
 import Pidea_logo_header__7_ from "@assets/Pidea logo header (7).png";
 
@@ -35,18 +37,10 @@ const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label
   helpful: { primary: 'rgba(139, 92, 246, 0.8)', glow: 'rgba(139, 92, 246, 0.4)', label: 'SPEAKING' },
 };
 
+// Simplified VoiceVisualizer - now just a visual element (click handler moved to parent div)
 const VoiceVisualizer = () => {
-  const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [sentiment, setSentiment] = useState<Sentiment>('calm');
   const [pulse, setPulse] = useState(0);
-  const [showHelper, setShowHelper] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const voiceStateRef = useRef<VoiceState>('idle');
-  
-  useEffect(() => { voiceStateRef.current = voiceState; }, [voiceState]);
 
   useEffect(() => {
     const sentimentInterval = setInterval(() => {
@@ -64,142 +58,6 @@ const VoiceVisualizer = () => {
     };
   }, []);
 
-  const cleanup = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.src = '';
-    }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
-    }
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'end' }));
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => () => cleanup(), [cleanup]);
-
-  const startGreeting = useCallback(async () => {
-    setShowHelper(false);
-    setVoiceState('loading');
-    try {
-      const res = await fetch('/api/voice/greeting', { method: 'POST' });
-      const data = await res.json();
-      if (!data.audioUrl) {
-        setVoiceState('error');
-        setTimeout(() => setVoiceState('idle'), 3000);
-        return;
-      }
-      const audio = new Audio(data.audioUrl);
-      audioRef.current = audio;
-      audio.onplay = () => setVoiceState('greeting');
-      audio.onended = () => startConversation();
-      audio.onerror = () => {
-        setVoiceState('error');
-        setTimeout(() => setVoiceState('idle'), 3000);
-      };
-      await audio.play();
-    } catch {
-      setVoiceState('error');
-      setTimeout(() => setVoiceState('idle'), 3000);
-    }
-  }, []);
-
-  const toggleGreetingPause = useCallback(() => {
-    if (!audioRef.current) return;
-    if (voiceState === 'greeting') {
-      audioRef.current.pause();
-      setVoiceState('greeting_paused');
-    } else if (voiceState === 'greeting_paused') {
-      audioRef.current.play();
-      setVoiceState('greeting');
-    }
-  }, [voiceState]);
-
-  const startConversation = useCallback(async () => {
-    setVoiceState('conversation');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/browser-voice`);
-      wsRef.current = ws;
-
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'processing') {
-          setVoiceState('processing');
-        } else if (msg.type === 'response' && msg.audioUrl) {
-          setVoiceState('responding');
-          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.pause();
-          }
-          const responseAudio = new Audio(msg.audioUrl);
-          responseAudio.onended = () => {
-            setVoiceState('conversation');
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'paused') {
-              mediaRecorderRef.current.resume();
-            }
-          };
-          responseAudio.play().catch(() => {
-            setVoiceState('conversation');
-          });
-        } else if (msg.type === 'error') {
-          console.error('[Voice] Server error:', msg.message);
-        }
-      };
-
-      ws.onopen = () => {
-        const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
-        mediaRecorderRef.current = recorder;
-
-        recorder.ondataavailable = async (e) => {
-          if (e.data.size > 0 && wsRef.current?.readyState === WebSocket.OPEN) {
-            const arrayBuffer = await e.data.arrayBuffer();
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-            wsRef.current.send(JSON.stringify({ type: 'audio', audio: base64 }));
-          }
-        };
-
-        recorder.start(4000);
-      };
-
-      ws.onerror = () => {
-        setVoiceState('error');
-        setTimeout(() => { cleanup(); setVoiceState('idle'); }, 3000);
-      };
-      ws.onclose = () => {
-        const currentState = voiceStateRef.current;
-        if (currentState === 'conversation' || currentState === 'processing' || currentState === 'responding') {
-          cleanup();
-          setVoiceState('idle');
-        }
-      };
-    } catch {
-      setVoiceState('error');
-      setTimeout(() => { cleanup(); setVoiceState('idle'); }, 3000);
-    }
-  }, [cleanup]);
-
-  const handleClick = useCallback(() => {
-    if (voiceState === 'idle' || voiceState === 'error') {
-      startGreeting();
-    } else if (voiceState === 'greeting' || voiceState === 'greeting_paused') {
-      toggleGreetingPause();
-    } else if (voiceState === 'conversation' || voiceState === 'processing' || voiceState === 'responding') {
-      cleanup();
-      setVoiceState('idle');
-      setShowHelper(true);
-    }
-  }, [voiceState, startGreeting, toggleGreetingPause, cleanup]);
-
   const sentimentConfig = SENTIMENT_COLORS[sentiment];
   const waveIntensity = Math.sin(pulse / 10) * 0.3 + 0.7;
   
@@ -207,12 +65,8 @@ const VoiceVisualizer = () => {
     <div className="relative flex items-center justify-center mx-auto" style={{ marginTop: '-100px' }}>
       
       <div 
-        className="relative w-32 h-32 flex items-center justify-center cursor-pointer select-none"
-        onClick={handleClick}
+        className="relative w-32 h-32 flex items-center justify-center"
         data-testid="button-voice-visualizer"
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleClick(); }}
       >
         <div 
           className="absolute inset-0 border border-dashed rounded-full animate-spin"
@@ -400,6 +254,38 @@ export default function BusinessPage() {
   const [, setLocation] = useLocation();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showCustomerLoginModal, setShowCustomerLoginModal] = useState(false);
+
+  // --- NEW: ConciergePanel State ---
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatLayout, setChatLayout] = useState<'floating' | 'fixed' | 'fullscreen'>('floating');
+  const [initialView, setInitialView] = useState<'chat' | 'voice'>('voice');
+  
+  // Voice configuration - default to Premium (Clear Voice) for demo
+  const voiceConfig = VoiceClientFactory.getDefaultConfig('premium');
+
+  // Platform Identity - fallback context when no business is selected
+  const platformIdentity = {
+    placeId: 'platform_landing',
+    name: 'Gateway Global AI',
+    address: 'AI-Powered Business Platform',
+    hours: '24/7 Support Available',
+    services: ['AI Concierge', 'Business Automation', 'Voice Agents', 'Website Generation'],
+    primaryColor: '#6366f1'
+  };
+
+  // Determine which business context to use
+  const currentBusiness = selectedPlace ? {
+    id: selectedPlace.place_id || 'platform_landing',
+    placeId: selectedPlace.place_id || '',
+    name: selectedPlace.name,
+    address: selectedPlace.formatted_address || '',
+    hours: selectedPlace.opening_hours?.weekday_text?.join(', '),
+    services: selectedPlace.types,
+    primaryColor: '#6366f1'
+  } : {
+    ...platformIdentity,
+    id: 'platform_landing'
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -662,49 +548,8 @@ export default function BusinessPage() {
 
   // Only show the platform SDK chat widget on landing. When user is in preview/full-access
   // they get a single chat inside WebsitePreview; avoid two chat UIs.
-  useEffect(() => {
-    const isPreviewOrFullAccess = stage === 'preview' || stage === 'full-access';
-    if (isPreviewOrFullAccess) {
-      if ((window as any).__gatewayChatWidget) {
-        (window as any).__gatewayChatWidget.destroy();
-        delete (window as any).__gatewayChatWidget;
-      }
-      const el = document.querySelector('script[data-gateway-sdk]');
-      if (el) el.remove();
-      return;
-    }
-    const existingScript = document.querySelector('script[data-gateway-sdk]');
-    if (existingScript) return;
-    const script = document.createElement('script');
-    script.src = '/sdk/gateway-chat.js';
-    script.setAttribute('data-gateway-sdk', 'true');
-    script.onload = () => {
-      if ((window as any).GatewayChat) {
-        (window as any).__gatewayChatWidget = (window as any).GatewayChat.init({
-          botId: 'platform-landing',
-          apiBase: '',
-          position: 'bottom-right',
-          botName: 'Gateway AI',
-          greetingMessage: 'Hi! I can help you learn about our free AI-powered websites, plans, and features. What would you like to know?',
-          placeholderText: 'Ask about our services...',
-          headerSubtitle: 'Online',
-          voice: { enabled: true },
-          theme: {
-            primaryColor: '#6366f1',
-          },
-        });
-      }
-    };
-    document.body.appendChild(script);
-    return () => {
-      if ((window as any).__gatewayChatWidget) {
-        (window as any).__gatewayChatWidget.destroy();
-        delete (window as any).__gatewayChatWidget;
-      }
-      const el = document.querySelector('script[data-gateway-sdk]');
-      if (el) el.remove();
-    };
-  }, [stage]);
+  // REMOVED: Legacy GatewayChat embed script
+  // Now using unified ConciergePanel component instead
 
   const handleSendMagicLink = async () => {
     if (!phoneNumber.trim()) {
@@ -1105,7 +950,14 @@ export default function BusinessPage() {
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none" />
         <div className="flex-1 flex items-center relative z-10">
           <div className="w-full max-w-5xl mx-auto flex flex-col items-center gap-6 md:gap-8">
-            <div style={{ marginBottom: '10px' }}>
+            <div 
+              style={{ marginBottom: '10px', cursor: 'pointer' }}
+              onClick={() => {
+                setInitialView('voice');
+                setIsChatOpen(true);
+              }}
+              title="Click to start voice conversation"
+            >
               <VoiceVisualizer />
             </div>
             <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white text-center" data-testid="text-hero-heading">
@@ -1435,6 +1287,47 @@ export default function BusinessPage() {
         subtitle="No account? One will be created automatically."
         accentColor="purple"
         testIdPrefix="customer"
+      />
+
+      {/* --- NEW: ConciergePanel Integration --- */}
+      <ConciergePanel
+        business={currentBusiness}
+        agent={{
+          role: selectedPlace ? 'Business Concierge' : 'Platform Sales Agent',
+          personality: 'Helpful, professional, and enthusiastic',
+          objectives: selectedPlace ? [
+            `Represent ${selectedPlace.name} and assist customers`,
+            'Answer questions about services, hours, and location',
+            'Help customers book appointments or place orders'
+          ] : [
+            'Help business owners understand our AI-powered website platform',
+            'Answer questions about features, pricing, and setup',
+            'Guide users through the onboarding process',
+            'Demo the Clear Voice technology'
+          ],
+          constraints: [
+            'Be polite and professional',
+            'Keep responses concise and actionable',
+            selectedPlace ? 'Stay on topic about the business' : 'Focus on the value of AI-powered websites'
+          ]
+        }}
+        voiceConfig={voiceConfig}
+        agentName={selectedPlace ? 'Ava' : 'Gateway AI Assistant'}
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        initialView={initialView}
+        layoutMode={chatLayout}
+        onCycleLayout={() => {
+          const modes: Array<'floating' | 'fixed' | 'fullscreen'> = ['floating', 'fixed', 'fullscreen'];
+          const currentIndex = modes.indexOf(chatLayout);
+          const nextMode = modes[(currentIndex + 1) % modes.length];
+          setChatLayout(nextMode);
+        }}
+        onOpenSettings={() => {
+          console.log('[BusinessPage] Open voice settings');
+          // TODO: Open settings modal
+        }}
+        zIndex={60}
       />
     </div>
   );

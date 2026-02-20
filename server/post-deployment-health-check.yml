@@ -1,0 +1,79 @@
+name: Post-Deployment Health Check
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      environment_url:
+        description: 'URL of the deployed environment to check'
+        required: true
+        default: 'https://aibizbot.gatewayglobal.ai'
+      notify_phone_number:
+        description: 'E.164 phone number for SMS alerts on failure'
+        required: false
+        default: '+17025405471'
+
+  # Example of automatic trigger after a deployment succeeds
+  # deployment_status:
+  #   if: github.event.deployment_status.state == 'success'
+
+jobs:
+  live-health-check:
+    runs-on: ubuntu-latest
+    name: Live System Health Check
+
+    steps:
+      - name: 'Wait for deployment to stabilize'
+        run: sleep 30 # Give the server a moment to start up
+
+      - name: 'Perform Live Health Check via API'
+        id: health_check
+        run: |
+          HEALTH_URL="${{ github.event.inputs.environment_url }}/api/health"
+          echo "Pinging health check endpoint: $HEALTH_URL"
+          
+          # Use curl to make the request. --fail causes curl to exit with an error
+          # if the HTTP status is not 2xx. We capture the body for logging.
+          response_body=$(curl -s --fail "$HEALTH_URL")
+          
+          if [ $? -ne 0 ]; then
+            echo "Health check failed! Endpoint returned non-200 status."
+            echo "::set-output name=status::error"
+            # Try to get error body for logging
+            error_body=$(curl -s "$HEALTH_URL")
+            echo "::set-output name=response::$error_body"
+          else
+            echo "Health check successful!"
+            echo "::set-output name=status::ok"
+            echo "::set-output name=response::$response_body"
+          fi
+
+      - name: 'Set up Twilio CLI for notifications'
+        if: failure() && steps.health_check.outputs.status == 'error' && github.event.inputs.notify_phone_number != ''
+        run: |
+          npm install -g twilio-cli
+
+      - name: 'Send SMS Alert on Failure'
+        if: failure() && steps.health_check.outputs.status == 'error' && github.event.inputs.notify_phone_number != ''
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_API_KEY: ${{ secrets.TWILIO_API_KEY }}
+          TWILIO_API_SECRET: ${{ secrets.TWILIO_API_SECRET }}
+        run: |
+          echo "Sending failure alert to ${{ github.event.inputs.notify_phone_number }}..."
+          ERROR_MESSAGE="🚨 Deployment Health Check FAILED for ${{ github.event.inputs.environment_url }}. Check GitHub Actions for details."
+          
+          twilio api:core:messages:create \
+            --from ${{ secrets.TWILIO_ALERT_PHONE_NUMBER }} \
+            --to ${{ github.event.inputs.notify_phone_number }} \
+            --body "$ERROR_MESSAGE"
+
+      - name: 'Verify Health Check Result'
+        run: |
+          echo "Health check status: ${{ steps.health_check.outputs.status }}"
+          echo "Response:"
+          echo "${{ steps.health_check.outputs.response }}"
+          if [ "${{ steps.health_check.outputs.status }}" != "ok" ]; then
+            echo "::error::Health check failed. See response above for details."
+            exit 1
+          fi

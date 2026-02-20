@@ -1,0 +1,52 @@
+# ============================================================================
+# AI AGENT PROTECTION RULES
+# ============================================================================
+# This file tells AI coding assistants (Cursor, Copilot, Claude Code, etc.)
+# which files are OFF-LIMITS for automated edits.
+#
+# Purpose: Prevent configuration drift and accidental breaking changes to
+# critical infrastructure files.
+# ============================================================================
+
+# === CRITICAL CONFIGURATION FILES (NEVER EDIT) ===
+.env
+.env.template
+.env.local
+.env.production
+server/config/geminiLiveProtocol.ts
+
+# === CORE VOICE INFRASTRUCTURE (REVIEW REQUIRED) ===
+server/geminiVoice.ts
+server/websocketRouter.ts
+client/src/services/voice/GeminiStreamingClient.ts
+client/src/services/voice/IVoiceClient.ts
+
+# === SECURITY & SECRETS ===
+*.pem
+*.key
+*.crt
+**/secrets/**
+**/.ssh/**
+
+# === BUILD ARTIFACTS (AUTO-GENERATED) ===
+dist/**
+build/**
+.next/**
+node_modules/**
+
+# === DOCUMENTATION (PRESERVE HISTORY) ===
+docs/CLEAR_VOICE_TECH.md
+CHANGELOG.md
+
+# ============================================================================
+# USAGE NOTES FOR AI ASSISTANTS
+# ============================================================================
+# If you need to modify any file listed above:
+# 1. Ask the user for explicit permission first
+# 2. Explain WHY the change is needed
+# 3. Show a detailed diff of the proposed changes
+# 4. Wait for confirmation before proceeding
+#
+# These files control critical system functionality. Automated edits without
+# review can cause production outages.
+# ============================================================================

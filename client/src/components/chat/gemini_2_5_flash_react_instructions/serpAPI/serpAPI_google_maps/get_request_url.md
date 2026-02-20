@@ -1,0 +1,1 @@
+https://serpapi.com/search.json?engine=google_maps&q=Boardwalk+Suites+Lafayette&ll=@40.7455096,-74.0083012,14z

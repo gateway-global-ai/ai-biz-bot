@@ -1,3 +1,10 @@
+---
+name: ""
+overview: ""
+todos: []
+isProject: false
+---
+
 # PTT and Standardized Chat Interface Fix (updated)
 
 ## Problem summary (updated with home page)
@@ -29,6 +36,7 @@ Additionally, the central **VoiceVisualizer** on the landing (big phone icon wit
 **Goal:** On the home page (BusinessPage), **do not** load the old `gateway-chat.js` widget for the main chat. Instead, render the **same** standardized chat interface (resize + PTT) that WebsitePreview uses.
 
 **Option A (recommended):** Extract the chat panel from WebsitePreview into a **reusable React component** (e.g. `StandardizedChatPanel` or `ConciergeChatPanel`) that accepts:
+
 - Layout mode state (floating | fixed | fullscreen) and cycle callback
 - Open/close state
 - Initial view (chat | voice)
@@ -38,6 +46,7 @@ Additionally, the central **VoiceVisualizer** on the landing (big phone icon wit
 - Optional admin/open-dashboard callback
 
 Then:
+
 - **WebsitePreview** uses this component (no duplication of layout/PTT UI).
 - **BusinessPage** uses this component on the landing: when the user is on the main landing (stage not preview/full-access), show a FAB that opens this panel instead of injecting the script. Remove the `useEffect` that injects `gateway-chat.js` for the landing stage.
 
@@ -48,6 +57,7 @@ Then:
 ### 2. Remove or repurpose the broken central voice visual (VoiceVisualizer)
 
 The large central phone icon with LISTENING/SPEAKING on the landing is the "blinking live voice screen" that is broken and disconnected from the real PTT. Either:
+
 - **Remove** it from the landing so the only voice entry is inside the standardized chat panel, or
 - **Repurpose** it to open the standardized chat panel in voice view (e.g. onClick opens chat with `initialView: 'voice'`) and remove its own WebSocket/greeting flow so it is not a second, broken voice UI.
 
@@ -94,3 +104,4 @@ For "simple include on any website," the **embed** (`gateway-chat.js`) should ev
 3. Add Cursor rule + README/doc.
 4. WebsitePreview refinements (header, menu, Restart Connection, placeholder, PTT feedback).
 5. Later: embed script updated to match full interface for third-party includes.
+
