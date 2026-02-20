@@ -79,6 +79,12 @@ All these are automatically set by the setup script:
 | `GOOGLE_CLOUD_PROJECT_ID` | `ai-biz-bot` | GCP project |
 | `PORT` | `3004` | Server port |
 | `NODE_ENV` | `development`/`production` | Environment |
+| `VITE_GOOGLE_MAPS_KEY` | Your client key | **Client-side Maps API key** (exposed in browser) |
+| `VITE_GOOGLE_MAP_ID` | `133113f6b0af325aa994b4cc` | Map ID for Day theme |
+| `VITE_GOOGLE_MAP_ID_MIDNIGHT` | `133113f6b0af325ac3bd97e2` | Map ID for Midnight theme |
+| `GOOGLE_MAPS_API_KEY` | Your server key | **Server-side Maps API key** (Places, Geocoding) |
+
+**Important:** `VITE_*` secrets must be set in Doppler and available during `npm run build` (Vite inlines them at build time).
 
 ## 🎯 Benefits
 

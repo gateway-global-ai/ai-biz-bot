@@ -22,6 +22,9 @@ export interface IVoiceClient {
   // Text input
   sendText(text: string): void;
   
+  // Tool I/O (optional, as not all clients may support it)
+  sendToolResponse?(toolResponse: { name: string; result: any; callId?: string }): void;
+
   // Event callbacks
   onMessage(callback: (message: VoiceMessage) => void): void;
   onVolumeChange(callback: (volume: number) => void): void;

@@ -1047,10 +1047,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
           const nextMode = modes[(currentIndex + 1) % modes.length];
           setChatLayout(nextMode);
         }}
-        onOpenSettings={() => {
-          console.log('[WebsitePreview] Open voice settings');
-          // TODO: Open settings modal
-        }}
+        onOpenAdmin={() => setIsAdminOpen(true)}
         zIndex={50}
       />
 

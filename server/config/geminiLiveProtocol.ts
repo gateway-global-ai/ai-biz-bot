@@ -61,6 +61,14 @@ export function validateGeminiConfig(): void {
   }
 
   console.log('✅ Gemini Live API configuration validated');
+  
+  // Optional: Validate Google Maps configuration (warnings only)
+  const googleMapsKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!googleMapsKey) {
+    console.warn('⚠️  GOOGLE_MAPS_API_KEY not set - Map tools will be unavailable');
+  } else {
+    console.log('✅ Google Maps API key configured');
+  }
 }
 
 /**
@@ -70,9 +78,10 @@ export function validateGeminiConfig(): void {
  * This structure is NON-NEGOTIABLE - do not modify without protocol updates.
  * 
  * @param systemInstruction - Optional system instruction text
+ * @param tools - Optional array of tool declarations
  * @returns Gemini Live API setup object
  */
-export function getGeminiLiveSetup(systemInstruction?: string) {
+export function getGeminiLiveSetup(systemInstruction?: string, tools?: any[]) {
   const setup: any = {
     setup: {
       model: GEMINI_MODEL,
@@ -94,6 +103,17 @@ export function getGeminiLiveSetup(systemInstruction?: string) {
     setup.setup.system_instruction = {
       parts: [{ text: systemInstruction }]
     };
+  }
+
+  // Add tools if provided
+  if (tools && tools.length > 0) {
+    setup.setup.tools = tools.map(tool => ({
+      functionDeclarations: [{
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters
+      }]
+    }));
   }
 
   return setup;

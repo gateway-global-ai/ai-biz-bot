@@ -216,7 +216,7 @@ export class LiveVoiceClient {
         // Send initial setup message
         const setupMessage = {
           setup: {
-            model: 'models/gemini-2.0-flash-exp',
+            model: process.env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025',
             generation_config: {
               response_modalities: ["audio"],
               speech_config: {

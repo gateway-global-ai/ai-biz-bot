@@ -1,0 +1,27 @@
+# Cinematic Touchdown for Boardwalk Suites Lafayette
+# Template: Descent (Zoom 12) → Touchdown (Zoom 15 trigger) → Dwell (Zoom 18, 360°)
+# See: client/src/.../tour_guide/cinematic_touchdown_template_guide.md
+
+tour_id: "boardwalk_suites_arrival"
+business_name: "Boardwalk Suites Lafayette"
+segments:
+  # Segment 1: The Descent (Zoom 12) – pan over Lafayette, Oil Center, landmarks
+  - name: "The Descent"
+    coords: { lat: 30.1795, lng: -92.0055 }
+    zoom: 12
+    narrative: "Welcome to Lafayette, the heart of Acadiana. We're descending into the historic Oil Center district, a hub for medical professionals and traveling workers."
+    dwell_time: 3
+
+  # Segment 2: Touchdown (Zoom 15 – Narrative Trigger) – "We've arrived..."
+  - name: "Touchdown"
+    coords: { lat: 30.1798, lng: -92.0058 }
+    zoom: 18
+    narrative: "We've arrived. At Boardwalk Suites, you're not just getting a room; you're getting a full kitchen and the space to actually live while you're here."
+    dwell_time: 2
+
+  # Segment 3: The Dwell (Zoom 18 – 360° Rotation) – property transformation
+  - name: "The Dwell"
+    coords: { lat: 30.1798, lng: -92.0058 }
+    zoom: 18
+    narrative: "Notice the modern contemporary architecture and soft lighting. Under new ownership, this 4-acre property has been completely transformed into a safe, non-smoking sanctuary."
+    dwell_time: 10

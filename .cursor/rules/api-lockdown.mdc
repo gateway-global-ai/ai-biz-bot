@@ -1,0 +1,19 @@
+---
+description: Enforces the Backend-for-Frontend (BFF) pattern and Secret Generator architecture.
+globs: server/routes/**, server/utils/secretManager.ts, client/src/**
+alwaysApply: true
+---
+# Total API Lockdown Rules
+Follow these principles to ensure zero client visibility of sensitive keys.
+
+## Critical Rules
+1. **No Frontend Keys**: NEVER embed `GEMINI_API_KEY` or `GROUNDING_LITE_KEY` in the frontend.
+2. **Proxy Enforcement**: All Google API calls must be proxied through the server (e.g., `/api/place-search`).
+3. **Secret Retrieval**: Use `secretManager.ts` to fetch credentials from Google Cloud Secret Manager at runtime.
+4. **Key Restriction**: Ensure `Grounding-Lite-Key` is restricted to `mapstools.googleapis.com` and `places.googleapis.com` only.
+
+## Env-Only Protection (Enforce)
+- **Enforce**: NEVER hardcode model strings. Explicitly forbidden: `gemini-2.0-flash-exp` and any other experimental or retired model IDs.
+- **Server**: ALWAYS use `process.env.GEMINI_MODEL_ID` for the model.
+- **Client**: Use `process.env.GEMINI_MODEL_ID` in code and expose it via Vite `define` in `vite.config.ts` (e.g. `'process.env.GEMINI_MODEL_ID': JSON.stringify(env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025')`), so the value is inlined at build time from the environment.
+- If you need to change a model, instruct the user to update Doppler; do not change the code.

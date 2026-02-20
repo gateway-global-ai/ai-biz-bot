@@ -1,0 +1,20 @@
+---
+description: Enforces the "Immutable Handover" and UPA Validation architecture.
+globs: "**/siteConfigRoutes.ts,**/storage.ts,**/ConciergePanel.tsx"
+alwaysApply: true
+---
+# Handover Protocol
+
+This project uses a database-backed handover service to prevent WebSocket 1006 loops and instruction drift.
+
+## Rules
+
+1. **Source of Truth**: System prompts are database artifacts (e.g. `site_configs`), not UI state. Do not derive voice instructions from transient client state.
+2. **Validation First**: Every prompt or config saved to `site_configs` (or equivalent) MUST pass `UPAValidator.validate()` (or the project's validator) before persistence.
+3. **Client Consumption**: The `ConciergePanel` must fetch config via `GET /api/site-configs/:id`. Never build or hardcode system prompts in the component; always use the API.
+4. **Audio Safety**: Before calling `inputAudioContext.close()`, check `inputAudioContext.state !== 'closed'` to avoid `InvalidStateError`. Clean up AudioContext on disconnect or unmount.
+
+## Related
+
+- Decoupled strategy: `docs/deployment/DECOUPLED_ENVIRONMENT_STRATEGY.md`
+- Site config routes: `server/routes/siteConfigRoutes.ts`

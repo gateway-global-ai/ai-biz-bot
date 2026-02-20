@@ -89,7 +89,7 @@ async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
   const base64Audio = audioBuffer.toString('base64');
   
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GOOGLE_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-native-audio-preview:generateContent?key=${process.env.GOOGLE_API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -173,7 +173,7 @@ Adapt your communication style accordingly.`;
  */
 async function getGeminiResponse(userMessage: string, systemInstruction: string): Promise<string> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GOOGLE_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-native-audio-preview:generateContent?key=${process.env.GOOGLE_API_KEY}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -1,0 +1,15 @@
+---
+description: Doppler CLI usage and secret management for this project
+globs: "**/.env*,**/ecosystem*.cjs,scripts/*doppler*,scripts/sync-doppler*.sh,scripts/run-with-doppler.sh"
+alwaysApply: false
+---
+
+# Doppler in this project
+
+- **Secrets:** Use Doppler for dev/stg/prd. Never commit real secrets; use `.env.example` or Doppler.
+- **Run app/scripts with secrets:** `doppler run -- <command>` or `doppler run --config stg -- <command>`.
+- **Copy configs (dev → stg/prd):** `./scripts/doppler-copy-config.sh` or `npm run doppler:copy-config`. Requires `jq`. Override with `FROM_CONFIG`, `TO_CONFIGS`, `PROJECT`.
+- **Sync PORT per config:** `npm run doppler:sync-ports` (reads PORT_DEV/STG/PRD and DOPPLER_SERVICE_TOKEN from `.env`).
+- **Permit/health checks:** `doppler run -- npx tsx scripts/check-google-key-permissions.ts` or `npm run check-keys`.
+- **Service tokens:** Servers use `DOPPLER_SERVICE_TOKEN` or `DOPPLER_TOKEN_DEV`/`DOPPLER_TOKEN_STAGE`/`DOPPLER_TOKEN_PRODUCTION`. Stage app runs from the stage repo and needs a token in that repo’s `.env` (or use a token that can read the `stg` config).
+- **Docs:** `docs/API_KEYS_DOPPLER.md`, `docs/DOPPLER_SETUP.md`, `docs/deployment/SECRET_MANAGER_SETUP.md`.

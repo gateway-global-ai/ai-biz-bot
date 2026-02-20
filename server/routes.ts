@@ -5,7 +5,10 @@ import { registerVlmRoutes } from "./vlm-routes";
 import { registerAgentRoutes } from "./agents/agent-routes";
 import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding";
 import knowledgeRoutes from "./routes/knowledge-routes";
+import businessRoutes from "./routes/businessRoutes";
+import siteConfigRoutes from "./routes/siteConfigRoutes";
 import { registerMenuRoutes } from "./routes/menu-routes";
+import healthRoutes from "./routes/healthRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import { registerB2bRoutes } from "./routes/b2b-routes";
 import twilio from "twilio";
@@ -30,6 +33,10 @@ import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
 import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
 import { customerSendOtp, customerVerifyOtp, customerVerifySession, customerLogout, customerUpdateProfile, customerGetBusinesses, customerClaimBusiness } from "./customerAuth";
 import { runDemoEnrichment } from "./services/demo-enrichment";
+import { generateFullReport } from "./services/reviewAnalysisService";
+import { enrichBusinessData } from "./services/businessDataService";
+import { buildRichSystemInstruction } from "./services/systemInstructionBuilder";
+import { getFreshPlaceId, getFreshPlaceIdWithSource } from "./services/placeDiscoveryService";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
@@ -108,6 +115,17 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  function isAdminAuthenticated(req: any): boolean {
+    const adminSession = req.headers?.["x-admin-token"];
+    if (adminSession) return true;
+    const cookieHeader: string | undefined = req.headers?.cookie;
+    const sessionCookie = cookieHeader?.split(";").find((c) => c.trim().startsWith("admin_session="));
+    return !!sessionCookie;
+  }
+
+  // Health check route (public)
+  app.use(healthRoutes);
 
   app.use(async (req, res, next) => {
     const ua = req.headers["user-agent"] || "";
@@ -464,12 +482,8 @@ export async function registerRoutes(
 
   app.post("/api/admin/backfill-sites", async (req, res) => {
     try {
-      const adminSession = req.headers["x-admin-token"];
-      if (!adminSession) {
-        const sessionCookie = req.headers.cookie?.split(";").find(c => c.trim().startsWith("admin_session="));
-        if (!sessionCookie) {
-          return res.status(401).json({ error: "Admin authentication required" });
-        }
+      if (!isAdminAuthenticated(req)) {
+        return res.status(401).json({ error: "Admin authentication required" });
       }
       const allLeads = await storage.getAllDemoLeads();
       let created = 0;
@@ -509,6 +523,257 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("[Backfill] Error:", error);
       res.status(500).json({ error: error.message || "Backfill failed" });
+    }
+  });
+
+  // ===================== Admin System Health Report =====================
+  // Runs dependency checks and BI pipeline checks (aligned with tests/test-bi-pipeline.ts).
+  app.get("/api/admin/health-report", async (req, res) => {
+    try {
+      if (!isAdminAuthenticated(req)) {
+        return res.status(401).json({ error: "Admin authentication required" });
+      }
+
+      const defaultPlaceId = "ChIJB4qU6oXvJIgR_2p602OaK_U";
+      const placeId =
+        (typeof req.query.placeId === "string" && req.query.placeId) ||
+        process.env.TEST_PLACE_ID ||
+        defaultPlaceId;
+      const businessName =
+        (typeof req.query.businessName === "string" && req.query.businessName) ||
+        process.env.TEST_BUSINESS_NAME ||
+        "Boardwalk Suites Lafayette";
+
+      const serpKey = process.env.SERPAPI_API_KEY || process.env.SERPAPI_KEY || process.env.SERP_API_KEY;
+      const googleMapsKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY;
+      const geminiKey = process.env.GEMINI_API_KEY;
+      const hasValidPlaceId = placeId.length > 20 && !placeId.includes("...");
+
+      const dependencyChecks: Array<{ name: string; status: "ok" | "missing" | "error"; message?: string }> = [
+        { name: "SERP_API_KEY", status: serpKey ? "ok" : "missing", message: serpKey ? undefined : "Set SERPAPI_API_KEY, SERPAPI_KEY, or SERP_API_KEY" },
+        { name: "GOOGLE_MAPS_API_KEY", status: googleMapsKey ? "ok" : "missing", message: googleMapsKey ? undefined : "Set GOOGLE_MAPS_API_KEY (or GOOGLE_API_KEY)" },
+        { name: "GEMINI_API_KEY", status: geminiKey ? "ok" : "missing", message: geminiKey ? undefined : "Set GEMINI_API_KEY" },
+        { name: "TEST_PLACE_ID", status: hasValidPlaceId ? "ok" : "error", message: hasValidPlaceId ? undefined : `Invalid TEST_PLACE_ID format (${placeId})` },
+      ];
+
+      const pipelineChecks: Array<{
+        name: string;
+        status: "pass" | "fail" | "skip";
+        message?: string;
+        detail?: Record<string, unknown>;
+      }> = [];
+
+      const rawMessages: string[] = [];
+      const log = (msg: string) => rawMessages.push(msg);
+
+      let enrichmentFailedDueTo404 = false;
+      let suggestedPlaceId: string | null = null;
+
+      // Test 1: Review Mining & SWOT Generation (SERP API + Gemini)
+      if (!serpKey) {
+        pipelineChecks.push({
+          name: "Review Mining & SWOT Generation",
+          status: "skip",
+          message: "SERP API key not set (SERPAPI_API_KEY, SERPAPI_KEY, or SERP_API_KEY)",
+        });
+      } else if (!geminiKey) {
+        pipelineChecks.push({
+          name: "Review Mining & SWOT Generation",
+          status: "skip",
+          message: "GEMINI_API_KEY not set (required to analyze reviews)",
+        });
+      } else {
+        try {
+          const report = await generateFullReport(placeId, businessName);
+          if (!report) throw new Error("Report is null");
+          if (!report.executive_summary || report.executive_summary.length === 0) {
+            throw new Error("Executive summary is missing or empty");
+          }
+          if (!report.cinematic_narrative || !report.cinematic_narrative.landing) {
+            throw new Error("Cinematic narrative landing is missing");
+          }
+          const amenityCount = report.amenity_list?.length ?? 0;
+          const blindSpotCount = report.owner_insights?.blind_spots?.length ?? 0;
+          if (amenityCount === 0) log("WARN: Amenity list empty");
+          if (blindSpotCount === 0) log("WARN: Blind spots empty");
+
+          pipelineChecks.push({
+            name: "Review Mining & SWOT Generation",
+            status: "pass",
+            detail: {
+              executiveSummaryPreview: report.executive_summary.substring(0, 140),
+              amenities: amenityCount,
+              blindSpots: blindSpotCount,
+            },
+          });
+        } catch (error: any) {
+          pipelineChecks.push({
+            name: "Review Mining & SWOT Generation",
+            status: "fail",
+            message: error?.message || "Failed to generate SWOT report",
+          });
+        }
+      }
+
+      // Test 2: Enriched Business Data (Places API New)
+      let placesOk = false;
+      if (!googleMapsKey) {
+        pipelineChecks.push({
+          name: "Enriched Business Data",
+          status: "skip",
+          message: "GOOGLE_MAPS_API_KEY not set",
+        });
+      } else if (!hasValidPlaceId) {
+        pipelineChecks.push({
+          name: "Enriched Business Data",
+          status: "skip",
+          message: "TEST_PLACE_ID invalid format",
+        });
+      } else {
+        try {
+          const enriched = await enrichBusinessData(placeId, {
+            includeIntelligence: true,
+            includeOwnerData: false,
+            businessName,
+          });
+          if (!enriched?.general) throw new Error("Enriched data missing general section");
+          if (!enriched.general.name || !enriched.general.placeId) throw new Error("General business data incomplete");
+          placesOk = true;
+          pipelineChecks.push({
+            name: "Enriched Business Data",
+            status: "pass",
+            detail: {
+              placeId: enriched.general.placeId,
+              name: enriched.general.name,
+              hasIntelligence: !!enriched.intelligence,
+            },
+          });
+        } catch (error: any) {
+          if (error?.response?.status === 404) {
+            enrichmentFailedDueTo404 = true;
+            suggestedPlaceId = await getFreshPlaceId(businessName);
+            pipelineChecks.push({
+              name: "Enriched Business Data",
+              status: "fail",
+              message: "Place ID is obsolete or invalid for Places API (New). Refresh the ID to fix.",
+              detail: {
+                placeId,
+                obsoletePlaceId: true,
+                suggestion: "Search for New ID",
+                ...(suggestedPlaceId ? { suggestedPlaceId } : {}),
+              },
+            });
+          } else {
+            pipelineChecks.push({
+              name: "Enriched Business Data",
+              status: "fail",
+              message: error?.message || "Failed to enrich business data",
+            });
+          }
+        }
+      }
+
+      // Test 3: System Instruction Building (requires Places success for BI section)
+      if (!googleMapsKey) {
+        pipelineChecks.push({
+          name: "System Instruction Building",
+          status: "skip",
+          message: "GOOGLE_MAPS_API_KEY not set",
+        });
+      } else if (!hasValidPlaceId) {
+        pipelineChecks.push({
+          name: "System Instruction Building",
+          status: "skip",
+          message: "TEST_PLACE_ID invalid format",
+        });
+      } else if (!placesOk) {
+        if (enrichmentFailedDueTo404) {
+          pipelineChecks.push({
+            name: "System Instruction Building",
+            status: "fail",
+            message: "Enrichment failed due to obsolete Place ID (see Enriched Business Data). Refresh the ID to fix.",
+            detail: {
+              obsoletePlaceId: true,
+              suggestion: "Search for New ID",
+              ...(suggestedPlaceId ? { suggestedPlaceId } : {}),
+            },
+          });
+        } else {
+          pipelineChecks.push({
+            name: "System Instruction Building",
+            status: "skip",
+            message: "Skipped because Places enrichment did not succeed (see Enriched Business Data)",
+          });
+        }
+      } else {
+        try {
+          const instruction = await buildRichSystemInstruction(
+            { placeId, name: businessName, address: "Admin health check" } as any,
+            {
+              role: "Business Assistant",
+              personality: "Helpful and professional",
+              objectives: ["Assist customers with business information"],
+              constraints: ["Be polite and professional"],
+            } as any,
+            { includeIntelligence: true, includeTourNarrative: true }
+          );
+          if (!instruction || instruction.length === 0) throw new Error("Instruction is empty");
+          if (!instruction.includes(businessName)) throw new Error("Instruction does not include business name");
+          if (!instruction.includes("BUSINESS INTELLIGENCE")) {
+            throw new Error("Instruction missing BUSINESS INTELLIGENCE section");
+          }
+          pipelineChecks.push({
+            name: "System Instruction Building",
+            status: "pass",
+            detail: { length: instruction.length },
+          });
+        } catch (error: any) {
+          pipelineChecks.push({
+            name: "System Instruction Building",
+            status: "fail",
+            message: error?.message || "Failed to build rich system instruction",
+          });
+        }
+      }
+
+      const passed = pipelineChecks.filter((c) => c.status === "pass").length;
+      const failed = pipelineChecks.filter((c) => c.status === "fail").length;
+      const skipped = pipelineChecks.filter((c) => c.status === "skip").length;
+
+      res.json({
+        timestamp: new Date().toISOString(),
+        params: { placeId, businessName },
+        dependencyChecks,
+        pipelineChecks,
+        summary: { passed, failed, skipped },
+        rawMessages,
+      });
+    } catch (error: any) {
+      console.error("[AdminHealthReport] Error:", error);
+      res.status(500).json({ error: error?.message || "Failed to run health report" });
+    }
+  });
+
+  // Admin: resolve fresh Place ID for a search signature (for "Search for New ID" in System Health UI).
+  app.post("/api/admin/place-discovery", async (req, res) => {
+    try {
+      if (!isAdminAuthenticated(req)) {
+        return res.status(401).json({ error: "Admin authentication required" });
+      }
+      const body = req.body as { searchSignature?: string };
+      const searchSignature =
+        typeof body?.searchSignature === "string" ? body.searchSignature.trim() : "";
+      if (!searchSignature) {
+        return res.status(400).json({ error: "searchSignature is required" });
+      }
+      const result = await getFreshPlaceIdWithSource(searchSignature);
+      res.json({
+        placeId: result.placeId,
+        source: result.source,
+      });
+    } catch (error: any) {
+      console.error("[AdminPlaceDiscovery] Error:", error);
+      res.status(500).json({ error: error?.message || "Place discovery failed" });
     }
   });
 
@@ -3558,11 +3823,14 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   }
 
-  // Serve Google Maps JS API key to frontend (for Places Autocomplete / Map)
-  // Prefer GOOGLE_MAPS_JS_API or GOOGLE_MAPS_JS_KEY, then GOOGLE_CLOUD_API_KEY
+  // Serve only the client-designated Maps key (referrer-restricted). Never expose server keys (GOOGLE_MAPS_API_KEY, GOOGLE_CLOUD_API_KEY).
   app.get("/api/config/maps-key", (_req, res) => {
-    const key = process.env.GOOGLE_MAPS_JS_API || process.env.GOOGLE_MAPS_JS_KEY || process.env.GOOGLE_CLOUD_API_KEY;
-    if (!key) return res.status(404).json({ error: "Google Maps API key not configured" });
+    const key = process.env.GOOGLE_MAPS_JS_API || process.env.GOOGLE_MAPS_JS_KEY;
+    if (!key) {
+      return res.status(503).json({
+        error: "Google Maps API key not configured for client. Set GOOGLE_MAPS_JS_API or GOOGLE_MAPS_JS_KEY (referrer-restricted key); do not use server key here.",
+      });
+    }
     res.json({ key });
   });
 
@@ -4138,16 +4406,6 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   });
 
-  app.get("/api/site-configs/:id", async (req, res) => {
-    try {
-      const config = await storage.getSiteConfig(req.params.id);
-      if (!config) return res.status(404).json({ error: "Site config not found" });
-      res.json(config);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   app.post("/api/site-configs", async (req, res) => {
     try {
       const schema = z.object({
@@ -4219,7 +4477,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
   app.get("/api/site-configs/:id/knowledge", async (req, res) => {
     try {
-      const site = await storage.getSiteConfig(req.params.id);
+      const site = await storage.getSiteConfigById(req.params.id);
       if (!site) return res.status(404).json({ error: "Site not found" });
       const lib = (site as any).knowledgeLibrary;
       res.json(Array.isArray(lib) ? lib : []);
@@ -4233,7 +4491,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       const schema = z.object({ title: z.string().min(1).max(200), content: z.string().max(500000) });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const site = await storage.getSiteConfig(req.params.id);
+      const site = await storage.getSiteConfigById(req.params.id);
       if (!site) return res.status(404).json({ error: "Site not found" });
       const existing = Array.isArray((site as any).knowledgeLibrary) ? (site as any).knowledgeLibrary : [];
       const doc = {
@@ -4251,7 +4509,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
   app.delete("/api/site-configs/:id/knowledge/:docId", async (req, res) => {
     try {
-      const site = await storage.getSiteConfig(req.params.id);
+      const site = await storage.getSiteConfigById(req.params.id);
       if (!site) return res.status(404).json({ error: "Site not found" });
       const existing = Array.isArray((site as any).knowledgeLibrary) ? (site as any).knowledgeLibrary : [];
       const next = existing.filter((d: any) => d.id !== req.params.docId);
@@ -7235,9 +7493,26 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
   // Register Knowledge Base routes
   app.use("/api/knowledge", knowledgeRoutes);
+  app.use("/api/business", businessRoutes);
+  app.use("/api/site-configs", siteConfigRoutes);
 
   // Register Menu and Cart routes
   registerMenuRoutes(app);
+
+  // Register Site Config routes
+  app.get("/api/site-configs/:id", async (req, res) => {
+    const { id } = req.params;
+    if (!id || id === 'undefined') {
+      return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    }
+    try {
+      const config = await storage.getSiteConfigById(id);
+      if (!config) return res.status(404).json({ error: "Site config not found" });
+      res.json(config);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 
   // Register Inquiry routes
   registerInquiryRoutes(app);

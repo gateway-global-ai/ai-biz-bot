@@ -69,7 +69,7 @@ export async function fetchSerpApiReviews(
   apiKey?: string,
   options: SerpApiReviewsOptions = {}
 ): Promise<SerpApiReviewsResult | null> {
-  const key = apiKey ?? process.env.SERPAPI_API_KEY;
+  const key = apiKey ?? process.env.SERPAPI_API_KEY ?? process.env.SERPAPI_KEY ?? process.env.SERP_API_KEY;
   if (!key || !placeId) return null;
 
   const num = Math.min(50, Math.max(1, options.num ?? DEFAULT_NUM));

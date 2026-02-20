@@ -1,45 +1,44 @@
 /**
  * ConciergePanel - Unified Voice/Chat Interface
  * 
- * The "Driver" component for the dual-engine voice system.
- * Handles PTT logic differences between "Standard" (Record & Upload) and "Clear Voice" (Stream) automatically.
+ * REDESIGNED LAYOUT (15-20-40-25):
+ * =================================
+ * 15% - Top Header (Title, Status, Settings/Layout/Close icons)
+ * 20% - Visualizer (Wave visualization with glowing effects, status text)
+ * 40% - Content Window (Transcribed conversation, multimodal tools area)
+ * 25% - Bottom Footer (PTT button 50% width, optional side buttons)
  * 
  * Key Features:
- * - Supports both streaming (Clear Voice Premium) and transactional (Standard PTT) modes
- * - Reusable across Landing Page and Preview Page
- * - Flexible layout modes: floating, fixed, fullscreen
- * - Integrated voice visualizer and chat history
+ * - Professional PTT interface with proper visual feedback
+ * - Compact, efficient use of screen space
+ * - Multimodal content area for maps, forms, catalogs
+ * - Auto-restart on settings change
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  X, Maximize2, Minimize2, Mic, Send, MoreVertical, 
-  Settings, MapPin, RefreshCw 
+  X, Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield 
 } from 'lucide-react';
 import { VoiceClientFactory } from '../../services/voice/VoiceClientFactory';
 import { IVoiceClient } from '../../services/voice/IVoiceClient';
-import { VoiceConfig, BusinessContext, AgentConfig, ChatMessage as VoiceChatMessage } from '../../types/voice';
+import { VoiceConfig, BusinessContext, AgentConfig } from '../../types/voice';
 import { VoiceSettings } from '../voice/VoiceSettings';
+import { ToolRouter } from '../voice/tools/ToolRouter';
+import { SuccessAnimation } from '../voice/animations/SuccessAnimation';
+import { useVoiceAnimations } from '../voice/animations/useVoiceAnimations';
 
-// --- Types ---
 interface ConciergePanelProps {
-  // Business & Agent Context
   business: BusinessContext;
   agent: AgentConfig;
-  
-  // Configuration
   voiceConfig: VoiceConfig;
   agentName?: string;
   initialView?: 'chat' | 'voice';
-  
-  // Layout Controls
   isOpen: boolean;
   layoutMode?: 'floating' | 'fixed' | 'fullscreen';
   onClose: () => void;
   onCycleLayout?: () => void;
-  
-  // Optional Callbacks
-  onOpenSettings?: () => void;
+  /** When set, header shows "Admin Mode" button that opens admin (e.g. partner dashboard). */
+  onOpenAdmin?: () => void;
   className?: string;
   zIndex?: number;
 }
@@ -48,8 +47,9 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   text?: string;
-  mapData?: any; // For Phase 10: Google Places
+  mapData?: any;
   timestamp: number;
+  metadata?: any;
 }
 
 export const ConciergePanel: React.FC<ConciergePanelProps> = ({
@@ -57,63 +57,107 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   agent,
   voiceConfig,
   agentName,
-  initialView = 'voice',
   isOpen,
   layoutMode = 'floating',
   onClose,
   onCycleLayout,
-  onOpenSettings,
+  onOpenAdmin,
   className = '',
   zIndex = 50
 }) => {
+  const siteConfigId = business.id;
+
   // --- State ---
-  const [activeView, setActiveView] = useState<'chat' | 'voice'>(initialView);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputText, setInputText] = useState('');
-  
-  // Voice State
-  const [client, setClient] = useState<IVoiceClient | null>(null);
+  const clientRef = useRef<IVoiceClient | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [volumeLevel, setVolumeLevel] = useState(0);
-  
-  // Settings State
   const [showSettings, setShowSettings] = useState(false);
   const [currentVoiceConfig, setCurrentVoiceConfig] = useState(voiceConfig);
+  const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+  const [successMessageId, setSuccessMessageId] = useState<string | null>(null);
   
-  // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { triggerSuccess } = useVoiceAnimations();
 
   // --- Engine Initialization ---
   useEffect(() => {
     if (!isOpen) {
-      // Cleanup when closed
-      client?.disconnect();
-      setConnectionStatus('disconnected');
+      if (clientRef.current) {
+        clientRef.current.disconnect();
+        clientRef.current = null;
+      }
       return;
     }
 
     const initEngine = async () => {
       setConnectionStatus('connecting');
       try {
-        console.log('[ConciergePanel] Initializing voice engine:', currentVoiceConfig.mode);
+        // --- HANDOVER SERVICE LOGIC ---
+        // 1. Fetch the pre-validated configuration from the server.
+        // The siteConfigId is passed as a prop or read from the URL.
+        const response = await fetch(`/api/site-configs/${siteConfigId}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
+        }
+        const siteConfig = await response.json();
+
+        // 2. MERGE the validated Model ID into the current voice config
+        const validatedVoiceConfig: VoiceConfig = {
+          ...currentVoiceConfig,
+          // Priority: Backend Config > Prop > Fallback
+          model: siteConfig.geminiModelId || currentVoiceConfig.model || "gemini-2.5-flash-native-audio-preview-12-2025"
+        };
+
+        console.log('[ConciergePanel] Initializing with verified model:', validatedVoiceConfig.model);
+
+        // 3. Create client with the VALIDATED config
+        const newClient = VoiceClientFactory.createClient(validatedVoiceConfig);
         
-        // 1. Factory creates the right engine (Standard vs Clear Voice)
-        const newClient = VoiceClientFactory.createClient(currentVoiceConfig);
-        
-        // 2. Setup Listeners
         newClient.onMessage((msg) => {
           console.log('[ConciergePanel] Message received:', msg);
           
-          if (msg.type === 'transcription' && msg.isFinal) {
-            addMessage('user', msg.text);
+          if (msg.type === 'transcription') {
+            // Handle user transcription (intermediate or final)
+            setMessages(prev => {
+              const lastMsg = prev[prev.length - 1];
+              if (lastMsg && lastMsg.role === 'user' && lastMsg.metadata?.isTranscription) {
+                // Update existing transcription message
+                const newMessages = [...prev];
+                newMessages[newMessages.length - 1] = {
+                  ...lastMsg,
+                  text: msg.text,
+                  metadata: { ...lastMsg.metadata, isFinal: msg.isFinal }
+                };
+                return newMessages;
+              } else {
+                // Add new transcription message
+                return [...prev, {
+                  id: `msg-${Date.now()}`,
+                  role: 'user',
+                  text: msg.text,
+                  timestamp: Date.now(),
+                  metadata: { isTranscription: true, isFinal: msg.isFinal }
+                }];
+              }
+            });
+            
+            if (msg.isFinal) {
+              setIsProcessing(true);
+            }
           } else if (msg.type === 'response') {
-            addMessage('assistant', msg.text, msg.metadata);
             setIsProcessing(false);
+            if (msg.text) {
+              addMessage('assistant', msg.text, msg.metadata);
+            } else if (msg.metadata?.tool_type) {
+              // Tool result without text (e.g. map, business intelligence)
+              addMessage('assistant', undefined, msg.metadata);
+            }
           } else if (msg.type === 'error') {
-            addMessage('system', `Error: ${msg.text}`);
             setIsProcessing(false);
+            addMessage('system', msg.text || 'An error occurred with the voice engine.');
           }
         });
 
@@ -125,56 +169,91 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           setConnectionStatus(connected ? 'connected' : 'disconnected');
         });
 
-        // 3. Connect
-        await newClient.connect(business, agent, currentVoiceConfig);
-        setClient(newClient);
-        setConnectionStatus('connected');
+        // 4. Connect using the fetched, validated system prompt and validated config.
+        // The `connect` method in GeminiStreamingClient will now receive this.
+        const handoverBusinessContext = { ...business, systemPromptOverride: siteConfig.systemPromptOverride };
+
+        await newClient.connect(handoverBusinessContext, agent, validatedVoiceConfig);
+        clientRef.current = newClient;
         
         console.log('[ConciergePanel] Voice engine connected successfully');
 
       } catch (err) {
         console.error("[ConciergePanel] Failed to init voice engine:", err);
         setConnectionStatus('disconnected');
-        addMessage('system', 'Connection failed. Switching to text mode.');
-        setActiveView('chat');
+        const errorMessage = err instanceof Error && err.message.includes('site configuration') 
+          ? 'Failed to load site configuration. Please try again.'
+          : 'Connection failed. Check microphone permissions.';
+        addMessage('system', errorMessage);
       }
     };
 
     initEngine();
 
-    // Cleanup on unmount or config change
     return () => {
-      client?.disconnect();
+      if (clientRef.current) {
+        clientRef.current.disconnect();
+        clientRef.current = null;
+      }
     };
-  }, [isOpen, currentVoiceConfig, business, agent]); // ✅ Added currentVoiceConfig dependency
+  }, [isOpen, currentVoiceConfig, business, agent]);
 
-  // Auto-scroll to latest message
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Sync initialView prop changes
-  useEffect(() => {
-    if (isOpen && initialView !== activeView) {
-      setActiveView(initialView);
-    }
-  }, [isOpen, initialView]);
-
-  // --- Helpers ---
+  // --- Message Management ---
   const addMessage = (role: 'user' | 'assistant' | 'system', text?: string, metadata?: any) => {
     setMessages(prev => [...prev, {
-      id: Date.now().toString() + Math.random(),
+      id: `msg-${Date.now()}-${Math.random()}`,
       role,
       text,
-      mapData: metadata?.placeId ? metadata : undefined,
+      metadata,
       timestamp: Date.now()
     }]);
   };
 
-  // --- PTT Logic (The Dual-Engine Handler) ---
-  
-  const startPTT = async () => {
-    if (!client || connectionStatus !== 'connected') {
+  // --- Tool Handlers ---
+  const handleToolSubmit = (messageId: string, value: string) => {
+    // Update message to mark tool as completed
+    setMessages(prev => prev.map(msg => 
+      msg.id === messageId 
+        ? { ...msg, metadata: { ...msg.metadata, completed: true, correctedValue: value } }
+        : msg
+    ));
+
+    // Show success animation
+    setSuccessMessageId(messageId);
+    setShowSuccessAnimation(true);
+    triggerSuccess();
+    
+    // Hide animation after 1.5 seconds
+    setTimeout(() => {
+      setShowSuccessAnimation(false);
+      setSuccessMessageId(null);
+    }, 1500);
+
+    // Send tool response back to Gemini
+    if (clientRef.current && 'sendToolResponse' in clientRef.current) {
+      (clientRef.current as any).sendToolResponse({
+        name: "request_manual_input",
+        result: {
+          corrected_value: value,
+          status: "success"
+        }
+      });
+    }
+  };
+
+  const handleToolCancel = (messageId: string) => {
+    // Remove the tool message or mark as cancelled
+    setMessages(prev => prev.filter(msg => msg.id !== messageId));
+  };
+
+  // --- PTT Handlers ---
+  const startPTT = () => {
+    if (!clientRef.current || connectionStatus !== 'connected' || isRecording) {
       console.warn('[ConciergePanel] Cannot start PTT: client not ready');
       return;
     }
@@ -183,10 +262,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     setIsRecording(true);
     
     try {
-      // Call the abstracted startSession() method
-      // - For Clear Voice (streaming): unmutes audio stream
-      // - For Standard (transactional): starts recording blob
-      client.startSession();
+      clientRef.current.startSession();
     } catch (err) {
       console.error("[ConciergePanel] PTT start error:", err);
       setIsRecording(false);
@@ -195,47 +271,22 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   };
 
   const stopPTT = () => {
-    if (!isRecording || !client) return;
+    if (!isRecording || !clientRef.current) return;
     
     console.log('[ConciergePanel] Stopping PTT session');
     setIsRecording(false);
-    setIsProcessing(true); // Show "Thinking..."
+    setIsProcessing(true);
 
     try {
-      // Call the abstracted endSession() method
-      // - For Clear Voice (streaming): mutes audio stream
-      // - For Standard (transactional): stops recording and uploads blob
-      client.endSession();
+      clientRef.current.endSession();
     } catch (err) {
       console.error("[ConciergePanel] PTT stop error:", err);
       setIsProcessing(false);
+      addMessage('system', 'Error processing audio.');
     }
   };
 
-  // --- Text Chat Handlers ---
-  
-  const handleSendText = () => {
-    if (!inputText.trim() || !client) return;
-    
-    const text = inputText.trim();
-    setInputText('');
-    
-    // Add user message immediately
-    addMessage('user', text);
-    setIsProcessing(true);
-    
-    // Send to voice client
-    client.sendText(text);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendText();
-    }
-  };
-
-  // --- Render Helpers ---
+  // --- Layout Classes ---
   const getContainerClasses = () => {
     const base = "fixed bg-white shadow-2xl transition-all duration-300 flex flex-col overflow-hidden";
     switch (layoutMode) {
@@ -258,216 +309,281 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       style={{ zIndex }}
     >
       
-      {/* 1. Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 shrink-0">
+      {/* 1. TOP HEADER - 15% */}
+      <div className="h-[15%] flex items-center justify-between px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white shrink-0">
         <div className="flex items-center gap-3">
-          <div className={`w-2 h-2 rounded-full ${
-            connectionStatus === 'connected' ? 'bg-green-500 animate-pulse' : 
-            connectionStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+          <div className={`w-3 h-3 rounded-full ${
+            connectionStatus === 'connected' ? 'bg-green-400 animate-pulse shadow-lg shadow-green-400/50' : 
+            connectionStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' :
             'bg-red-400'
           }`} />
           <div>
-            <h3 className="font-semibold text-gray-800 text-sm">{agentName || agent.role}</h3>
-            <p className="text-[10px] text-gray-400 tracking-wider font-medium">
+            <h3 className="font-bold text-base">{agentName || agent.role}</h3>
+            <p className="text-[10px] text-white/70 tracking-wide font-medium">
               {business.name.toUpperCase()}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           <button 
-            onClick={() => setShowSettings(true)} 
-            className="p-2 hover:bg-gray-50 rounded-full text-gray-400 transition-colors"
+            onClick={() => {
+              const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+              if (isDesktop && layoutMode !== 'fullscreen' && onCycleLayout) onCycleLayout();
+              setShowSettings(true);
+            }} 
+            className="p-2 hover:bg-white/20 rounded-lg text-white transition-colors"
             title="Voice AI Settings"
           >
-            <Settings size={16} />
+            <Settings size={18} />
           </button>
+          {onOpenAdmin && (
+            <button 
+              onClick={onOpenAdmin} 
+              className="p-2 hover:bg-white/20 rounded-lg text-white transition-colors flex items-center gap-1"
+              title="Admin Mode"
+            >
+              <Shield size={18} />
+              <span className="text-xs font-medium hidden sm:inline">Admin</span>
+            </button>
+          )}
           {onCycleLayout && (
             <button 
               onClick={onCycleLayout} 
-              className="p-2 hover:bg-gray-50 rounded-full text-gray-400 transition-colors"
+              className="p-2 hover:bg-white/20 rounded-lg text-white transition-colors"
               title="Toggle Layout"
             >
-              {layoutMode === 'fullscreen' ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              {layoutMode === 'fullscreen' ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
             </button>
           )}
           <button 
             onClick={onClose} 
-            className="p-2 hover:bg-red-50 hover:text-red-500 rounded-full text-gray-400 transition-colors"
+            className="p-2 hover:bg-red-500/30 rounded-lg text-white transition-colors"
             title="Close"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
       </div>
 
-      {/* 2. Main Content Area */}
-      <div className="flex-1 bg-gray-50 overflow-hidden relative">
+      {/* 2. VISUALIZER - 20% */}
+      <div className="h-[20%] bg-gradient-to-b from-gray-900 to-gray-800 flex flex-col items-center justify-center shrink-0 relative overflow-hidden">
+        {/* Voice Wave Visualization with Tier-Based Colors */}
+        <div className="flex items-center gap-1 h-16 mb-2">
+          {[...Array(32)].map((_, i) => {
+            // Tier-based colors: Green for Clear Voice (Premium), Blue for Standard PTT
+            const baseColor = currentVoiceConfig.mode === 'clear_voice' 
+              ? (isRecording ? 'bg-green-400' : isProcessing ? 'bg-emerald-400' : 'bg-gray-600')
+              : (isRecording ? 'bg-blue-400' : isProcessing ? 'bg-purple-400' : 'bg-gray-600');
+            
+            return (
+              <div
+                key={i}
+                className={`w-1 rounded-full transition-all duration-100 ${baseColor}`}
+                style={{
+                  height: isRecording 
+                    ? `${Math.max(4, volumeLevel * 200 * (1 + Math.sin((i + Date.now() / 100) / 2)))}px`
+                    : isProcessing
+                    ? `${20 + Math.sin((i + Date.now() / 200) * 0.5) * 16}px`
+                    : '8px',
+                  opacity: isRecording || isProcessing ? 0.8 : 0.3
+                }}
+              />
+            );
+          })}
+        </div>
         
-        {/* VOICE VIEW */}
-        <div className={`absolute inset-0 flex flex-col items-center justify-center transition-opacity duration-300 ${
-          activeView === 'voice' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
-        }`}>
-          <div className="w-full max-w-[280px] aspect-square bg-white rounded-full shadow-sm flex items-center justify-center mb-12 relative">
-            {/* Visualizer - Animated based on volume */}
-            <div 
-              className={`absolute inset-0 rounded-full transition-all duration-300 ${
-                isRecording ? 'bg-blue-500' : 'bg-gray-100'
-              }`}
-              style={{
-                opacity: isRecording ? Math.min(volumeLevel * 2, 0.4) : 0.1,
-                transform: `scale(${1 + (isRecording ? volumeLevel * 0.5 : 0)})`
-              }}
-            />
-            <div className={`w-24 h-24 rounded-full ${
-              isProcessing ? 'bg-purple-500 animate-pulse' : 
-              isRecording ? 'bg-blue-600' : 
-              'bg-gray-800'
-            } flex items-center justify-center shadow-lg relative z-10 transition-all duration-300`}>
-              <Mic className="text-white w-8 h-8" />
-            </div>
-          </div>
-          
-          <div className="text-center space-y-2 px-8">
-            <h2 className="text-xl font-medium text-gray-800">
-              {isRecording ? "Listening..." : isProcessing ? "Thinking..." : "How can I help?"}
-            </h2>
-            <p className="text-sm text-gray-400">
-              {voiceConfig.mode === 'streaming' ? '⚡ Clear Voice (Streaming)' : '💬 Standard (PTT)'}
-            </p>
-          </div>
-
-          {/* Recent Messages Preview */}
-          {messages.length > 0 && (
-            <div className="absolute bottom-4 left-4 right-4 max-h-32 overflow-y-auto space-y-2">
-              {messages.slice(-3).map((msg) => (
-                <div key={msg.id} className={`text-xs ${
-                  msg.role === 'user' ? 'text-right text-blue-600' : 'text-left text-gray-700'
-                }`}>
-                  {msg.text}
-                </div>
-              ))}
-            </div>
+        {/* Status Text with Tier-Based Glow */}
+        <div className="relative">
+          {(isRecording || isProcessing) && (
+            <div className={`absolute inset-0 blur-xl ${
+              currentVoiceConfig.mode === 'clear_voice'
+                ? (isRecording ? 'bg-green-500' : 'bg-emerald-500')
+                : (isRecording ? 'bg-blue-500' : 'bg-purple-500')
+            } opacity-60`} />
           )}
+          <p className={`text-sm font-semibold tracking-wider relative z-10 ${
+            isRecording 
+              ? (currentVoiceConfig.mode === 'clear_voice' ? 'text-green-300' : 'text-blue-300')
+              : isProcessing 
+              ? (currentVoiceConfig.mode === 'clear_voice' ? 'text-emerald-300' : 'text-purple-300')
+              : 'text-gray-500'
+          }`}>
+            {isRecording ? '● LISTENING' : isProcessing ? '◐ THINKING' : 'READY'}
+          </p>
         </div>
-
-        {/* CHAT VIEW (Text History) */}
-        <div className={`absolute inset-0 flex flex-col bg-white transition-opacity duration-300 ${
-          activeView === 'chat' ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
-        }`}>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.map((msg) => (
-              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
-                  msg.role === 'user' 
-                    ? 'bg-blue-600 text-white rounded-br-none' 
-                    : msg.role === 'system'
-                    ? 'bg-yellow-50 text-yellow-800 rounded-bl-none border border-yellow-200'
-                    : 'bg-gray-100 text-gray-800 rounded-bl-none'
-                }`}>
-                  {msg.text}
-                  {msg.mapData && (
-                    <div className="mt-2 p-2 bg-white/10 rounded border border-white/20 flex items-center gap-2">
-                      <MapPin size={14} />
-                      <span className="text-xs font-medium">Map Location</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
-
       </div>
 
-      {/* 3. Footer / Controls */}
-      <div className="bg-white border-t border-gray-100 p-4 shrink-0">
-        {activeView === 'voice' ? (
-          <div className="flex flex-col gap-4">
-            <button
-              onPointerDown={startPTT}
-              onPointerUp={stopPTT}
-              onPointerLeave={stopPTT}
-              onTouchStart={startPTT}
-              onTouchEnd={stopPTT}
-              disabled={connectionStatus !== 'connected'}
-              className={`w-full py-4 rounded-xl font-medium tracking-wide transition-all duration-200 select-none touch-none ${
-                connectionStatus !== 'connected'
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : isRecording 
-                  ? 'bg-red-500 text-white shadow-lg scale-[0.98]' 
-                  : 'bg-gray-900 text-white hover:bg-gray-800 shadow-md active:scale-[0.98]'
-              }`}
-            >
-              {connectionStatus !== 'connected' ? 'CONNECTING...' :
-               isRecording ? 'RELEASE TO SEND' : 'HOLD TO SPEAK'}
-            </button>
-            <div className="flex justify-between px-2">
-              <button 
-                onClick={() => setActiveView('chat')}
-                className="text-xs font-medium text-gray-400 hover:text-gray-600 uppercase tracking-wider flex items-center gap-2 transition-colors"
-              >
-                💬 Text Mode
-              </button>
-              <button 
-                onClick={() => {
-                  setMessages([]);
-                  client?.disconnect();
-                  setTimeout(() => client?.connect(business, agent, voiceConfig), 100);
-                }}
-                className="text-xs font-medium text-gray-400 hover:text-gray-600 uppercase tracking-wider flex items-center gap-2 transition-colors"
-              >
-                <RefreshCw size={12} /> Restart
-              </button>
-            </div>
+      {/* 3. CONTENT WINDOW - 40% (Multimodal Communication Area) */}
+      <div className="h-[40%] bg-white overflow-y-auto shrink-0 border-y border-gray-200">
+        {messages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center px-8 text-gray-400">
+            <Mic className="w-12 h-12 mb-3 text-gray-300" />
+            <p className="text-sm font-medium text-gray-600">Hold the button below to speak</p>
+            <p className="text-xs mt-2 text-gray-400">
+              Voice input & AI responses appear here
+            </p>
+            <p className="text-[10px] mt-4 text-gray-300 max-w-xs">
+              This window supports multimodal content: maps, forms, catalogs, and interactive tools
+            </p>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setActiveView('voice')}
-              className="p-3 bg-gray-100 rounded-xl text-gray-600 hover:bg-gray-200 transition-colors"
-              title="Switch to Voice"
-            >
-              <Mic size={20} />
-            </button>
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyPress}
-                placeholder="Type a message..."
-                disabled={connectionStatus !== 'connected'}
-                className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-100 transition-all outline-none disabled:opacity-50"
-              />
-              <button 
-                onClick={handleSendText}
-                disabled={!inputText.trim() || connectionStatus !== 'connected'}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-blue-600 text-white rounded-lg shadow-sm hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send size={14} />
-              </button>
-            </div>
+          <div className="space-y-3 p-4">
+            {messages.map((msg) => {
+              // Check if this is a tool message (map, form, catalog, etc.)
+              const hasTool = msg.metadata?.tool_type;
+              
+              return (
+                <div 
+                  key={msg.id} 
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={`${
+                    hasTool ? 'w-full' : 'max-w-[80%]'
+                  } rounded-2xl px-4 py-2.5 ${
+                    msg.role === 'user' 
+                      ? 'bg-blue-600 text-white shadow-sm' 
+                      : msg.role === 'assistant'
+                      ? hasTool 
+                        ? 'bg-gray-50 text-gray-800 border border-gray-200' 
+                        : 'bg-gray-100 text-gray-800 shadow-sm'
+                      : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
+                  }`}>
+                    {msg.text && (
+                      <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                    )}
+                    
+                    {/* MULTIMODAL TOOL RENDERING */}
+                    {hasTool && !msg.metadata.completed && (
+                      <div className="mt-3 relative">
+                        <ToolRouter
+                          toolType={msg.metadata.tool_type || 'loading'}
+                          metadata={msg.metadata}
+                          onSubmit={(value) => handleToolSubmit(msg.id, value)}
+                          onCancel={() => handleToolCancel(msg.id)}
+                          onTriggerSpeech={(text) => {
+                            // Trigger AI speech for tour narration
+                            if (clientRef.current && clientRef.current.isConnected()) {
+                              clientRef.current.sendText(text);
+                            }
+                          }}
+                        />
+                        {showSuccessAnimation && successMessageId === msg.id && (
+                          <SuccessAnimation
+                            isVisible={showSuccessAnimation}
+                            message="UPDATED SUCCESSFULLY"
+                            onComplete={() => setShowSuccessAnimation(false)}
+                            showConfetti={true}
+                          />
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Show corrected value after submission */}
+                    {hasTool && msg.metadata.completed && msg.metadata.correctedValue && (
+                      <div className="mt-2 text-xs text-green-600 font-medium">
+                        ✓ Corrected: {msg.metadata.correctedValue}
+                      </div>
+                    )}
+                    
+                    {/* Metadata Footer (DISC, Emotion, Sentiment) */}
+                    {msg.metadata && !hasTool && (
+                      <div className="mt-2 text-xs opacity-70 border-t border-white/20 pt-2 space-x-3">
+                        {msg.metadata.emotion && <span>😊 {msg.metadata.emotion}</span>}
+                        {msg.metadata.sentiment && <span>💭 {msg.metadata.sentiment}</span>}
+                        {msg.metadata.disc && <span>🎯 {msg.metadata.disc}</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
           </div>
         )}
       </div>
 
-      {/* Voice Settings Modal */}
+      {/* 4. BOTTOM FOOTER - 25% */}
+      <div className="h-[25%] bg-gradient-to-b from-gray-50 to-white flex flex-col items-center justify-center gap-3 px-4 py-3 shrink-0">
+        
+        {/* Optional Action Buttons Row (LEFT - PTT - RIGHT layout) */}
+        <div className="flex items-center justify-center gap-3 w-full">
+          {/* Left Button: Text Mode */}
+          <button
+            className="w-[20%] h-12 flex items-center justify-center text-xs font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors border border-gray-200"
+            title="Switch to Text Chat"
+          >
+            <Send size={16} />
+          </button>
+
+          {/* Center: Push-To-Talk Button - 50% Width */}
+          <button
+            onMouseDown={startPTT}
+            onMouseUp={stopPTT}
+            onMouseLeave={stopPTT}
+            onTouchStart={(e) => { e.preventDefault(); startPTT(); }}
+            onTouchEnd={(e) => { e.preventDefault(); stopPTT(); }}
+            disabled={connectionStatus !== 'connected'}
+            className={`w-[50%] h-14 rounded-xl font-bold text-sm tracking-wider transition-all transform active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed select-none ${
+              isRecording 
+                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/50 ring-4 ring-blue-300/30' 
+                : isProcessing
+                ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-purple-500/50 animate-pulse'
+                : 'bg-gradient-to-r from-gray-800 to-gray-900 text-white hover:from-blue-600 hover:to-blue-700 shadow-gray-800/50'
+            }`}
+          >
+            {isRecording ? '🎤 LISTENING...' : isProcessing ? '⏳ PROCESSING...' : '🎙️ HOLD TO SPEAK'}
+          </button>
+
+          {/* Right Button: Restart */}
+          <button
+            onClick={() => {
+              if (clientRef.current) {
+                clientRef.current.disconnect();
+                clientRef.current = null;
+              }
+              setTimeout(() => window.location.reload(), 300);
+            }}
+            className="w-[20%] h-12 flex items-center justify-center text-xs font-medium text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-xl transition-colors border border-gray-200"
+            title="Restart Connection"
+          >
+            <RefreshCw size={16} />
+          </button>
+        </div>
+
+        {/* Footer Info */}
+        <div className="flex items-center justify-between w-full text-[10px] text-gray-400">
+          <span>
+            {currentVoiceConfig.mode === 'clear_voice' ? '⚡ Clear Voice' : '💬 Standard PTT'}
+          </span>
+          <span>
+            Buffer: {currentVoiceConfig.bufferDelay || 800}ms
+          </span>
+          <span className={`font-medium ${
+            connectionStatus === 'connected' ? 'text-green-600' : 
+            connectionStatus === 'connecting' ? 'text-yellow-600' : 'text-red-600'
+          }`}>
+            {connectionStatus === 'connected' ? '● CONNECTED' : 
+             connectionStatus === 'connecting' ? '◐ CONNECTING' : '○ DISCONNECTED'}
+          </span>
+        </div>
+      </div>
+
+      {/* Voice Settings - contained inside panel so it does not exit the chat interface */}
       <VoiceSettings
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
-        currentMode={voiceConfig.mode}
+        contained
+        currentMode={currentVoiceConfig.mode === 'clear_voice' ? 'clear_voice' : 'standard'}
         currentConfig={{
-          bufferDelay: currentVoiceConfig.bufferDelay || 500,
+          bufferDelay: currentVoiceConfig.bufferDelay || 800,
           silenceThreshold: currentVoiceConfig.silenceThreshold || -45,
-          analysis: currentVoiceConfig.analysis || {
-            detectEmotion: false,
-            detectSentiment: false,
-            detectDISC: false
+          analysis: {
+            detectEmotion: currentVoiceConfig.enableAnalysis?.emotion || currentVoiceConfig.analysis?.emotion || false,
+            detectSentiment: currentVoiceConfig.enableAnalysis?.sentiment || currentVoiceConfig.analysis?.sentiment || false,
+            detectDISC: currentVoiceConfig.enableAnalysis?.disc || currentVoiceConfig.analysis?.disc || false
           }
         }}
         onConfigChange={(newConfig) => {
-          // Update config - useEffect will auto-restart the engine
           setCurrentVoiceConfig({
             ...currentVoiceConfig,
             ...newConfig

@@ -31,6 +31,8 @@ import {
 interface VoiceSettingsProps {
   isOpen: boolean;
   onClose: () => void;
+  /** When true, render inside parent (absolute inset-0). When false, viewport overlay (fixed inset-0). */
+  contained?: boolean;
   currentMode: 'clear_voice' | 'standard';
   currentConfig: {
     bufferDelay: number;
@@ -58,6 +60,7 @@ interface PerformanceMetric {
 export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
   isOpen,
   onClose,
+  contained = false,
   currentMode,
   currentConfig,
   onConfigChange
@@ -173,8 +176,14 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div className={contained
+      ? "absolute inset-0 z-20 bg-white flex flex-col overflow-hidden"
+      : "fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4"
+    }>
+      <div className={contained
+        ? "flex-1 flex flex-col overflow-hidden min-h-0"
+        : "bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+      }>
         
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">

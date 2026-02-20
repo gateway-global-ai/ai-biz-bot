@@ -70,7 +70,7 @@ doppler secrets upload .env
 
 **Option B: Individual Secret Addition**:
 ```bash
-# Add secrets one by one
+# Core Gemini Configuration
 doppler secrets set GEMINI_API_KEY="your-key-here"
 doppler secrets set GEMINI_MODEL="models/gemini-2.5-flash-native-audio-preview-12-2025"
 doppler secrets set GEMINI_API_VERSION="v1beta"
@@ -78,6 +78,14 @@ doppler secrets set GEMINI_VOICE_NAME="Puck"
 doppler secrets set GOOGLE_CLOUD_PROJECT_ID="ai-biz-bot"
 doppler secrets set PORT="3004"
 doppler secrets set NODE_ENV="development"
+
+# Google Maps Configuration (Client-side - VITE_ prefix)
+doppler secrets set VITE_GOOGLE_MAPS_KEY="your-client-maps-key"
+doppler secrets set VITE_GOOGLE_MAP_ID="133113f6b0af325aa994b4cc"
+doppler secrets set VITE_GOOGLE_MAP_ID_MIDNIGHT="133113f6b0af325ac3bd97e2"
+
+# Google Maps Configuration (Server-side)
+doppler secrets set GOOGLE_MAPS_API_KEY="your-server-maps-key"
 ```
 
 ### 5. Verify Secrets
@@ -105,13 +113,17 @@ doppler run -- npm run dev
 
 ### Production Build
 
+**CRITICAL:** `VITE_*` environment variables are inlined by Vite at **build time**. You **must** run the build command with Doppler so these secrets are available:
+
 ```bash
-# Build with secrets
+# Build with secrets (VITE_ vars are embedded in client bundle)
 doppler run -- npm run build
 
 # Start production server
 doppler run -- node dist/index.mjs
 ```
+
+**Why this matters:** If you build without Doppler, the client bundle will have `undefined` for `VITE_GOOGLE_MAPS_KEY` and Map IDs, causing map tools to fail.
 
 ### As a Service (systemd)
 

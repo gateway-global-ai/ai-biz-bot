@@ -42,7 +42,8 @@ export class GeminiStreamingClient implements IVoiceClient {
   private socket: WebSocket | null = null;
   private currentStream: MediaStream | null = null;
   private connected = false;
-  private streaming = false;
+  private streaming = false;  private isDisconnecting = false;
+  private disconnecting = false; // Add a flag to prevent multiple disconnect calls
   private stopTimeout: number | null = null;
   
   private nextStartTime = 0;
@@ -91,8 +92,16 @@ export class GeminiStreamingClient implements IVoiceClient {
     this.nextStartTime = 0;
     this.currentInputText = '';
     
-    // Build system instruction
-    const systemInstruction = this.buildSystemInstruction(business, agent);
+    // Build system instruction (optionally fetch enriched version)
+    let systemInstruction: string;
+    try {
+      // Try to fetch enriched system instruction from server
+      const enriched = await this.fetchEnrichedSystemInstruction(business, agent);
+      systemInstruction = enriched || this.buildSystemInstruction(business, agent);
+    } catch (error) {
+      console.warn('[GeminiStreamingClient] Failed to fetch enriched instruction, using basic:', error);
+      systemInstruction = this.buildSystemInstruction(business, agent);
+    }
 
     try {
       // Use current host (Nginx will proxy to correct port)
@@ -105,27 +114,88 @@ export class GeminiStreamingClient implements IVoiceClient {
       this.socket.onopen = () => {
         console.log('[GeminiStreamingClient] Connected to voice proxy, waiting for server ready signal...');
         
-        // Send initial setup message - Using the correct model for bidiGenerateContent v1beta
+        // Use the model from the configuration to ensure protocol alignment.
+        const modelToUse = this.config.model?.startsWith('models/')
+          ? this.config.model
+          : `models/${this.config.model}`; // e.g., 'models/gemini-2.5-flash-native-audio-preview-12-2025'
+
+        // Define the tools array with strict OpenAPI schemas
+        const tools = [
+          {
+            function_declarations: [
+              {
+                name: "get_business_details",
+                description: "Fetch current place information, hours, and address for a specific business.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    placeId: { type: "string", description: "The unique Google Place ID." },
+                    query: { type: "string", description: "Fallback search query." }
+                  },
+                  required: ["placeId"]
+                }
+              },
+              {
+                name: "get_business_reviews",
+                description: "Retrieve customer feedback, ratings, and specific review snippets.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    placeId: { type: "string", description: "The Google Place ID to fetch reviews for." },
+                    maxReviews: { type: "integer", description: "Number of reviews to return (default 5)." }
+                  },
+                  required: ["placeId"]
+                }
+              },
+              {
+                name: "get_business_intelligence",
+                description: "Generate SWOT analysis, competitive positioning, or tour narratives.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    businessName: { type: "string", description: "Name of the business." },
+                    focusArea: { 
+                      type: "string", 
+                      enum: ["SWOT", "TourNarrative", "CompetitiveAnalysis"],
+                      description: "The type of intelligence analysis."
+                    }
+                  },
+                  required: ["businessName", "focusArea"]
+                }
+              },
+              {
+                name: "request_manual_input",
+                description: "Signal that the assistant needs manual user input from the UI.",
+                parameters: {
+                  // ✅ CRITICAL: Protocol requires a valid object schema even if empty
+                  type: "object",
+                  properties: {}
+                }
+              }
+            ]
+          }
+        ];
+
         const setupMessage = {
           setup: {
-            model: 'models/gemini-2.5-flash-native-audio-preview-12-2025',
+            model: modelToUse,
             generation_config: {
-              response_modalities: ["AUDIO"],
+              response_modalities: ["audio"], // ✅ Fixed to lowercase for v1beta protocol
               speech_config: {
                 voice_config: {
-                  prebuilt_voice_config: {
-                    voice_name: 'Puck'
-                  }
+                  prebuilt_voice_config: { voice_name: 'Puck' }
                 }
               }
             },
-            system_instruction: {
-              parts: [{ text: systemInstruction }]
-            }
+            tools: tools, // ✅ Tools properly declared
+            system_instruction: { parts: [{ text: systemInstruction }] }
           }
         };
         
-        console.log('[GeminiStreamingClient] Sending setup with model:', setupMessage.setup.model);
+        // --- DEBUG: Log the exact outgoing setup JSON to audit for formatting errors. ---
+        const setupPayload = JSON.stringify(setupMessage, null, 2);
+        console.log('[GeminiStreamingClient] Sending final validated setup payload');
+
         this.socket?.send(JSON.stringify(setupMessage));
         // DON'T start audio yet - wait for server_ready signal
       };
@@ -140,7 +210,10 @@ export class GeminiStreamingClient implements IVoiceClient {
       };
 
       this.socket.onclose = (e) => {
-        console.log('[GeminiStreamingClient] Connection closed', e);
+        console.log(`[GeminiStreamingClient] Connection closed. Code: ${e.code}, Reason: ${e.reason}, Was Clean: ${e.wasClean}`);
+        if (this.connected) {
+          this.disconnect();
+        }
         this.connected = false;
         this.connectionCallback(false);
       };
@@ -163,23 +236,58 @@ export class GeminiStreamingClient implements IVoiceClient {
     }
   }
 
-  disconnect(): void {
+  async disconnect(): Promise<void> {
+    if (this.isDisconnecting || !this.connected) {
+      return;
+    }
+    this.isDisconnecting = true;
+    console.log('[GeminiStreamingClient] Disconnecting...');
+
     if (this.stopTimeout) window.clearTimeout(this.stopTimeout);
+
     if (this.socket) { 
       try { this.socket.close(); } catch(e) {}
     }
     this.currentStream?.getTracks().forEach(t => t.stop());
-    this.activeSources.forEach(s => { try { s.stop(); } catch(e) {} });
+    this.activeSources.forEach(source => { 
+      try { source.stop(); } catch(e) {} 
+    });
     this.activeSources.clear();
-    this.workletNode?.disconnect(); // ✅ Updated
+    this.workletNode?.disconnect();
     this.inputSource?.disconnect();
-    this.inputAudioContext?.close();
-    this.outputAudioContext?.close();
+    
+    // #region agent log
+    // Log state before trying to close to debug the race condition
+    console.log('[GeminiStreamingClient] Disconnecting audio contexts', {
+        inputState: this.inputAudioContext?.state,
+        outputState: this.outputAudioContext?.state
+    });
+    // #endregion
+    
+    // Check state BEFORE attempting to close to prevent InvalidStateError
+    if (this.inputAudioContext?.state !== 'closed') {
+      try {
+        await this.inputAudioContext.close();
+      } catch (e) {
+        console.warn('[GeminiStreamingClient] Error closing inputAudioContext:', e);
+      }
+    }
+    if (this.outputAudioContext?.state !== 'closed') {
+      try {
+        await this.outputAudioContext.close();
+      } catch (e) {
+        console.warn('[GeminiStreamingClient] Error closing outputAudioContext:', e);
+      }
+    }
+    
+    this.inputAudioContext = null;
+    this.outputAudioContext = null;
     this.socket = null;
     this.connected = false;
     this.streaming = false;
     this.currentInputText = '';
     this.connectionCallback(false);
+    this.isDisconnecting = false;
   }
 
   // IVoiceClient interface methods - ABSTRACTED for PTT
@@ -200,6 +308,23 @@ export class GeminiStreamingClient implements IVoiceClient {
         parts: [{ text }]
       }
     }));
+  }
+
+  public sendToolResponse(toolResponse: { name: string, result: any, callId?: string }): void {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+    
+    const responsePayload = {
+      tool_response: {
+        function_responses: [{
+          name: toolResponse.name,
+          response: toolResponse.result,
+          id: toolResponse.callId // Important for multi-tool tracking
+        }]
+      }
+    };
+  
+    console.log('[GeminiStreamingClient] Sending tool response:', responsePayload);
+    this.socket.send(JSON.stringify(responsePayload));
   }
 
   onMessage(callback: (message: VoiceMessage) => void): void {
@@ -351,6 +476,24 @@ export class GeminiStreamingClient implements IVoiceClient {
     const parts = modelTurn?.parts;
     if (parts && this.outputAudioContext) {
       for (const part of parts) {
+        // 1. Check for Tool Calls (The "Request" side)
+        const toolCall = part.tool_call || part.toolCall;
+        if (toolCall) {
+          console.log("[GeminiStreamingClient] 🛠️ Tool call received:", toolCall.name);
+          
+          // Specifically route 'request_manual_input' to the UI
+          this.messageCallback({
+            type: 'response',
+            text: '', 
+            metadata: {
+              tool_type: toolCall.name === 'request_manual_input' ? 'manual_input' : toolCall.name,
+              call_id: toolCall.call_id || toolCall.callId,
+              ...toolCall.args
+            }
+          });
+          continue; // Skip audio processing if it's a tool call
+        }
+
         const inlineData = part.inline_data || part.inlineData;
         if (inlineData?.data) {
           console.log("[GeminiStreamingClient] Playing model audio chunk");
@@ -360,10 +503,24 @@ export class GeminiStreamingClient implements IVoiceClient {
           console.log("[GeminiStreamingClient] Model text response:", part.text);
           this.messageCallback({
             type: 'response',
-            text: part.text
+            text: part.text,
+            metadata: {} // Can be enhanced to include tool metadata
           });
         }
       }
+    }
+
+    // Handle tool result metadata from server
+    if (message.type === 'tool_result') {
+      console.log("[GeminiStreamingClient] Tool result received:", message.tool_name);
+      this.messageCallback({
+        type: 'response',
+        text: '', // No text, just tool metadata
+        metadata: {
+          tool_type: message.tool_type,
+          ...message.data,
+        }
+      });
     }
   }
 
@@ -400,6 +557,39 @@ export class GeminiStreamingClient implements IVoiceClient {
       data: encode(new Uint8Array(int16.buffer)), 
       mimeType: 'audio/pcm;rate=16000' 
     };
+  }
+
+  /**
+   * Fetch enriched system instruction from server (includes business intelligence).
+   */
+  private async fetchEnrichedSystemInstruction(
+    business: BusinessContext,
+    agent: AgentConfig
+  ): Promise<string | null> {
+    try {
+      const params = new URLSearchParams({
+        businessName: business.name,
+        address: business.address,
+        role: agent.role,
+        personality: agent.personality,
+        objectives: agent.objectives.join('|'),
+        constraints: agent.constraints.join('|'),
+        includeIntelligence: 'true',
+        includeOwnerData: 'false',
+      });
+      if (business.hours) params.set('hours', business.hours);
+      if (business.services) params.set('services', business.services.join(','));
+
+      const response = await fetch(
+        `/api/business/${encodeURIComponent(business.placeId)}/enriched-instruction?${params.toString()}`
+      );
+      if (!response.ok) return null;
+      const data = await response.json();
+      return data.instruction || null;
+    } catch (error) {
+      console.warn('[GeminiStreamingClient] Error fetching enriched instruction:', error);
+      return null;
+    }
   }
 
   private buildSystemInstruction(business: BusinessContext, agent: AgentConfig): string {

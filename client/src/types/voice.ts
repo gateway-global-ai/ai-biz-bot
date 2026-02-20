@@ -19,18 +19,25 @@ export interface VoiceMessage {
 }
 
 export interface VoiceConfig {
-  mode: 'streaming' | 'transactional';
+  mode: 'clear_voice' | 'standard_ptt'; // 'clear_voice' = streaming, 'standard_ptt' = transactional
   latency: 'ultra-low' | 'standard';
-  bufferDelay: number; // milliseconds (e.g., 2000 for PTT)
+  bufferDelay: number; // milliseconds (e.g., 800 for PTT)
+  silenceThreshold?: number; // Optional silence detection threshold
   enableAnalysis: {
     emotion: boolean;
     sentiment: boolean;
     disc: boolean;
   };
-  model: string; // e.g., 'gemini-2.0-flash-exp'
+  analysis?: {
+    emotion: boolean;
+    sentiment: boolean;
+    disc: boolean;
+  };
+  model: string; // e.g., 'gemini-2.5-flash-native-audio-preview-12-2025'
 }
 
 export interface BusinessContext {
+  id: string; // The UUID of the site configuration
   placeId: string;
   name: string;
   address: string;

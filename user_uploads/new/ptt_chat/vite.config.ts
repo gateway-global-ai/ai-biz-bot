@@ -12,7 +12,8 @@ export default defineConfig(({ mode }) => {
       plugins: [react()],
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        'process.env.GEMINI_MODEL_ID': JSON.stringify(env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025')
       },
       resolve: {
         alias: {

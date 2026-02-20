@@ -31,6 +31,7 @@ import MvpLanding from "@/pages/showcase/MvpLanding";
 import LandingV2 from "@/pages/showcase/LandingV2";
 import KimiAudioDemo from "@/pages/showcase/KimiAudioDemo";
 import TwilioHealthCheck from "@/pages/developer/TwilioHealthCheck";
+import SystemHealthCheck from "@/pages/developer/SystemHealthCheck";
 import TelephonyManager from "@/pages/developer/TelephonyManager";
 import BillingPage from "@/pages/account/BillingPage";
 import GoogleDrivePage from "@/pages/integrations/GoogleDrivePage";
@@ -288,6 +289,7 @@ function AppRouter() {
       <Route path="/telephony-legacy" component={TelephonyPanel} />
       <Route path="/twilio-account" component={TwilioAccountManager} />
       <Route path="/twilio-health" component={TwilioHealthCheck} />
+      <Route path="/system-health" component={SystemHealthCheck} />
       <Route path="/twilio" component={TwilioHub} />
       <Route path="/servers" component={ServerPanel} />
       <Route path="/config" component={GlobalConfig} />

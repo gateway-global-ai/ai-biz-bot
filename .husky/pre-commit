@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔍 Running API Permit Diagnostics..."
+doppler run -- npx tsx scripts/check-google-key-permissions.ts

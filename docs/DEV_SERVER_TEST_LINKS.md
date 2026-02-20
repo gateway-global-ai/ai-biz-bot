@@ -33,6 +33,15 @@ Use these links to test services on the dev server. No developer setup required.
 
 ---
 
+## Admin / Health Checks
+
+| Description | Link |
+|-------------|------|
+| **System Health** – dependency + BI pipeline report | https://aibizbot-dev.gatewayglobal.ai/system-health |
+| **SMS Health Check** – Twilio Messaging Services | https://aibizbot-dev.gatewayglobal.ai/twilio-health |
+
+CLI equivalent (server env required): `npm run test:bi`
+
 ---
 
 ## Server requirements (for Event Search & full B2B)

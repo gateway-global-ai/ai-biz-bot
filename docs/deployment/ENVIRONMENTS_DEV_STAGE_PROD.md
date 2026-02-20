@@ -2,6 +2,8 @@
 
 Yes — **dev**, **stage**, and **prod** is the right configuration for shipping the MVP. This doc defines how each environment is used and how they stay in sync.
 
+**Architecture:** For the three-pillar setup (Doppler + PM2 + Nginx) and how it fixes port collisions, instruction drift, and 1006 WebSocket issues, see **[DECOUPLED_ENVIRONMENT_STRATEGY.md](DECOUPLED_ENVIRONMENT_STRATEGY.md)**.
+
 ---
 
 ## 1. Overview

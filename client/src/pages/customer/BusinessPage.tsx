@@ -275,13 +275,17 @@ export default function BusinessPage() {
 
   // Determine which business context to use
   const currentBusiness = selectedPlace ? {
+    id: selectedPlace.place_id || 'platform_landing',
     placeId: selectedPlace.place_id || '',
     name: selectedPlace.name,
     address: selectedPlace.formatted_address || '',
     hours: selectedPlace.opening_hours?.weekday_text?.join(', '),
     services: selectedPlace.types,
     primaryColor: '#6366f1'
-  } : platformIdentity;
+  } : {
+    ...platformIdentity,
+    id: 'platform_landing'
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

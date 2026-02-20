@@ -1,0 +1,18 @@
+---
+description: Patterns for speech processing via ClearerVoice-Studio (FRCRN/MossFormer).
+globs: "server/services/audio/**,client/src/worklets/**"
+alwaysApply: false
+---
+# Clear Voice Technology Protocol
+
+This project utilizes the ClearerVoice-Studio toolkit for production-grade audio enhancement.
+
+## Architectural Patterns
+
+- **Model Usage**: Prioritize `FRCRN` for denoising and `MossFormer2` for complex speech separation.
+- **Numpy Interface**: Use the `Numpy2Numpy` interface for flexible inference pipelines.
+- **Evaluation**: Reference `SpeechScore` metrics (DNSMOS, NISQA) when justifying audio quality improvements.
+
+## Code Implementation
+
+- Ensure all audio worklets handle 16-bit PCM streaming to stay compatible with the Gemini Native Audio input requirements (16kHz, little-endian).

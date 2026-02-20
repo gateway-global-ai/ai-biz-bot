@@ -50,6 +50,7 @@ const OPERATIONS_ITEMS = [
   { id: 'inquiries', label: 'Inquiries', path: '/inquiries', icon: MessageSquare },
   { id: 'billing', label: 'Billing', path: '/billing', icon: CreditCard },
   { id: 'twilio-health', label: 'SMS Health Check', path: '/twilio-health', icon: Stethoscope },
+  { id: 'system-health', label: 'System Health', path: '/system-health', icon: Activity },
   { id: 'google-drive', label: 'Google Drive', path: '/google-drive', icon: HardDrive },
   { id: 'google-calendar', label: 'Google Calendar', path: '/google-calendar', icon: Calendar },
   { id: 'google-tasks', label: 'Google Tasks', path: '/google-tasks', icon: ListTodo },

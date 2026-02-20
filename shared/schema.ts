@@ -973,6 +973,91 @@ export type InsertChatLog = z.infer<typeof insertChatLogSchema>;
 export type ChatLog = typeof chatLogs.$inferSelect;
 
 // =========================================
+// Business Data & Tour Guide (Clear Voice)
+// =========================================
+
+/** Cached enriched business data from Google Places + optional intelligence. TTL per row. */
+export const businessDataCache = pgTable("business_data_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placeId: text("place_id").notNull().unique(),
+  generalData: jsonb("general_data").notNull(),
+  intelligenceData: jsonb("intelligence_data"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type BusinessDataCacheRow = typeof businessDataCache.$inferSelect;
+
+/** Owner-provided business data (custom description, story, offers). */
+export const ownerBusinessData = pgTable("owner_business_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placeId: text("place_id").notNull().unique(),
+  ownerId: varchar("owner_id").references(() => customerAccounts.id),
+  customDescription: text("custom_description"),
+  specialOffers: jsonb("special_offers").$type<string[]>(),
+  ownerStory: text("owner_story"),
+  customHours: text("custom_hours"),
+  contactPreferences: jsonb("contact_preferences"),
+  publicAmenities: jsonb("public_amenities").$type<string[]>(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOwnerBusinessDataSchema = createInsertSchema(ownerBusinessData).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type OwnerBusinessDataRow = typeof ownerBusinessData.$inferSelect;
+
+/** Cached business intelligence reports (SWOT, narrative). */
+export const businessIntelligenceCache = pgTable("business_intelligence_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placeId: text("place_id").notNull(),
+  businessName: text("business_name").notNull(),
+  report: jsonb("report").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type BusinessIntelligenceCacheRow = typeof businessIntelligenceCache.$inferSelect;
+
+/** Tour specifications (YAML-derived or manual) for featured partners. */
+export const tourSpecifications = pgTable("tour_specifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placeId: text("place_id"),
+  partnerId: text("partner_id"),
+  tourId: text("tour_id").notNull().unique(),
+  spec: jsonb("spec").notNull(), // { segments: TourSegment[] }
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type TourSpecificationRow = typeof tourSpecifications.$inferSelect;
+
+/** Featured Partners - Preferential placement for Clear Voice partners (e.g. Boardwalk Suites). */
+export const featuredPartners = pgTable("featured_partners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  grnHotelId: varchar("grn_hotel_id"),
+  googlePlaceId: text("google_place_id"),
+  businessName: text("business_name").notNull(),
+  cityCode: text("city_code").notNull(),
+  category: text("category"),
+  aiHook: text("ai_hook"),
+  aiTags: jsonb("ai_tags").$type<string[]>(),
+  aiStory: text("ai_story"),
+  aiTriggerConditions: jsonb("ai_trigger_conditions"),
+  uiThemeGlow: text("ui_theme_glow"),
+  badgeLabel: text("badge_label").default("Certified Local"),
+  storyVideoUrl: text("story_video_url"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type FeaturedPartnerRow = typeof featuredPartners.$inferSelect;
+
+// =========================================
 // VoiceLeadMachine - Outbound Lead Generator
 // =========================================
 
