@@ -13,6 +13,41 @@ Use this checklist on the server (72.61.4.44) after DNS is pointing **aibizbot-s
 
 ---
 
+## 0. Database (PostgreSQL) on the server
+
+The app expects **PostgreSQL** at **localhost:5432**. Each environment’s `.env` has a `DATABASE_URL`; for dev it is set to something like `postgresql://gateway_ai_user:PASSWORD@localhost:5432/gateway_ai`.
+
+**One-time server actions (run once per VPS or per environment):**
+
+1. Install PostgreSQL and start it (see below).
+2. Create the database and user (either run `./script/setup-db-server.sh` from the app repo root, or run the manual `psql` commands below with the password from `.env`).
+3. From the app directory, run **`npm run db:push`** to apply schema and migrations.
+4. Restart the app (`npm run serve` or `pm2 restart ...`) so it connects to the DB; seed and task scheduler should then run without SASL errors.
+
+**If PostgreSQL is not installed or the database/user do not exist**, run this once on the VPS (adjust user/password to match your `.env`):
+
+```bash
+# Install PostgreSQL (Ubuntu/Debian)
+sudo apt update
+sudo apt install -y postgresql postgresql-contrib
+
+# Start and enable
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Create DB and user (run as postgres; replace YOUR_PASSWORD with the password in DATABASE_URL)
+# The password must match the one in .env exactly; if it contains single quotes, escape them by doubling ('').
+sudo -u postgres psql -c "CREATE USER gateway_ai_user WITH PASSWORD 'YOUR_PASSWORD';"
+sudo -u postgres psql -c "CREATE DATABASE gateway_ai OWNER gateway_ai_user;"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE gateway_ai TO gateway_ai_user;"
+```
+
+**Optional:** From the repo root, run **`./script/setup-db-server.sh`** to create the user and database using the password from `.env` (one-time; requires PostgreSQL already installed and `npm install` done so `dotenv` is available).
+
+Then in the app directory run **`npm run db:push`** (or **`npx drizzle-kit push`**) so the schema and migrations are applied. The app loads `.env` at startup via `dotenv`; if you still see `SASL: client password must be a string`, ensure `DATABASE_URL` in `.env` is correct and that the database and user exist.
+
+---
+
 ## 1. Stage (aibizbot-stage.gatewayglobal.ai, port 3003)
 
 ### 1.1 Create directory and clone (stage branch)

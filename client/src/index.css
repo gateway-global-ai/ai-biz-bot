@@ -2,38 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    /* BACKGROUNDS: Enforcing the white-base rule */
-    --bg-primary: #FFFFFF;
-    --bg-secondary: #F9FAFB;
-    
-    /* BRAND COLORS: Pink Accents */
-    --color-primary: #E91E63;
-    --color-primary-hover: #C2185B;
-    
-    /* THEME LOCK: Mandatory light mode */
-    color-scheme: light !important;
-  }
-
-  body {
-    background-color: var(--bg-primary) !important;
-    color: #111827 !important; /* High-contrast text */
-    @apply font-sans antialiased;
-  }
-}
-
-/* Custom Component Shorthands */
-@layer components {
-  .btn-primary {
-    @apply bg-brand-pink hover:bg-brand-darkPink text-white px-6 py-2 rounded-full font-bold transition-all shadow-lg shadow-brand-pink/20;
-  }
-  
-  .card-clean {
-    @apply bg-surface-white border border-slate-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow;
-  }
-}
-
 html {
   scrollbar-width: none;
 }
@@ -370,4 +338,50 @@ html::-webkit-scrollbar {
 
 .animate-slide-in {
   animation: slideIn 0.4s ease-out forwards;
+}
+
+/* --- Google Places UI Kit Theme Overrides --- */
+
+/* ☀️ DAY MODE (Clear Voice - Day) */
+:root {
+  --gmp-mat-font-family: 'Inter', sans-serif !important;
+  --gmp-mat-color-surface: #ffffff !important;
+  --gmp-mat-color-on-surface: #0f172a !important; /* Slate 900 */
+  --gmp-mat-color-on-surface-variant: #475569 !important; /* Slate 600 */
+  --gmp-mat-color-primary: #3b82f6 !important; /* Blue 500 */
+  --gmp-mat-color-outline-decorative: #e2e8f0 !important; /* Slate 200 */
+  --gmp-mat-color-positive: #10b981 !important; /* Emerald 500 */
+}
+
+/* 🌑 MIDNIGHT MODE (Clear Voice - Midnight) */
+.dark {
+  --gmp-mat-color-surface: #0f172a !important; /* Slate 900 (Matches Midnight Map) */
+  --gmp-mat-color-on-surface: #f8fafc !important; /* Slate 50 */
+  --gmp-mat-color-on-surface-variant: #94a3b8 !important; /* Slate 400 */
+  --gmp-mat-color-primary: #60a5fa !important; /* Blue 400 */
+  --gmp-mat-color-outline-decorative: #1e293b !important; /* Slate 800 */
+  --gmp-mat-color-secondary-container: #1e293b !important; /* Button Background */
+  --gmp-mat-color-on-secondary-container: #f8fafc !important; /* Button Text */
+}
+
+/* Custom component styling */
+gmp-place-details {
+  border-radius: 12px;
+  overflow: hidden;
+  color-scheme: light dark;
+}
+
+/* Attribution styling */
+gmp-place-attribution {
+  --gmp-mat-font-body-medium: 400 0.75rem / 1rem 'Inter', sans-serif !important;
+  --gmp-mat-color-surface: var(--gmp-mat-color-surface) !important;
+  --gmp-mat-color-on-surface: var(--gmp-mat-color-on-surface) !important;
+  padding: 8px 12px;
+  display: block;
+  border-top: 1px solid var(--gmp-mat-color-outline-decorative);
+}
+
+/* Force dark mode when .dark class is present */
+.dark gmp-place-details {
+  color-scheme: dark !important;
 }

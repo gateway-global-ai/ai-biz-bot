@@ -1,0 +1,257 @@
+# Hotel Search Integration - SDK Definitions
+# Gateway Global AI - MCP Hotel Server
+# Use this YAML for SDK integration, API clients, and documentation.
+
+name: hotel-search-sdk
+version: 1.0.0
+description: Hotel search MCP tools integrating Google Maps, Google Places, and GRN Connect for rates and availability.
+
+baseUrl:
+  development: https://aibizbot-dev.gatewayglobal.ai/mcp/hotels
+  production: https://aibizbot.gatewayglobal.ai/mcp/hotels
+
+transport: Streamable HTTP (POST, GET, DELETE)
+protocol: MCP (Model Context Protocol)
+
+tools:
+  poi_autocomplete:
+    description: Autocomplete for Points of Interest using Google Places. Find Place IDs for "hotels near X".
+    parameters:
+      input:
+        type: string
+        required: true
+        description: Search text (e.g., "Times Square", "LAX airport")
+      region:
+        type: string
+        required: false
+        description: Two-letter country code (e.g., US, FR)
+      types:
+        type: string
+        required: false
+        description: Filter types - establishment, geocode, address, or (cities)
+      language:
+        type: string
+        required: false
+        description: Language code (default en)
+
+  search_hotels:
+    description: Search hotels by location. Returns hotels with Google Maps details and GRN codes.
+    parameters:
+      location:
+        type: string
+        required: true
+        description: Location (e.g., "New York", "Paris, France")
+      query:
+        type: string
+        required: false
+        description: Optional query (e.g., luxury, beachfront)
+      keywords:
+        type: string
+        required: false
+        description: Keywords (e.g., pet friendly, pool)
+      minRating:
+        type: number
+        required: false
+        description: Minimum rating 1-5
+      maxRating:
+        type: number
+        required: false
+        description: Maximum rating 1-5
+      limit:
+        type: number
+        required: false
+        description: Max results (default 20)
+
+  search_hotels_near_poi:
+    description: Search hotels near a Point of Interest.
+    parameters:
+      poiName:
+        type: string
+        required: true
+        description: POI name (e.g., Times Square, LAX Airport)
+      poiPlaceId:
+        type: string
+        required: false
+        description: Google Place ID from poi_autocomplete
+      radius:
+        type: number
+        required: false
+        description: Search radius (default 5)
+      radiusUnit:
+        type: string
+        enum: [miles, km, meters]
+        required: false
+      query:
+        type: string
+        required: false
+      keywords:
+        type: string
+        required: false
+      limit:
+        type: number
+        required: false
+
+  search_hotels_db:
+    description: Search hotels in GRN database by city. Returns hotel codes for availability.
+    parameters:
+      cityName:
+        type: string
+        required: true
+        description: City name
+      countryCode:
+        type: string
+        required: false
+        description: Two-letter country code
+      limit:
+        type: number
+        required: false
+        description: Max results (default 100)
+
+  get_hotel_availability:
+    description: Get hotel rates and availability from GRN Connect.
+    parameters:
+      hotelCodes:
+        type: array
+        items: string
+        required: true
+        description: GRN hotel codes (H!xxx or numeric)
+      checkin:
+        type: string
+        required: true
+        format: date
+        description: Check-in YYYY-MM-DD
+      checkout:
+        type: string
+        required: true
+        format: date
+        description: Check-out YYYY-MM-DD
+      rooms:
+        type: array
+        items:
+          type: object
+          properties:
+            adults: { type: number }
+            childrenAges: { type: array, items: number }
+        required: true
+      nationality:
+        type: string
+        required: false
+        default: US
+      currency:
+        type: string
+        required: false
+        default: USD
+      rateType:
+        type: string
+        enum: [concise, comprehensive]
+        required: false
+
+  enrich_hotels_with_rates:
+    description: Combined search + rates. Best for availability and pricing in one call.
+    parameters:
+      location:
+        type: string
+        required: true
+      checkin:
+        type: string
+        required: true
+        format: date
+      checkout:
+        type: string
+        required: true
+        format: date
+      query:
+        type: string
+        required: false
+      rooms:
+        type: array
+        items:
+          type: object
+          properties:
+            adults: { type: number }
+            childrenAges: { type: array, items: number }
+        required: false
+        default: [{ adults: 2 }]
+      currency:
+        type: string
+        required: false
+        default: USD
+
+  get_hotel_reviews:
+    description: Get hotel reviews from Google Maps via SERP API.
+    parameters:
+      placeId:
+        type: string
+        required: true
+      sortBy:
+        type: string
+        enum: [qualityScore, newestFirst, ratingHigh, ratingLow]
+        required: false
+      maxReviews:
+        type: number
+        required: false
+        default: 20
+
+  search_reviews:
+    description: Search within hotel reviews by text.
+    parameters:
+      placeId:
+        type: string
+        required: true
+      query:
+        type: string
+        required: true
+      fetchLimit:
+        type: number
+        required: false
+
+  get_full_hotel_details:
+    description: Complete hotel info - Google data, GRN rates, reviews.
+    parameters:
+      placeId:
+        type: string
+        required: true
+      grnHotelCode:
+        type: string
+        required: false
+      checkin:
+        type: string
+        required: true
+      checkout:
+        type: string
+        required: true
+
+  get_place_details_for_ui_kit:
+    description: Google Place details for Places UI Kit integration.
+    parameters:
+      placeId:
+        type: string
+        required: true
+      includeAtmosphere:
+        type: boolean
+        required: false
+
+  search_hotels_with_ui_data:
+    description: Search hotels with Places UI Kit-ready data.
+    parameters:
+      location:
+        type: string
+        required: true
+      query:
+        type: string
+        required: false
+      limit:
+        type: number
+        required: false
+
+# Environment variables required
+env:
+  GRN_API_KEY: GRN Connect API key
+  GOOGLE_MAPS_API_KEY: Google Maps API key (Maps Grounding Lite)
+  GOOGLE_PLACES_KEY: Google Places API key (autocomplete, details)
+  SERPAPI_KEY: SERP API key (reviews)
+  DB_HOST: GRN static database host
+  DB_PORT: GRN database port
+  DB_NAME: static_master
+  DB_USER: reporting
+  GRN_STATIC_KEY: Database password

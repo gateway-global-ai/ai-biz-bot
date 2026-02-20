@@ -1,46 +1,55 @@
-#!/bin/bash
-# Stop script on first real error, but we'll handle specific checks manually
-set -e
+#!/usr/bin/env bash
+# Idempotent one-time setup: create PostgreSQL user and database to match DATABASE_URL in .env.
+# Run from repo root after: npm install, and with PostgreSQL already installed.
+# Usage: ./script/setup-db-server.sh
 
-# 1. Source the environment variables
-if [ -f .env ]; then
-    export $(grep -v '^#' .env | xargs)
-else
-    echo "Error: .env file not found."
-    exit 1
+set -e
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+if [ ! -f ".env" ]; then
+  echo "No .env file found in $REPO_ROOT. Create one from .env.example and set DATABASE_URL."
+  exit 1
 fi
 
-# 2. Extract DB name and user from the connection string or variables
-# Assuming format: postgresql://user:password@localhost:5432/dbname
-DB_NAME="gateway_ai"
-DB_USER="gateway_ai_user"
-DB_PASS=$DATABASE_PASSWORD # Ensure this is in your .env
+# Load .env so DATABASE_URL is available for node (and optional psql checks)
+set -a
+# shellcheck disable=SC1090
+source <(grep -v '^#' .env | grep -v '^$' | sed 's/^/export /') 2>/dev/null || true
+set +a
+export DATABASE_URL="${DATABASE_URL:-}"
 
-echo "Configuring PostgreSQL for $DB_NAME..."
+# Parse DATABASE_URL; write user, db, escaped password to temp file (one value per line)
+TMPF=$(mktemp)
+trap 'rm -f "$TMPF"' EXIT
+node -e "
+require('dotenv').config();
+const u = require('url').parse(process.env.DATABASE_URL || '');
+if (!u.auth) {
+  console.error('DATABASE_URL in .env is missing or invalid');
+  process.exit(1);
+}
+const auth = u.auth.split(':');
+const user = auth[0] || '';
+const pass = auth.slice(1).join(':');
+const decoded = pass ? decodeURIComponent(pass) : '';
+const db = (u.pathname || '').replace(/^\//, '') || 'gateway_ai';
+const escaped = decoded.replace(/'/g, \"''\");
+require('fs').writeFileSync(process.argv[1], user + '\n' + db + '\n' + escaped, 'utf8');
+" "$TMPF" || { echo "Failed to parse DATABASE_URL"; exit 1; }
 
-# 3. Create User and Database with existence checks
-sudo -u postgres psql <<EOF
--- Create user if not exists
-DO \$$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '$DB_USER') THEN
-        CREATE ROLE $DB_USER WITH LOGIN PASSWORD '$DB_PASS';
-    END IF;
-END
-\$$;
+# Read three values (user, db, password); last read may hit EOF without newline so use || true to avoid set -e exit
+{ IFS= read -r DB_USER; IFS= read -r DB_NAME; IFS= read -r DB_PASS || true; } < "$TMPF"
 
--- Create database if not exists
--- Note: SELECT ... \gexec is a psql trick to execute the result of a query
-SELECT 'CREATE DATABASE $DB_NAME'
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$DB_NAME')\gexec
+if [ -z "$DB_USER" ] || [ -z "$DB_NAME" ]; then
+  echo "Could not parse DATABASE_URL from .env. Ensure it looks like postgresql://USER:PASSWORD@localhost:5432/DBNAME"
+  exit 1
+fi
 
--- Grant privileges
-ALTER DATABASE $DB_NAME OWNER TO $DB_USER;
-GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
-EOF
-
-# 4. Finalize Schema
-echo "Applying Drizzle Schema..."
-npm run db:push
-
-echo "Database environment is stable and ready."
+echo "Creating PostgreSQL user '$DB_USER' and database '$DB_NAME' (idempotent)..."
+# Create user if not exists (Postgres: DO block with exception)
+sudo -u postgres psql -v ON_ERROR_STOP=0 -c "DO \$\$ BEGIN CREATE USER $DB_USER WITH PASSWORD '$DB_PASS'; EXCEPTION WHEN duplicate_object THEN NULL; END \$\$;" 2>/dev/null || true
+# Create database if not exists (ignore "already exists" error)
+sudo -u postgres psql -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" 2>/dev/null || echo "Database $DB_NAME may already exist."
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;" 2>/dev/null || true
+echo "Done. Run 'npm run db:push' in the app directory to apply schema."

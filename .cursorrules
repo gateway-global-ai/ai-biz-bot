@@ -1,0 +1,11 @@
+# Platform Architecture Guidelines
+## 1. Credentials & Signing
+- **Secret Manager**: Located at `server/utils/secretManager.ts`. Use `@google-cloud/secret-manager`.
+- **Key Split**: 
+    - `Maps_JS_API`: Restricted by HTTP Referrer (Client-side).
+    - `GEMINI_API_KEY`: Server-side only (except for Live API /api/gemini-key).
+    - `GROUNDING_LITE_KEY`: Server-side only via Secret Manager.
+
+## 2. Testing Standards
+- Always use `doppler run --` for local script execution to avoid leaking secrets into the shell history.
+- All new API routes MUST be added to the permit-check script.
