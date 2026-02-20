@@ -4,25 +4,27 @@
 -- Platform business map: one row per onboarded platformId.
 -- Acts as the stable identity anchor for all enrichment data.
 CREATE TABLE IF NOT EXISTS platform_business_map (
-  platform_id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
-  site_config_id varchar NOT NULL REFERENCES site_configs(id) ON DELETE CASCADE,
-  serpapi_data_id text,
+  platform_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  site_config_id varchar NOT NULL UNIQUE REFERENCES site_configs(id) ON DELETE CASCADE,
+  google_cid text UNIQUE,
   google_place_id text,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  serpapi_data_id text,
+  category_slug text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_platform_business_map_site_config_id
-  ON platform_business_map(site_config_id);
-
-CREATE INDEX IF NOT EXISTS idx_platform_business_map_google_place_id
+CREATE INDEX IF NOT EXISTS idx_platform_map_place_id
   ON platform_business_map(google_place_id);
+
+CREATE INDEX IF NOT EXISTS idx_platform_map_serpapi_id
+  ON platform_business_map(serpapi_data_id);
 
 -- Enrichment snapshots: raw SerpApi payloads stored per platformId.
 -- Written only by the admin enrich_business_profile tool; never by voice path.
 CREATE TABLE IF NOT EXISTS platform_business_enrichment_snapshots (
-  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
-  platform_id varchar NOT NULL REFERENCES platform_business_map(platform_id) ON DELETE CASCADE,
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  platform_id uuid NOT NULL REFERENCES platform_business_map(platform_id) ON DELETE CASCADE,
   provider text NOT NULL,
   provider_ref text,
   payload jsonb NOT NULL,

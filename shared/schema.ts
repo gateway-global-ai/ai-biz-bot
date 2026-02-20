@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, uuid, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1916,18 +1916,38 @@ export type B2bCurationEvent = typeof b2bCurationEvents.$inferSelect;
 // Maps a platform's site config to external provider IDs.
 // Created by the healing layer (PR #2); enrichment snapshots FK to this.
 // ============================================================
-export const platformBusinessMap = pgTable("platform_business_map", {
-  /** Stable UUID assigned at onboarding; used as the public platformId. */
-  platformId: varchar("platform_id").primaryKey().default(sql`gen_random_uuid()`),
-  /** FK to the site_configs row that owns this platform. */
-  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
-  /** Cached SerpApi data_id for google_maps / google_maps_reviews engines. */
-  serpapiDataId: text("serpapi_data_id"),
-  /** Google Place ID (if known). */
-  googlePlaceId: text("google_place_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+
+/**
+ * Maps each site_config to a stable internal platform_id (UUID).
+ * External identifiers (Google place_id, CID, SerpApi ID) become attributes
+ * that can change over time without affecting internal references.
+ */
+export const platformBusinessMap = pgTable(
+  "platform_business_map",
+  {
+    /** Stable UUID assigned at onboarding; used as the public platformId. */
+    platformId: uuid("platform_id").primaryKey().defaultRandom(),
+    /** FK to the site_configs row that owns this platform. One-to-one. */
+    siteConfigId: varchar("site_config_id")
+      .notNull()
+      .unique()
+      .references(() => siteConfigs.id, { onDelete: "cascade" }),
+    /** Google CID (unique per business). */
+    googleCid: text("google_cid").unique(),
+    /** Google Place ID (if known). */
+    googlePlaceId: text("google_place_id"),
+    /** Cached SerpApi data_id for google_maps / google_maps_reviews engines. */
+    serpapiDataId: text("serpapi_data_id"),
+    /** Normalized business-category slug (e.g. 'restaurant', 'hotel'). */
+    categorySlug: text("category_slug"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_platform_map_place_id").on(table.googlePlaceId),
+    index("idx_platform_map_serpapi_id").on(table.serpapiDataId),
+  ],
+);
 
 export const insertPlatformBusinessMapSchema = createInsertSchema(platformBusinessMap).omit({
   platformId: true,
@@ -1945,9 +1965,9 @@ export type PlatformBusinessMap = typeof platformBusinessMap.$inferSelect;
 export const platformBusinessEnrichmentSnapshots = pgTable(
   "platform_business_enrichment_snapshots",
   {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    id: uuid("id").primaryKey().defaultRandom(),
     /** FK to platform_business_map(platform_id). */
-    platformId: varchar("platform_id")
+    platformId: uuid("platform_id")
       .references(() => platformBusinessMap.platformId, { onDelete: "cascade" })
       .notNull(),
     /**
@@ -1960,8 +1980,13 @@ export const platformBusinessEnrichmentSnapshots = pgTable(
     providerRef: text("provider_ref"),
     /** Raw provider response or merged payload. */
     payload: jsonb("payload").notNull(),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
+  (table) => [
+    index("idx_enrichment_snapshots_platform_id").on(table.platformId),
+    index("idx_enrichment_snapshots_provider").on(table.provider),
+    index("idx_enrichment_snapshots_platform_provider").on(table.platformId, table.provider),
+  ],
 );
 
 export const insertEnrichmentSnapshotSchema = createInsertSchema(
