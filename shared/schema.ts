@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1923,7 +1923,7 @@ export type B2bCurationEvent = typeof b2bCurationEvents.$inferSelect;
 export const platformBusinessMap = pgTable(
   "platform_business_map",
   {
-    platformId: varchar("platform_id").primaryKey().default(sql`gen_random_uuid()`),
+    platformId: uuid("platform_id").primaryKey().defaultRandom(),
     siteConfigId: varchar("site_config_id")
       .notNull()
       .unique()
@@ -1936,8 +1936,8 @@ export const platformBusinessMap = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [
-    index("idx_platform_business_map_google_place_id").on(table.googlePlaceId),
-    index("idx_platform_business_map_serpapi_data_id").on(table.serpapiDataId),
+    index("idx_platform_map_place_id").on(table.googlePlaceId),
+    index("idx_platform_map_serpapi_id").on(table.serpapiDataId),
   ],
 );
 

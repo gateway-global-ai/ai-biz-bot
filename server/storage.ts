@@ -1,6 +1,12 @@
 import { Pool } from 'pg';
 import { db } from './db';
-import { siteConfigs, type SiteConfig, type InsertSiteConfig } from '@shared/schema';
+import {
+  siteConfigs,
+  platformBusinessMap,
+  type SiteConfig,
+  type InsertSiteConfig,
+  type PlatformBusinessMap,
+} from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 // Placeholder for a future validation service.
@@ -61,8 +67,118 @@ async function createSiteConfig(data: InsertSiteConfig): Promise<SiteConfig> {
   return newSiteConfig;
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Platform Identity – System of Record for stable internal platform_id
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Given a `siteConfigId`, return the existing `platform_id` if a mapping
+ * already exists, or create one (copying `google_place_id` from
+ * `site_configs.place_id` when present) and return the new `platform_id`.
+ *
+ * This is the canonical create-if-missing entry point.
+ */
+async function getOrCreatePlatformId(siteConfigId: string): Promise<string> {
+  // 1. Try to find an existing mapping.
+  const [existing] = await db
+    .select({ platformId: platformBusinessMap.platformId })
+    .from(platformBusinessMap)
+    .where(eq(platformBusinessMap.siteConfigId, siteConfigId))
+    .limit(1);
+
+  if (existing) {
+    return existing.platformId;
+  }
+
+  // 2. Fetch the associated site config so we can copy place_id if present.
+  const [siteConfig] = await db
+    .select({ placeId: siteConfigs.placeId })
+    .from(siteConfigs)
+    .where(eq(siteConfigs.id, siteConfigId))
+    .limit(1);
+
+  // 3. Insert a new mapping row.  ON CONFLICT DO NOTHING guards against a
+  //    race condition; if another request inserted between steps 1 and 3 we
+  //    re-fetch and return the winner's platformId.
+  const inserted = await db
+    .insert(platformBusinessMap)
+    .values({
+      siteConfigId,
+      googlePlaceId: siteConfig?.placeId ?? null,
+    })
+    .onConflictDoNothing()
+    .returning({ platformId: platformBusinessMap.platformId });
+
+  if (inserted.length > 0) {
+    return inserted[0].platformId;
+  }
+
+  // Race condition: another request already inserted – fetch the existing row.
+  const [raceRow] = await db
+    .select({ platformId: platformBusinessMap.platformId })
+    .from(platformBusinessMap)
+    .where(eq(platformBusinessMap.siteConfigId, siteConfigId))
+    .limit(1);
+
+  if (!raceRow) {
+    throw new Error(`[Storage] Failed to resolve platform_id for siteConfigId=${siteConfigId}`);
+  }
+
+  return raceRow.platformId;
+}
+
+/**
+ * Flexible platform identity resolver.
+ *
+ * - `{ siteConfigId }` — returns existing mapping or lazily creates one
+ *   (copying site_configs.place_id → google_place_id when present).
+ * - `{ googlePlaceId }` — returns the mapping row if found; does NOT create a
+ *   new mapping from a place ID alone (prevents cross-wiring).
+ *
+ * Returns `null` when no mapping is found and creation is not applicable.
+ */
+async function resolvePlatformId(
+  input: { siteConfigId?: string; googlePlaceId?: string },
+): Promise<PlatformBusinessMap | null> {
+  if (input.siteConfigId) {
+    // Try to find an existing mapping first.
+    const [existing] = await db
+      .select()
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.siteConfigId, input.siteConfigId))
+      .limit(1);
+
+    if (existing) {
+      return existing;
+    }
+
+    // Not found – create it, then return the full row.
+    await getOrCreatePlatformId(input.siteConfigId);
+
+    const [row] = await db
+      .select()
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.siteConfigId, input.siteConfigId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  if (input.googlePlaceId) {
+    const [row] = await db
+      .select()
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.googlePlaceId, input.googlePlaceId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  return null;
+}
+
 export const storage = {
   getSiteConfigById,
   createSiteConfig,
-  // ... other storage functions like createSiteConfig, etc.
+  // Platform Identity – canonical System of Record
+  getOrCreatePlatformId,
+  resolvePlatformId,
 };

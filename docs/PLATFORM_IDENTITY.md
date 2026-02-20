@@ -45,22 +45,25 @@ existing row that has a non-null `place_id`.  The backfill uses
 
 | Function | Description |
 |---|---|
-| `resolvePlatformId(siteConfigId)` | Returns the existing `platform_id` for the given site config, or lazily creates one (copying `google_place_id` from `site_configs.place_id` if present). |
-| `findBySiteConfigId(siteConfigId)` | Returns the full mapping row or `null`. |
-| `findByGooglePlaceId(googlePlaceId)` | Finds the mapping row by `google_place_id` or `null`. |
+| `getOrCreatePlatformId(siteConfigId)` | Returns the existing `platform_id` for the given site config, or lazily creates one (copying `google_place_id` from `site_configs.place_id` if present). |
+| `resolvePlatformId({ siteConfigId })` | Same as `getOrCreatePlatformId` but returns the full mapping row. |
+| `resolvePlatformId({ googlePlaceId })` | Returns the mapping row if found; does **not** create a new mapping from a place ID alone (prevents cross-wiring). |
 
 ### Example
 
 ```typescript
-import { resolvePlatformId, findByGooglePlaceId } from './platformIdentity';
+import { storage } from './storage';
 
 // Resolve (or create) the platform_id for a site:
-const platformId = await resolvePlatformId('site-config-uuid');
+const platformId = await storage.getOrCreatePlatformId('site-config-uuid');
 
-// Look up by Google place_id:
-const mapping = await findByGooglePlaceId('ChIJN1t_tDeuEmsRUsoyG83frY4');
-if (mapping) {
-  console.log(mapping.platformId); // stable internal UUID
+// Full mapping row via siteConfigId (creates if missing):
+const mapping = await storage.resolvePlatformId({ siteConfigId: 'site-config-uuid' });
+
+// Look up by Google place_id (read-only – no implicit creation):
+const mapping2 = await storage.resolvePlatformId({ googlePlaceId: 'ChIJN1t_tDeuEmsRUsoyG83frY4' });
+if (mapping2) {
+  console.log(mapping2.platformId); // stable internal UUID
 }
 ```
 
