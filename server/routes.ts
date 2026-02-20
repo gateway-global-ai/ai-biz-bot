@@ -37,6 +37,8 @@ import { generateFullReport } from "./services/reviewAnalysisService";
 import { enrichBusinessData } from "./services/businessDataService";
 import { buildRichSystemInstruction } from "./services/systemInstructionBuilder";
 import { getFreshPlaceId, getFreshPlaceIdWithSource } from "./services/placeDiscoveryService";
+import { enrichBusinessProfile } from "./services/enrichBusinessProfile";
+import { handleAdminToolCall, ADMIN_TOOL_DEFINITIONS } from "./tools/adminToolHandlers";
 import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
@@ -774,6 +776,121 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("[AdminPlaceDiscovery] Error:", error);
       res.status(500).json({ error: error?.message || "Place discovery failed" });
+    }
+  });
+
+  /**
+   * Admin: manually trigger business enrichment snapshots via SerpApi.
+   *
+   * POST /api/admin/enrich-business
+   * Body: { platformId: string; maxReviews?: number; force?: boolean }
+   *
+   * Stores raw SerpApi payloads to platform_business_enrichment_snapshots.
+   * Admin-only; never called by voice assistant path.
+   */
+  // Simple in-memory rate limiter for the enrichment endpoint (expensive SerpApi calls).
+  const enrichRateLimits = new Map<string, { count: number; resetTime: number }>();
+  const ENRICH_RATE_LIMIT = 10; // requests per minute per IP
+  const ENRICH_RATE_WINDOW = 60_000; // 1 minute in ms
+
+  app.post("/api/admin/enrich-business", async (req, res) => {
+    try {
+      // Rate limiting (checked before auth to prevent brute-force)
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const rateInfo = enrichRateLimits.get(clientIp);
+      if (rateInfo) {
+        if (now > rateInfo.resetTime) {
+          enrichRateLimits.set(clientIp, { count: 1, resetTime: now + ENRICH_RATE_WINDOW });
+        } else if (rateInfo.count >= ENRICH_RATE_LIMIT) {
+          return res.status(429).json({ error: "Rate limit exceeded. Please try again later." });
+        } else {
+          rateInfo.count++;
+        }
+      } else {
+        enrichRateLimits.set(clientIp, { count: 1, resetTime: now + ENRICH_RATE_WINDOW });
+      }
+
+      if (!isAdminAuthenticated(req)) {
+        return res.status(401).json({ error: "Admin authentication required" });
+      }
+
+      const schema = z.object({
+        platformId: z.string().min(1),
+        maxReviews: z.number().int().min(1).max(500).optional(),
+        force: z.boolean().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+      const result = await enrichBusinessProfile(parsed.data);
+      const httpStatus = result.status === "failed" ? 422 : 200;
+      res.status(httpStatus).json(result);
+    } catch (error: any) {
+      console.error("[AdminEnrichBusiness] Error:", error);
+      res.status(500).json({ error: error?.message || "Enrichment failed" });
+    }
+  });
+
+  /**
+   * Admin: generic admin tool-call endpoint.
+   *
+   * GET  /api/admin/tool-definitions  – list available admin tools (OpenAI-compatible schema)
+   * POST /api/admin/tool-call         – execute a named admin tool
+   *   Body: { tool: string; args?: Record<string, unknown> }
+   *
+   * Admin-only. Rate-limited (shares the enrichment rate-limiter).
+   */
+  app.get("/api/admin/tool-definitions", (req, res) => {
+    if (!isAdminAuthenticated(req)) {
+      return res.status(401).json({ error: "Admin authentication required" });
+    }
+    res.json(ADMIN_TOOL_DEFINITIONS);
+  });
+
+  app.post("/api/admin/tool-call", async (req, res) => {
+    try {
+      // Rate limiting (reuses enrichment limits — same cost boundary)
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const rateInfo = enrichRateLimits.get(clientIp);
+      if (rateInfo) {
+        if (now > rateInfo.resetTime) {
+          enrichRateLimits.set(clientIp, { count: 1, resetTime: now + ENRICH_RATE_WINDOW });
+        } else if (rateInfo.count >= ENRICH_RATE_LIMIT) {
+          return res.status(429).json({ error: "Rate limit exceeded. Please try again later." });
+        } else {
+          rateInfo.count++;
+        }
+      } else {
+        enrichRateLimits.set(clientIp, { count: 1, resetTime: now + ENRICH_RATE_WINDOW });
+      }
+
+      if (!isAdminAuthenticated(req)) {
+        return res.status(401).json({ error: "Admin authentication required" });
+      }
+
+      const schema = z.object({
+        tool: z.string().min(1),
+        args: z.record(z.unknown()).optional().default({}),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const result = await handleAdminToolCall(parsed.data.tool, parsed.data.args, {
+        adminId: String(req.headers?.["x-admin-token"] ?? "session"),
+        ip: req.ip || req.socket.remoteAddress || "unknown",
+      });
+      res.json(result);
+    } catch (error: any) {
+      if (error?.message?.startsWith("Unknown admin tool:")) {
+        return res.status(404).json({ error: error.message });
+      }
+      console.error("[AdminToolCall] Error:", error);
+      res.status(500).json({ error: error?.message || "Tool call failed" });
     }
   });
 

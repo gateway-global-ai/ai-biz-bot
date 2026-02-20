@@ -11,7 +11,8 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Send, Bot, User, Loader2, Volume2, MessageCircle,
   Coffee, Briefcase, FlaskConical, GraduationCap, Phone,
-  Globe, Users, Zap, BarChart3,
+  Globe, Users, Zap, BarChart3, Sparkles, ChevronDown, ChevronUp,
+  CheckCircle2, XCircle, Database,
 } from 'lucide-react';
 import type { Agent } from '@shared/schema';
 
@@ -36,6 +37,166 @@ const QUICK_COMMANDS = [
   { label: 'Customer Overview', prompt: 'Give me an overview of our customer base. How many customers do we have, what statuses are they in, and who are the most recent ones?', icon: Users },
   { label: 'Pipeline Status', prompt: 'What is the current status of our VoiceLeadMachine pipeline? How many campaigns have been run, how many calls made, and what are the results?', icon: Zap },
 ];
+
+interface EnrichResult {
+  status: 'enriched' | 'already_enriched' | 'failed';
+  platformId: string;
+  artifacts: {
+    serpPlaceProfileStored: boolean;
+    serpReviewsStored: boolean;
+    reviewCount: number;
+    reviewsPartial?: boolean;
+    serpapiDataId?: string;
+  };
+  reason?: string;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_COMMAND_LENGTH = 2000;
+
+/** Inline panel for the admin enrich_business_profile tool. */
+function EnrichPanel() {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [platformId, setPlatformId] = useState('');
+  const [maxReviews, setMaxReviews] = useState('100');
+  const [force, setForce] = useState(false);
+  const [result, setResult] = useState<EnrichResult | null>(null);
+
+  const platformIdValid = platformId.trim() === '' || UUID_RE.test(platformId.trim());
+  const platformIdReady = UUID_RE.test(platformId.trim());
+
+  const enrichMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/admin/tool-call', {
+        tool: 'enrich_business_profile',
+        args: {
+          platformId: platformId.trim(),
+          maxReviews: parseInt(maxReviews, 10) || 100,
+          force,
+        },
+      });
+      return response.json() as Promise<EnrichResult>;
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      if (data.status === 'enriched') {
+        toast({ title: 'Enrichment complete', description: `Stored ${data.artifacts.reviewCount} reviews.` });
+      } else if (data.status === 'already_enriched') {
+        toast({ title: 'Already enriched', description: data.reason, variant: 'default' });
+      } else {
+        toast({ title: 'Enrichment failed', description: data.reason, variant: 'destructive' });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const statusColor = result
+    ? result.status === 'enriched'
+      ? 'text-emerald-400'
+      : result.status === 'already_enriched'
+        ? 'text-yellow-400'
+        : 'text-red-400'
+    : '';
+
+  return (
+    <div className="border border-slate-700 rounded-xl overflow-hidden" data-testid="enrich-panel">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-800/70 hover:bg-slate-800 transition-colors text-left"
+        data-testid="button-enrich-toggle"
+      >
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-indigo-400" />
+          <span className="text-sm font-medium text-white">Enrich Business Profile</span>
+          <Badge variant="outline" className="text-xs border-indigo-500/40 text-indigo-300">Admin Tool</Badge>
+        </div>
+        {open ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 pt-3 bg-slate-900/60 space-y-3">
+          <p className="text-xs text-slate-400">
+            Fetch SerpApi place profile + paginated reviews and persist raw snapshots for the given platformId.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="md:col-span-2">
+              <label className="text-xs text-slate-400 mb-1 block">Platform ID <span className="text-red-400">*</span></label>
+              <Input
+                value={platformId}
+                onChange={e => setPlatformId(e.target.value)}
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                className={`bg-slate-800 border-slate-700 text-white text-sm h-8 ${!platformIdValid ? 'border-red-500' : ''}`}
+                data-testid="input-enrich-platform-id"
+              />
+              {!platformIdValid && (
+                <p className="text-xs text-red-400 mt-1" data-testid="error-enrich-platform-id">Must be a valid UUID</p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Max Reviews</label>
+              <Input
+                type="number"
+                value={maxReviews}
+                onChange={e => setMaxReviews(e.target.value)}
+                min={1}
+                max={500}
+                className="bg-slate-800 border-slate-700 text-white text-sm h-8"
+                data-testid="input-enrich-max-reviews"
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="enrich-force"
+              checked={force}
+              onChange={e => setForce(e.target.checked)}
+              className="accent-indigo-500"
+              data-testid="checkbox-enrich-force"
+            />
+            <label htmlFor="enrich-force" className="text-xs text-slate-400 cursor-pointer">
+              Force re-enrich (overwrite existing snapshots)
+            </label>
+          </div>
+          <Button
+            onClick={() => enrichMutation.mutate()}
+            disabled={!platformIdReady || enrichMutation.isPending}
+            className="bg-indigo-600 hover:bg-indigo-500 h-8 text-sm"
+            data-testid="button-enrich-submit"
+          >
+            {enrichMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <Database className="w-3 h-3 mr-2" />}
+            {enrichMutation.isPending ? 'Enriching…' : 'Enrich Business'}
+          </Button>
+
+          {result && (
+            <div className="mt-2 p-3 rounded-lg bg-slate-800/80 border border-slate-700 text-xs space-y-1" data-testid="enrich-result">
+              <div className={`flex items-center gap-2 font-semibold ${statusColor}`}>
+                {result.status === 'enriched' ? <CheckCircle2 className="w-3 h-3" /> : result.status === 'failed' ? <XCircle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+                <span>{result.status.replace('_', ' ').toUpperCase()}</span>
+              </div>
+              {result.artifacts.serpapiDataId && (
+                <div className="text-slate-400">data_id: <span className="text-slate-200 font-mono">{result.artifacts.serpapiDataId}</span></div>
+              )}
+              <div className="text-slate-400">
+                Place profile: <span className={result.artifacts.serpPlaceProfileStored ? 'text-emerald-400' : 'text-slate-500'}>{result.artifacts.serpPlaceProfileStored ? '✓ stored' : '—'}</span>
+                {' · '}
+                Reviews: <span className={result.artifacts.serpReviewsStored ? 'text-emerald-400' : 'text-slate-500'}>
+                  {result.artifacts.serpReviewsStored
+                    ? `✓ ${result.artifacts.reviewCount} stored${result.artifacts.reviewsPartial ? ' (partial)' : ''}`
+                    : '—'}
+                </span>
+              </div>
+              {result.reason && <div className="text-slate-400 italic">{result.reason}</div>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function CommandChat() {
   const { toast } = useToast();
@@ -213,6 +374,11 @@ export default function CommandChat() {
                   );
                 })}
               </div>
+
+              {/* Admin Tools panel — always available in command mode */}
+              <div className="mt-6 max-w-2xl mx-auto text-left">
+                <EnrichPanel />
+              </div>
             </div>
           )}
 
@@ -290,6 +456,7 @@ export default function CommandChat() {
             placeholder={selectedAgent ? `Command ${selectedAgent.name}...` : 'Select an agent first...'}
             className="flex-1 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
             disabled={chatMutation.isPending || !selectedAgentId}
+            maxLength={MAX_COMMAND_LENGTH}
             data-testid="input-command-message"
           />
           <Button
