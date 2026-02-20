@@ -47,6 +47,13 @@ function toGrnApiCode(grnHotelId: string | null | undefined): string | null {
   return grnHotelId.replace(/^H!/i, "");
 }
 
+/** Convert a bare GRN API code back to the DB-stored "H!" prefix form. */
+function toGrnDbCode(apiCode: string | null | undefined): string | null {
+  if (!apiCode) return null;
+  if (/^H!/i.test(apiCode)) return apiCode;
+  return `H!${apiCode}`;
+}
+
 function toRad(deg: number) {
   return deg * (Math.PI / 180);
 }
@@ -421,4 +428,4 @@ export async function getGooglePlaceDetails(
   };
 }
 
-export { toGrnApiCode };
+export { toGrnApiCode, toGrnDbCode };

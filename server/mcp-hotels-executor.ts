@@ -15,6 +15,7 @@ import {
   matchHotels,
   toGrnApiCode,
 } from "./mcp-hotels-logic.js";
+import { b2bStorage } from "./b2b-storage.js";
 
 type ToolName = string;
 type ToolArgs = Record<string, unknown>;
@@ -165,16 +166,33 @@ export async function executeHotelTool(
           rooms,
           { currency: args.currency as string | undefined }
         );
-        const enriched = grnHotels.map((h) => {
-          const apiCode = toGrnApiCode(h.grn_hotel_id);
-          const ah = av.hotels?.find((x: any) => x.hotel_code === apiCode);
-          return {
-            ...h,
-            availability: ah
-              ? { available: true, minRate: ah.min_rate, rates: ah.rates }
-              : { available: false },
-          };
-        });
+        const platformId = args.platformId as string | undefined;
+        const enriched = await Promise.all(
+          grnHotels.map(async (h) => {
+            const apiCode = toGrnApiCode(h.grn_hotel_id);
+            const ah = av.hotels?.find((x: any) => x.hotel_code === apiCode);
+            // Persist to b2b_hotels when we have a platform anchor
+            if (apiCode && platformId) {
+              try {
+                await b2bStorage.upsertHotelByCode({
+                  hotelCode: apiCode,
+                  platformId,
+                  name: h.hotel_name ?? undefined,
+                  rawResponse: ah ?? undefined,
+                  // googlePlaceId not available in DB-only path; preserved from existing record by upsert
+                });
+              } catch (persistErr: any) {
+                console.warn("[GRN Hotels] Persist warning:", persistErr.message);
+              }
+            }
+            return {
+              ...h,
+              availability: ah
+                ? { available: true, minRate: ah.min_rate, rates: ah.rates }
+                : { available: false },
+            };
+          })
+        );
         return JSON.stringify(
           {
             success: true,

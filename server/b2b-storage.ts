@@ -50,6 +50,35 @@ export const b2bStorage = {
   listHotels(limit = 50): Promise<B2bHotel[]> {
     return db.select().from(b2bHotels).orderBy(desc(b2bHotels.createdAt)).limit(limit);
   },
+  /** Fetch all B2B hotels linked to a platform_id (from platform_business_map). */
+  listHotelsByPlatformId(platformId: string): Promise<B2bHotel[]> {
+    return db.select().from(b2bHotels).where(eq(b2bHotels.platformId, platformId));
+  },
+  /**
+   * Insert or update a GRN hotel record keyed by hotel_code.
+   * Updates google_place_id, platform_id, name, and rawResponse when the row already exists.
+   */
+  async upsertHotelByCode(data: InsertB2bHotel): Promise<B2bHotel> {
+    const existing = await db
+      .select()
+      .from(b2bHotels)
+      .where(eq(b2bHotels.hotelCode, data.hotelCode))
+      .then((r) => r[0]);
+    if (existing) {
+      return db
+        .update(b2bHotels)
+        .set({
+          googlePlaceId: data.googlePlaceId !== undefined ? data.googlePlaceId : existing.googlePlaceId,
+          platformId: data.platformId !== undefined ? data.platformId : existing.platformId,
+          name: data.name !== undefined ? data.name : existing.name,
+          rawResponse: data.rawResponse !== undefined ? data.rawResponse : existing.rawResponse,
+        })
+        .where(eq(b2bHotels.id, existing.id))
+        .returning()
+        .then(([r]) => r);
+    }
+    return db.insert(b2bHotels).values(data).returning().then(([r]) => r);
+  },
 
   // --- Flights (SerpAPI) ---
   createFlight(data: InsertB2bFlight): Promise<B2bFlight> {
