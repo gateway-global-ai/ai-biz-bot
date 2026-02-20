@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1910,3 +1910,42 @@ export const b2bCurationEvents = pgTable("b2b_curation_events", {
 export const insertB2bCurationEventSchema = createInsertSchema(b2bCurationEvents).omit({ id: true, createdAt: true });
 export type InsertB2bCurationEvent = z.infer<typeof insertB2bCurationEventSchema>;
 export type B2bCurationEvent = typeof b2bCurationEvents.$inferSelect;
+
+// ==========================================
+// Platform Identity – stable internal business identity
+// ==========================================
+
+/**
+ * Maps each site_config to a stable internal platform_id (UUID).
+ * External identifiers (Google place_id, CID, SerpApi ID) become attributes
+ * that can change over time without affecting internal references.
+ */
+export const platformBusinessMap = pgTable(
+  "platform_business_map",
+  {
+    platformId: varchar("platform_id").primaryKey().default(sql`gen_random_uuid()`),
+    siteConfigId: varchar("site_config_id")
+      .notNull()
+      .unique()
+      .references(() => siteConfigs.id, { onDelete: "cascade" }),
+    googleCid: text("google_cid").unique(),
+    googlePlaceId: text("google_place_id"),
+    serpapiDataId: text("serpapi_data_id"),
+    categorySlug: text("category_slug"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_platform_business_map_google_place_id").on(table.googlePlaceId),
+    index("idx_platform_business_map_serpapi_data_id").on(table.serpapiDataId),
+  ],
+);
+
+export const insertPlatformBusinessMapSchema = createInsertSchema(platformBusinessMap).omit({
+  platformId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertPlatformBusinessMap = z.infer<typeof insertPlatformBusinessMapSchema>;
+export type PlatformBusinessMap = typeof platformBusinessMap.$inferSelect;
