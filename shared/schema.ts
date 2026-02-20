@@ -1910,3 +1910,62 @@ export const b2bCurationEvents = pgTable("b2b_curation_events", {
 export const insertB2bCurationEventSchema = createInsertSchema(b2bCurationEvents).omit({ id: true, createdAt: true });
 export type InsertB2bCurationEvent = z.infer<typeof insertB2bCurationEventSchema>;
 export type B2bCurationEvent = typeof b2bCurationEvents.$inferSelect;
+
+// ============================================================
+// Platform Business Map – one row per onboarded platformId.
+// Maps a platform's site config to external provider IDs.
+// Created by the healing layer (PR #2); enrichment snapshots FK to this.
+// ============================================================
+export const platformBusinessMap = pgTable("platform_business_map", {
+  /** Stable UUID assigned at onboarding; used as the public platformId. */
+  platformId: varchar("platform_id").primaryKey().default(sql`gen_random_uuid()`),
+  /** FK to the site_configs row that owns this platform. */
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
+  /** Cached SerpApi data_id for google_maps / google_maps_reviews engines. */
+  serpapiDataId: text("serpapi_data_id"),
+  /** Google Place ID (if known). */
+  googlePlaceId: text("google_place_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertPlatformBusinessMapSchema = createInsertSchema(platformBusinessMap).omit({
+  platformId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertPlatformBusinessMap = z.infer<typeof insertPlatformBusinessMapSchema>;
+export type PlatformBusinessMap = typeof platformBusinessMap.$inferSelect;
+
+// ============================================================
+// Platform Business Enrichment Snapshots
+// Raw provider payloads stored per platformId.
+// Written by the admin-only enrich_business_profile tool; never by voice path.
+// ============================================================
+export const platformBusinessEnrichmentSnapshots = pgTable(
+  "platform_business_enrichment_snapshots",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    /** FK to platform_business_map(platform_id). */
+    platformId: varchar("platform_id")
+      .references(() => platformBusinessMap.platformId, { onDelete: "cascade" })
+      .notNull(),
+    /**
+     * Provider identifier, e.g.:
+     *   'serpapi_google_maps_place'
+     *   'serpapi_google_maps_reviews_merged'
+     */
+    provider: text("provider").notNull(),
+    /** Optional provider-specific reference key (e.g. SerpApi data_id). */
+    providerRef: text("provider_ref"),
+    /** Raw provider response or merged payload. */
+    payload: jsonb("payload").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+);
+
+export const insertEnrichmentSnapshotSchema = createInsertSchema(
+  platformBusinessEnrichmentSnapshots,
+).omit({ id: true, createdAt: true });
+export type InsertEnrichmentSnapshot = z.infer<typeof insertEnrichmentSnapshotSchema>;
+export type EnrichmentSnapshot = typeof platformBusinessEnrichmentSnapshots.$inferSelect;
