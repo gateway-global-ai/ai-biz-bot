@@ -16,7 +16,7 @@ build a persistent business knowledge library for analytics and competitive insi
 Enrichment runs only when an admin explicitly triggers it, either via:
 
 - The admin panel "Enrich this business" button (calls `POST /api/admin/enrich-business`)
-- A future admin agent workflow tool (`enrich_business_profile`)
+- The Command Chat admin agent panel (`enrich_business_profile` via `POST /api/admin/tool-call`)
 
 ---
 
@@ -26,14 +26,16 @@ Enrichment runs only when an admin explicitly triggers it, either via:
 
 One row per onboarded platform (business). Acts as the stable identity anchor.
 
-| Column            | Type        | Description                                             |
-|-------------------|-------------|---------------------------------------------------------|
-| `platform_id`     | varchar PK  | Stable UUID assigned at onboarding (the `platformId`)   |
-| `site_config_id`  | varchar FK  | FK to `site_configs(id)` ON DELETE CASCADE              |
-| `serpapi_data_id` | text        | Cached SerpApi `data_id` for google_maps engines        |
-| `google_place_id` | text        | Google Place ID (if known)                              |
-| `created_at`      | timestamptz | Row creation time                                       |
-| `updated_at`      | timestamptz | Last update time                                        |
+| Column            | Type           | Description                                              |
+|-------------------|----------------|----------------------------------------------------------|
+| `platform_id`     | uuid PK        | Stable UUID assigned at onboarding (`defaultRandom()`)   |
+| `site_config_id`  | varchar FK UNIQUE | FK to `site_configs(id)` ON DELETE CASCADE (1:1)       |
+| `google_cid`      | text UNIQUE    | Google CID, when known                                   |
+| `google_place_id` | text           | Google Place ID (if known)                               |
+| `serpapi_data_id` | text           | Cached SerpApi `data_id` for google_maps engines         |
+| `category_slug`   | text           | Normalized business-category slug (e.g. `restaurant`)   |
+| `created_at`      | timestamptz    | Row creation time                                        |
+| `updated_at`      | timestamptz    | Last update time (auto-set by trigger on every UPDATE)   |
 
 ### `platform_business_enrichment_snapshots`
 
@@ -42,14 +44,14 @@ inserts new rows (use `force=true` to re-enrich after an existing snapshot exist
 
 | Column         | Type        | Description                                                   |
 |----------------|-------------|---------------------------------------------------------------|
-| `id`           | varchar PK  | Auto-generated UUID                                           |
-| `platform_id`  | varchar FK  | FK to `platform_business_map(platform_id)` ON DELETE CASCADE  |
+| `id`           | uuid PK     | Auto-generated UUID (`defaultRandom()`)                       |
+| `platform_id`  | uuid FK     | FK to `platform_business_map(platform_id)` ON DELETE CASCADE  |
 | `provider`     | text        | Provider identifier (see below)                               |
 | `provider_ref` | text        | Optional provider-specific key (e.g. SerpApi `data_id`)       |
 | `payload`      | jsonb       | Raw provider response or merged response                      |
 | `created_at`   | timestamptz | Snapshot creation time                                        |
 
-**Indexes:** `platform_id`, `provider`, `(platform_id, provider)` composite.
+**Indexes:** `platform_id`, `provider`, `(platform_id, provider)` composite, `provider_ref` (partial, where not null).
 
 ---
 
@@ -94,6 +96,7 @@ Requires admin authentication (`x-admin-token` header or `admin_session` cookie)
     "serpPlaceProfileStored": true,
     "serpReviewsStored": true,
     "reviewCount": 87,
+    "reviewsPartial": false,
     "serpapiDataId": "0x..."
   }
 }
@@ -103,6 +106,8 @@ Requires admin authentication (`x-admin-token` header or `admin_session` cookie)
 - `enriched` – new snapshots stored
 - `already_enriched` – snapshot exists and `force=false`
 - `failed` – see `reason` field
+
+`artifacts.reviewsPartial` is `true` when reviews were fetched but pagination was interrupted by a network error (partial snapshot stored).
 
 ---
 

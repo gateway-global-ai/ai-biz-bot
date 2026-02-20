@@ -20,6 +20,20 @@ CREATE INDEX IF NOT EXISTS idx_platform_map_place_id
 CREATE INDEX IF NOT EXISTS idx_platform_map_serpapi_id
   ON platform_business_map(serpapi_data_id);
 
+-- Auto-update updated_at on every row change.
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_platform_business_map_updated_at ON platform_business_map;
+CREATE TRIGGER trg_platform_business_map_updated_at
+  BEFORE UPDATE ON platform_business_map
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 -- Enrichment snapshots: raw SerpApi payloads stored per platformId.
 -- Written only by the admin enrich_business_profile tool; never by voice path.
 CREATE TABLE IF NOT EXISTS platform_business_enrichment_snapshots (
@@ -39,3 +53,8 @@ CREATE INDEX IF NOT EXISTS idx_enrichment_snapshots_provider
 
 CREATE INDEX IF NOT EXISTS idx_enrichment_snapshots_platform_provider
   ON platform_business_enrichment_snapshots(platform_id, provider);
+
+-- Index on provider_ref for fast lookup by SerpApi data_id or other external key.
+CREATE INDEX IF NOT EXISTS idx_enrichment_snapshots_provider_ref
+  ON platform_business_enrichment_snapshots(provider_ref)
+  WHERE provider_ref IS NOT NULL;

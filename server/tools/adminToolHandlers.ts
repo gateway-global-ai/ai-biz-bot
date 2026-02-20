@@ -6,14 +6,29 @@
  * toolHandler.ts so the voice path is never affected.
  */
 
+import { z } from "zod";
 import {
   enrichBusinessProfile,
-  type EnrichBusinessProfileInput,
   type EnrichBusinessProfileResult,
 } from "../services/enrichBusinessProfile.js";
 
+// ---------------------------------------------------------------------------
+// Per-tool Zod schemas — runtime validation before any service call
+// ---------------------------------------------------------------------------
+
+const enrichBusinessProfileSchema = z.object({
+  platformId: z.string().uuid("platformId must be a valid UUID"),
+  maxReviews: z.number().int().min(1).max(500).optional(),
+  force: z.boolean().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Dispatcher
+// ---------------------------------------------------------------------------
+
 /**
  * Dispatch an admin tool call by name.
+ * Validates args at runtime before forwarding to the service layer.
  *
  * Supported tools:
  *   - enrich_business_profile  { platformId, maxReviews?, force? }
@@ -21,10 +36,25 @@ import {
 export async function handleAdminToolCall(
   toolName: string,
   args: unknown,
+  context?: { adminId?: string; ip?: string },
 ): Promise<unknown> {
   switch (toolName) {
-    case "enrich_business_profile":
-      return enrichBusinessProfile(args as EnrichBusinessProfileInput);
+    case "enrich_business_profile": {
+      const parsed = enrichBusinessProfileSchema.safeParse(args);
+      if (!parsed.success) {
+        throw new Error(`Invalid args for ${toolName}: ${parsed.error.message}`);
+      }
+      // Audit log — no sensitive payload, just the operation and who triggered it
+      console.log(
+        `[AdminTool] enrich_business_profile triggered`,
+        `platformId=${parsed.data.platformId}`,
+        `maxReviews=${parsed.data.maxReviews ?? 100}`,
+        `force=${parsed.data.force ?? false}`,
+        `adminId=${context?.adminId ?? "unknown"}`,
+        `ip=${context?.ip ?? "unknown"}`,
+      );
+      return enrichBusinessProfile(parsed.data);
+    }
 
     default:
       throw new Error(`Unknown admin tool: ${toolName}`);
@@ -44,6 +74,7 @@ export const ADMIN_TOOL_DEFINITIONS = [
         properties: {
           platformId: {
             type: "string",
+            format: "uuid",
             description: "UUID from platform_business_map.platform_id",
           },
           maxReviews: {

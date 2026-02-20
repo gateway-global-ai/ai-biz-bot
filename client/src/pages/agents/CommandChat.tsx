@@ -45,10 +45,14 @@ interface EnrichResult {
     serpPlaceProfileStored: boolean;
     serpReviewsStored: boolean;
     reviewCount: number;
+    reviewsPartial?: boolean;
     serpapiDataId?: string;
   };
   reason?: string;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_COMMAND_LENGTH = 2000;
 
 /** Inline panel for the admin enrich_business_profile tool. */
 function EnrichPanel() {
@@ -58,6 +62,9 @@ function EnrichPanel() {
   const [maxReviews, setMaxReviews] = useState('100');
   const [force, setForce] = useState(false);
   const [result, setResult] = useState<EnrichResult | null>(null);
+
+  const platformIdValid = platformId.trim() === '' || UUID_RE.test(platformId.trim());
+  const platformIdReady = UUID_RE.test(platformId.trim());
 
   const enrichMutation = useMutation({
     mutationFn: async () => {
@@ -120,10 +127,13 @@ function EnrichPanel() {
               <Input
                 value={platformId}
                 onChange={e => setPlatformId(e.target.value)}
-                placeholder="uuid from platform_business_map"
-                className="bg-slate-800 border-slate-700 text-white text-sm h-8"
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                className={`bg-slate-800 border-slate-700 text-white text-sm h-8 ${!platformIdValid ? 'border-red-500' : ''}`}
                 data-testid="input-enrich-platform-id"
               />
+              {!platformIdValid && (
+                <p className="text-xs text-red-400 mt-1" data-testid="error-enrich-platform-id">Must be a valid UUID</p>
+              )}
             </div>
             <div>
               <label className="text-xs text-slate-400 mb-1 block">Max Reviews</label>
@@ -153,7 +163,7 @@ function EnrichPanel() {
           </div>
           <Button
             onClick={() => enrichMutation.mutate()}
-            disabled={!platformId.trim() || enrichMutation.isPending}
+            disabled={!platformIdReady || enrichMutation.isPending}
             className="bg-indigo-600 hover:bg-indigo-500 h-8 text-sm"
             data-testid="button-enrich-submit"
           >
@@ -173,7 +183,11 @@ function EnrichPanel() {
               <div className="text-slate-400">
                 Place profile: <span className={result.artifacts.serpPlaceProfileStored ? 'text-emerald-400' : 'text-slate-500'}>{result.artifacts.serpPlaceProfileStored ? '✓ stored' : '—'}</span>
                 {' · '}
-                Reviews: <span className={result.artifacts.serpReviewsStored ? 'text-emerald-400' : 'text-slate-500'}>{result.artifacts.serpReviewsStored ? `✓ ${result.artifacts.reviewCount} stored` : '—'}</span>
+                Reviews: <span className={result.artifacts.serpReviewsStored ? 'text-emerald-400' : 'text-slate-500'}>
+                  {result.artifacts.serpReviewsStored
+                    ? `✓ ${result.artifacts.reviewCount} stored${result.artifacts.reviewsPartial ? ' (partial)' : ''}`
+                    : '—'}
+                </span>
               </div>
               {result.reason && <div className="text-slate-400 italic">{result.reason}</div>}
             </div>
@@ -442,6 +456,7 @@ export default function CommandChat() {
             placeholder={selectedAgent ? `Command ${selectedAgent.name}...` : 'Select an agent first...'}
             className="flex-1 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
             disabled={chatMutation.isPending || !selectedAgentId}
+            maxLength={MAX_COMMAND_LENGTH}
             data-testid="input-command-message"
           />
           <Button

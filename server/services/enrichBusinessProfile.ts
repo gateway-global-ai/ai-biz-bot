@@ -25,6 +25,9 @@ const SERPAPI_BASE = "https://serpapi.com/search";
 const MAX_PAGES = 10;
 const MAX_REVIEWS = 500;
 
+/** In-memory set of platformIds currently being enriched. Prevents duplicate runs from concurrent admin requests. */
+const enrichmentInProgress = new Set<string>();
+
 export interface EnrichBusinessProfileInput {
   platformId: string;
   maxReviews?: number;
@@ -38,6 +41,8 @@ export interface EnrichBusinessProfileResult {
     serpPlaceProfileStored: boolean;
     serpReviewsStored: boolean;
     reviewCount: number;
+    /** True when reviews were fetched but pagination was cut short by an error. */
+    reviewsPartial?: boolean;
     serpapiDataId?: string;
   };
   reason?: string;
@@ -190,18 +195,22 @@ async function fetchAndStorePlaceProfile(
 /**
  * Fetch SerpApi google_maps_reviews, paginating until maxReviews reached.
  * Merges all review pages into a single snapshot payload.
+ * If a mid-pagination fetch fails, stores whatever was collected so far
+ * and flags the snapshot as partial.
  */
 async function fetchAndStoreReviews(
   platformId: string,
   dataId: string,
   maxReviews: number,
-): Promise<{ stored: boolean; reviewCount: number }> {
+): Promise<{ stored: boolean; reviewCount: number; partial: boolean }> {
   const allReviews: unknown[] = [];
   let nextPageToken: string | undefined;
   let pagesFetched = 0;
   let placeInfo: unknown = null;
   let topics: unknown[] = [];
+  let partial = false;
 
+  // Fetch pages; catch per-page errors so partial data is preserved
   try {
     do {
       const params: Record<string, string> = {
@@ -212,7 +221,18 @@ async function fetchAndStoreReviews(
       };
       if (nextPageToken) params.next_page_token = nextPageToken;
 
-      const data = await serpFetch(params);
+      let data: Record<string, unknown>;
+      try {
+        data = await serpFetch(params);
+      } catch (pageErr) {
+        // Page failed — mark partial and stop paginating
+        console.warn(
+          `[Enrichment] Review page ${pagesFetched + 1} failed for platformId=${platformId}:`,
+          (pageErr as Error).message,
+        );
+        partial = true;
+        break;
+      }
 
       if (!placeInfo && data.place_info) placeInfo = data.place_info;
       if (Array.isArray(data.topics) && topics.length === 0) topics = data.topics;
@@ -228,30 +248,36 @@ async function fetchAndStoreReviews(
       allReviews.length < maxReviews &&
       pagesFetched < MAX_PAGES
     );
-
-    const mergedPayload = {
-      place_info: placeInfo,
-      topics,
-      reviews: allReviews.slice(0, maxReviews),
-      total_fetched: allReviews.length,
-      pages_fetched: pagesFetched,
-    };
-
-    await storeSnapshot(
-      platformId,
-      "serpapi_google_maps_reviews_merged",
-      dataId,
-      mergedPayload,
-    );
-
-    console.log(
-      `[Enrichment] Stored ${allReviews.length} reviews (${pagesFetched} pages) for platformId=${platformId} data_id=${dataId}`,
-    );
-    return { stored: true, reviewCount: allReviews.length };
   } catch (err) {
     console.warn(`[Enrichment] Reviews fetch failed for platformId=${platformId}:`, (err as Error).message);
-    return { stored: false, reviewCount: 0 };
+    return { stored: false, reviewCount: 0, partial: false };
   }
+
+  // Store whatever we have (even if partial), as long as there is something
+  if (allReviews.length === 0 && !placeInfo) {
+    return { stored: false, reviewCount: 0, partial };
+  }
+
+  const mergedPayload = {
+    place_info: placeInfo,
+    topics,
+    reviews: allReviews.slice(0, maxReviews),
+    total_fetched: allReviews.length,
+    pages_fetched: pagesFetched,
+    partial,
+  };
+
+  await storeSnapshot(
+    platformId,
+    "serpapi_google_maps_reviews_merged",
+    dataId,
+    mergedPayload,
+  );
+
+  console.log(
+    `[Enrichment] Stored ${allReviews.length} reviews (${pagesFetched} pages${partial ? ", partial" : ""}) for platformId=${platformId} data_id=${dataId}`,
+  );
+  return { stored: true, reviewCount: allReviews.length, partial };
 }
 
 /**
@@ -260,6 +286,7 @@ async function fetchAndStoreReviews(
  * - Requires an existing platform_business_map row for platformId.
  * - Fetches SerpApi place profile + paginated reviews.
  * - Stores raw payloads as snapshots (idempotent with force=false).
+ * - Guards against concurrent runs for the same platformId.
  */
 export async function enrichBusinessProfile(
   input: EnrichBusinessProfileInput,
@@ -273,6 +300,30 @@ export async function enrichBusinessProfile(
     reason,
   });
 
+  // 0. Concurrency guard — reject if already in progress for this platformId
+  if (enrichmentInProgress.has(platformId)) {
+    return failed(`Enrichment already in progress for platformId=${platformId}; try again shortly`);
+  }
+
+  enrichmentInProgress.add(platformId);
+  try {
+    return await _doEnrich({ platformId, maxReviews, force, failed });
+  } finally {
+    enrichmentInProgress.delete(platformId);
+  }
+}
+
+async function _doEnrich({
+  platformId,
+  maxReviews,
+  force,
+  failed,
+}: {
+  platformId: string;
+  maxReviews: number;
+  force: boolean;
+  failed: (reason: string) => EnrichBusinessProfileResult;
+}): Promise<EnrichBusinessProfileResult> {
   // 1. Require existing platform_business_map row
   const [pbm] = await db
     .select()
@@ -326,7 +377,7 @@ export async function enrichBusinessProfile(
   const serpPlaceProfileStored = await fetchAndStorePlaceProfile(platformId, dataId);
 
   // 5. Fetch + store reviews (paginated)
-  const { stored: serpReviewsStored, reviewCount } = await fetchAndStoreReviews(
+  const { stored: serpReviewsStored, reviewCount, partial: reviewsPartial } = await fetchAndStoreReviews(
     platformId,
     dataId,
     cappedReviews,
@@ -339,6 +390,7 @@ export async function enrichBusinessProfile(
       serpPlaceProfileStored,
       serpReviewsStored,
       reviewCount,
+      ...(reviewsPartial && { reviewsPartial: true }),
       serpapiDataId: dataId,
     },
   };

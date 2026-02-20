@@ -880,7 +880,10 @@ export async function registerRoutes(
         return res.status(400).json({ error: parsed.error.message });
       }
 
-      const result = await handleAdminToolCall(parsed.data.tool, parsed.data.args);
+      const result = await handleAdminToolCall(parsed.data.tool, parsed.data.args, {
+        adminId: String(req.headers?.["x-admin-token"] ?? "session"),
+        ip: req.ip || req.socket.remoteAddress || "unknown",
+      });
       res.json(result);
     } catch (error: any) {
       if (error?.message?.startsWith("Unknown admin tool:")) {
