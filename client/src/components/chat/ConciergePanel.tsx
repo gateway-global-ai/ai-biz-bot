@@ -66,6 +66,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   zIndex = 50
 }) => {
   const siteConfigId = business.id;
+  const isValidSiteConfigId = !!(siteConfigId && siteConfigId !== 'undefined' && siteConfigId !== '');
 
   // --- State ---
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -96,13 +97,17 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       setConnectionStatus('connecting');
       try {
         // --- HANDOVER SERVICE LOGIC ---
-        // 1. Fetch the pre-validated configuration from the server.
-        // The siteConfigId is passed as a prop or read from the URL.
-        const response = await fetch(`/api/site-configs/${siteConfigId}`);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
+        // 1. Fetch the pre-validated configuration from the server (only when a valid ID is available).
+        let siteConfig: { geminiModelId?: string; systemPromptOverride?: string } = {};
+        if (isValidSiteConfigId) {
+          const response = await fetch(`/api/site-configs/${siteConfigId}`);
+          if (response.ok) {
+            siteConfig = await response.json();
+          } else if (response.status !== 404) {
+            // Only hard-fail on unexpected server errors; 404 means no config yet, which is fine.
+            throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
+          }
         }
-        const siteConfig = await response.json();
 
         // 2. MERGE the validated Model ID into the current voice config
         const validatedVoiceConfig: VoiceConfig = {
@@ -196,7 +201,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         clientRef.current = null;
       }
     };
-  }, [isOpen, currentVoiceConfig, business, agent]);
+  }, [isOpen, currentVoiceConfig, siteConfigId, business.name]); // agent/business objects excluded intentionally — only stable primitives used as deps
 
   // Auto-scroll
   useEffect(() => {

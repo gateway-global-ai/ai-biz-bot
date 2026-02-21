@@ -45,6 +45,7 @@ interface PlaceData {
 
 interface WebsitePreviewProps {
   place: PlaceData;
+  siteConfigId?: string;
   onBack: () => void;
 }
 
@@ -91,7 +92,7 @@ interface ChatMessage {
   content: string;
 }
 
-export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
+export default function WebsitePreview({ place, siteConfigId, onBack }: WebsitePreviewProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
@@ -1011,6 +1012,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
       {/* --- REPLACED: Old chat UI with new ConciergePanel --- */}
       <ConciergePanel
         business={{
+          id: siteConfigId || '',
           placeId: place.place_id || '',
           name: place.name,
           address: place.formatted_address || '',

@@ -65,6 +65,7 @@ export default function CustomerSiteManager() {
   return (
     <WebsitePreview
       place={placeData}
+      siteConfigId={siteId}
       onBack={() => setLocation("/my-account")}
     />
   );
