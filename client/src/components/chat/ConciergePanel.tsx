@@ -103,17 +103,34 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           const response = await fetch(`/api/site-configs/${siteConfigId}`);
           if (response.ok) {
             siteConfig = await response.json();
-          } else if (response.status !== 404) {
-            // Only hard-fail on unexpected server errors; 404 means no config yet, which is fine.
+          } else if (response.status === 404) {
+            // 404 = new customer, no config saved yet — proceed with defaults.
+            console.info(`[ConciergePanel] No site config found for ID ${siteConfigId} (new customer). Using defaults.`);
+          } else {
+            // Any other error is an infrastructure problem — hard fail so it is visible.
             throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
           }
+        }
+
+        // Allowed Gemini native-audio model IDs. Guards against typos entered in the admin panel.
+        const ALLOWED_MODELS = new Set([
+          'gemini-2.5-flash-native-audio-preview-12-2025',
+          'gemini-2.0-flash-live-001',
+          'gemini-2.5-flash-exp-native-audio-thinking-dialog',
+        ]);
+        const backendModelId = siteConfig.geminiModelId;
+        const resolvedModel = (backendModelId && ALLOWED_MODELS.has(backendModelId))
+          ? backendModelId
+          : currentVoiceConfig.model || 'gemini-2.5-flash-native-audio-preview-12-2025';
+        if (backendModelId && !ALLOWED_MODELS.has(backendModelId)) {
+          console.warn(`[ConciergePanel] Ignoring unknown model ID from site config: "${backendModelId}". Falling back to default.`);
         }
 
         // 2. MERGE the validated Model ID into the current voice config
         const validatedVoiceConfig: VoiceConfig = {
           ...currentVoiceConfig,
-          // Priority: Backend Config > Prop > Fallback
-          model: siteConfig.geminiModelId || currentVoiceConfig.model || "gemini-2.5-flash-native-audio-preview-12-2025"
+          // Priority: Backend Config (whitelisted) > Prop > Fallback
+          model: resolvedModel
         };
 
         console.log('[ConciergePanel] Initializing with verified model:', validatedVoiceConfig.model);
@@ -527,6 +544,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             onMouseLeave={stopPTT}
             onTouchStart={(e) => { e.preventDefault(); startPTT(); }}
             onTouchEnd={(e) => { e.preventDefault(); stopPTT(); }}
+            onContextMenu={(e) => e.preventDefault()}
             disabled={connectionStatus !== 'connected'}
             className={`w-[50%] h-14 rounded-xl font-bold text-sm tracking-wider transition-all transform active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed select-none ${
               isRecording 
