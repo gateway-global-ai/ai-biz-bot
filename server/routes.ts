@@ -242,7 +242,7 @@ export async function registerRoutes(
           widgetColor: "#2563eb",
           greetingMessage: `Welcome to ${businessName}! How can we help you today?`,
           placeholderText: "Type a message...",
-          modelProvider: "kimi",
+          modelProvider: "gemini",
         });
         console.log(`[Demo] Created site_config ${siteConfig.id} for "${businessName}"${customerAccount ? ` (linked to customer ${customerAccount.id})` : " (no customer account yet)"}`);
       }
@@ -326,7 +326,7 @@ export async function registerRoutes(
           widgetColor: "#2563eb",
           greetingMessage: `Welcome to ${businessName}! How can we help you today?`,
           placeholderText: "Type a message...",
-          modelProvider: "kimi",
+          modelProvider: "gemini",
         });
       }
 
@@ -517,7 +517,7 @@ export async function registerRoutes(
           widgetColor: "#2563eb",
           greetingMessage: `Welcome to ${lead.businessName}! How can we help you today?`,
           placeholderText: "Type a message...",
-          modelProvider: "kimi",
+          modelProvider: "gemini",
         });
         created++;
       }
@@ -947,6 +947,12 @@ export async function registerRoutes(
       }
       const result = data.result || {};
       res.json({
+        name: result.name,
+        formatted_address: result.formatted_address,
+        geometry: result.geometry,
+        types: result.types,
+        opening_hours: result.opening_hours,
+        photos: result.photos || [],
         reviews: result.reviews || [],
         user_ratings_total: result.user_ratings_total || 0,
         rating: result.rating || 0,
@@ -956,6 +962,8 @@ export async function registerRoutes(
         vicinity: result.vicinity,
         utc_offset: result.utc_offset,
         international_phone_number: result.international_phone_number,
+        formatted_phone_number: result.formatted_phone_number,
+        website: result.website,
         address_components: result.address_components,
         plus_code: result.plus_code,
         editorial_summary: result.editorial_summary?.overview || null,
@@ -6736,8 +6744,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   // Stripe webhook for A2P payment completion
   app.post("/api/stripe/webhook/a2p", async (req, res) => {
     try {
-      const { getUncachableStripeClient, getStripeSecretKey } = await import('./stripeClient');
-      const Stripe = await import('stripe');
+      const { getUncachableStripeClient } = await import('./stripeClient');
       const stripe = await getUncachableStripeClient();
       
       const sig = req.headers['stripe-signature'];
@@ -7238,6 +7245,89 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       res.json({ audioUrl });
     } catch (error: any) {
       console.error("[Classroom] TTS error:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==================== SUBSCRIPTION CHECKOUT ====================
+
+  // Create a Stripe Checkout Session for a plan upgrade (per-business)
+  app.post("/api/subscriptions/create-checkout-session", async (req, res) => {
+    try {
+      const { getStripeClient, getStripePublishableKey, STRIPE_PRICE_IDS } = await import('./stripeClient');
+      const stripe = getStripeClient();
+
+      const customerSession = (req as any).session?.customerAccount;
+      if (!customerSession?.id) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const { plan, siteConfigId } = req.body as { plan: string; siteConfigId: string };
+      if (!plan || !siteConfigId) {
+        return res.status(400).json({ error: 'plan and siteConfigId are required' });
+      }
+
+      const priceId = STRIPE_PRICE_IDS[plan];
+      if (!priceId) {
+        return res.status(400).json({ error: `Unknown plan: ${plan}` });
+      }
+
+      const host = req.headers.host || 'localhost:3004';
+      const protocol = (req.headers['x-forwarded-proto'] as string) || 'https';
+      const baseUrl = `${protocol}://${host}`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${baseUrl}/my-account/site/${siteConfigId}?upgrade=success&plan=${plan}`,
+        cancel_url: `${baseUrl}/my-account?upgrade=cancelled`,
+        metadata: { siteConfigId, plan, customerId: customerSession.id },
+        client_reference_id: siteConfigId,
+      });
+
+      res.json({ url: session.url, publishableKey: getStripePublishableKey() });
+    } catch (error: any) {
+      console.error('[Stripe] create-checkout-session error:', error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Stripe webhook — subscription plan upgrades
+  app.post("/api/stripe/webhook/subscriptions", async (req, res) => {
+    try {
+      const { getStripeClient, getStripeWebhookSecret } = await import('./stripeClient');
+      const stripe = getStripeClient();
+      const sig = req.headers['stripe-signature'] as string;
+      const webhookSecret = getStripeWebhookSecret();
+
+      let event: any;
+      const rawBody = (req as any).rawBody ?? req.body;
+
+      if (webhookSecret && sig) {
+        try {
+          event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+        } catch (err: any) {
+          console.error('[Stripe] Webhook signature verification failed:', err.message);
+          return res.status(400).json({ error: `Webhook signature invalid: ${err.message}` });
+        }
+      } else {
+        console.warn('[Stripe] STRIPE_WEBHOOK_SECRET not set — skipping signature verification (dev mode)');
+        event = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
+      }
+
+      if (event.type === 'checkout.session.completed') {
+        const session = event.data.object;
+        const { siteConfigId, plan } = session.metadata ?? {};
+
+        if (siteConfigId && plan) {
+          await storage.updateSiteConfig(siteConfigId, { plan } as any);
+          console.log(`[Stripe] Plan upgraded → site ${siteConfigId} is now on "${plan}"`);
+        }
+      }
+
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error('[Stripe] Subscription webhook error:', error.message);
       res.status(500).json({ error: error.message });
     }
   });

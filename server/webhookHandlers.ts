@@ -1,17 +1,7 @@
-import { getStripeSync } from './stripeClient';
-
+// stripe-replit-sync has been removed — webhook processing is handled directly
+// in the route handlers in server/routes.ts using stripe.webhooks.constructEvent().
 export class WebhookHandlers {
-  static async processWebhook(payload: Buffer, signature: string): Promise<void> {
-    if (!Buffer.isBuffer(payload)) {
-      throw new Error(
-        'STRIPE WEBHOOK ERROR: Payload must be a Buffer. ' +
-        'Received type: ' + typeof payload + '. ' +
-        'This usually means express.json() parsed the body before reaching this handler. ' +
-        'FIX: Ensure webhook route is registered BEFORE app.use(express.json()).'
-      );
-    }
-
-    const sync = await getStripeSync();
-    await sync.processWebhook(payload, signature);
+  static async processWebhook(_payload: Buffer, _signature: string): Promise<void> {
+    throw new Error('Use the route-level webhook handlers in server/routes.ts instead of WebhookHandlers.processWebhook.');
   }
 }

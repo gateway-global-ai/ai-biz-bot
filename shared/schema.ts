@@ -931,7 +931,7 @@ export const siteConfigs = pgTable("site_configs", {
   assignedAgentId: varchar("assigned_agent_id"),
   botTemplateId: varchar("bot_template_id"),
   systemPromptOverride: text("system_prompt_override"),
-  modelProvider: text("model_provider").default("kimi"),
+  modelProvider: text("model_provider").default("gemini"),
   modelName: text("model_name"),
   chatbotEnabled: boolean("chatbot_enabled").default(true),
   voiceConciergeEnabled: boolean("voice_concierge_enabled").default(true),
@@ -941,6 +941,8 @@ export const siteConfigs = pgTable("site_configs", {
   placeholderText: text("placeholder_text").default("Type a message..."),
   /** Knowledge library: array of { id, title, content, addedAt } for agent training. */
   knowledgeLibrary: jsonb("knowledge_library"),
+  /** Per-business subscription plan: 'free' | 'pro' | 'voice' | 'enterprise' */
+  plan: text("plan").default("free"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

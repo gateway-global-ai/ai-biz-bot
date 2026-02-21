@@ -28,6 +28,7 @@ import {
   Shield,
   Search,
   X,
+  Copy,
 } from "lucide-react";
 import gatewayLogo from "@assets/gatewaylogo_header_left_1770354860467.png";
 
@@ -41,6 +42,7 @@ export default function MyAccount() {
   const [emailValue, setEmailValue] = useState("");
   const [showAddBusiness, setShowAddBusiness] = useState(false);
   const [addingBusiness, setAddingBusiness] = useState(false);
+  const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [mapsKey, setMapsKey] = useState<string | null>(null);
   const [mapsLibLoaded, setMapsLibLoaded] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -106,6 +108,32 @@ export default function MyAccount() {
       if (place.userRatingCount) placeData.user_ratings_total = place.userRatingCount;
       if (place.location) {
         placeData.geometry = { location: { lat: place.location.lat(), lng: place.location.lng() } };
+      }
+
+      // Enrich placeData with full Place Details (photos, hours, phone, website) server-side
+      if (placeId) {
+        try {
+          const detailsRes = await fetch(`/api/places/details/${encodeURIComponent(placeId)}`);
+          if (detailsRes.ok) {
+            const details = await detailsRes.json();
+            placeData = {
+              ...placeData,
+              ...(details.photos?.length ? { photos: details.photos } : {}),
+              ...(details.opening_hours ? { opening_hours: details.opening_hours } : {}),
+              ...(details.formatted_phone_number ? { formatted_phone_number: details.formatted_phone_number } : {}),
+              ...(details.international_phone_number ? { international_phone_number: details.international_phone_number } : {}),
+              ...(details.website ? { website: details.website } : {}),
+              ...(details.geometry ? { geometry: details.geometry } : {}),
+              ...(details.rating ? { rating: details.rating } : {}),
+              ...(details.user_ratings_total ? { user_ratings_total: details.user_ratings_total } : {}),
+              ...(details.types ? { types: details.types } : {}),
+              ...(details.editorial_summary ? { editorial_summary: details.editorial_summary } : {}),
+              ...(details.business_status ? { business_status: details.business_status } : {}),
+            };
+          }
+        } catch {
+          // Non-fatal — proceed with basic placeData if enrichment fails
+        }
       }
 
       if (!phone) {
@@ -429,9 +457,34 @@ export default function MyAccount() {
                         variant="outline"
                         className="w-full"
                         data-testid={`button-upgrade-${key}`}
+                        disabled={upgradingPlan === key}
+                        onClick={async () => {
+                          const siteConfigId = businesses[0]?.id;
+                          if (!siteConfigId) {
+                            toast({ title: "No business found", description: "Add a business first before upgrading.", variant: "destructive" });
+                            return;
+                          }
+                          setUpgradingPlan(key);
+                          try {
+                            const res = await fetch("/api/subscriptions/create-checkout-session", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                              body: JSON.stringify({ plan: key, siteConfigId }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.error || "Failed to start checkout");
+                            window.location.href = data.url;
+                          } catch (err: any) {
+                            toast({ title: "Upgrade failed", description: err.message, variant: "destructive" });
+                            setUpgradingPlan(null);
+                          }
+                        }}
                       >
-                        <Sparkles className="w-3 h-3 mr-1" />
-                        Upgrade
+                        {upgradingPlan === key ? (
+                          <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Redirecting...</span>
+                        ) : (
+                          <><Sparkles className="w-3 h-3 mr-1" />Upgrade</>
+                        )}
                       </Button>
                     )}
                   </div>
@@ -542,6 +595,18 @@ export default function MyAccount() {
                       {biz.domain && (
                         <p className="text-xs text-slate-500 truncate">{biz.domain}</p>
                       )}
+                      <button
+                        className="flex items-center gap-1 mt-0.5 group"
+                        title="Copy Site ID"
+                        onClick={() => {
+                          navigator.clipboard.writeText(biz.id);
+                          toast({ title: "Copied", description: `Site ID copied to clipboard` });
+                        }}
+                        data-testid={`copy-uuid-${biz.id}`}
+                      >
+                        <span className="text-[10px] text-slate-600 font-mono group-hover:text-slate-400 transition-colors">{biz.id}</span>
+                        <Copy className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 transition-colors flex-shrink-0" />
+                      </button>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
