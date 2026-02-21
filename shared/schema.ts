@@ -943,6 +943,10 @@ export const siteConfigs = pgTable("site_configs", {
   knowledgeLibrary: jsonb("knowledge_library"),
   /** Per-business subscription plan: 'free' | 'pro' | 'voice' | 'enterprise' */
   plan: text("plan").default("free"),
+  /** AI-generated or custom hero image URL stored on the platform */
+  heroImageUrl: text("hero_image_url"),
+  /** Prompt used to generate the hero image (stored for regeneration) */
+  heroImagePrompt: text("hero_image_prompt"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -955,6 +959,45 @@ export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
 
 export type InsertSiteConfig = z.infer<typeof insertSiteConfigSchema>;
 export type SiteConfig = typeof siteConfigs.$inferSelect;
+
+// ── Google Workspace Integration ──────────────────────────────────────────────
+// Per-site workspace configuration (tied to siteConfigs, not customerAccounts,
+// because each site can independently have the $99 Voice plan).
+export const workspaceConfigurations = pgTable("workspace_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull().unique(),
+
+  // Connection method
+  setupType: text("setup_type").default("oauth"), // 'oauth' | 'hosted'
+
+  // Customer's OAuth credentials (encrypted at rest recommendation)
+  googleEmail: text("google_email"),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiry: timestamp("token_expiry"),
+
+  // Per-app enable state stored as JSONB: { gmail: true, calendar: false, ... }
+  enabledApps: jsonb("enabled_apps").default({}),
+
+  // Drive folder IDs created by platform
+  driveFolderId: text("drive_folder_id"),
+  leadTrackingSheetId: text("lead_tracking_sheet_id"),
+  calendarId: text("calendar_id"),
+  taskListId: text("task_list_id"),
+
+  // Status
+  status: text("status").default("disconnected"), // 'disconnected' | 'connected' | 'error'
+  statusMessage: text("status_message"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWorkspaceConfigurationSchema = createInsertSchema(workspaceConfigurations).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type InsertWorkspaceConfiguration = z.infer<typeof insertWorkspaceConfigurationSchema>;
+export type WorkspaceConfiguration = typeof workspaceConfigurations.$inferSelect;
 
 // Chat logs for web-based AI Biz Bot conversations
 export const chatLogs = pgTable("chat_logs", {
@@ -1249,64 +1292,7 @@ export const insertOgSettingsSchema = createInsertSchema(ogSettings).omit({
 export type InsertOgSettings = z.infer<typeof insertOgSettingsSchema>;
 export type OgSettings = typeof ogSettings.$inferSelect;
 
-// =========================================
-// Google Workspace Integration
-// =========================================
-
-export const workspaceConfigurations = pgTable("workspace_configurations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
-  
-  // Setup Type
-  setupType: text("setup_type").notNull(), // 'hosted' | 'integrated'
-  
-  // Hosted Email Configuration (gatewayglobal.ai)
-  hostedEmail: text("hosted_email"), // user@gatewayglobal.ai
-  hostedUserId: text("hosted_user_id"), // Google Workspace user ID
-  workspacePlan: text("workspace_plan"), // 'starter' | 'standard'
-  
-  // Integrated Email Configuration (existing email)
-  integratedEmail: text("integrated_email"),
-  
-  // OAuth Credentials (encrypted)
-  accessToken: text("access_token"),
-  refreshToken: text("refresh_token"),
-  tokenExpiry: timestamp("token_expiry"),
-  
-  // Workspace Structure IDs
-  driveFolderId: text("drive_folder_id"), // Root business folder
-  clientsFolderId: text("clients_folder_id"),
-  operationsFolderId: text("operations_folder_id"),
-  marketingFolderId: text("marketing_folder_id"),
-  
-  // Template IDs
-  leadTrackingSheetId: text("lead_tracking_sheet_id"),
-  taskListId: text("task_list_id"),
-  calendarId: text("calendar_id"),
-  
-  // Setup Status
-  setupStatus: text("setup_status").default("pending"), // 'pending' | 'in_progress' | 'completed' | 'failed'
-  setupStep: text("setup_step"), // Current step in setup process
-  setupError: text("setup_error"),
-  
-  // SWOT Analysis Link
-  swotAnalysisId: text("swot_analysis_id"),
-  swotCompletedAt: timestamp("swot_completed_at"),
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertWorkspaceConfigurationSchema = createInsertSchema(workspaceConfigurations).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertWorkspaceConfiguration = z.infer<typeof insertWorkspaceConfigurationSchema>;
-export type WorkspaceConfiguration = typeof workspaceConfigurations.$inferSelect;
-
-// SWOT Analysis Results
+// SWOT Analysis Results (legacy; workspace config is defined above with siteConfigId)
 export const swotAnalyses = pgTable("swot_analyses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),

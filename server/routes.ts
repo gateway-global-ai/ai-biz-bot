@@ -45,6 +45,9 @@ import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOw
 import { getAvailableApis, calculateCosts, analyzeWithKimi, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
 import { placesCache, CACHE_TTL } from "./placesCache";
 import crypto from "crypto";
+import { db } from "./db";
+import { workspaceConfigurations } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -987,6 +990,35 @@ export async function registerRoutes(
     }
   });
 
+  // Photo proxy: fetch a business hero image by placeId (keeps API key server-side)
+  app.get("/api/places/photo-proxy/:placeId", async (req, res) => {
+    const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+    if (!apiKey) return res.status(500).send("API key not configured");
+    const { placeId } = req.params;
+    const maxWidth = Math.min(Number(req.query.maxWidth) || 800, 1200);
+
+    try {
+      // Fetch photo_reference from legacy Places Details API
+      const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=photos&key=${apiKey}`;
+      const detailsRes = await fetch(detailsUrl);
+      const detailsData = await detailsRes.json() as any;
+      const photoRef = detailsData?.result?.photos?.[0]?.photo_reference;
+      if (!photoRef) return res.status(404).send("No photo available");
+
+      // Redirect through the Places Photo API (Google handles caching)
+      const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?photoreference=${encodeURIComponent(photoRef)}&maxwidth=${maxWidth}&key=${apiKey}`;
+      const photoRes = await fetch(photoUrl);
+      if (!photoRes.ok) return res.status(502).send("Photo fetch failed");
+
+      res.setHeader("Content-Type", photoRes.headers.get("content-type") || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400"); // 24h cache
+      const buffer = await photoRes.arrayBuffer();
+      res.end(Buffer.from(buffer));
+    } catch (err: any) {
+      res.status(500).send(err.message);
+    }
+  });
+
   // Google Places Search - for business discovery (with caching)
   app.post("/api/places/search", async (req, res) => {
     try {
@@ -1175,32 +1207,76 @@ export async function registerRoutes(
     res.json({ success: true, message: 'Cache cleared successfully' });
   });
 
-  // ============ Google Workspace Integration ============
-  
-  // In-memory storage for Google Workspace credentials (per business)
-  const googleWorkspaceCredentials = new Map<string, GoogleWorkspaceCredentials>();
-  
-  // Check if Google Workspace is configured
+  // ============ Google Workspace Integration (DB-backed by siteConfigId) ============
+
+  async function getWorkspaceCredentialsBySiteConfigId(siteConfigId: string): Promise<GoogleWorkspaceCredentials | null> {
+    const row = await db.query.workspaceConfigurations.findFirst({
+      where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+      columns: { accessToken: true, refreshToken: true, tokenExpiry: true },
+    });
+    if (!row?.accessToken) return null;
+    return {
+      accessToken: row.accessToken,
+      refreshToken: row.refreshToken ?? undefined,
+      expiryDate: row.tokenExpiry ? new Date(row.tokenExpiry).getTime() : undefined,
+    };
+  }
+
+  // Check if Google Workspace is configured (env)
   app.get("/api/google/status", (req, res) => {
     const hasClientId = !!process.env.GOOGLE_CLIENT_ID;
     const hasClientSecret = !!process.env.GOOGLE_CLIENT_SECRET;
-    res.json({ 
+    res.json({
       configured: hasClientId && hasClientSecret,
       hasClientId,
-      hasClientSecret
+      hasClientSecret,
     });
   });
 
-  // Get Google Workspace OAuth URL
+  // Workspace status for a site (DB)
+  app.get("/api/workspace/status/:siteConfigId", async (req, res) => {
+    try {
+      const { siteConfigId } = req.params;
+      const row = await db.query.workspaceConfigurations.findFirst({
+        where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+      });
+      if (!row) {
+        return res.json({ status: "disconnected", googleEmail: null, enabledApps: {} });
+      }
+      const enabledApps = (row.enabledApps as Record<string, boolean>) ?? {};
+      res.json({
+        status: row.status ?? "disconnected",
+        googleEmail: row.googleEmail ?? null,
+        enabledApps,
+      });
+    } catch (error: any) {
+      console.error("Workspace status error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // OAuth URL for connecting workspace (state = siteConfigId)
+  app.get("/api/workspace/connect/:siteConfigId", (req, res) => {
+    try {
+      const { siteConfigId } = req.params;
+      const service = createGoogleWorkspaceService();
+      const authUrl = service.getAuthUrl(siteConfigId);
+      res.json({ authUrl });
+    } catch (error: any) {
+      console.error("Workspace connect URL error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Legacy: Get Google Workspace OAuth URL (query siteConfigId)
   app.get("/api/google/auth-url", (req, res) => {
     try {
-      const { businessId } = req.query;
-      if (!businessId || typeof businessId !== 'string') {
-        return res.status(400).json({ error: "businessId is required" });
+      const siteConfigId = (req.query.businessId ?? req.query.siteConfigId) as string | undefined;
+      if (!siteConfigId || typeof siteConfigId !== "string") {
+        return res.status(400).json({ error: "siteConfigId or businessId is required" });
       }
-
       const service = createGoogleWorkspaceService();
-      const authUrl = service.getAuthUrl(businessId);
+      const authUrl = service.getAuthUrl(siteConfigId);
       res.json({ authUrl });
     } catch (error: any) {
       console.error("Google auth URL error:", error);
@@ -1208,63 +1284,112 @@ export async function registerRoutes(
     }
   });
 
-  // Google OAuth callback
+  // Google OAuth callback (state = siteConfigId); persist tokens to DB
   app.get("/api/google/callback", async (req, res) => {
     try {
-      const { code, state: businessId } = req.query;
-      
-      if (!code || typeof code !== 'string') {
+      const { code, state: siteConfigId } = req.query;
+      if (!code || typeof code !== "string") {
         return res.status(400).send("Authorization code not provided");
       }
-      if (!businessId || typeof businessId !== 'string') {
-        return res.status(400).send("Business ID not provided");
+      if (!siteConfigId || typeof siteConfigId !== "string") {
+        return res.status(400).send("State (siteConfigId) not provided");
       }
-
       const service = createGoogleWorkspaceService();
       const credentials = await service.exchangeCode(code);
-      
-      // Store credentials for this business
-      googleWorkspaceCredentials.set(businessId, credentials);
-      
-      // Redirect back to the admin panel with success
-      res.redirect(`/website-builder?google_connected=true&businessId=${businessId}`);
+      const tokenExpiry = credentials.expiryDate ? new Date(credentials.expiryDate) : null;
+      const existing = await db.query.workspaceConfigurations.findFirst({
+        where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+      });
+      if (existing) {
+        await db.update(workspaceConfigurations)
+          .set({
+            accessToken: credentials.accessToken,
+            refreshToken: credentials.refreshToken ?? null,
+            tokenExpiry,
+            status: "connected",
+            statusMessage: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(workspaceConfigurations.siteConfigId, siteConfigId));
+      } else {
+        await db.insert(workspaceConfigurations).values({
+          siteConfigId,
+          accessToken: credentials.accessToken,
+          refreshToken: credentials.refreshToken ?? null,
+          tokenExpiry,
+          status: "connected",
+          updatedAt: new Date(),
+        });
+      }
+      res.redirect(`/website-builder?google_connected=true&siteConfigId=${siteConfigId}`);
     } catch (error: any) {
       console.error("Google OAuth callback error:", error);
       res.redirect(`/website-builder?google_error=${encodeURIComponent(error.message)}`);
     }
   });
 
-  // Check if business has Google Workspace connected
-  app.get("/api/google/connection/:businessId", (req, res) => {
-    const { businessId } = req.params;
-    const hasCredentials = googleWorkspaceCredentials.has(businessId);
-    res.json({ connected: hasCredentials });
+  // Save workspace preferences (enabledApps, etc.)
+  app.patch("/api/workspace/save/:siteConfigId", async (req, res) => {
+    try {
+      const { siteConfigId } = req.params;
+      const { enabledApps, status } = req.body as { enabledApps?: Record<string, boolean>; status?: string };
+      const existing = await db.query.workspaceConfigurations.findFirst({
+        where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+      });
+      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      if (enabledApps !== undefined) updates.enabledApps = enabledApps;
+      if (status !== undefined) updates.status = status;
+      if (existing) {
+        await db.update(workspaceConfigurations).set(updates as any).where(eq(workspaceConfigurations.siteConfigId, siteConfigId));
+      } else {
+        await db.insert(workspaceConfigurations).values({
+          siteConfigId,
+          ...(enabledApps && { enabledApps }),
+          ...(status && { status }),
+          updatedAt: new Date(),
+        });
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Workspace save error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check if site has Google Workspace connected
+  app.get("/api/workspace/connection/:siteConfigId", async (req, res) => {
+    const { siteConfigId } = req.params;
+    const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
+    res.json({ connected: !!credentials });
+  });
+
+  app.get("/api/google/connection/:siteConfigId", async (req, res) => {
+    const { siteConfigId } = req.params;
+    const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
+    res.json({ connected: !!credentials });
   });
 
   // Execute a Google Workspace tool
   app.post("/api/google/execute-tool", async (req, res) => {
     try {
-      const { businessId, toolName, args } = req.body;
-      
-      if (!businessId) {
-        return res.status(400).json({ success: false, error: "businessId is required" });
+      const { siteConfigId, toolName, args } = req.body as { siteConfigId?: string; businessId?: string; toolName: string; args?: Record<string, unknown> };
+      const id = siteConfigId ?? (req.body as any).businessId;
+      if (!id) {
+        return res.status(400).json({ success: false, error: "siteConfigId is required" });
       }
       if (!toolName) {
         return res.status(400).json({ success: false, error: "toolName is required" });
       }
-
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(id);
       if (!credentials) {
-        return res.status(401).json({ 
-          success: false, 
-          error: "Google Workspace not connected for this business",
-          requiresAuth: true
+        return res.status(401).json({
+          success: false,
+          error: "Google Workspace not connected for this site",
+          requiresAuth: true,
         });
       }
-
       const service = createGoogleWorkspaceService(credentials);
       const result = await service.executeTool(toolName, args || {});
-      
       res.json(result);
     } catch (error: any) {
       console.error("Google tool execution error:", error);
@@ -1272,11 +1397,50 @@ export async function registerRoutes(
     }
   });
 
-  // Disconnect Google Workspace
-  app.delete("/api/google/connection/:businessId", (req, res) => {
-    const { businessId } = req.params;
-    const wasConnected = googleWorkspaceCredentials.delete(businessId);
-    res.json({ success: true, wasConnected });
+  // Disconnect Google Workspace (clear tokens, keep row)
+  app.delete("/api/workspace/connection/:siteConfigId", async (req, res) => {
+    try {
+      const { siteConfigId } = req.params;
+      const existing = await db.query.workspaceConfigurations.findFirst({
+        where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+      });
+      if (!existing) {
+        return res.json({ success: true, wasConnected: false });
+      }
+      await db.update(workspaceConfigurations)
+        .set({
+          accessToken: null,
+          refreshToken: null,
+          tokenExpiry: null,
+          status: "disconnected",
+          googleEmail: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(workspaceConfigurations.siteConfigId, siteConfigId));
+      res.json({ success: true, wasConnected: true });
+    } catch (error: any) {
+      console.error("Workspace disconnect error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/google/connection/:siteConfigId", async (req, res) => {
+    const { siteConfigId } = req.params;
+    const existing = await db.query.workspaceConfigurations.findFirst({
+      where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+    });
+    if (!existing) return res.json({ success: true, wasConnected: false });
+    await db.update(workspaceConfigurations)
+      .set({
+        accessToken: null,
+        refreshToken: null,
+        tokenExpiry: null,
+        status: "disconnected",
+        googleEmail: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(workspaceConfigurations.siteConfigId, siteConfigId));
+    res.json({ success: true, wasConnected: true });
   });
 
   // ============ Google Drive API ============
@@ -1284,10 +1448,10 @@ export async function registerRoutes(
   const multer = (await import('multer')).default;
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-  app.get("/api/google/drive/drives/:businessId", async (req, res) => {
+  app.get("/api/google/drive/drives/:siteConfigId", async (req, res) => {
     try {
-      const { businessId } = req.params;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const { siteConfigId } = req.params;
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1299,11 +1463,11 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/google/drive/files/:businessId", async (req, res) => {
+  app.get("/api/google/drive/files/:siteConfigId", async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const { siteConfigId } = req.params;
       const { folderId = 'root', pageToken, pageSize } = req.query;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1319,12 +1483,12 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/google/drive/folder/:businessId", async (req, res) => {
+  app.post("/api/google/drive/folder/:siteConfigId", async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const { siteConfigId } = req.params;
       const { name, parentId } = req.body;
       if (!name) return res.status(400).json({ success: false, error: "Folder name is required" });
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1336,13 +1500,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/google/drive/upload/:businessId", upload.single('file'), async (req, res) => {
+  app.post("/api/google/drive/upload/:siteConfigId", upload.single('file'), async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const { siteConfigId } = req.params;
       const { parentId } = req.body;
       const file = (req as any).file;
       if (!file) return res.status(400).json({ success: false, error: "No file provided" });
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1354,10 +1518,10 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/google/drive/files/:businessId/:fileId", async (req, res) => {
+  app.delete("/api/google/drive/files/:siteConfigId/:fileId", async (req, res) => {
     try {
-      const { businessId, fileId } = req.params;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const { siteConfigId, fileId } = req.params;
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1371,11 +1535,11 @@ export async function registerRoutes(
 
   // ============ Google Calendar API ============
 
-  app.get("/api/google/calendar/events/:businessId", async (req, res) => {
+  app.get("/api/google/calendar/events/:siteConfigId", async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const { siteConfigId } = req.params;
       const { maxResults, timeMin } = req.query;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1390,14 +1554,14 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/google/calendar/events/:businessId", async (req, res) => {
+  app.post("/api/google/calendar/events/:siteConfigId", async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const { siteConfigId } = req.params;
       const { summary, description, startTime, endTime, attendees } = req.body;
       if (!summary || !startTime || !endTime) {
         return res.status(400).json({ success: false, error: "summary, startTime, and endTime are required" });
       }
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1409,10 +1573,10 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/google/calendar/events/:businessId/:eventId", async (req, res) => {
+  app.patch("/api/google/calendar/events/:siteConfigId/:eventId", async (req, res) => {
     try {
-      const { businessId, eventId } = req.params;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const { siteConfigId, eventId } = req.params;
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1424,10 +1588,10 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/google/calendar/events/:businessId/:eventId", async (req, res) => {
+  app.delete("/api/google/calendar/events/:siteConfigId/:eventId", async (req, res) => {
     try {
-      const { businessId, eventId } = req.params;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const { siteConfigId, eventId } = req.params;
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -4570,6 +4734,8 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
         widgetColor: z.string().optional(),
         greetingMessage: z.string().nullable().optional(),
         knowledgeLibrary: z.array(z.object({ id: z.string(), title: z.string(), content: z.string(), addedAt: z.string() })).nullable().optional(),
+        heroImageUrl: z.string().nullable().optional(),
+        heroImagePrompt: z.string().nullable().optional(),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
@@ -4587,6 +4753,55 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // AI Hero Image Generation — uses Flux via Replicate (same pattern as classroom)
+  app.post("/api/site-configs/:id/generate-hero-image", async (req, res) => {
+    try {
+      const siteConfig = await storage.getSiteConfig(req.params.id);
+      if (!siteConfig) return res.status(404).json({ error: "Site not found" });
+
+      const replicateToken = process.env.REPLICATE_API_TOKEN;
+      if (!replicateToken) return res.status(503).json({ error: "Image generation not configured. Please add REPLICATE_API_TOKEN to Doppler." });
+
+      // Build a rich, business-specific prompt
+      const { customPrompt } = req.body || {};
+      const businessName = siteConfig.name || "a local business";
+      const placeData = siteConfig.placeData as any;
+      const types = (placeData?.types || []).filter((t: string) => !['point_of_interest','establishment'].includes(t)).slice(0, 3).join(', ');
+      const address = placeData?.formatted_address?.split(',').slice(-2).join(',').trim() || '';
+
+      const prompt = customPrompt || [
+        `Professional hero image for ${businessName}`,
+        types ? `a ${types} business` : null,
+        address ? `located in ${address}` : null,
+        `— cinematic wide angle shot, golden hour lighting, photorealistic, ultra high resolution,`,
+        `modern architectural photography style, inviting atmosphere, no text overlays`,
+      ].filter(Boolean).join(', ');
+
+      const Replicate = (await import("replicate")).default;
+      const replicate = new Replicate({ auth: replicateToken });
+
+      const output = await replicate.run("black-forest-labs/flux-schnell", {
+        input: {
+          prompt,
+          aspect_ratio: "16:9",
+          output_format: "webp",
+          output_quality: 92,
+        },
+      });
+
+      const imageUrl = (Array.isArray(output) ? output[0] : output) as string;
+      if (!imageUrl) throw new Error("No image URL returned from generator");
+
+      // Persist the URL back to site_configs
+      await storage.updateSiteConfig(req.params.id, { heroImageUrl: imageUrl, heroImagePrompt: prompt } as any);
+
+      res.json({ imageUrl, prompt });
+    } catch (err: any) {
+      console.error("[HeroImage] Generation error:", err.message);
+      res.status(500).json({ error: err.message });
     }
   });
 
@@ -7257,7 +7472,17 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       const { getStripeClient, getStripePublishableKey, STRIPE_PRICE_IDS } = await import('./stripeClient');
       const stripe = getStripeClient();
 
-      const customerSession = (req as any).session?.customerAccount;
+      // Support Bearer token auth (primary) or legacy session (fallback)
+      const bearerToken = (req.headers.authorization || '').replace('Bearer ', '').trim();
+      let customerSession: { id: string; email?: string } | null = null;
+      if (bearerToken) {
+        const dbSession = await storage.getValidCustomerSession(bearerToken);
+        if (dbSession) {
+          const account = await storage.getCustomerAccountById(dbSession.customerAccountId);
+          if (account?.isActive) customerSession = { id: account.id, email: account.email ?? undefined };
+        }
+      }
+      if (!customerSession) customerSession = (req as any).session?.customerAccount ?? null;
       if (!customerSession?.id) {
         return res.status(401).json({ error: 'Authentication required' });
       }

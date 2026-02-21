@@ -12,12 +12,12 @@ import { z } from "zod";
 export function registerWorkspaceOnboardingRoutes(app: Express) {
   
   /**
-   * Get onboarding status for a business
+   * Get onboarding status for a site (by siteConfigId)
    */
-  app.get("/api/workspace/onboarding/status/:businessId", async (req: Request, res: Response) => {
+  app.get("/api/workspace/onboarding/status/:siteConfigId", async (req: Request, res: Response) => {
     try {
-      const { businessId } = req.params;
-      const status = await workspaceOrchestrator.getOnboardingStatus(businessId);
+      const { siteConfigId } = req.params;
+      const status = await workspaceOrchestrator.getOnboardingStatus(siteConfigId);
       res.json(status);
     } catch (error: any) {
       console.error('Onboarding status error:', error);
@@ -31,7 +31,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
   app.post("/api/workspace/onboarding/initiate", async (req: Request, res: Response) => {
     try {
       const schema = z.object({
-        businessId: z.string(),
+        siteConfigId: z.string(),
         swotAnalysisId: z.string(),
       });
 
@@ -41,7 +41,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
       }
 
       const result = await workspaceOrchestrator.initiateOnboarding(
-        parsed.data.businessId,
+        parsed.data.siteConfigId,
         parsed.data.swotAnalysisId
       );
 
@@ -92,10 +92,10 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
   /**
    * Get OAuth URL for integrated email setup
    */
-  app.get("/api/workspace/onboarding/auth-url/:businessId", async (req: Request, res: Response) => {
+  app.get("/api/workspace/onboarding/auth-url/:siteConfigId", async (req: Request, res: Response) => {
     try {
-      const { businessId } = req.params;
-      const authUrl = workspaceOrchestrator.getAuthUrl(businessId);
+      const { siteConfigId } = req.params;
+      const authUrl = workspaceOrchestrator.getAuthUrl(siteConfigId);
       res.json({ authUrl });
     } catch (error: any) {
       console.error('Auth URL generation error:', error);
@@ -145,8 +145,8 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
         return res.status(400).json({ error: 'Missing code or state parameter' });
       }
 
-      // The state parameter contains the businessId
-      const businessId = state as string;
+      // The state parameter contains the siteConfigId
+      const siteConfigId = state as string;
 
       // Return a success page with the auth code
       // In production, this would redirect to the frontend with the code
@@ -198,7 +198,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
           <div class="container">
             <h1>✓ Authorization Successful</h1>
             <p>Your Google Workspace account has been connected successfully!</p>
-            <p>Business ID: <strong>${businessId}</strong></p>
+            <p>Site Config ID: <strong>${siteConfigId}</strong></p>
             <div class="code">Auth Code: ${code}</div>
             <p>You can now close this window and return to the application to complete setup.</p>
             <a href="/" class="btn">Return to Dashboard</a>
@@ -218,7 +218,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
   app.post("/api/workspace/onboarding/swot-complete", async (req: Request, res: Response) => {
     try {
       const schema = z.object({
-        businessId: z.string(),
+        siteConfigId: z.string(),
         swotAnalysisId: z.string(),
       });
 
@@ -228,7 +228,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
       }
 
       const result = await workspaceOrchestrator.onSwotComplete(
-        parsed.data.businessId,
+        parsed.data.siteConfigId,
         parsed.data.swotAnalysisId
       );
 
@@ -294,7 +294,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
   app.post("/api/workspace/consultation/start", async (req: Request, res: Response) => {
     try {
       const schema = z.object({
-        businessId: z.string(),
+        siteConfigId: z.string(),
         businessName: z.string(),
         swotAnalysisId: z.string(),
         workspaceConfigId: z.string(),
@@ -306,7 +306,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
       }
 
       const consultationPrompt = await aiBizBotConsultant.getConsultationPrompt({
-        businessId: parsed.data.businessId,
+        businessId: parsed.data.siteConfigId,
         businessName: parsed.data.businessName,
         swotAnalysis: parsed.data.swotAnalysisId,
         workspaceConfigId: parsed.data.workspaceConfigId,
@@ -330,7 +330,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
   app.post("/api/workspace/consultation/message", async (req: Request, res: Response) => {
     try {
       const schema = z.object({
-        businessId: z.string(),
+        siteConfigId: z.string(),
         businessName: z.string(),
         swotAnalysisId: z.string(),
         workspaceConfigId: z.string(),
@@ -348,7 +348,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
 
       const result = await aiBizBotConsultant.processConsultationMessage(
         {
-          businessId: parsed.data.businessId,
+          businessId: parsed.data.siteConfigId,
           businessName: parsed.data.businessName,
           swotAnalysis: parsed.data.swotAnalysisId,
           workspaceConfigId: parsed.data.workspaceConfigId,
@@ -375,7 +375,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
   app.post("/api/workspace/consultation/analyze", async (req: Request, res: Response) => {
     try {
       const schema = z.object({
-        businessId: z.string(),
+        siteConfigId: z.string(),
         businessName: z.string(),
         swotAnalysisId: z.string(),
         workspaceConfigId: z.string(),
@@ -392,7 +392,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
 
       const customization = await aiBizBotConsultant.analyzeConsultation(
         {
-          businessId: parsed.data.businessId,
+          businessId: parsed.data.siteConfigId,
           businessName: parsed.data.businessName,
           swotAnalysis: parsed.data.swotAnalysisId,
           workspaceConfigId: parsed.data.workspaceConfigId,

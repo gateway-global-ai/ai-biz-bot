@@ -15,8 +15,9 @@ import {
   Bot, Plus, Globe, MessageSquare, Settings, Trash2,
   Send, Loader2, ExternalLink, Code, Copy, Check,
   Sparkles, Clock, Star, MapPin, Phone, Zap,
-  ShoppingCart, Headphones, Palette, BookOpen, UserPlus
+  ShoppingCart, Headphones, Palette, BookOpen, UserPlus, Image as ImageIcon, Building2
 } from 'lucide-react';
+import { GoogleWorkspacePanel } from '@/components/workspace/GoogleWorkspacePanel';
 import type { Agent, SiteConfig, BotTemplate } from '@shared/schema';
 
 interface ChatMessage {
@@ -331,11 +332,15 @@ function AdminPanel({
 }) {
   const placeData = site.placeData as any;
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'settings' | 'plan' | 'agent' | 'chat' | 'logs' | 'embed' | 'knowledge'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'plan' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'knowledge'>('settings');
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [deployingTemplateId, setDeployingTemplateId] = useState<string | null>(null);
   const [savingAgentConfig, setSavingAgentConfig] = useState(false);
   const [toolCallLog, setToolCallLog] = useState<Array<{ ts: string; tool: string; type: string }>>([]);
+  // Hero image generation
+  const [heroImageUrl, setHeroImageUrl] = useState<string>((site as any).heroImageUrl || '');
+  const [heroCustomPrompt, setHeroCustomPrompt] = useState('');
+  const [generatingHero, setGeneratingHero] = useState(false);
 
   const { data: agentTemplates = [] } = useQuery<any[]>({
     queryKey: ['/api/agents/templates'],
@@ -514,10 +519,12 @@ function AdminPanel({
     });
   };
 
+  const sitePlan = (site as any).plan || 'free';
   const tabs = [
     { id: 'settings' as const, label: 'Settings', icon: Settings },
     { id: 'plan' as const, label: 'Plan', icon: Sparkles },
     { id: 'agent' as const, label: 'Agent', icon: Bot },
+    ...(sitePlan === 'voice' ? [{ id: 'workspace' as const, label: 'Workspace', icon: Building2 }] : []),
     { id: 'knowledge' as const, label: 'Knowledge', icon: BookOpen },
     { id: 'chat' as const, label: 'Test Chat', icon: MessageSquare },
     { id: 'logs' as const, label: 'Logs', icon: Clock },
@@ -659,6 +666,10 @@ function AdminPanel({
           );
         })()}
 
+        {activeTab === 'workspace' && (
+          <GoogleWorkspacePanel siteConfigId={site.id} />
+        )}
+
         {activeTab === 'settings' && (
           <div className="space-y-5">
             <div>
@@ -774,6 +785,94 @@ function AdminPanel({
                 </CardContent>
               </Card>
             )}
+
+            {/* ── Hero Image Generator ── */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-violet-400" />
+                  Hero Image
+                </CardTitle>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  AI-generated background for your website hero section. Powered by Flux.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* Current image preview */}
+                {heroImageUrl ? (
+                  <div className="relative rounded-md overflow-hidden h-28 bg-slate-900">
+                    <img
+                      src={heroImageUrl}
+                      alt="Hero preview"
+                      className="w-full h-full object-cover opacity-90"
+                      onError={() => setHeroImageUrl('')}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
+                    <button
+                      className="absolute top-2 right-2 text-[10px] bg-red-600/80 hover:bg-red-500 text-white px-2 py-0.5 rounded"
+                      onClick={async () => {
+                        setHeroImageUrl('');
+                        await fetch(`/api/site-configs/${site.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ heroImageUrl: null }),
+                        });
+                        onUpdate({ heroImageUrl: null } as any);
+                        toast({ title: 'Hero image removed' });
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="rounded-md h-20 bg-gradient-to-br from-blue-950 via-slate-900 to-slate-950 flex items-center justify-center border border-dashed border-slate-700">
+                    <p className="text-[11px] text-slate-500">No hero image — using gradient fallback</p>
+                  </div>
+                )}
+                {/* Custom prompt */}
+                <div>
+                  <Label className="text-slate-400 text-[10px] mb-1 block">Custom prompt (optional)</Label>
+                  <Textarea
+                    value={heroCustomPrompt}
+                    onChange={(e) => setHeroCustomPrompt(e.target.value)}
+                    placeholder="e.g. Modern Italian restaurant interior, warm candlelight, rich wood accents…"
+                    className="bg-slate-900 border-slate-700 text-white text-xs resize-none"
+                    rows={2}
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full bg-violet-600 hover:bg-violet-500 text-white"
+                  disabled={generatingHero}
+                  data-testid="button-generate-hero"
+                  onClick={async () => {
+                    setGeneratingHero(true);
+                    try {
+                      const res = await fetch(`/api/site-configs/${site.id}/generate-hero-image`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ customPrompt: heroCustomPrompt || undefined }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error || 'Generation failed');
+                      setHeroImageUrl(data.imageUrl);
+                      onUpdate({ heroImageUrl: data.imageUrl } as any);
+                      toast({ title: '✨ Hero image generated!', description: 'Your website hero has been updated.' });
+                    } catch (err: any) {
+                      toast({ title: 'Generation failed', description: err.message, variant: 'destructive' });
+                    } finally {
+                      setGeneratingHero(false);
+                    }
+                  }}
+                >
+                  {generatingHero ? (
+                    <><Loader2 className="w-3 h-3 animate-spin mr-2" />Generating… (~15s)</>
+                  ) : (
+                    <><Sparkles className="w-3 h-3 mr-2" />Generate AI Hero Image</>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         )}
 

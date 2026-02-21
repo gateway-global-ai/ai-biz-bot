@@ -7,7 +7,7 @@
 
 import { GoogleWorkspaceService, GoogleWorkspaceCredentials } from '../mcp/googleWorkspace';
 import { db } from '../db';
-import { workspaceConfigurations, swotAnalyses, customerAccounts } from '@shared/schema';
+import { workspaceConfigurations, siteConfigs } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 export interface OnboardingDecision {
@@ -47,36 +47,33 @@ export class WorkspaceOrchestrator {
   /**
    * Start the onboarding flow after SWOT analysis
    */
-  async initiateOnboarding(businessId: string, swotAnalysisId: string): Promise<WorkspaceSetupResult> {
+  async initiateOnboarding(siteConfigId: string, swotAnalysisId: string): Promise<WorkspaceSetupResult> {
     try {
-      // Check if workspace already exists
       const existing = await db.query.workspaceConfigurations.findFirst({
-        where: eq(workspaceConfigurations.businessId, businessId),
+        where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
       });
 
-      if (existing && existing.setupStatus === 'completed') {
+      if (existing && existing.status === 'connected') {
         return {
           success: false,
-          error: 'Workspace already configured for this business',
+          error: 'Workspace already configured for this site',
         };
       }
 
-      // Create or update workspace configuration
       const [config] = await db
         .insert(workspaceConfigurations)
         .values({
-          businessId,
-          swotAnalysisId,
-          setupType: 'hosted', // Default, will be updated based on user choice
-          setupStatus: 'pending',
-          setupStep: 'email_decision',
+          siteConfigId,
+          setupType: 'hosted',
+          status: 'disconnected',
+          statusMessage: 'email_decision',
+          updatedAt: new Date(),
         })
         .onConflictDoUpdate({
-          target: workspaceConfigurations.businessId,
+          target: workspaceConfigurations.siteConfigId,
           set: {
-            swotAnalysisId,
-            setupStatus: 'pending',
-            setupStep: 'email_decision',
+            status: 'disconnected',
+            statusMessage: 'email_decision',
             updatedAt: new Date(),
           },
         })
@@ -116,20 +113,16 @@ export class WorkspaceOrchestrator {
       // Generate email address
       const email = `${params.preferredUsername}@gatewayglobal.ai`;
 
-      // Update configuration status
       await db
         .update(workspaceConfigurations)
         .set({
           setupType: 'hosted',
-          hostedEmail: email,
-          workspacePlan: params.workspacePlan,
-          setupStatus: 'in_progress',
-          setupStep: 'creating_user',
+          status: 'connected',
+          statusMessage: 'creating_user',
           updatedAt: new Date(),
         })
         .where(eq(workspaceConfigurations.id, workspaceConfigId));
 
-      // Create Google Workspace user via Admin API
       const inviteResult = await this.workspaceService.sendUserInvitation(
         email,
         params.firstName,
@@ -140,8 +133,8 @@ export class WorkspaceOrchestrator {
         await db
           .update(workspaceConfigurations)
           .set({
-            setupStatus: 'failed',
-            setupError: inviteResult.error,
+            status: 'error',
+            statusMessage: inviteResult.error ?? 'Failed to create user',
             updatedAt: new Date(),
           })
           .where(eq(workspaceConfigurations.id, workspaceConfigId));
@@ -152,26 +145,23 @@ export class WorkspaceOrchestrator {
         };
       }
 
-      // Update with user ID
       await db
         .update(workspaceConfigurations)
         .set({
-          hostedUserId: inviteResult.data.id,
-          setupStep: 'creating_structure',
+          statusMessage: 'creating_structure',
           updatedAt: new Date(),
         })
         .where(eq(workspaceConfigurations.id, workspaceConfigId));
 
-      // Get business info for structure creation
-      const business = await db.query.customerAccounts.findFirst({
-        where: eq(customerAccounts.id, config.businessId),
+      const site = await db.query.siteConfigs.findFirst({
+        where: eq(siteConfigs.id, config.siteConfigId),
+        columns: { name: true },
       });
 
-      // Create workspace structure
       const structureResult = await this.createWorkspaceStructure(
         workspaceConfigId,
         params.businessName,
-        business?.name || 'Business'
+        site?.name || 'Business'
       );
 
       if (!structureResult.success) {
@@ -219,34 +209,31 @@ export class WorkspaceOrchestrator {
       // Exchange auth code for tokens
       const credentials = await this.workspaceService.exchangeCode(params.authCode);
 
-      // Update configuration
       await db
         .update(workspaceConfigurations)
         .set({
-          setupType: 'integrated',
-          integratedEmail: params.email,
+          setupType: 'oauth',
+          googleEmail: params.email,
           accessToken: credentials.accessToken,
-          refreshToken: credentials.refreshToken,
+          refreshToken: credentials.refreshToken ?? null,
           tokenExpiry: credentials.expiryDate ? new Date(credentials.expiryDate) : null,
-          setupStatus: 'in_progress',
-          setupStep: 'creating_structure',
+          status: 'connected',
+          statusMessage: 'creating_structure',
           updatedAt: new Date(),
         })
         .where(eq(workspaceConfigurations.id, workspaceConfigId));
 
-      // Set credentials for workspace service
       this.workspaceService.setCredentials(credentials);
 
-      // Get business info
-      const business = await db.query.customerAccounts.findFirst({
-        where: eq(customerAccounts.id, config.businessId),
+      const site = await db.query.siteConfigs.findFirst({
+        where: eq(siteConfigs.id, config.siteConfigId),
+        columns: { name: true },
       });
 
-      // Create workspace structure
       const structureResult = await this.createWorkspaceStructure(
         workspaceConfigId,
-        business?.name || 'Business',
-        'Business' // business type
+        site?.name || 'Business',
+        'Business'
       );
 
       if (!structureResult.success) {
@@ -271,8 +258,8 @@ export class WorkspaceOrchestrator {
       await db
         .update(workspaceConfigurations)
         .set({
-          setupStatus: 'failed',
-          setupError: error.message,
+          status: 'error',
+          statusMessage: error.message,
           updatedAt: new Date(),
         })
         .where(eq(workspaceConfigurations.id, workspaceConfigId));
@@ -297,12 +284,7 @@ export class WorkspaceOrchestrator {
         where: eq(workspaceConfigurations.id, workspaceConfigId),
       });
 
-      let swotData = null;
-      if (config?.swotAnalysisId) {
-        swotData = await db.query.swotAnalyses.findFirst({
-          where: eq(swotAnalyses.id, config.swotAnalysisId),
-        });
-      }
+      const swotData = null;
 
       // Create basic structure - AI Biz Bot will customize further based on conversation
       const result = await this.workspaceService.createWorkspaceStructure({
@@ -314,19 +296,13 @@ export class WorkspaceOrchestrator {
         return { success: false, error: result.error };
       }
 
-      // Update configuration with structure IDs
-      // Mark as 'awaiting_customization' instead of 'completed'
-      // AI Biz Bot will complete setup after consultation
       await db
         .update(workspaceConfigurations)
         .set({
-          driveFolderId: result.data.folders.root?.id,
-          clientsFolderId: result.data.folders.clients?.id,
-          operationsFolderId: result.data.folders.operations?.id,
-          marketingFolderId: result.data.folders.marketing?.id,
-          leadTrackingSheetId: result.data.sheets.leadTracking?.id,
-          setupStatus: 'awaiting_customization',
-          setupStep: 'ai_consultation',
+          driveFolderId: result.data.folders?.root?.id ?? undefined,
+          leadTrackingSheetId: result.data.sheets?.leadTracking?.id ?? undefined,
+          status: 'connected',
+          statusMessage: 'ai_consultation',
           updatedAt: new Date(),
         })
         .where(eq(workspaceConfigurations.id, workspaceConfigId));
@@ -354,8 +330,8 @@ export class WorkspaceOrchestrator {
       await db
         .update(workspaceConfigurations)
         .set({
-          setupStatus: 'failed',
-          setupError: error.message,
+          status: 'error',
+          statusMessage: error.message,
           updatedAt: new Date(),
         })
         .where(eq(workspaceConfigurations.id, workspaceConfigId));
@@ -416,12 +392,11 @@ export class WorkspaceOrchestrator {
         }
       }
 
-      // Mark as completed
       await db
         .update(workspaceConfigurations)
         .set({
-          setupStatus: 'completed',
-          setupStep: 'completed',
+          status: 'connected',
+          statusMessage: 'completed',
           updatedAt: new Date(),
         })
         .where(eq(workspaceConfigurations.id, workspaceConfigId));
@@ -449,9 +424,9 @@ export class WorkspaceOrchestrator {
   /**
    * Get onboarding status
    */
-  async getOnboardingStatus(businessId: string): Promise<any> {
+  async getOnboardingStatus(siteConfigId: string): Promise<any> {
     const config = await db.query.workspaceConfigurations.findFirst({
-      where: eq(workspaceConfigurations.businessId, businessId),
+      where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
     });
 
     if (!config) {
@@ -462,11 +437,11 @@ export class WorkspaceOrchestrator {
     }
 
     return {
-      status: config.setupStatus,
-      step: config.setupStep,
+      status: config.status ?? 'disconnected',
+      step: config.statusMessage,
       setupType: config.setupType,
-      email: config.hostedEmail || config.integratedEmail,
-      error: config.setupError,
+      email: config.googleEmail,
+      error: config.statusMessage,
       workspaceConfigId: config.id,
     };
   }
@@ -474,32 +449,29 @@ export class WorkspaceOrchestrator {
   /**
    * Generate OAuth URL for integrated email setup
    */
-  getAuthUrl(businessId: string): string {
-    return this.workspaceService.getAuthUrl(businessId);
+  getAuthUrl(siteConfigId: string): string {
+    return this.workspaceService.getAuthUrl(siteConfigId);
   }
 
   /**
    * Trigger orchestrator after SWOT completion
    */
-  async onSwotComplete(businessId: string, swotAnalysisId: string): Promise<WorkspaceSetupResult> {
-    // Mark SWOT as completed in workspace config
+  async onSwotComplete(siteConfigId: string, swotAnalysisId: string): Promise<WorkspaceSetupResult> {
     const existing = await db.query.workspaceConfigurations.findFirst({
-      where: eq(workspaceConfigurations.businessId, businessId),
+      where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
     });
 
     if (existing) {
       await db
         .update(workspaceConfigurations)
         .set({
-          swotAnalysisId,
-          swotCompletedAt: new Date(),
+          statusMessage: `swot_complete:${swotAnalysisId}`,
           updatedAt: new Date(),
         })
         .where(eq(workspaceConfigurations.id, existing.id));
     }
 
-    // Initiate onboarding
-    return this.initiateOnboarding(businessId, swotAnalysisId);
+    return this.initiateOnboarding(siteConfigId, swotAnalysisId);
   }
 }
 
