@@ -176,6 +176,12 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             } else if (msg.metadata?.tool_type) {
               // Tool result without text (e.g. map, business intelligence)
               addMessage('assistant', undefined, msg.metadata);
+
+              // Show SuccessAnimation when an onboarding email is confirmed sent
+              if (msg.metadata.tool_type === 'email_sent') {
+                setShowSuccessAnimation(true);
+                setTimeout(() => setShowSuccessAnimation(false), 3000);
+              }
             }
           } else if (msg.type === 'error') {
             setIsProcessing(false);

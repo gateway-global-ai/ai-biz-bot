@@ -334,6 +334,8 @@ function AdminPanel({
   const [activeTab, setActiveTab] = useState<'settings' | 'plan' | 'agent' | 'chat' | 'logs' | 'embed' | 'knowledge'>('settings');
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [deployingTemplateId, setDeployingTemplateId] = useState<string | null>(null);
+  const [savingAgentConfig, setSavingAgentConfig] = useState(false);
+  const [toolCallLog, setToolCallLog] = useState<Array<{ ts: string; tool: string; type: string }>>([]);
 
   const { data: agentTemplates = [] } = useQuery<any[]>({
     queryKey: ['/api/agents/templates'],
@@ -370,6 +372,63 @@ function AdminPanel({
       setDeployingTemplateId(null);
     }
   };
+
+  // Fetch the live configuration of the currently assigned agent
+  const { data: assignedAgentConfig, refetch: refetchAgentConfig } = useQuery<any>({
+    queryKey: ['/api/agents', site.assignedAgentId],
+    queryFn: async () => {
+      if (!site.assignedAgentId) return null;
+      const res = await fetch(`/api/agents/${site.assignedAgentId}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!site.assignedAgentId && activeTab === 'agent',
+  });
+
+  const assignedTemplateId: string = assignedAgentConfig?.templateId || '';
+  const isQualifier = assignedTemplateId === 'lead-qualifier';
+  const isCloser = assignedTemplateId === 'sales-closer';
+  const hasSkillPanel = isQualifier || isCloser;
+
+  const currentSkillToggles: Record<string, boolean> = assignedAgentConfig?.configuration?.skillToggles || {};
+  const currentToolLimits: Record<string, number> = assignedAgentConfig?.configuration?.toolLimits || {};
+
+  const saveAgentConfiguration = async (patch: Record<string, any>) => {
+    if (!site.assignedAgentId) return;
+    setSavingAgentConfig(true);
+    try {
+      const merged = {
+        ...(assignedAgentConfig?.configuration || {}),
+        ...patch,
+      };
+      const res = await fetch(`/api/agents/${site.assignedAgentId}/configuration`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ configuration: merged }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      await refetchAgentConfig();
+      toast({ title: 'Agent Updated', description: 'Configuration saved.' });
+    } catch (err: any) {
+      toast({ title: 'Save Failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setSavingAgentConfig(false);
+    }
+  };
+
+  // Load tool call activity log from localStorage when agent tab is open
+  useEffect(() => {
+    if (activeTab !== 'agent') return;
+    const readLog = () => {
+      try {
+        const raw = localStorage.getItem('gg_tool_log');
+        if (raw) setToolCallLog(JSON.parse(raw).slice(0, 20));
+      } catch { /* ignore */ }
+    };
+    readLog();
+    const interval = setInterval(readLog, 5000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: site.greetingMessage || `Hi! I'm the AI assistant for ${site.name}. How can I help you?` }
   ]);
@@ -883,6 +942,179 @@ function AdminPanel({
               />
               <p className="text-[10px] text-slate-500 mt-1">Custom instructions for the AI on this site.</p>
             </div>
+
+            {/* ── Skills Panel (Lead Qualifier & Sales Closer only) ── */}
+            {hasSkillPanel && (
+              <Card className="bg-slate-800/50 border-slate-700">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    Agent Skills
+                    <span className="ml-auto text-[10px] text-slate-500 font-normal">
+                      {isQualifier ? 'Lead Qualifier' : 'Sales Closer'}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {isQualifier && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-slate-200 font-medium">Empathy Mode</p>
+                          <p className="text-[10px] text-slate-500">Agent pivots to calming cadence when frustration is detected in voice.</p>
+                        </div>
+                        <Switch
+                          checked={currentSkillToggles.empathy_mode ?? true}
+                          onCheckedChange={(v) => saveAgentConfiguration({
+                            skillToggles: { ...currentSkillToggles, empathy_mode: v },
+                          })}
+                          disabled={savingAgentConfig}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-slate-200 font-medium">Aggressive Qualification</p>
+                          <p className="text-[10px] text-slate-500">Agent pushes harder on budget and authority signals. Off by default.</p>
+                        </div>
+                        <Switch
+                          checked={currentSkillToggles.aggressive_qualification ?? false}
+                          onCheckedChange={(v) => saveAgentConfiguration({
+                            skillToggles: { ...currentSkillToggles, aggressive_qualification: v },
+                          })}
+                          disabled={savingAgentConfig}
+                        />
+                      </div>
+                    </>
+                  )}
+                  {isCloser && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-slate-200 font-medium">Aggressive Closing Mode</p>
+                          <p className="text-[10px] text-slate-500">Agent uses stronger assumptive closes and urgency signals. Off by default.</p>
+                        </div>
+                        <Switch
+                          checked={currentSkillToggles.aggressive_closing ?? false}
+                          onCheckedChange={(v) => saveAgentConfiguration({
+                            skillToggles: { ...currentSkillToggles, aggressive_closing: v },
+                          })}
+                          disabled={savingAgentConfig}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-slate-200 font-medium">Urgency Injection</p>
+                          <p className="text-[10px] text-slate-500">Agent activates scarcity signals after 8 min without commitment.</p>
+                        </div>
+                        <Switch
+                          checked={currentSkillToggles.urgency_injection ?? true}
+                          onCheckedChange={(v) => saveAgentConfiguration({
+                            skillToggles: { ...currentSkillToggles, urgency_injection: v },
+                          })}
+                          disabled={savingAgentConfig}
+                        />
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── Tool Limits (Lead Qualifier & Sales Closer only) ── */}
+            {hasSkillPanel && (
+              <Card className="bg-slate-800/50 border-slate-700">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-slate-400" />
+                    Tool Limits
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {isQualifier && (
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="text-xs text-slate-200 font-medium">Max Meetings / Day</p>
+                        <p className="text-[10px] text-slate-500">Agent cannot book more than this many meetings per day via <code className="text-slate-400">book_meeting</code>.</p>
+                      </div>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        className="w-20 bg-slate-900 border-slate-700 text-white text-center"
+                        defaultValue={currentToolLimits.max_meetings_per_day ?? 10}
+                        onBlur={(e) => saveAgentConfiguration({
+                          toolLimits: { ...currentToolLimits, max_meetings_per_day: parseInt(e.target.value) || 10 },
+                        })}
+                      />
+                    </div>
+                  )}
+                  {isCloser && (
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="text-xs text-slate-200 font-medium">Max Discount %</p>
+                        <p className="text-[10px] text-slate-500">Agent cannot offer more than this % via <code className="text-slate-400">apply_discount</code>. Excess requests are auto-capped.</p>
+                      </div>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        className="w-20 bg-slate-900 border-slate-700 text-white text-center"
+                        defaultValue={currentToolLimits.max_discount_percent ?? 10}
+                        onBlur={(e) => saveAgentConfiguration({
+                          toolLimits: { ...currentToolLimits, max_discount_percent: parseInt(e.target.value) || 10 },
+                        })}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── Tool Call Activity Log ── */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-400" />
+                  Tool Call Activity
+                  <button
+                    className="ml-auto text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+                    onClick={() => {
+                      localStorage.removeItem('gg_tool_log');
+                      setToolCallLog([]);
+                    }}
+                  >
+                    Clear
+                  </button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {toolCallLog.length === 0 ? (
+                  <p className="text-[11px] text-slate-600 italic text-center py-3">
+                    No tool calls recorded yet. Start a voice session to see agent tool activity here.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {toolCallLog.map((entry, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[11px]">
+                        <span className="text-slate-600 font-mono shrink-0">
+                          {new Date(entry.ts).toLocaleTimeString()}
+                        </span>
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 shrink-0 ${
+                          entry.tool?.includes('crm') || entry.tool?.includes('qualify') ? 'text-emerald-400 border-emerald-400/30' :
+                          entry.tool?.includes('checkout') || entry.tool?.includes('discount') ? 'text-blue-400 border-blue-400/30' :
+                          'text-slate-400 border-slate-600'
+                        }`}>
+                          {entry.tool || entry.type || 'tool'}
+                        </Badge>
+                        <span className="text-slate-500 truncate">
+                          {entry.type ? `→ ${entry.type}` : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         )}
 

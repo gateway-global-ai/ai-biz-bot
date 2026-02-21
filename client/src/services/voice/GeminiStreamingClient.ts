@@ -513,9 +513,25 @@ export class GeminiStreamingClient implements IVoiceClient {
     // Handle tool result metadata from server
     if (message.type === 'tool_result') {
       console.log("[GeminiStreamingClient] Tool result received:", message.tool_name);
+
+      // Write to localStorage for admin activity log (keyed globally; admin reads this)
+      try {
+        const existing = JSON.parse(localStorage.getItem('gg_tool_log') || '[]');
+        existing.unshift({
+          ts: new Date().toISOString(),
+          tool: message.tool_name,
+          type: message.tool_type,
+          placeId: message.placeId,
+        });
+        // Keep last 50 entries
+        localStorage.setItem('gg_tool_log', JSON.stringify(existing.slice(0, 50)));
+      } catch {
+        // Non-fatal: localStorage may be unavailable
+      }
+
       this.messageCallback({
         type: 'response',
-        text: '', // No text, just tool metadata
+        text: '',
         metadata: {
           tool_type: message.tool_type,
           ...message.data,

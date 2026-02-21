@@ -264,6 +264,7 @@ export interface IStorage {
   // Platform Identity
   getOrCreatePlatformId(siteConfigId: string): Promise<string>;
   resolvePlatformId(input: { siteConfigId?: string; googlePlaceId?: string }): Promise<PlatformBusinessMap | null>;
+  getSiteConfigIdByPlatformId(platformId: string): Promise<string | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1306,6 +1307,15 @@ export class DatabaseStorage implements IStorage {
     }
 
     return null;
+  }
+
+  async getSiteConfigIdByPlatformId(platformId: string): Promise<string | null> {
+    const [row] = await db
+      .select({ siteConfigId: platformBusinessMap.siteConfigId })
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.platformId, platformId as any))
+      .limit(1);
+    return row?.siteConfigId ?? null;
   }
 }
 

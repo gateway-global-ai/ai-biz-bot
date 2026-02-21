@@ -7322,6 +7322,39 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         if (siteConfigId && plan) {
           await storage.updateSiteConfig(siteConfigId, { plan } as any);
           console.log(`[Stripe] Plan upgraded → site ${siteConfigId} is now on "${plan}"`);
+
+          // Post-payment onboarding email (non-fatal — never blocks the webhook response)
+          try {
+            const { sendPlatformEmail } = await import('./services/emailService');
+            const siteConfig = await storage.getSiteConfig(siteConfigId);
+            const platformId = await storage.getOrCreatePlatformId(siteConfigId);
+
+            let ownerEmail: string | null = null;
+            let ownerName = 'Valued Customer';
+            if (siteConfig?.ownerId) {
+              const owner = await storage.getCustomerAccountById(siteConfig.ownerId);
+              ownerEmail = owner?.email ?? null;
+              ownerName = owner?.name || ownerName;
+            }
+            // Fallback: use customer_email from Stripe session if owner email not in DB
+            const recipientEmail = ownerEmail || (session as any).customer_email || null;
+
+            if (recipientEmail && siteConfig) {
+              await sendPlatformEmail({
+                to: recipientEmail,
+                customerName: ownerName,
+                businessName: siteConfig.name || 'Your Business',
+                planName: plan,
+                platformId,
+                siteUrl: (siteConfig as any).domain ? `https://${(siteConfig as any).domain}` : '',
+              });
+              console.log(`[Stripe] Onboarding email sent → ${recipientEmail} (platform: ${platformId})`);
+            } else {
+              console.warn(`[Stripe] Onboarding email skipped — no recipient email for site ${siteConfigId}`);
+            }
+          } catch (emailErr: any) {
+            console.error('[Stripe] Onboarding email failed (non-fatal):', emailErr.message);
+          }
         }
       }
 

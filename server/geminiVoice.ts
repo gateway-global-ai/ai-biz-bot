@@ -152,6 +152,7 @@ export function setupGeminiLiveWebSocket(server: Server): void {
               
               try {
                 const result = await handleToolCall(functionCall);
+                const fcArgs = (functionCall.args as any) ?? {};
                 
                 // Send function result back to Google
                 const functionResult = {
@@ -159,7 +160,7 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                     modelTurn: {
                       parts: [{
                         functionResponse: {
-                          name,
+                          name: functionCall.name,
                           response: { result },
                         }
                       }]
@@ -177,17 +178,17 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                   if (functionCall.name === 'get_place_ui_data' || functionCall.name === 'get_business_details') {
                     toolMetadata = {
                       type: 'tool_result',
-                      tool_name: name,
+                      tool_name: functionCall.name,
                       tool_type: 'place_details',
-                      placeId: (result as any)?.placeId || args.place_id,
+                      placeId: (result as any)?.placeId || fcArgs.place_id,
                       data: result,
                     };
                   } else if (functionCall.name === 'get_business_intelligence') {
                     // Check if this business has a tour spec (e.g. Boardwalk Suites)
                     const businessName = (result as any)?.executive_summary 
-                      ? (functionCall.args as any).business_name?.toLowerCase() || ''
+                      ? fcArgs.business_name?.toLowerCase() || ''
                       : '';
-                    const placeId = args.place_id || '';
+                    const placeId = fcArgs.place_id || '';
                     
                     // Known tour mappings (could be moved to DB/config)
                     let tourYamlUrl: string | undefined;
@@ -202,19 +203,19 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                     
                     toolMetadata = {
                       type: 'tool_result',
-                      tool_name: name,
+                      tool_name: functionCall.name,
                       tool_type: 'business_intelligence',
-                      placeId: args.place_id,
+                      placeId: fcArgs.place_id,
                       tourYamlUrl,
                       data: result,
                     };
                   } else if (functionCall.name === 'search_local_business') {
                     toolMetadata = {
                       type: 'tool_result',
-                      tool_name: name,
+                      tool_name: functionCall.name,
                       tool_type: 'map',
-                      center: (result as any[])?.[0]?.position || { lat: 0, lng: 0 }, // Default center
-                      zoom: args.zoom_level || 14,
+                      center: (result as any[])?.[0]?.position || { lat: 0, lng: 0 },
+                      zoom: fcArgs.zoom_level || 14,
                       markers: (result as any[]) || [],
                     };
                   }

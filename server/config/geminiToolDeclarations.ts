@@ -206,5 +206,176 @@ export const TOOL_DECLARATIONS = {
       },
       required: ["place_id"]
     }
+  },
+
+  // ── Lead Qualifier tools ──────────────────────────────────────────────────
+
+  search_crm: {
+    name: "search_crm",
+    description: "Silently checks whether a caller already exists in the business CRM by phone number or email. Call at the start of every inbound lead conversation. Never announce this check to the caller.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        caller_id: {
+          type: "STRING",
+          description: "The caller's phone number or email address to look up."
+        },
+        email: {
+          type: "STRING",
+          description: "Optional email address to cross-reference."
+        }
+      },
+      required: ["caller_id"]
+    }
+  },
+
+  qualify_lead: {
+    name: "qualify_lead",
+    description: "Scores an inbound lead 1–10 based on NBAT signals (Need, Budget, Authority, Timeline) gathered from the conversation. Call after collecting at least 3 signals. Returns a score and routing recommendation.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        nbat_signals: {
+          type: "OBJECT",
+          description: "The four NBAT qualification signals extracted from the conversation.",
+          properties: {
+            need: { type: "STRING", description: "The stated problem or pain point." },
+            budget: { type: "STRING", description: "Budget range or willingness to invest." },
+            authority: { type: "STRING", description: "Whether this person can make the buying decision." },
+            timeline: { type: "STRING", description: "When they need the solution." }
+          }
+        },
+        caller_name: {
+          type: "STRING",
+          description: "The caller's name for personalization."
+        }
+      },
+      required: ["nbat_signals"]
+    }
+  },
+
+  book_meeting: {
+    name: "book_meeting",
+    description: "Books a meeting for a qualified lead (score ≥ 7). Returns the next available time slot. Only call this after a successful qualification — do not book unqualified leads.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        lead_name: {
+          type: "STRING",
+          description: "Full name of the lead."
+        },
+        lead_contact: {
+          type: "STRING",
+          description: "Phone number or email for calendar invite."
+        },
+        preferred_slot: {
+          type: "STRING",
+          description: "Optional preferred time the lead mentioned (e.g. 'Tuesday afternoon')."
+        }
+      },
+      required: ["lead_name", "lead_contact"]
+    }
+  },
+
+  // ── Sales Closer tools ────────────────────────────────────────────────────
+
+  generate_quote: {
+    name: "generate_quote",
+    description: "Generates a structured quote/proposal based on the scope of work discussed in the conversation. Call as soon as the prospect's needs are defined — do not wait for explicit permission. Returns a formatted proposal summary.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        scope_summary: {
+          type: "STRING",
+          description: "A concise summary of the services or products the prospect is interested in."
+        },
+        tier: {
+          type: "STRING",
+          enum: ["free", "starter", "ai_pro", "enterprise"],
+          description: "The subscription tier being quoted."
+        },
+        prospect_name: {
+          type: "STRING",
+          description: "Name to personalize the quote."
+        }
+      },
+      required: ["scope_summary", "tier"]
+    }
+  },
+
+  apply_discount: {
+    name: "apply_discount",
+    description: "Checks the business's site configuration for available promotional discounts and validates whether the requested discount is within the authorized limit. Call silently when price hesitation is detected. Never announce the check — only reveal the outcome if a discount is approved.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        business_id: {
+          type: "STRING",
+          description: "The site config UUID of the business."
+        },
+        requested_pct: {
+          type: "NUMBER",
+          description: "The discount percentage being requested (e.g. 10 for 10%)."
+        }
+      },
+      required: ["business_id", "requested_pct"]
+    }
+  },
+
+  stripe_checkout: {
+    name: "stripe_checkout",
+    description: "Creates a live Stripe Checkout payment link for the agreed service tier and sends it to the prospect. Call when verbal agreement is reached. Tell the prospect: 'I've sent a secure payment link to your screen right now.'",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        business_id: {
+          type: "STRING",
+          description: "The site config UUID of the business."
+        },
+        plan: {
+          type: "STRING",
+          enum: ["starter", "ai_pro", "enterprise"],
+          description: "The subscription plan to charge for."
+        },
+        customer_email: {
+          type: "STRING",
+          description: "Optional prospect email to pre-fill in the Stripe checkout."
+        }
+      },
+      required: ["business_id", "plan"]
+    }
+  },
+
+  // ── Post-payment follow-up ────────────────────────────────────────────────
+
+  send_onboarding_email: {
+    name: "send_onboarding_email",
+    description: "Sends a comprehensive welcome kit and onboarding guide to a customer after a successful payment or plan upgrade. Requires a valid Platform ID. Only call this after stripe_checkout confirms success — never speculatively.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        platformId: {
+          type: "STRING",
+          description: "The unique UUID (platform_id) of the business from the platform_business_map table, used to fetch correct branding and verify payment status."
+        },
+        customerEmail: {
+          type: "STRING",
+          description: "The recipient's email address. Must be a valid email format."
+        },
+        customerName: {
+          type: "STRING",
+          description: "The name of the customer to personalize the greeting."
+        },
+        planName: {
+          type: "STRING",
+          description: "The name of the subscription plan purchased (e.g., 'Starter', 'AI Pro', 'Enterprise')."
+        },
+        agentName: {
+          type: "STRING",
+          description: "The name of the agent sending the email, to maintain conversational continuity (e.g., 'Jordan')."
+        }
+      },
+      required: ["platformId", "customerEmail", "customerName", "planName"]
+    }
   }
 };
