@@ -438,6 +438,64 @@ export function registerAgentRoutes(app: Express) {
   });
 
   // ==========================================
+  // SerpApi Tool Access Control (per-agent)
+  // ==========================================
+
+  /**
+   * Get the SerpApi tools enabled for a specific agent.
+   * Returns the list of SerpApi engine IDs the agent is currently allowed to call.
+   */
+  app.get("/api/agents/:id/serp-tools", (req: Request, res: Response) => {
+    try {
+      const agent = agentSwarmManager.getAgent(req.params.id);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      const tools: string[] = agent.configuration?.serpApiTools ?? [];
+      res.json({ agentId: req.params.id, serpApiTools: tools });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Update the SerpApi tools enabled for a specific agent.
+   * Body: { serpApiTools: string[] }
+   * Replaces the agent's allowed SerpApi engine list.
+   * Use an empty array to disable all SerpApi access for this agent.
+   *
+   * Example engines: "google_flights", "google_maps", "amazon_search",
+   *   "home_depot_search", "walmart_search", "facebook_profile", "open_table",
+   *   "tripadvisor_search", "google_hotels", "google_travel_explore"
+   */
+  app.patch("/api/agents/:id/serp-tools", (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        serpApiTools: z.array(z.string()),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+      const agent = agentSwarmManager.getAgent(req.params.id);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      agentSwarmManager.updateAgentConfiguration(req.params.id, {
+        ...(agent.configuration ?? {}),
+        serpApiTools: parsed.data.serpApiTools,
+      });
+      const updated = agentSwarmManager.getAgent(req.params.id);
+      res.json({
+        agentId: req.params.id,
+        serpApiTools: updated?.configuration?.serpApiTools ?? [],
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==========================================
   // Agent Testing
   // ==========================================
 
