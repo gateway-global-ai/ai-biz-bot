@@ -16,7 +16,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
    */
   app.get("/api/workspace/onboarding/status/:siteConfigId", async (req: Request, res: Response) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = req.params.siteConfigId as string;
       const status = await workspaceOrchestrator.getOnboardingStatus(siteConfigId);
       res.json(status);
     } catch (error: any) {
@@ -94,7 +94,7 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
    */
   app.get("/api/workspace/onboarding/auth-url/:siteConfigId", async (req: Request, res: Response) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = req.params.siteConfigId as string;
       const authUrl = workspaceOrchestrator.getAuthUrl(siteConfigId);
       res.json({ authUrl });
     } catch (error: any) {
