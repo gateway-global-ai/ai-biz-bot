@@ -23,12 +23,13 @@ import {
   Check,
   ExternalLink,
   Sparkles,
-  PhoneCall,
   Mic,
-  Shield,
   Search,
   X,
   Copy,
+  LayoutGrid,
+  List,
+  ImageOff,
 } from "lucide-react";
 import gatewayLogo from "@assets/gatewaylogo_header_left_1770354860467.png";
 
@@ -43,6 +44,9 @@ export default function MyAccount() {
   const [showAddBusiness, setShowAddBusiness] = useState(false);
   const [addingBusiness, setAddingBusiness] = useState(false);
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  // Track which plan tab is previewed per business (defaults to current plan)
+  const [planTabs, setPlanTabs] = useState<Record<string, PlanType>>({});
   const [mapsKey, setMapsKey] = useState<string | null>(null);
   const [mapsLibLoaded, setMapsLibLoaded] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -235,8 +239,6 @@ export default function MyAccount() {
     );
   }
 
-  const plan = (user.plan || "free") as PlanType;
-  const planInfo = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
   const businesses = businessesQuery.data || [];
 
   return (
@@ -377,145 +379,37 @@ export default function MyAccount() {
           </div>
         </Card>
 
+        {/* Platform-level entitlements summary — compact, no per-business upgrade here */}
         <Card className="bg-slate-900 border-slate-800 p-6">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
-                <Crown className="w-6 h-6 text-amber-400" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-white">Plan</h2>
-                <p className="text-sm text-slate-400">Your current subscription</p>
-              </div>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
+              <Crown className="w-6 h-6 text-amber-400" />
             </div>
-            <Badge
-              variant="secondary"
-              className={
-                plan === "enterprise"
-                  ? "bg-violet-500/20 text-violet-300"
-                  : plan === "voice"
-                  ? "bg-amber-500/20 text-amber-300"
-                  : plan === "pro"
-                  ? "bg-blue-500/20 text-blue-300"
-                  : "bg-slate-700 text-slate-300"
-              }
-            >
-              {planInfo.label}
-            </Badge>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Platform</h2>
+              <p className="text-sm text-slate-400">
+                Each website has its own independent plan. Upgrade individual sites in <strong className="text-slate-300">My Businesses</strong> below.
+              </p>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {(Object.entries(PLAN_LIMITS) as [PlanType, typeof PLAN_LIMITS[PlanType]][]).map(
-              ([key, info]) => {
-                const isCurrent = key === plan;
-                const planKeys = Object.keys(PLAN_LIMITS) as PlanType[];
-                const currentIdx = planKeys.indexOf(plan);
-                const thisIdx = planKeys.indexOf(key);
-                const isDowngrade = thisIdx < currentIdx;
-                const borderColor = isCurrent
-                  ? "border-blue-500 bg-blue-500/10"
-                  : key === "enterprise"
-                  ? "border-slate-700 bg-slate-800/50"
-                  : "border-slate-700 bg-slate-800/50";
-
-                return (
-                  <div
-                    key={key}
-                    className={`rounded-md border p-4 flex flex-col ${borderColor}`}
-                    data-testid={`plan-card-${key}`}
-                  >
-                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">{info.tagline}</p>
-                    <p className="text-sm font-semibold text-white">{info.label}</p>
-                    <p className="text-2xl font-bold text-white mt-1">
-                      {info.price === 0 ? "Free" : `$${info.price}`}
-                      {info.price > 0 && (
-                        <span className="text-xs text-slate-400 font-normal">/mo</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1 mb-3">
-                      {info.maxBusinesses >= 999
-                        ? "Unlimited businesses"
-                        : `${info.maxBusinesses} business${info.maxBusinesses > 1 ? "es" : ""}`}
-                    </p>
-
-                    <div className="space-y-2 flex-1 mb-4">
-                      {info.features.map((feature, i) => (
-                        <div key={i} className="flex items-start gap-2 text-xs">
-                          <Check className="w-3 h-3 text-emerald-400 mt-0.5 flex-shrink-0" />
-                          <span className="text-slate-300">{feature}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {isCurrent ? (
-                      <Badge variant="secondary" className="w-full justify-center bg-blue-500/20 text-blue-300">
-                        Current Plan
-                      </Badge>
-                    ) : isDowngrade ? null : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full"
-                        data-testid={`button-upgrade-${key}`}
-                        disabled={upgradingPlan === key}
-                        onClick={async () => {
-                          const siteConfigId = businesses[0]?.id;
-                          if (!siteConfigId) {
-                            toast({ title: "No business found", description: "Add a business first before upgrading.", variant: "destructive" });
-                            return;
-                          }
-                          setUpgradingPlan(key);
-                          try {
-                            const res = await fetch("/api/subscriptions/create-checkout-session", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                              body: JSON.stringify({ plan: key, siteConfigId }),
-                            });
-                            const data = await res.json();
-                            if (!res.ok) throw new Error(data.error || "Failed to start checkout");
-                            window.location.href = data.url;
-                          } catch (err: any) {
-                            toast({ title: "Upgrade failed", description: err.message, variant: "destructive" });
-                            setUpgradingPlan(null);
-                          }
-                        }}
-                      >
-                        {upgradingPlan === key ? (
-                          <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Redirecting...</span>
-                        ) : (
-                          <><Sparkles className="w-3 h-3 mr-1" />Upgrade</>
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                );
-              }
-            )}
-          </div>
-
-          {planInfo.liveVoiceMinutes > 0 || planInfo.websiteTtsMinutes > 0 ? (
-            <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
-                <Mic className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-                <p className="text-lg font-bold text-white">{planInfo.websiteTtsMinutes.toLocaleString()}</p>
-                <p className="text-xs text-slate-400">Website Voice Min</p>
-              </div>
-              {planInfo.liveVoiceMinutes > 0 && (
-                <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
-                  <PhoneCall className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
-                  <p className="text-lg font-bold text-white">{planInfo.liveVoiceMinutes.toLocaleString()}</p>
-                  <p className="text-xs text-slate-400">Live Voice Min</p>
-                </div>
-              )}
-              {planInfo.dedicatedNumber && (
-                <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
-                  <Shield className="w-5 h-5 text-amber-400 mx-auto mb-1" />
-                  <p className="text-lg font-bold text-white">Active</p>
-                  <p className="text-xs text-slate-400">Dedicated Number</p>
-                </div>
-              )}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
+              <Mic className="w-5 h-5 text-blue-400 mx-auto mb-1" />
+              <p className="text-lg font-bold text-white">500</p>
+              <p className="text-xs text-slate-400">Voice Min / site</p>
             </div>
-          ) : null}
+            <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
+              <Globe className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
+              <p className="text-lg font-bold text-white">{businesses.length}</p>
+              <p className="text-xs text-slate-400">Active Website{businesses.length !== 1 ? "s" : ""}</p>
+            </div>
+            <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
+              <Bot className="w-5 h-5 text-violet-400 mx-auto mb-1" />
+              <p className="text-lg font-bold text-white">AI</p>
+              <p className="text-xs text-slate-400">Concierge on all</p>
+            </div>
+          </div>
         </Card>
 
         <Card className="bg-slate-900 border-slate-800 p-6">
@@ -527,21 +421,42 @@ export default function MyAccount() {
               <div>
                 <h2 className="text-lg font-semibold text-white">My Businesses</h2>
                 <p className="text-sm text-slate-400">
-                  {businesses.length} of {planInfo.maxBusinesses >= 999 ? "unlimited" : planInfo.maxBusinesses} used
+                  {businesses.length} website{businesses.length !== 1 ? "s" : ""} — each with its own plan
                 </p>
               </div>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => setShowAddBusiness(!showAddBusiness)}
-              data-testid="button-add-business"
-            >
-              {showAddBusiness ? (
-                <><X className="w-4 h-4 mr-2" />Cancel</>
-              ) : (
-                <><Globe className="w-4 h-4 mr-2" />Add Business</>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* View toggle */}
+              <div className="flex items-center bg-slate-800 rounded-md border border-slate-700 p-0.5">
+                <button
+                  onClick={() => setViewMode("grid")}
+                  className={`p-1.5 rounded transition-colors ${viewMode === "grid" ? "bg-slate-600 text-white" : "text-slate-500 hover:text-slate-300"}`}
+                  data-testid="button-view-grid"
+                  title="Grid view"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`p-1.5 rounded transition-colors ${viewMode === "list" ? "bg-slate-600 text-white" : "text-slate-500 hover:text-slate-300"}`}
+                  data-testid="button-view-list"
+                  title="List view"
+                >
+                  <List className="w-4 h-4" />
+                </button>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => setShowAddBusiness(!showAddBusiness)}
+                data-testid="button-add-business"
+              >
+                {showAddBusiness ? (
+                  <><X className="w-4 h-4 mr-2" />Cancel</>
+                ) : (
+                  <><Globe className="w-4 h-4 mr-2" />Add Business</>
+                )}
+              </Button>
+            </div>
           </div>
 
           {showAddBusiness && (
@@ -579,52 +494,228 @@ export default function MyAccount() {
               </Button>
             </div>
           ) : (
-            <div className="space-y-3">
-              {businesses.map((biz: any) => (
-                <div
-                  key={biz.id}
-                  className="flex items-center justify-between gap-4 p-4 bg-slate-800/50 border border-slate-700 rounded-md"
-                  data-testid={`business-row-${biz.id}`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-md bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-5 h-5 text-blue-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-white font-medium truncate">{biz.name}</p>
-                      {biz.domain && (
-                        <p className="text-xs text-slate-500 truncate">{biz.domain}</p>
+            <div className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "space-y-3"}>
+              {businesses.map((biz: any) => {
+                const bizPlan = (biz.plan || "free") as PlanType;
+
+                const heroUrl = biz.placeId ? `/api/places/photo-proxy/${encodeURIComponent(biz.placeId)}?maxWidth=600` : null;
+                // Generate a gradient fallback color from the business name
+                const colors = ["from-blue-900 to-slate-900","from-violet-900 to-slate-900","from-emerald-900 to-slate-900","from-amber-900 to-slate-900","from-rose-900 to-slate-900"];
+                const colorIdx = biz.name.charCodeAt(0) % colors.length;
+
+                return (
+                  <div
+                    key={biz.id}
+                    className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden"
+                    data-testid={`business-row-${biz.id}`}
+                  >
+                    {/* Grid view: hero image */}
+                    {viewMode === "grid" && (
+                      <div className="relative h-36 w-full bg-slate-900 overflow-hidden group">
+                        {heroUrl ? (
+                          <img
+                            src={heroUrl}
+                            alt={biz.name}
+                            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-300"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                          />
+                        ) : (
+                          <div className={`w-full h-full bg-gradient-to-br ${colors[colorIdx]} flex items-center justify-center`}>
+                            <ImageOff className="w-8 h-8 text-slate-600" />
+                          </div>
+                        )}
+                        {/* Gradient overlay + name */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent" />
+                        <div className="absolute bottom-0 left-0 right-0 p-3">
+                          <p className="text-white font-semibold text-sm leading-tight truncate drop-shadow">{biz.name}</p>
+                          {biz.domain && (
+                            <p className="text-slate-400 text-[10px] truncate">{biz.domain}</p>
+                          )}
+                        </div>
+                        <div className="absolute top-2 right-2 flex items-center gap-1">
+                          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0.5 ${biz.chatbotEnabled ? "bg-emerald-500/80 text-white" : "bg-slate-600/80 text-slate-300"}`}>
+                            {biz.chatbotEnabled ? "Live" : "Draft"}
+                          </Badge>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="p-4">
+                      {/* List view: top row with name + status + manage */}
+                      {viewMode === "list" && (
+                        <div className="flex items-center justify-between gap-4 mb-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-md bg-blue-500/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                              {heroUrl ? (
+                                <img src={heroUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display="none"; }} />
+                              ) : (
+                                <Bot className="w-5 h-5 text-blue-400" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-white font-medium truncate">{biz.name}</p>
+                              {biz.domain && <p className="text-xs text-slate-500 truncate">{biz.domain}</p>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-300">
+                              {biz.chatbotEnabled ? "Live" : "Draft"}
+                            </Badge>
+                          </div>
+                        </div>
                       )}
-                      <button
-                        className="flex items-center gap-1 mt-0.5 group"
-                        title="Copy Site ID"
-                        onClick={() => {
-                          navigator.clipboard.writeText(biz.id);
-                          toast({ title: "Copied", description: `Site ID copied to clipboard` });
-                        }}
-                        data-testid={`copy-uuid-${biz.id}`}
-                      >
-                        <span className="text-[10px] text-slate-600 font-mono group-hover:text-slate-400 transition-colors">{biz.id}</span>
-                        <Copy className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 transition-colors flex-shrink-0" />
-                      </button>
+
+                      {/* Grid view: UUID + Manage row */}
+                      {viewMode === "grid" && (
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <button
+                            className="flex items-center gap-1 group min-w-0"
+                            title="Copy Site ID"
+                            onClick={() => {
+                              navigator.clipboard.writeText(biz.id);
+                              toast({ title: "Copied", description: "Site ID copied to clipboard" });
+                            }}
+                            data-testid={`copy-uuid-${biz.id}`}
+                          >
+                            <span className="text-[10px] text-slate-600 font-mono group-hover:text-slate-400 transition-colors truncate">{biz.id}</span>
+                            <Copy className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 flex-shrink-0" />
+                          </button>
+                          <Button size="sm" variant="outline" className="flex-shrink-0" onClick={() => setLocation(`/my-account/site/${biz.id}`)} data-testid={`button-manage-${biz.id}`}>
+                            Manage <ExternalLink className="w-3 h-3 ml-1" />
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* List view: UUID + Manage */}
+                      {viewMode === "list" && (
+                        <div className="flex items-center gap-2 mb-3">
+                          <button
+                            className="flex items-center gap-1 group flex-1 min-w-0"
+                            title="Copy Site ID"
+                            onClick={() => {
+                              navigator.clipboard.writeText(biz.id);
+                              toast({ title: "Copied", description: "Site ID copied to clipboard" });
+                            }}
+                            data-testid={`copy-uuid-${biz.id}`}
+                          >
+                            <span className="text-[10px] text-slate-600 font-mono group-hover:text-slate-400 transition-colors truncate">{biz.id}</span>
+                            <Copy className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 flex-shrink-0" />
+                          </button>
+                          <Button size="sm" variant="outline" className="flex-shrink-0" onClick={() => setLocation(`/my-account/site/${biz.id}`)} data-testid={`button-manage-${biz.id}`}>
+                            Manage <ExternalLink className="w-3 h-3 ml-1" />
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Plan tab navigator */}
+                      {(() => {
+                      const planKeys = Object.keys(PLAN_LIMITS) as PlanType[];
+                      const selectedTab = planTabs[biz.id] ?? bizPlan;
+                      const tabInfo = PLAN_LIMITS[selectedTab];
+                      const tabIdx = planKeys.indexOf(selectedTab);
+                      const isCurrentPlan = selectedTab === bizPlan;
+                      const isUpgrade = tabIdx > planKeys.indexOf(bizPlan);
+                      const upgradeId = `${biz.id}-${selectedTab}`;
+
+                      return (
+                        <div className="pt-2 border-t border-slate-700/50">
+                          {/* Tab strip */}
+                          <div className="flex gap-0.5 bg-slate-900/60 rounded-md p-0.5 mb-3">
+                            {planKeys.map((pk) => {
+                              const pkInfo = PLAN_LIMITS[pk];
+                              const isActive = pk === selectedTab;
+                              const isCurrent = pk === bizPlan;
+                              return (
+                                <button
+                                  key={pk}
+                                  onClick={() => setPlanTabs((prev) => ({ ...prev, [biz.id]: pk }))}
+                                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-all ${
+                                    isActive
+                                      ? "bg-slate-700 text-white shadow-sm"
+                                      : "text-slate-500 hover:text-slate-300"
+                                  }`}
+                                  data-testid={`plan-tab-${biz.id}-${pk}`}
+                                >
+                                  {pkInfo.label}
+                                  {isCurrent && (
+                                    <span className="ml-1 text-[9px] text-emerald-400">✓</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Selected tab content */}
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-baseline gap-2 mb-2">
+                                <span className="text-lg font-bold text-white">
+                                  {tabInfo.price === 0 ? "Free" : `$${tabInfo.price}`}
+                                </span>
+                                {tabInfo.price > 0 && (
+                                  <span className="text-xs text-slate-400">/mo per site</span>
+                                )}
+                                <span className="text-xs text-slate-500 italic">{tabInfo.tagline}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                                {tabInfo.features.map((f, i) => (
+                                  <div key={i} className="flex items-start gap-1 text-xs text-slate-400">
+                                    <Check className="w-3 h-3 text-emerald-400 mt-0.5 flex-shrink-0" />
+                                    <span>{f}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="flex-shrink-0">
+                              {isCurrentPlan ? (
+                                <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-300 whitespace-nowrap">
+                                  <Check className="w-3 h-3 mr-1" />
+                                  Current Plan
+                                </Badge>
+                              ) : isUpgrade ? (
+                                <Button
+                                  size="sm"
+                                  className="bg-blue-600 hover:bg-blue-500 text-white whitespace-nowrap"
+                                  disabled={upgradingPlan === upgradeId}
+                                  data-testid={`button-upgrade-${biz.id}-${selectedTab}`}
+                                  onClick={async () => {
+                                    setUpgradingPlan(upgradeId);
+                                    try {
+                                      const res = await fetch("/api/subscriptions/create-checkout-session", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                                        body: JSON.stringify({ plan: selectedTab, siteConfigId: biz.id }),
+                                      });
+                                      const data = await res.json();
+                                      if (!res.ok) throw new Error(data.error || "Failed to start checkout");
+                                      window.location.href = data.url;
+                                    } catch (err: any) {
+                                      toast({ title: "Upgrade failed", description: err.message, variant: "destructive" });
+                                      setUpgradingPlan(null);
+                                    }
+                                  }}
+                                >
+                                  {upgradingPlan === upgradeId ? (
+                                    <><Loader2 className="w-3 h-3 animate-spin mr-1" />Redirecting...</>
+                                  ) : (
+                                    <><Sparkles className="w-3 h-3 mr-1" />Upgrade</>
+                                  )}
+                                </Button>
+                              ) : (
+                                <Badge variant="secondary" className="bg-slate-700 text-slate-400 whitespace-nowrap">
+                                  Lower tier
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                      })()}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-300">
-                      {biz.chatbotEnabled ? "Live" : "Draft"}
-                    </Badge>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setLocation(`/my-account/site/${biz.id}`)}
-                      data-testid={`button-manage-${biz.id}`}
-                    >
-                      Manage
-                      <ExternalLink className="w-3 h-3 ml-1" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>

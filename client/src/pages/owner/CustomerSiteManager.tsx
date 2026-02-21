@@ -66,6 +66,8 @@ export default function CustomerSiteManager() {
     <WebsitePreview
       place={placeData}
       siteConfigId={siteId}
+      placeId={siteData.placeId || placeData.place_id}
+      heroImageUrl={siteData.heroImageUrl}
       onBack={() => setLocation("/my-account")}
     />
   );

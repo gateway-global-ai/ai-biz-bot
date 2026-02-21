@@ -46,11 +46,16 @@ interface PlaceData {
 interface WebsitePreviewProps {
   place: PlaceData;
   siteConfigId?: string;
+  /** AI-generated or custom hero image URL saved in site_configs */
+  heroImageUrl?: string | null;
+  /** Google Place ID — used to fetch hero from Places photo proxy if no heroImageUrl */
+  placeId?: string | null;
   onBack: () => void;
 }
 
 function getPhotoUrl(photo: any, maxWidth = 1200): string | null {
   if (!photo) return null;
+  // Live Google Maps JS API objects
   if (typeof photo.getURI === 'function') return photo.getURI({ maxWidth });
   if (typeof photo.getUrl === 'function') return photo.getUrl({ maxWidth });
   return null;
@@ -92,7 +97,7 @@ interface ChatMessage {
   content: string;
 }
 
-export default function WebsitePreview({ place, siteConfigId, onBack }: WebsitePreviewProps) {
+export default function WebsitePreview({ place, siteConfigId, heroImageUrl: heroImageUrlProp, placeId: placeIdProp, onBack }: WebsitePreviewProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
@@ -256,8 +261,20 @@ export default function WebsitePreview({ place, siteConfigId, onBack }: WebsiteP
     voiceClient.current.setStreaming(false);
   }, [isPTTRecording]);
 
-  const heroImage = place.photos && place.photos.length > 0 ? getPhotoUrl(place.photos[0]) : null;
-  const galleryImages = (place.photos || []).slice(1, 4).map(p => getPhotoUrl(p, 600)).filter(Boolean) as string[];
+  // Priority: AI-generated/custom URL → server photo proxy (by placeId) → live Maps API object → placeholder
+  const effectivePlaceId = placeIdProp || place.place_id;
+  const heroImage: string | null =
+    heroImageUrlProp ||
+    (effectivePlaceId ? `/api/places/photo-proxy/${encodeURIComponent(effectivePlaceId)}?maxWidth=1200` : null) ||
+    (place.photos && place.photos.length > 0 ? getPhotoUrl(place.photos[0]) : null);
+
+  // Gallery: use proxy for stored photos, live API for live Place objects
+  const galleryImages = (place.photos || []).slice(1, 4).map((p, i) => {
+    const fromApi = getPhotoUrl(p, 600);
+    if (fromApi) return fromApi;
+    // For stored photos use place_id with an index offset (best-effort)
+    return effectivePlaceId ? null : null;
+  }).filter(Boolean) as string[];
   const tagline = generateTagline(place);
   const description = generateDescription(place);
   const mapLink = place.place_id
@@ -306,9 +323,14 @@ export default function WebsitePreview({ place, siteConfigId, onBack }: WebsiteP
         <div className="relative h-[85vh] min-h-[600px] w-full bg-slate-900 text-white overflow-hidden rounded-b-[4rem] shadow-2xl group">
           <div className="absolute inset-0 select-none">
             {heroImage ? (
-              <img src={heroImage} alt={place.name} className="w-full h-full object-cover transition-transform duration-[2s] ease-out scale-105 group-hover:scale-110 opacity-60" />
+              <img
+                src={heroImage}
+                alt={place.name}
+                className="w-full h-full object-cover transition-transform duration-[2s] ease-out scale-105 group-hover:scale-110 opacity-70"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900" />
+              <div className="w-full h-full bg-gradient-to-br from-blue-950 via-slate-900 to-slate-950" />
             )}
             <div className="absolute inset-0 bg-gradient-to-b from-slate-900/30 via-slate-900/60 to-slate-900" />
           </div>

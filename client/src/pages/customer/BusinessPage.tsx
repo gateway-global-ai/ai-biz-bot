@@ -1277,7 +1277,8 @@ export default function BusinessPage() {
         onSuccess={(data) => {
           customerLogin(data.token, data.user);
           setShowCustomerLoginModal(false);
-          toast({ title: 'Welcome!', description: `Signed in as ${data.user.name || 'Business Owner'}` });
+          toast({ title: 'Welcome back!', description: `Signed in as ${data.user.name || 'Business Owner'}` });
+          window.location.href = "/my-account";
         }}
         sendOtpEndpoint="/api/customer/send-otp"
         verifyOtpEndpoint="/api/customer/verify-otp"
