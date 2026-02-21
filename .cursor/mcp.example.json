@@ -19,6 +19,9 @@
         "--tags",
         "Api20100401IncomingPhoneNumber"
       ]
+    },
+    "serpapi": {
+      "url": "https://mcp.serpapi.com/mcp?api_key=YOUR_SERP_API_KEY"
     }
   }
 }

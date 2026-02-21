@@ -88,7 +88,65 @@ Cursor’s `mcp.json` does not expand environment variables inside `args`. To av
 1. **Global config with env:** Put the Twilio server in `~/.cursor/mcp.json` and use the `env` block for other vars; the credential string itself still has to be in `args` in that file, or
 2. **Wrapper script:** Create a small script that reads `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY`, `TWILIO_API_SECRET` from the environment, builds the string, and runs `npx -y @twilio-alpha/mcp "$CREDENTIAL_STRING"`. In `mcp.json`, set `command` to that script and no args with secrets.
 
-## 4. Other MCP servers (Google Workspace, Maps, etc.)
+## 4. SerpApi MCP (hosted remote server)
+
+SerpApi provides a hosted MCP server at `https://mcp.serpapi.com/` that exposes Google Search, Maps, and other SerpApi endpoints as tools for Cursor agents.
+
+### Prerequisites
+
+- A SerpApi account and API key. Get one at [serpapi.com](https://serpapi.com/).
+- Doppler configured for this project (see `docs/DOPPLER_SETUP.md`).
+
+### Step 1 — Store the API key in Doppler
+
+```bash
+doppler secrets set SERP_API_KEY="your-serp-api-key-here"
+```
+
+Verify:
+
+```bash
+doppler secrets get SERP_API_KEY --plain
+```
+
+### Step 2 — Generate `.cursor/mcp.json` from Doppler
+
+Run the provided helper script to write `.cursor/mcp.json` with your real API key injected at generation time. The file is gitignored, so no secrets are ever committed.
+
+```bash
+npm run mcp:generate
+# or directly:
+./scripts/gen-cursor-mcp.sh
+```
+
+This creates or updates `.cursor/mcp.json`, merging the `"serpapi"` block into any existing `mcpServers` entries (e.g. Twilio) without overwriting them:
+
+```json
+{
+  "mcpServers": {
+    "serpapi": {
+      "url": "https://mcp.serpapi.com/mcp?api_key=<your-key-from-doppler>"
+    }
+  }
+}
+```
+
+### Step 3 — Reload Cursor
+
+Press `Cmd/Ctrl+Shift+P` → **Reload Window** (or restart Cursor). The SerpApi MCP should appear in **Settings → MCP** as connected.
+
+### Option: manual placeholder (without Doppler)
+
+If you prefer to manage the secret yourself, copy the example and replace the placeholder:
+
+```bash
+cp .cursor/mcp.example.json .cursor/mcp.json
+# edit .cursor/mcp.json and replace YOUR_SERP_API_KEY with your real key
+```
+
+**Never commit the edited `mcp.json`** — it is gitignored for this reason.
+
+## 5. Other MCP servers (Google Workspace, Maps, etc.)
 
 If you use more MCPs (e.g. Google Workspace, Maps), add them under `mcpServers` in the same `.cursor/mcp.json`:
 
@@ -107,7 +165,7 @@ If you use more MCPs (e.g. Google Workspace, Maps), add them under `mcpServers` 
 
 Each server needs a valid `command` and `args` (and `env` if required). If a server is listed but not configured (e.g. missing credentials), Cursor may show “No server info found” or “Server not yet created” for that server.
 
-## 5. Verify
+## 6. Verify
 
 1. **Cursor:** Settings → MCP (or Features → MCP) and confirm your servers are listed and not in an error state.
 2. In the agent/chat, try a Twilio-related request (e.g. “List my Twilio phone numbers”) and confirm the Twilio tool is offered and runs.
@@ -118,10 +176,13 @@ If a server still shows “No server info found,” check:
 - Node/npx is on your PATH so `npx -y @twilio-alpha/mcp ...` can run.
 - No typo in server name or `mcp.json` syntax (valid JSON, no trailing commas).
 
-## 6. References
+## 7. References
 
 - [Cursor MCP docs](https://docs.cursor.com/context/mcp)
 - [Twilio Alpha MCP](https://github.com/twilio-labs/mcp) — use `@twilio-alpha/mcp` and the credential format above
 - [Twilio API keys](https://www.twilio.com/docs/iam/api-keys)
+- [SerpApi MCP server](https://mcp.serpapi.com/) — hosted MCP at `https://mcp.serpapi.com/`
+- [SerpApi API keys](https://serpapi.com/manage-api-key) — manage your SerpApi key
+- [Doppler docs](docs/DOPPLER_SETUP.md) — secrets management for this project
 - [Deploy Key](./DEPLOY_KEY.md) — SSH deploy key for cursor agent GitHub access
 - [Deploy Keys Reference](../docs/deployment/DEPLOY_KEYS.md) — Complete deploy keys documentation
