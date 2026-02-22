@@ -7997,14 +7997,16 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   // Development is intentionally excluded — server/vite.ts registers its own
   // "/{*path}" catch-all that lets Vite transform and serve index.html.
   if (process.env.NODE_ENV === "production") {
-    app.get("*", (req, res, next) => {
+    // Express 5 (path-to-regexp v8) requires a named wildcard — bare "*" throws.
+    // "/{*path}" matches every path including "/".
+    app.get("/{*path}", (req, res, next) => {
       if (req.path.startsWith("/api")) {
         return next();
       }
       // In dist/index.mjs, __dirname resolves to 'dist/', so index.html
       // lives one level down in 'dist/public/index.html'.
       const indexPath = path.resolve(__dirname, "public", "index.html");
-      res.sendFile(indexPath, (err) => {
+      res.sendFile(indexPath, (err: any) => {
         if (err) next(err);
       });
     });
