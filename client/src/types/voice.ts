@@ -37,13 +37,16 @@ export interface VoiceConfig {
 }
 
 export interface BusinessContext {
-  id: string; // The UUID of the site configuration
+  id: string; // The UUID of the site configuration (siteConfigId)
   placeId: string;
   name: string;
   address: string;
   hours?: string;
   services?: string[];
   primaryColor?: string;
+  /** DB-backed system prompt from site_configs.system_prompt_override. When present,
+   *  takes priority over the enriched or default instruction in GeminiStreamingClient. */
+  systemPromptOverride?: string | null;
 }
 
 export interface AgentConfig {

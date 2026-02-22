@@ -92,15 +92,22 @@ export class GeminiStreamingClient implements IVoiceClient {
     this.nextStartTime = 0;
     this.currentInputText = '';
     
-    // Build system instruction (optionally fetch enriched version)
+    // Build system instruction — Override-First priority:
+    // 1. DB-backed system_prompt_override (Voice/Enterprise Knowledge Worker prompt)
+    // 2. Server-enriched instruction (business intelligence + SWOT)
+    // 3. Basic template built from BusinessContext + AgentConfig
     let systemInstruction: string;
-    try {
-      // Try to fetch enriched system instruction from server
-      const enriched = await this.fetchEnrichedSystemInstruction(business, agent);
-      systemInstruction = enriched || this.buildSystemInstruction(business, agent);
-    } catch (error) {
-      console.warn('[GeminiStreamingClient] Failed to fetch enriched instruction, using basic:', error);
-      systemInstruction = this.buildSystemInstruction(business, agent);
+    if ((business as any).systemPromptOverride) {
+      systemInstruction = (business as any).systemPromptOverride;
+      console.log('[GeminiStreamingClient] Using system_prompt_override (Knowledge Worker mode)');
+    } else {
+      try {
+        const enriched = await this.fetchEnrichedSystemInstruction(business, agent);
+        systemInstruction = enriched || this.buildSystemInstruction(business, agent);
+      } catch (error) {
+        console.warn('[GeminiStreamingClient] Failed to fetch enriched instruction, using basic:', error);
+        systemInstruction = this.buildSystemInstruction(business, agent);
+      }
     }
 
     try {
@@ -216,7 +223,12 @@ export class GeminiStreamingClient implements IVoiceClient {
             },
             tools: tools, // ✅ Tools properly declared
             system_instruction: { parts: [{ text: systemInstruction }] }
-          }
+          },
+          // Identity anchor: server proxy reads sessionContext.siteConfigId and injects it
+          // into MCP tool args so the model never needs to emit the UUID directly.
+          sessionContext: {
+            siteConfigId: business.id,
+          },
         };
         
         // --- DEBUG: Log the exact outgoing setup JSON to audit for formatting errors. ---

@@ -208,44 +208,82 @@ async function getWorkspaceContext(siteConfigId: string): Promise<
 async function handleMcpSearchDrive(args: any) {
   const ctx = await getWorkspaceContext(args.siteConfigId);
   if (!ctx.allowed) {
-    return { error: ctx.error, plan_required: ctx.error === WORKSPACE_PLAN_REQUIRED_MESSAGE };
+    const isPlanGating = ctx.error === WORKSPACE_PLAN_REQUIRED_MESSAGE;
+    return {
+      error: ctx.error,
+      plan_required: isPlanGating,
+      audio_cue: isPlanGating
+        ? "I need a quick permission update in the Workspace tab to see that. If you hop into your Admin Panel and connect Google Workspace, I'll be able to access those files instantly. Should we keep talking strategy in the meantime?"
+        : "I'm trying to access those files for you, but it looks like I don't have the green light on my end yet. Should we keep talking strategy while you sort that out?",
+      ui_action: isPlanGating ? "SHOW_UPGRADE_MODAL" : "SHOW_WORKSPACE_CONNECT",
+    };
   }
   const service = createGoogleWorkspaceService(ctx.credentials);
-  const result = await service.searchDriveFiles(args.query, args.mimeType);
-  if (!result.success) {
-    return { error: result.error || "Drive search failed." };
+  try {
+    const result = await service.searchDriveFiles(args.query, args.mimeType);
+    if (!result.success) {
+      return {
+        error: result.error || "Drive search failed.",
+        audio_cue: "I'm hitting a bit of digital static with that Drive search right now — let's try a different angle. Tell me more about what you're looking for and I'll keep searching in the background.",
+      };
+    }
+    return {
+      audio_cue: "Found it!",
+      summary: (result.data as any).summary,
+      count: (result.data as any).count,
+      files: (result.data as any).files,
+    };
+  } catch (err: any) {
+    return {
+      error: err.message || "Unexpected Drive error.",
+      audio_cue: "I'm hitting a bit of digital static with the Drive search — let's try another angle.",
+    };
   }
-  return {
-    summary: (result.data as any).summary,
-    count: (result.data as any).count,
-    files: (result.data as any).files,
-  };
 }
 
 async function handleMcpReadCalendar(args: any) {
   const ctx = await getWorkspaceContext(args.siteConfigId);
   if (!ctx.allowed) {
-    return { error: ctx.error, plan_required: ctx.error === WORKSPACE_PLAN_REQUIRED_MESSAGE };
+    const isPlanGating = ctx.error === WORKSPACE_PLAN_REQUIRED_MESSAGE;
+    return {
+      error: ctx.error,
+      plan_required: isPlanGating,
+      audio_cue: isPlanGating
+        ? "I'd love to check your calendar, but that feature requires the Voice or Enterprise plan. Would you like me to walk you through the upgrade?"
+        : "I need the calendar connection set up first — you can do that quickly in the Workspace tab of your Admin Panel.",
+      ui_action: isPlanGating ? "SHOW_UPGRADE_MODAL" : "SHOW_WORKSPACE_CONNECT",
+    };
   }
   const service = createGoogleWorkspaceService(ctx.credentials);
-  const result = await service.listCalendarEvents(
-    20,
-    args.timeMin,
-    args.timeMax
-  );
-  if (!result.success) {
-    return { error: result.error || "Calendar read failed." };
+  try {
+    const result = await service.listCalendarEvents(
+      20,
+      args.timeMin,
+      args.timeMax
+    );
+    if (!result.success) {
+      return {
+        error: result.error || "Calendar read failed.",
+        audio_cue: "I'm hitting a bit of digital static with the calendar right now — let's keep talking while I try again.",
+      };
+    }
+    const events = (result.data as any).events || [];
+    const summary =
+      events.length === 0
+        ? "No events in this time range."
+        : `You have ${events.length} event(s): ${events.map((e: any) => `${e.summary || "Untitled"} (${e.start}–${e.end})`).join("; ")}`;
+    return {
+      audio_cue: events.length === 0 ? "Your schedule looks clear in that window." : "Got your schedule — let me walk you through it.",
+      summary,
+      events,
+      count: events.length,
+    };
+  } catch (err: any) {
+    return {
+      error: err.message || "Unexpected Calendar error.",
+      audio_cue: "I'm getting a bit of digital static on the calendar feed — let's keep talking strategy while that sorts itself out.",
+    };
   }
-  const events = (result.data as any).events || [];
-  const summary =
-    events.length === 0
-      ? "No events in this time range."
-      : `You have ${events.length} event(s): ${events.map((e: any) => `${e.summary || "Untitled"} (${e.start}–${e.end})`).join("; ")}`;
-  return {
-    summary,
-    events,
-    count: events.length,
-  };
 }
 
 // ── Sales Closer / Onboarding ────────────────────────────────────────────────

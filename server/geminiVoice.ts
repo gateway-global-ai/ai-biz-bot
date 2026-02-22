@@ -46,6 +46,9 @@ export function setupGeminiLiveWebSocket(server: Server): void {
     const googleWs = new WebSocket(googleUrl);
     let messageQueue: Buffer[] = [];
     let isGoogleWsOpen = false;
+    // Identity Anchor — captured from the client's setup sessionContext and injected
+    // into every MCP tool call so the model never needs to emit the UUID itself.
+    let sessionSiteConfigId: string | null = null;
 
     const processClientMessage = (data: Buffer) => {
       // The client, GeminiStreamingClient, sends JSON strings. It does not send binary data.
@@ -55,6 +58,15 @@ export function setupGeminiLiveWebSocket(server: Server): void {
 
         // Inject tools into setup message
         if (message.setup) {
+          // Capture the siteConfigId from sessionContext (sent by GeminiStreamingClient).
+          // This is the "Identity Anchor" — used to scope all MCP tool calls to the right tenant.
+          if (message.sessionContext?.siteConfigId) {
+            sessionSiteConfigId = message.sessionContext.siteConfigId;
+            console.log(`[GeminiVoice] Identity anchor set: siteConfigId=${sessionSiteConfigId}`);
+          }
+          // Strip sessionContext before forwarding to Google — it is an internal field only.
+          delete message.sessionContext;
+
           // --- ENV ENFORCEMENT: Lockdown the model ID ---
           // The model ID is sourced ONLY from the server environment to prevent client-side drift.
           const modelId = process.env.GEMINI_MODEL_ID;
@@ -149,6 +161,18 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           for (const part of parts) {
             if (part.functionCall) {
               const functionCall = part.functionCall;
+
+              // Security Interceptor: inject the session-level siteConfigId into MCP
+              // tool args if it is missing, preventing the model from hallucinating a UUID
+              // or omitting the parameter for cross-tenant calls.
+              const MCP_TOOLS = ['mcp_search_drive', 'mcp_read_calendar'];
+              if (MCP_TOOLS.includes(functionCall.name)) {
+                const args = (functionCall.args as any) ?? {};
+                if (!args.siteConfigId && sessionSiteConfigId) {
+                  functionCall.args = { ...args, siteConfigId: sessionSiteConfigId };
+                  console.log(`[GeminiVoice] Injected siteConfigId into ${functionCall.name} args`);
+                }
+              }
               
               try {
                 const result = await handleToolCall(functionCall);
