@@ -10,6 +10,7 @@ import { db } from "../db";
 import { workspaceConfigurations } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "../mcp/googleWorkspace";
+import { isKnowledgeWorkerPlan } from "../prompts/knowledgeWorkerPrompt";
 
 /**
  * Interface for the tool call structure received from the Gemini v1beta protocol
@@ -187,7 +188,7 @@ async function getWorkspaceContext(siteConfigId: string): Promise<
     return { allowed: false, error: "Site not found." };
   }
   const plan = (siteConfig as any).plan || "free";
-  if (plan !== "voice" && plan !== "enterprise") {
+  if (!isKnowledgeWorkerPlan(plan)) {
     return { allowed: false, error: WORKSPACE_PLAN_REQUIRED_MESSAGE };
   }
   const row = await db.query.workspaceConfigurations.findFirst({
