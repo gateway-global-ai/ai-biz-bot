@@ -518,7 +518,7 @@ app.use((req, res, next) => {
   const { setupWebSocketRouter } = await import("./websocketRouter");
   setupWebSocketRouter(httpServer);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
@@ -526,6 +526,11 @@ app.use((req, res, next) => {
 
     if (res.headersSent) {
       return next(err);
+    }
+
+    // Non-API errors: redirect to Error Navigator with 500 context
+    if (!req.path.startsWith("/api")) {
+      return res.redirect(`/error?code=500&ref=${encodeURIComponent(req.path)}`);
     }
 
     return res.status(status).json({ message });

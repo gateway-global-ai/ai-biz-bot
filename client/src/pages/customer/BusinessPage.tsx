@@ -235,7 +235,7 @@ export default function BusinessPage() {
   const [gateStep, setGateStep] = useState<'phone' | 'otp'>('phone');
   const [otpCode, setOtpCode] = useState('');
   const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
-  const [previewTimer, setPreviewTimer] = useState(600); // 10 minutes to view preview and complete OTP
+  const [previewTimer, setPreviewTimer] = useState(30); // 30-second gate before phone capture
   const [trainingProgress, setTrainingProgress] = useState(0);
   const [demoLeadId, setDemoLeadId] = useState<string | null>(null);
   const [ownerName, setOwnerName] = useState('');
@@ -501,7 +501,7 @@ export default function BusinessPage() {
 
   useEffect(() => {
     if (stage !== 'preview') return;
-    setPreviewTimer(600); // 10 minutes
+    setPreviewTimer(30); // 30-second gate
     const interval = setInterval(() => {
       setPreviewTimer(prev => {
         if (prev <= 1) {

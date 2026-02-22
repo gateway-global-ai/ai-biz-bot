@@ -47,7 +47,7 @@ import { getAvailableApis, calculateCosts, analyzeWithKimi, generateRateLimits, 
 import { placesCache, CACHE_TTL } from "./placesCache";
 import crypto from "crypto";
 import { db } from "./db";
-import { workspaceConfigurations } from "@shared/schema";
+import { workspaceConfigurations, analyticsLogs } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 
@@ -484,6 +484,32 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("[Demo] Verify error:", error);
       res.status(500).json({ error: error.message || "Failed to verify link" });
+    }
+  });
+
+  // Error Navigator & recovery analytics (bounce prevention, VOICE_TIER_INTEREST)
+  app.post("/api/analytics/recovery-success", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const eventType = body.eventType || "RECOVERY_SUCCESS";
+      const siteConfigId = body.siteConfigId ?? null;
+      const metadata =
+        eventType === "RECOVERY_SUCCESS"
+          ? {
+              errorCode: body.errorCode,
+              recoveredPath: body.recoveredPath,
+              timeInError: body.timeInError,
+            }
+          : body.metadata || {};
+      await db.insert(analyticsLogs).values({
+        siteConfigId,
+        eventType,
+        metadata,
+      });
+      res.json({ success: true, message: "Recovery logged." });
+    } catch (error: any) {
+      console.error("[Analytics] recovery-success error:", error);
+      res.status(500).json({ error: "Failed to log recovery" });
     }
   });
 

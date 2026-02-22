@@ -62,7 +62,14 @@ import TestB2b from "@/pages/showcase/TestB2b";
 import OlympicB2b from "@/pages/showcase/OlympicB2b";
 import AgentPortal from "@/pages/showcase/AgentPortal";
 import NotFound from "@/pages/admin/not-found";
+import { ErrorNavigator } from "@/pages/error/ErrorNavigator";
+import { useBreadcrumbTracker } from "@/hooks/use-breadcrumb";
 import { Loader2 } from "lucide-react";
+
+function BreadcrumbTracker() {
+  useBreadcrumbTracker();
+  return null;
+}
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
 
 function ServerPanel() {
@@ -385,8 +392,10 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <CustomerAuthProvider>
+            <BreadcrumbTracker />
             <Switch>
               {/* Public routes */}
+              <Route path="/error" component={ErrorNavigator} />
               <Route path="/" component={BusinessPage} />
               <Route path="/business" component={BusinessPage} />
               <Route path="/demo" component={BusinessPage} />

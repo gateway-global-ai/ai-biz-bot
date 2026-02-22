@@ -1017,6 +1017,18 @@ export const insertChatLogSchema = createInsertSchema(chatLogs).omit({
 export type InsertChatLog = z.infer<typeof insertChatLogSchema>;
 export type ChatLog = typeof chatLogs.$inferSelect;
 
+// ── Error Navigator & Recovery Analytics ─────────────────────────────────────
+/** Logs ERROR_LANDING, RECOVERY_SUCCESS, VOICE_TIER_INTEREST for bounce/recovery tracking. */
+export const analyticsLogs = pgTable("analytics_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id),
+  eventType: text("event_type").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AnalyticsLog = typeof analyticsLogs.$inferSelect;
+
 // =========================================
 // Business Data & Tour Guide (Clear Voice)
 // =========================================

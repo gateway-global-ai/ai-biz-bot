@@ -3,6 +3,7 @@ import ShareButton from '@/components/ShareButton';
 import { LiveVoiceClient } from '@/services/liveService';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
+import { ReferralFooter } from '@/components/layout/ReferralFooter';
 
 interface PlaceData {
   name: string;
@@ -1319,6 +1320,8 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
           )}
         </div>
       )}
+
+      <ReferralFooter siteConfigId={siteConfigId} />
 
       {!isChatOpen && !isAdminOpen && (
         <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
