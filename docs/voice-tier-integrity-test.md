@@ -1,6 +1,6 @@
 # Voice Tier Integrity Test — "Jason Standard" QA Checklist
 
-Final gate before promoting the `feature/pr2-healing-layer` branch to production.
+Final gate before promoting the `copilot/add-knowledge-worker-prompt` branch to production.
 Run every step in the **Dev** environment (port 3004) against a site that is on the **voice** plan.
 
 ---

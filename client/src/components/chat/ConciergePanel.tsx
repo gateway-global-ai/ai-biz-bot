@@ -182,6 +182,17 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                 setShowSuccessAnimation(true);
                 setTimeout(() => setShowSuccessAnimation(false), 3000);
               }
+
+              // Surface upgrade / workspace-connect notices from MCP tool errors.
+              if (msg.metadata.tool_type === 'mcp_action') {
+                let notice: string | undefined;
+                if (msg.metadata.ui_action === 'SHOW_UPGRADE_MODAL') {
+                  notice = '⚠️ Voice or Enterprise plan required to use Workspace tools. Upgrade in your Admin Panel.';
+                } else if (msg.metadata.ui_action === 'SHOW_WORKSPACE_CONNECT') {
+                  notice = '🔗 Google Workspace is not connected. Go to Admin Panel → Workspace tab to connect it.';
+                }
+                if (notice) addMessage('system', notice);
+              }
             }
           } else if (msg.type === 'error') {
             setIsProcessing(false);

@@ -5,6 +5,13 @@ import { registerWebSocketRoute } from "./websocketRouter";
 import { TOOL_DECLARATIONS } from "./config/geminiToolDeclarations";
 import { handleToolCall } from "./services/toolHandler";
 
+/** Shape of the structured result returned by MCP tool handlers. */
+interface McpToolResult {
+  ui_action?: 'SHOW_UPGRADE_MODAL' | 'SHOW_WORKSPACE_CONNECT';
+  audio_cue?: string;
+  [key: string]: unknown;
+}
+
 /**
  * Gemini Multimodal Live API Proxy
  * 
@@ -242,6 +249,18 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                       zoom: fcArgs.zoom_level || 14,
                       markers: (result as any[]) || [],
                     };
+                  } else if (functionCall.name === 'mcp_search_drive' || functionCall.name === 'mcp_read_calendar') {
+                    // Forward ui_action so the client can surface upgrade/connect modals.
+                    const r = result as McpToolResult;
+                    if (r?.ui_action) {
+                      toolMetadata = {
+                        type: 'tool_result',
+                        tool_name: functionCall.name,
+                        tool_type: 'mcp_action',
+                        ui_action: r.ui_action,
+                        audio_cue: r.audio_cue,
+                      };
+                    }
                   }
 
                   if (toolMetadata) {

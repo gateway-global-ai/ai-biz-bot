@@ -97,8 +97,8 @@ export class GeminiStreamingClient implements IVoiceClient {
     // 2. Server-enriched instruction (business intelligence + SWOT)
     // 3. Basic template built from BusinessContext + AgentConfig
     let systemInstruction: string;
-    if ((business as any).systemPromptOverride) {
-      systemInstruction = (business as any).systemPromptOverride;
+    if (business.systemPromptOverride) {
+      systemInstruction = business.systemPromptOverride;
       console.log('[GeminiStreamingClient] Using system_prompt_override (Knowledge Worker mode)');
     } else {
       try {
@@ -231,9 +231,7 @@ export class GeminiStreamingClient implements IVoiceClient {
           },
         };
         
-        // --- DEBUG: Log the exact outgoing setup JSON to audit for formatting errors. ---
-        const setupPayload = JSON.stringify(setupMessage, null, 2);
-        console.log('[GeminiStreamingClient] Sending final validated setup payload');
+        console.log('[GeminiStreamingClient] Sending final validated setup payload:', JSON.stringify(setupMessage, null, 2));
 
         this.socket?.send(JSON.stringify(setupMessage));
         // DON'T start audio yet - wait for server_ready signal
@@ -573,6 +571,8 @@ export class GeminiStreamingClient implements IVoiceClient {
         text: '',
         metadata: {
           tool_type: message.tool_type,
+          ui_action: message.ui_action,
+          audio_cue: message.audio_cue,
           ...message.data,
         }
       });
