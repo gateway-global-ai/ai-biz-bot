@@ -47,6 +47,8 @@ export const telephonyConfigs = pgTable("telephony_configs", {
   ownerEmail: text("owner_email"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  /** Links this telephony config to the site/business it serves (for billing attribution). */
+  siteConfigId: varchar("site_config_id"),
 });
 
 export const insertTelephonyConfigSchema = createInsertSchema(telephonyConfigs).omit({
@@ -72,6 +74,14 @@ export const callLogs = pgTable("call_logs", {
   customerEmail: text("customer_email"),
   notes: text("notes"),
   timestamp: timestamp("timestamp").defaultNow(),
+  /** Millisecond-precision call start time recorded when the Media Stream begins. */
+  callStart: timestamp("call_start"),
+  /** Millisecond-precision call end time recorded when the Media Stream stops. */
+  callEnd: timestamp("call_end"),
+  /** Actual call duration in seconds derived from callEnd - callStart (stopwatch). */
+  actualSeconds: integer("actual_seconds"),
+  /** The site/business this call belongs to – used for billing attribution. */
+  siteConfigId: varchar("site_config_id"),
 });
 
 export const insertCallLogSchema = createInsertSchema(callLogs).omit({

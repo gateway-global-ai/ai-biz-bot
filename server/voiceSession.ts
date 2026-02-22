@@ -11,6 +11,14 @@ export interface VoiceSession {
   personality: string;
   isProcessing: boolean;
   turnCount: number;
+  /** Millisecond-precision timestamp recorded when the Twilio Media Stream starts. */
+  callStart: Date | null;
+  /** Millisecond-precision timestamp recorded when the Twilio Media Stream stops. */
+  callEnd: Date | null;
+  /** Computed duration in whole seconds (callEnd - callStart). Null until call ends. */
+  actualSeconds: number | null;
+  /** The site/business this call belongs to – used for billing attribution. */
+  siteConfigId: string | null;
 }
 
 class VoiceSessionManager {
@@ -22,7 +30,7 @@ class VoiceSessionManager {
     this.cleanupInterval = setInterval(() => this.cleanupStaleSessions(), 60000);
   }
 
-  createSession(callSid: string, agentName: string = "AI Assistant", personality: string = "helpful"): VoiceSession {
+  createSession(callSid: string, agentName: string = "AI Assistant", personality: string = "helpful", siteConfigId?: string | null): VoiceSession {
     const session: VoiceSession = {
       callSid,
       streamSid: null,
@@ -34,6 +42,10 @@ class VoiceSessionManager {
       personality,
       isProcessing: false,
       turnCount: 0,
+      callStart: null,
+      callEnd: null,
+      actualSeconds: null,
+      siteConfigId: siteConfigId ?? null,
     };
     this.sessions.set(callSid, session);
     console.log(`[VoiceSession] Created session for call ${callSid}`);
@@ -74,6 +86,41 @@ class VoiceSessionManager {
       session.isProcessing = isProcessing;
       session.lastActivity = new Date();
     }
+  }
+
+  /**
+   * Start the per-call stopwatch.  Records `callStart` to the millisecond.
+   */
+  startCall(callSid: string): void {
+    const session = this.sessions.get(callSid);
+    if (session && !session.callStart) {
+      session.callStart = new Date();
+      session.lastActivity = new Date();
+      console.log(`[VoiceSession] Stopwatch started for call ${callSid}`);
+    }
+  }
+
+  /**
+   * Stop the per-call stopwatch.  Records `callEnd` and computes `actualSeconds`
+   * from the difference between `callEnd` and `callStart`.
+   * Returns the elapsed seconds (0 if callStart was never set).
+   */
+  stopCall(callSid: string): number {
+    const session = this.sessions.get(callSid);
+    if (!session) return 0;
+    session.callEnd = new Date();
+    session.lastActivity = new Date();
+    if (session.callStart) {
+      session.actualSeconds = Math.round(
+        (session.callEnd.getTime() - session.callStart.getTime()) / 1000
+      );
+    } else {
+      session.actualSeconds = 0;
+    }
+    console.log(
+      `[VoiceSession] Stopwatch stopped for call ${callSid}: ${session.actualSeconds}s`
+    );
+    return session.actualSeconds;
   }
 
   deleteSession(callSid: string): boolean {
