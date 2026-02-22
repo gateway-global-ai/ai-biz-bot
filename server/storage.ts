@@ -62,6 +62,9 @@ import {
   type Inquiry,
   type InsertInquiry,
   type PlatformBusinessMap,
+  type VoiceUsageLog,
+  type InsertVoiceUsageLog,
+  voiceUsageLogs,
   botTemplates,
   telephonyConfigs,
   callLogs,
@@ -265,6 +268,10 @@ export interface IStorage {
   getOrCreatePlatformId(siteConfigId: string): Promise<string>;
   resolvePlatformId(input: { siteConfigId?: string; googlePlaceId?: string }): Promise<PlatformBusinessMap | null>;
   getSiteConfigIdByPlatformId(platformId: string): Promise<string | null>;
+
+  // Voice Usage Log operations
+  createVoiceUsageLog(log: InsertVoiceUsageLog): Promise<VoiceUsageLog>;
+  getVoiceUsageLogs(siteConfigId: string, limit?: number): Promise<VoiceUsageLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1316,6 +1323,20 @@ export class DatabaseStorage implements IStorage {
       .where(eq(platformBusinessMap.platformId, platformId as any))
       .limit(1);
     return row?.siteConfigId ?? null;
+  }
+
+  async createVoiceUsageLog(log: InsertVoiceUsageLog): Promise<VoiceUsageLog> {
+    const [created] = await db.insert(voiceUsageLogs).values(log).returning();
+    return created;
+  }
+
+  async getVoiceUsageLogs(siteConfigId: string, limit = 50): Promise<VoiceUsageLog[]> {
+    return db
+      .select()
+      .from(voiceUsageLogs)
+      .where(eq(voiceUsageLogs.siteConfigId, siteConfigId))
+      .orderBy(desc(voiceUsageLogs.createdAt))
+      .limit(limit);
   }
 }
 

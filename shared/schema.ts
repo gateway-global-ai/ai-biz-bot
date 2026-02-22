@@ -947,6 +947,8 @@ export const siteConfigs = pgTable("site_configs", {
   heroImageUrl: text("hero_image_url"),
   /** Prompt used to generate the hero image (stored for regeneration) */
   heroImagePrompt: text("hero_image_prompt"),
+  /** Prepaid minute balance for the Energy Pool billing system. null = unrestricted. */
+  minuteBalance: integer("minute_balance"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -959,6 +961,36 @@ export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
 
 export type InsertSiteConfig = z.infer<typeof insertSiteConfigSchema>;
 export type SiteConfig = typeof siteConfigs.$inferSelect;
+
+// ── Voice Usage Logs – Energy Pool Billing ($0.10/min) ────────────────────────
+// One row per completed call. billedMinutes = ceil(rawDurationSeconds / 60).
+// amountCents = billedMinutes * ratePerMinuteCents (default 10 cents).
+export const voiceUsageLogs = pgTable("voice_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** The site/business that was charged for this call */
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  /** Twilio or internal session identifier */
+  callSid: text("call_sid"),
+  /** 'phone' = PSTN/Twilio, 'web' = Gemini Live website voice */
+  callType: text("call_type").notNull().default("phone"), // 'phone' | 'web'
+  /** Raw call duration as reported by Twilio / session timer */
+  rawDurationSeconds: integer("raw_duration_seconds").notNull().default(0),
+  /** Billed minutes after ceiling rounding: ceil(rawDurationSeconds / 60) */
+  billedMinutes: integer("billed_minutes").notNull().default(0),
+  /** Rate in cents per minute (default 10 = $0.10/min) */
+  ratePerMinuteCents: integer("rate_per_minute_cents").notNull().default(10),
+  /** Total charge in cents: billedMinutes * ratePerMinuteCents */
+  billedAmountCents: integer("billed_amount_cents").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVoiceUsageLogSchema = createInsertSchema(voiceUsageLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVoiceUsageLog = z.infer<typeof insertVoiceUsageLogSchema>;
+export type VoiceUsageLog = typeof voiceUsageLogs.$inferSelect;
 
 // ── Google Workspace Integration ──────────────────────────────────────────────
 // Per-site workspace configuration (tied to siteConfigs, not customerAccounts,

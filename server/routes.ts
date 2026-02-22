@@ -48,6 +48,7 @@ import { placesCache, CACHE_TTL } from "./placesCache";
 import crypto from "crypto";
 import { db } from "./db";
 import { workspaceConfigurations, analyticsLogs } from "@shared/schema";
+import { logVoiceUsage, hasEnergyBalance, getEnergyBalance, getVoiceUsageLogs } from "./services/energy-monitor";
 import { eq } from "drizzle-orm";
 
 
@@ -3634,6 +3635,21 @@ export async function registerRoutes(
                   CallStatus === 'busy' ? 'missed' : 'failed',
           callSid: CallSid,
         });
+
+        // Log energy usage for completed calls
+        if (CallStatus === 'completed') {
+          try {
+            const siteConfigId = (config as any).siteConfigId ?? config.id;
+            await logVoiceUsage({
+              siteConfigId,
+              callSid: CallSid,
+              callType: 'phone',
+              rawDurationSeconds: parseInt(CallDuration ?? '0', 10) || 0,
+            });
+          } catch (usageErr: any) {
+            console.error('[Energy] Failed to log voice usage:', usageErr.message);
+          }
+        }
       }
     } catch (error) {
       console.error('Error logging call status:', error);
@@ -4883,6 +4899,52 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       const next = existing.filter((d: any) => d.id !== req.params.docId);
       await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: next } as any);
       res.json({ success: true, knowledgeLibrary: next });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ── Energy / Usage Ledger endpoints ─────────────────────────────────────────
+
+  /** GET /api/site-configs/:id/energy – current balance + lifetime totals */
+  app.get("/api/site-configs/:id/energy", async (req, res) => {
+    try {
+      const site = await storage.getSiteConfigById(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const balance = await getEnergyBalance(req.params.id);
+      res.json(balance);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /** GET /api/site-configs/:id/energy/logs – paginated usage log */
+  app.get("/api/site-configs/:id/energy/logs", async (req, res) => {
+    try {
+      const site = await storage.getSiteConfigById(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const limit = Math.min(parseInt(String(req.query.limit ?? '50'), 10) || 50, 200);
+      const logs = await getVoiceUsageLogs(req.params.id, limit);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /** POST /api/site-configs/:id/energy/top-up – add prepaid minutes */
+  app.post("/api/site-configs/:id/energy/top-up", async (req, res) => {
+    try {
+      const site = await storage.getSiteConfigById(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+
+      const schema = z.object({ minutes: z.number().int().positive() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "minutes must be a positive integer" });
+
+      const current = site.minuteBalance ?? 0;
+      const newBalance = current + parsed.data.minutes;
+      await storage.updateSiteConfig(req.params.id, { minuteBalance: newBalance } as any);
+      res.json({ success: true, minuteBalance: newBalance, added: parsed.data.minutes });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -6366,6 +6428,22 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         callSid: CallSid,
         duration: 0,
       });
+
+      // Energy balance guard – if the site has exhausted its prepaid minutes, play the
+      // "Zuckerberg Lock" message and hang up rather than burning more AI cost.
+      const siteConfigId = (config as any)?.siteConfigId ?? config?.id;
+      if (siteConfigId) {
+        const hasBalance = await hasEnergyBalance(siteConfigId);
+        if (!hasBalance) {
+          console.log(`[Energy] Site ${siteConfigId} out of prepaid minutes – blocking call`);
+          res.set('Content-Type', 'text/xml');
+          return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="alice">I'm low on energy for this business. The owner needs to top up my reserves so I can keep assisting you. Please call back later. Goodbye!</Say>
+  <Hangup/>
+</Response>`);
+        }
+      }
       
       // Check firewall - is this caller allowed?
       const allowedNumbers = config?.allowedNumbers || [];
@@ -6492,12 +6570,32 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   // Voice status callback - tracks call completion
   app.post("/webhook/voice/status", validateTwilioSignature, async (req, res) => {
     try {
-      const { CallSid, CallStatus, CallDuration } = req.body;
+      const { CallSid, CallStatus, CallDuration, To } = req.body;
       
       console.log(`[Voice Status] CallSid: ${CallSid}, Status: ${CallStatus}, Duration: ${CallDuration}`);
       
-      // Update call log with final status
-      // Note: Would need to add a method to update by callSid
+      // Log usage and decrement balance for every completed call
+      if (CallStatus === 'completed' && CallSid) {
+        try {
+          // Resolve the siteConfigId via the dialled-to phone number
+          const config = await storage.getTelephonyConfig();
+          if (config?.id) {
+            // Use the telephonyConfig's linked siteConfig if available; otherwise fall back
+            // to the config id itself as a best-effort attribution key.
+            const siteConfigId = (config as any).siteConfigId ?? config.id;
+            const rawSeconds = parseInt(CallDuration ?? '0', 10) || 0;
+            const result = await logVoiceUsage({
+              siteConfigId,
+              callSid: CallSid,
+              callType: 'phone',
+              rawDurationSeconds: rawSeconds,
+            });
+            console.log(`[Energy] Logged ${result.billedMinutes} billed minute(s), $${(result.billedAmountCents / 100).toFixed(2)} – balance now ${result.newBalance ?? 'unrestricted'} minute(s)`);
+          }
+        } catch (usageErr: any) {
+          console.error('[Energy] Failed to log voice usage:', usageErr.message);
+        }
+      }
       
       res.sendStatus(200);
     } catch (error: any) {
