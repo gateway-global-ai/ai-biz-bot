@@ -3902,35 +3902,39 @@ export async function registerRoutes(
       
       console.log('[Task Submit] Created task:', newTask.id);
       
-      // Send immediate SMS confirmation
+      // Send Navigator first-login "Call Coordinates" SMS
+      let callCoordinates: string | null = null;
       try {
-        const { generateTaskUpdate } = await import("./kimi");
+        const { generateNavigatorIntroduction } = await import("./kimi");
         
-        const smsMessage = await generateTaskUpdate({
+        // Fetch telephony config once; reuse the phone number as Call Coordinates
+        const config = await storage.getTelephonyConfig();
+        callCoordinates = config?.phoneNumber ?? null;
+
+        const smsMessage = await generateNavigatorIntroduction({
+          userName: name,
           agentName,
           taskDescription: task,
-          hoursElapsed: 0,
-          totalHours: 24,
-          updateType: 'start',
+          callCoordinates: callCoordinates ?? 'Gateway Global AI',
         });
         
         // Send SMS via Twilio
-        const config = await storage.getTelephonyConfig();
-        if (config?.phoneNumber && config?.accountSid && config?.authToken) {
+        if (callCoordinates && config?.accountSid && config?.authToken) {
           const { sendSms } = await import("./twilio");
-          await sendSms(e164Phone, smsMessage, config.phoneNumber);
-          console.log(`[Task Submit] Sent initial SMS to ${e164Phone}`);
+          await sendSms(e164Phone, smsMessage, callCoordinates);
+          console.log(`[Task Submit] Sent Navigator intro SMS to ${e164Phone}`);
         } else {
-          console.warn('[Task Submit] No Twilio config, skipping SMS');
+          console.warn('[Task Submit] No Twilio config, skipping Navigator intro SMS');
         }
       } catch (smsError) {
-        console.error('[Task Submit] SMS send error:', smsError);
+        console.error('[Task Submit] Navigator intro SMS error:', smsError);
       }
       
       res.json({ 
         success: true, 
         taskId: newTask.id,
-        message: `Task created! ${agentName} will text you shortly.`
+        message: `Task created! ${agentName} will text you shortly.`,
+        callCoordinates,
       });
       
     } catch (error: any) {
