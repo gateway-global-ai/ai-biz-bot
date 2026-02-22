@@ -949,6 +949,12 @@ export const siteConfigs = pgTable("site_configs", {
   heroImagePrompt: text("hero_image_prompt"),
   /** Prepaid minute balance for the Energy Pool billing system. null = unrestricted. */
   minuteBalance: integer("minute_balance"),
+  /** Twilio sub-account SID provisioned for this AI Partner deployment. */
+  twilioSubAccountSid: text("twilio_sub_account_sid"),
+  /** Phone number (E.164) provisioned for this AI Partner via CID provisioning. */
+  provisionedPhoneNumber: text("provisioned_phone_number"),
+  /** Twilio IncomingPhoneNumber SID for the provisioned number. */
+  provisionedPhoneSid: text("provisioned_phone_sid"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

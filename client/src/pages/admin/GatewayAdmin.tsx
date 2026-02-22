@@ -12,9 +12,9 @@ import { useToast } from '@/hooks/use-toast';
 import { 
   Globe, Phone, Users, BarChart3, Settings, Check, 
   Loader2, PhoneCall, MessageSquare, Clock, TrendingUp,
-  Building2, Plus, Trash2, Key
+  Building2, Plus, Trash2, Key, Zap
 } from 'lucide-react';
-import type { TelephonyConfig, Customer, CallLog, TwilioSubAccount } from '@shared/schema';
+import type { TelephonyConfig, Customer, CallLog, TwilioSubAccount, SiteConfig } from '@shared/schema';
 
 export default function GatewayAdmin() {
   const { toast } = useToast();
@@ -24,6 +24,10 @@ export default function GatewayAdmin() {
   const [newSubAccountEmail, setNewSubAccountEmail] = useState('');
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   
+  // Provision Number dialog state
+  const [provisioningSiteId, setProvisioningSiteId] = useState<string | null>(null);
+  const [provisionAreaCode, setProvisionAreaCode] = useState('');
+
   // Local state for editable fields
   const [editedPhoneNumber, setEditedPhoneNumber] = useState('');
   const [editedPhoneSid, setEditedPhoneSid] = useState('');
@@ -45,6 +49,11 @@ export default function GatewayAdmin() {
 
   const { data: subAccounts = [], isLoading: subAccountsLoading } = useQuery<TwilioSubAccount[]>({
     queryKey: ['/api/twilio/sub-accounts'],
+  });
+
+  const { data: siteConfigs = [], isLoading: siteConfigsLoading } = useQuery<SiteConfig[]>({
+    queryKey: ['/api/site-configs'],
+    enabled: activeTab === 'ai-partners',
   });
 
   const updateConfigMutation = useMutation({
@@ -77,6 +86,22 @@ export default function GatewayAdmin() {
       toast({ title: 'Sub-account deleted' });
     },
     onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
+  });
+
+  const provisionNumberMutation = useMutation({
+    mutationFn: ({ siteId, areaCode }: { siteId: string; areaCode: string }) =>
+      apiRequest('POST', `/api/site-configs/${siteId}/provision-number`, { areaCode }),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/site-configs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/twilio/sub-accounts'] });
+      toast({
+        title: 'Phone number provisioned!',
+        description: `${data.phoneNumber} is now live and connected.`,
+      });
+      setProvisioningSiteId(null);
+      setProvisionAreaCode('');
+    },
+    onError: (error: any) => toast({ title: 'Provisioning failed', description: error.message, variant: 'destructive' }),
   });
 
   // Initialize edited values when config loads
@@ -214,6 +239,10 @@ export default function GatewayAdmin() {
               <Settings className="w-4 h-4 mr-2" />
               Gateway Config
             </TabsTrigger>
+            <TabsTrigger value="ai-partners" className="data-[state=active]:bg-purple-600" data-testid="tab-ai-partners">
+              <Zap className="w-4 h-4 mr-2" />
+              AI Partners
+            </TabsTrigger>
             <TabsTrigger value="sub-accounts" className="data-[state=active]:bg-purple-600" data-testid="tab-sub-accounts">
               <Building2 className="w-4 h-4 mr-2" />
               Sub-Accounts
@@ -329,6 +358,135 @@ export default function GatewayAdmin() {
                       )}
                     </div>
                   </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="ai-partners" className="space-y-4">
+            <Card className="bg-slate-900/50 border-slate-800">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-amber-400" />
+                  AI Partner Deployments
+                </CardTitle>
+                <CardDescription>
+                  Provision dedicated phone numbers for your AI Partner clients. Each partner gets
+                  their own Twilio sub-account and a local number with the voice webhook pre-configured.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {siteConfigsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+                  </div>
+                ) : siteConfigs.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400">
+                    <Zap className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No AI Partner deployments yet</p>
+                    <p className="text-sm mt-1">Create site configurations to get started</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {siteConfigs.map((site) => (
+                      <div
+                        key={site.id}
+                        className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700"
+                        data-testid={`ai-partner-row-${site.id}`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                            <Zap className="w-6 h-6 text-amber-400" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-white">{site.name}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              {site.provisionedPhoneNumber ? (
+                                <span className="flex items-center gap-1 text-xs text-emerald-400">
+                                  <Phone className="w-3 h-3" />
+                                  {site.provisionedPhoneNumber}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-500">No number provisioned</span>
+                              )}
+                              {site.domain && (
+                                <span className="text-xs text-slate-500">• {site.domain}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {site.provisionedPhoneNumber ? (
+                            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                              <Phone className="w-3 h-3 mr-1" /> Live
+                            </Badge>
+                          ) : (
+                            <Dialog
+                              open={provisioningSiteId === site.id}
+                              onOpenChange={(open) => {
+                                if (!open) { setProvisioningSiteId(null); setProvisionAreaCode(''); }
+                              }}
+                            >
+                              <DialogTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  className="bg-amber-600 hover:bg-amber-500"
+                                  onClick={() => setProvisioningSiteId(site.id)}
+                                  data-testid={`button-provision-number-${site.id}`}
+                                >
+                                  <Phone className="w-3 h-3 mr-1" />
+                                  Provision Number
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="bg-slate-900 border-slate-700">
+                                <DialogHeader>
+                                  <DialogTitle className="text-white">
+                                    Provision Number for {site.name}
+                                  </DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-4 pt-4">
+                                  <p className="text-sm text-slate-400">
+                                    A dedicated Twilio sub-account will be created for this AI Partner,
+                                    and a local phone number from the requested area code will be
+                                    purchased and pre-wired to the voice AI webhook.
+                                  </p>
+                                  <div>
+                                    <Label className="text-slate-300">Area Code (US)</Label>
+                                    <Input
+                                      value={provisionAreaCode}
+                                      onChange={(e) => setProvisionAreaCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                                      placeholder="e.g. 415"
+                                      maxLength={3}
+                                      className="bg-slate-800 border-slate-700 mt-1 font-mono"
+                                      data-testid="input-provision-area-code"
+                                    />
+                                  </div>
+                                  <Button
+                                    className="w-full bg-amber-600 hover:bg-amber-500"
+                                    disabled={provisionAreaCode.length !== 3 || provisionNumberMutation.isPending}
+                                    onClick={() => provisionNumberMutation.mutate({ siteId: site.id, areaCode: provisionAreaCode })}
+                                    data-testid="button-confirm-provision-number"
+                                  >
+                                    {provisionNumberMutation.isPending ? (
+                                      <>
+                                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                        Provisioning…
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Zap className="w-4 h-4 mr-2" />
+                                        Provision Number
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </CardContent>
             </Card>

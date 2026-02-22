@@ -25,7 +25,8 @@ import {
   getMessageLogs,
   updateCallerIdName,
   getTwilioFromPhoneNumber,
-  getTwilioClient
+  getTwilioClient,
+  createSubAccountAndProvisionNumber
 } from "./twilio";
 import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, PLAN_LIMITS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
@@ -4796,6 +4797,74 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       await storage.deleteSiteConfig(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Sub-Account CID Provisioning Engine
+  // Automatically creates a Twilio sub-account for a new AI Partner, purchases a
+  // local phone number in that sub-account, and wires the Voice URL webhook so the
+  // number is live in a single API call (< 10 s target).
+  app.post("/api/site-configs/:id/provision-number", async (req, res) => {
+    try {
+      const siteConfig = await storage.getSiteConfig(req.params.id);
+      if (!siteConfig) return res.status(404).json({ error: "AI Partner not found" });
+
+      if (siteConfig.provisionedPhoneNumber) {
+        return res.status(409).json({
+          error: "A phone number is already provisioned for this AI Partner",
+          phoneNumber: siteConfig.provisionedPhoneNumber,
+        });
+      }
+
+      const schema = z.object({
+        areaCode: z.string().regex(/^\d{3}$/, "Area code must be exactly 3 digits"),
+        country: z.string().length(2).optional().default("US"),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+      const { areaCode, country } = parsed.data;
+
+      // Build the Voice webhook URL pointing to the AI voice concierge endpoint.
+      // /webhook/voice/kimi is the primary voice AI handler registered in routes.ts.
+      const host = process.env.REPLIT_DEV_DOMAIN || req.get("host");
+      const voiceWebhookUrl = `https://${host}/webhook/voice/kimi`;
+
+      const result = await createSubAccountAndProvisionNumber(
+        siteConfig.name,
+        areaCode,
+        voiceWebhookUrl,
+        country,
+      );
+
+      // Persist the sub-account and provisioned number on the site config
+      // Note: authToken is saved in the twilioSubAccounts table for security
+      const savedSubAccount = await storage.createTwilioSubAccount({
+        accountSid: result.subAccountSid,
+        authToken: result.subAccountAuthToken,
+        friendlyName: result.subAccountFriendlyName,
+        status: "active",
+        ownerEmail: null,
+      });
+
+      await storage.updateSiteConfig(req.params.id, {
+        twilioSubAccountSid: result.subAccountSid,
+        provisionedPhoneNumber: result.phoneNumber,
+        provisionedPhoneSid: result.phoneSid,
+      });
+
+      console.log(`[Provision] AI Partner "${siteConfig.name}" (${req.params.id}) provisioned number ${result.phoneNumber} via sub-account ${result.subAccountSid}`);
+
+      res.status(201).json({
+        subAccountSid: result.subAccountSid,
+        subAccountId: savedSubAccount.id,
+        phoneNumber: result.phoneNumber,
+        phoneSid: result.phoneSid,
+        voiceWebhookUrl,
+      });
+    } catch (error: any) {
+      console.error("[Provision] Error provisioning number:", error);
       res.status(500).json({ error: error.message });
     }
   });
