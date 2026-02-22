@@ -32,6 +32,10 @@ const allowlist = [
   "zod-validation-error",
 ];
 
+// These packages must always remain external — they rely on native bindings or
+// use dynamic require() patterns that break when bundled into a single ESM file.
+const forceExternal = ["socket.io", "socket.io-client"];
+
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
 
@@ -56,7 +60,7 @@ async function buildAll() {
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,
-    external: externals,
+    external: [...new Set([...externals, ...forceExternal])],
     logLevel: "info",
     banner: {
       js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
