@@ -554,6 +554,24 @@ app.use((req, res, next) => {
   // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
+
+    // Belt-and-suspenders SPA catch-all: placed AFTER serveStatic() so that
+    // express.static() handles /assets/* before this wildcard fires.
+    // Express 5 requires a named wildcard — bare "*" throws in path-to-regexp v8.
+    app.get("/{*path}", (req: Request, res: Response, next: NextFunction) => {
+      if (
+        req.path.startsWith("/api") ||
+        req.path.startsWith("/ws") ||
+        req.path.includes(".")
+      ) {
+        return next();
+      }
+      // runtimeDirname = dist/ in the production bundle, so public/index.html is one level down
+      res.sendFile(
+        path.resolve(runtimeDirname, "public", "index.html"),
+        (err: any) => { if (err) next(err); }
+      );
+    });
   } else {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
