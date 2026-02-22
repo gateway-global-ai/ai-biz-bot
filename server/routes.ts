@@ -1,5 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import path, { dirname } from "path";
+import { fileURLToPath } from "url";
 import { storage } from "./storage";
 import { registerVlmRoutes } from "./vlm-routes";
 import { registerAgentRoutes } from "./agents/agent-routes";
@@ -48,6 +50,10 @@ import crypto from "crypto";
 import { db } from "./db";
 import { workspaceConfigurations } from "@shared/schema";
 import { eq } from "drizzle-orm";
+
+// Establish correct path context for both source and bundled (dist/index.mjs) execution
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -7984,6 +7990,25 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
   // B2B Travel OS: itineraries, GRN/SerpAPI leads, markups, curation events
   registerB2bRoutes(app);
+
+  // SPA catch-all: in production, serve index.html for every unmatched GET
+  // request so that client-side routes (e.g. /my-account) never return
+  // "Cannot GET". API paths are excluded so they can still 404 properly.
+  // Development is intentionally excluded — server/vite.ts registers its own
+  // "/{*path}" catch-all that lets Vite transform and serve index.html.
+  if (process.env.NODE_ENV === "production") {
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api")) {
+        return next();
+      }
+      // In dist/index.mjs, __dirname resolves to 'dist/', so index.html
+      // lives one level down in 'dist/public/index.html'.
+      const indexPath = path.resolve(__dirname, "public", "index.html");
+      res.sendFile(indexPath, (err) => {
+        if (err) next(err);
+      });
+    });
+  }
 
   return httpServer;
 }
