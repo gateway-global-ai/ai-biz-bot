@@ -284,7 +284,7 @@ export class WorkspaceOrchestrator {
         where: eq(workspaceConfigurations.id, workspaceConfigId),
       });
 
-      const swotData = null;
+      const swotData = null; // placeholder for future SWOT data retrieval
 
       // Create basic structure - AI Biz Bot will customize further based on conversation
       const result = await this.workspaceService.createWorkspaceStructure({
@@ -312,11 +312,7 @@ export class WorkspaceOrchestrator {
         workspaceConfigId,
         setupData: {
           ...result.data,
-          swotInsights: swotData ? {
-            strengths: swotData.strengths,
-            opportunities: swotData.opportunities,
-            recommendations: swotData.recommendations,
-          } : null,
+          swotInsights: null,
         },
         nextSteps: [
           'Basic workspace structure created',
@@ -351,7 +347,7 @@ export class WorkspaceOrchestrator {
       customTools: Array<{
         toolType: string;
         toolName: string;
-        configuration: any;
+        configuration?: any;
       }>;
       additionalFolders?: string[];
       customSheets?: Array<{ name: string; headers: string[] }>;
