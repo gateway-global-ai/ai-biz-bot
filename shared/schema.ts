@@ -2048,3 +2048,76 @@ export const insertEnrichmentSnapshotSchema = createInsertSchema(
 ).omit({ id: true, createdAt: true });
 export type InsertEnrichmentSnapshot = z.infer<typeof insertEnrichmentSnapshotSchema>;
 export type EnrichmentSnapshot = typeof platformBusinessEnrichmentSnapshots.$inferSelect;
+
+// ============================================================
+// Reseller Hierarchy (migration 0007_resellers_commissions)
+// ============================================================
+
+/** One row per reseller partner.  parentResellerId enables multi-level trees. */
+export const resellers = pgTable(
+  "resellers",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique(),
+    phone: text("phone"),
+    company: text("company"),
+    parentResellerId: varchar("parent_reseller_id").references((): any => resellers.id, {
+      onDelete: "set null",
+    }),
+    commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }).notNull().default("0.10"),
+    stripeAccountId: text("stripe_account_id"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_resellers_parent_id").on(table.parentResellerId),
+    index("idx_resellers_email").on(table.email),
+  ],
+);
+
+export const insertResellerSchema = createInsertSchema(resellers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertReseller = z.infer<typeof insertResellerSchema>;
+export type Reseller = typeof resellers.$inferSelect;
+
+/** One row per commission event (subscription payment, energy top-up, manual credit). */
+export const resellerCommissions = pgTable(
+  "reseller_commissions",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    resellerId: varchar("reseller_id")
+      .notNull()
+      .references(() => resellers.id, { onDelete: "cascade" }),
+    customerAccountId: varchar("customer_account_id").references(
+      () => customerAccounts.id,
+      { onDelete: "set null" },
+    ),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    /** 'subscription' | 'top_up' | 'manual' */
+    eventType: text("event_type").notNull(),
+    grossAmount: integer("gross_amount").notNull(),     // cents
+    commissionAmount: integer("commission_amount").notNull(), // cents
+    commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }).notNull(),
+    /** 'pending' | 'paid' | 'cancelled' */
+    status: text("status").notNull().default("pending"),
+    paidAt: timestamp("paid_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_reseller_commissions_reseller_id").on(table.resellerId),
+    index("idx_reseller_commissions_customer_id").on(table.customerAccountId),
+    index("idx_reseller_commissions_status").on(table.status),
+  ],
+);
+
+export const insertResellerCommissionSchema = createInsertSchema(resellerCommissions).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertResellerCommission = z.infer<typeof insertResellerCommissionSchema>;
+export type ResellerCommission = typeof resellerCommissions.$inferSelect;
