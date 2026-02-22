@@ -284,8 +284,6 @@ export class WorkspaceOrchestrator {
         where: eq(workspaceConfigurations.id, workspaceConfigId),
       });
 
-      const swotData = null; // placeholder for future SWOT data retrieval
-
       // Create basic structure - AI Biz Bot will customize further based on conversation
       const result = await this.workspaceService.createWorkspaceStructure({
         businessName,
@@ -312,6 +310,7 @@ export class WorkspaceOrchestrator {
         workspaceConfigId,
         setupData: {
           ...result.data,
+          // Placeholder for future SWOT-backed structure customization
           swotInsights: null,
         },
         nextSteps: [

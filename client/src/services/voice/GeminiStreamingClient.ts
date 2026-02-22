@@ -171,6 +171,33 @@ export class GeminiStreamingClient implements IVoiceClient {
                   type: "object",
                   properties: {}
                 }
+              },
+              // Workspace MCP Suite — read-only; scoped by siteConfigId (Voice/Enterprise plan)
+              {
+                name: "mcp_search_drive",
+                description: "Searches the user's Google Drive for documents, spreadsheets, or folders based on a semantic query. Use this to find business context or client files.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    siteConfigId: { type: "string", description: "The unique UUID of the business to scope the search." },
+                    query: { type: "string", description: "Semantic search term (e.g., 'Project Alpha Requirements')." },
+                    mimeType: { type: "string", description: "Optional: Filter by file type (e.g., 'application/pdf')." }
+                  },
+                  required: ["siteConfigId", "query"]
+                }
+              },
+              {
+                name: "mcp_read_calendar",
+                description: "Retrieves the user's upcoming schedule or checks availability for a specific date range.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    siteConfigId: { type: "string", description: "The unique UUID of the business." },
+                    timeMin: { type: "string", description: "ISO format start time (e.g., '2026-02-21T09:00:00Z')." },
+                    timeMax: { type: "string", description: "ISO format end time." }
+                  },
+                  required: ["siteConfigId", "timeMin"]
+                }
               }
             ]
           }

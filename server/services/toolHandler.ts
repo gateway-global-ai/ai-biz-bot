@@ -6,6 +6,10 @@ import { getBusinessDetails, getBusinessReviews } from "./mapsService";
 import { generateBusinessIntelligence } from "./intelligenceService";
 import { storage } from "../storage";
 import { sendPlatformEmail } from "./emailService";
+import { db } from "../db";
+import { workspaceConfigurations } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import { createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "../mcp/googleWorkspace";
 
 /**
  * Interface for the tool call structure received from the Gemini v1beta protocol
@@ -165,6 +169,87 @@ async function handleStripeCheckout(args: any) {
   }
 }
 
+// ── Workspace MCP (read-only); Jason Standard: UUID scoping + plan check ─────
+
+const WORKSPACE_PLAN_REQUIRED_MESSAGE =
+  "I'd love to check your calendar and files, but that feature requires the Voice or Enterprise plan. Would you like to upgrade?";
+const WORKSPACE_NOT_CONNECTED_MESSAGE =
+  "Google Workspace isn't connected for this business. Connect it in the Workspace tab in your site settings to enable this.";
+
+async function getWorkspaceContext(siteConfigId: string): Promise<
+  { allowed: true; credentials: GoogleWorkspaceCredentials } | { allowed: false; error: string }
+> {
+  if (!siteConfigId || typeof siteConfigId !== "string") {
+    return { allowed: false, error: "siteConfigId is required." };
+  }
+  const siteConfig = await storage.getSiteConfig(siteConfigId);
+  if (!siteConfig) {
+    return { allowed: false, error: "Site not found." };
+  }
+  const plan = (siteConfig as any).plan || "free";
+  if (plan !== "voice" && plan !== "enterprise") {
+    return { allowed: false, error: WORKSPACE_PLAN_REQUIRED_MESSAGE };
+  }
+  const row = await db.query.workspaceConfigurations.findFirst({
+    where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+    columns: { accessToken: true, refreshToken: true, tokenExpiry: true },
+  });
+  if (!row?.accessToken) {
+    return { allowed: false, error: WORKSPACE_NOT_CONNECTED_MESSAGE };
+  }
+  const credentials: GoogleWorkspaceCredentials = {
+    accessToken: row.accessToken,
+    refreshToken: row.refreshToken ?? undefined,
+    expiryDate: row.tokenExpiry ? new Date(row.tokenExpiry).getTime() : undefined,
+  };
+  return { allowed: true, credentials };
+}
+
+async function handleMcpSearchDrive(args: any) {
+  const ctx = await getWorkspaceContext(args.siteConfigId);
+  if (!ctx.allowed) {
+    return { error: ctx.error, plan_required: ctx.error === WORKSPACE_PLAN_REQUIRED_MESSAGE };
+  }
+  const service = createGoogleWorkspaceService(ctx.credentials);
+  const result = await service.searchDriveFiles(args.query, args.mimeType);
+  if (!result.success) {
+    return { error: result.error || "Drive search failed." };
+  }
+  return {
+    summary: (result.data as any).summary,
+    count: (result.data as any).count,
+    files: (result.data as any).files,
+  };
+}
+
+async function handleMcpReadCalendar(args: any) {
+  const ctx = await getWorkspaceContext(args.siteConfigId);
+  if (!ctx.allowed) {
+    return { error: ctx.error, plan_required: ctx.error === WORKSPACE_PLAN_REQUIRED_MESSAGE };
+  }
+  const service = createGoogleWorkspaceService(ctx.credentials);
+  const result = await service.listCalendarEvents(
+    20,
+    args.timeMin,
+    args.timeMax
+  );
+  if (!result.success) {
+    return { error: result.error || "Calendar read failed." };
+  }
+  const events = (result.data as any).events || [];
+  const summary =
+    events.length === 0
+      ? "No events in this time range."
+      : `You have ${events.length} event(s): ${events.map((e: any) => `${e.summary || "Untitled"} (${e.start}–${e.end})`).join("; ")}`;
+  return {
+    summary,
+    events,
+    count: events.length,
+  };
+}
+
+// ── Sales Closer / Onboarding ────────────────────────────────────────────────
+
 async function handleSendOnboardingEmail(args: any) {
   const { platformId, customerEmail, customerName, planName, agentName } = args;
 
@@ -289,6 +374,13 @@ export async function handleToolCall(toolCall: ToolCall) {
 
       case "send_onboarding_email":
         return await handleSendOnboardingEmail(toolCall.args);
+
+      // Workspace MCP (read-only; plan + UUID guardrails)
+      case "mcp_search_drive":
+        return await handleMcpSearchDrive(toolCall.args);
+
+      case "mcp_read_calendar":
+        return await handleMcpReadCalendar(toolCall.args);
 
       default:
         console.warn(`[ToolHandler] ⚠️ Tool not recognized: ${toolCall.name}`);
