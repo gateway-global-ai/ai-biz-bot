@@ -6351,6 +6351,8 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       
       // Log the call
       const config = await storage.getTelephonyConfig();
+      // Resolve siteConfigId: prefer the link stored on the telephony config, then fall back to config.id
+      const siteConfigId: string | null = (config as any)?.siteConfigId ?? null;
       await storage.createCallLog({
         configId: config?.id || null,
         direction: 'inbound',
@@ -6358,6 +6360,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         status: CallStatus || 'ringing',
         callSid: CallSid,
         duration: 0,
+        siteConfigId,
       });
       
       // Check firewall
@@ -6384,9 +6387,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       const wsProtocol = host.includes('localhost') ? 'ws' : 'wss';
       const streamUrl = `${wsProtocol}://${host}/ws/voice-stream`;
       
-      console.log(`[Voice] Stream URL: ${streamUrl}`);
+      console.log(`[Voice] Stream URL: ${streamUrl}, siteConfigId: ${siteConfigId ?? 'none'}`);
       
-      // Return TwiML with Media Streams (voice pipeline uses Gemini)
+      // Return TwiML with Media Streams (voice pipeline uses Gemini Clear Voice)
       res.set('Content-Type', 'text/xml');
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -6395,6 +6398,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     <Stream url="${streamUrl}">
       <Parameter name="agentName" value="AI Assistant"/>
       <Parameter name="personality" value="helpful"/>
+      ${siteConfigId ? `<Parameter name="siteConfigId" value="${escapeXml(siteConfigId)}"/>` : ''}
     </Stream>
   </Connect>
   <Say voice="Google.en-US-Neural2-F">The conversation has ended. Goodbye!</Say>
@@ -6420,6 +6424,8 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       
       // Log the call
       const config = await storage.getTelephonyConfig();
+      // Resolve siteConfigId from the telephony config's link (set during number provisioning)
+      const siteConfigId: string | null = (config as any)?.siteConfigId ?? null;
       await storage.createCallLog({
         configId: config?.id || null,
         direction: 'inbound',
@@ -6427,15 +6433,16 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         status: CallStatus || 'ringing',
         callSid: CallSid,
         duration: 0,
+        siteConfigId,
       });
 
       // Energy balance guard – if the site has exhausted its prepaid minutes, play the
       // "Zuckerberg Lock" message and hang up rather than burning more AI cost.
-      const siteConfigId = (config as any)?.siteConfigId ?? config?.id;
-      if (siteConfigId) {
-        const hasBalance = await hasEnergyBalance(siteConfigId);
+      const effectiveSiteId = siteConfigId ?? config?.id;
+      if (effectiveSiteId) {
+        const hasBalance = await hasEnergyBalance(effectiveSiteId);
         if (!hasBalance) {
-          console.log(`[Energy] Site ${siteConfigId} out of prepaid minutes – blocking call`);
+          console.log(`[Energy] Site ${effectiveSiteId} out of prepaid minutes – blocking call`);
           res.set('Content-Type', 'text/xml');
           return res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -6574,23 +6581,40 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       
       console.log(`[Voice Status] CallSid: ${CallSid}, Status: ${CallStatus}, Duration: ${CallDuration}`);
       
-      // Log usage and decrement balance for every completed call
+      // Log usage and decrement balance for every completed call.
+      // NOTE: The Media Stream handler (voiceStream.ts) already persists billing when it
+      // has a siteConfigId.  Check for an existing voice_usage_log row first to avoid
+      // double-billing when the call went through the Clear Voice (Media Streams) path.
       if (CallStatus === 'completed' && CallSid) {
         try {
-          // Resolve the siteConfigId via the dialled-to phone number
           const config = await storage.getTelephonyConfig();
-          if (config?.id) {
-            // Use the telephonyConfig's linked siteConfig if available; otherwise fall back
-            // to the config id itself as a best-effort attribution key.
-            const siteConfigId = (config as any).siteConfigId ?? config.id;
-            const rawSeconds = parseInt(CallDuration ?? '0', 10) || 0;
-            const result = await logVoiceUsage({
-              siteConfigId,
-              callSid: CallSid,
-              callType: 'phone',
-              rawDurationSeconds: rawSeconds,
-            });
-            console.log(`[Energy] Logged ${result.billedMinutes} billed minute(s), $${(result.billedAmountCents / 100).toFixed(2)} – balance now ${result.newBalance ?? 'unrestricted'} minute(s)`);
+          // Prefer the explicit siteConfigId link on the telephony config.
+          const siteConfigId: string | null = (config as any)?.siteConfigId ?? null;
+
+          if (siteConfigId) {
+            // Check whether voiceStream already recorded usage for this call
+            const { db: _db } = await import('./db');
+            const { voiceUsageLogs: _vul } = await import('@shared/schema');
+            const { eq: _eq } = await import('drizzle-orm');
+            const existing = await _db
+              .select({ id: _vul.id })
+              .from(_vul)
+              .where(_eq(_vul.callSid, CallSid))
+              .limit(1);
+
+            if (existing.length > 0) {
+              console.log(`[Energy] Usage already logged for call ${CallSid} by stream handler – skipping`);
+            } else {
+              // Fallback: bill using Twilio's reported duration (Gather path, no stream)
+              const rawSeconds = parseInt(CallDuration ?? '0', 10) || 0;
+              const result = await logVoiceUsage({
+                siteConfigId,
+                callSid: CallSid,
+                callType: 'phone',
+                rawDurationSeconds: rawSeconds,
+              });
+              console.log(`[Energy] Logged ${result.billedMinutes} billed minute(s), $${(result.billedAmountCents / 100).toFixed(2)} – balance now ${result.newBalance ?? 'unrestricted'} minute(s)`);
+            }
           }
         } catch (usageErr: any) {
           console.error('[Energy] Failed to log voice usage:', usageErr.message);
