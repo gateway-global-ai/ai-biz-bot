@@ -1,8 +1,0 @@
-{
-  "name": "App-B2B-Tradeshow",
-  "description": "An AI-powered luxury event planner for CES 2026, featuring a crystal-glass interface, Tesla-style itinerary management, and an intelligent assistant for seamless Las Vegas navigation.",
-  "requestFramePermissions": [
-    "geolocation",
-    "camera"
-  ]
-}

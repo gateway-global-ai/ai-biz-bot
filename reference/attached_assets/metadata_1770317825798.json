@@ -1,7 +1,0 @@
-{
-  "name": "GenAI Business Site Generator",
-  "description": "Instantly generate a modern, interactive business website with AI-powered Voice and Chat assistance using Google Maps data.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
-}

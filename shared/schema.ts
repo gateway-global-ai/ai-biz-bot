@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, pgEnum, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -941,6 +941,17 @@ export const siteConfigs = pgTable("site_configs", {
   placeholderText: text("placeholder_text").default("Type a message..."),
   /** Knowledge library: array of { id, title, content, addedAt } for agent training. */
   knowledgeLibrary: jsonb("knowledge_library"),
+  /** Per-business subscription plan: 'free' | 'pro' | 'voice' | 'enterprise' */
+  plan: text("plan").default("free"),
+  /** AI-generated or custom hero image URL stored on the platform */
+  heroImageUrl: text("hero_image_url"),
+  /** Prompt used to generate the hero image (stored for regeneration) */
+  heroImagePrompt: text("hero_image_prompt"),
+  /** Granular resource ledger: prepaid quotas per cost center (all default 0). */
+  voicePhoneAiMinutes: integer("voice_phone_ai_minutes").default(0).notNull(),
+  voiceWebAiMinutes: integer("voice_web_ai_minutes").default(0).notNull(),
+  smsMessages: integer("sms_messages").default(0).notNull(),
+  chatBotMessages: integer("chat_bot_messages").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1910,3 +1921,35 @@ export const b2bCurationEvents = pgTable("b2b_curation_events", {
 export const insertB2bCurationEventSchema = createInsertSchema(b2bCurationEvents).omit({ id: true, createdAt: true });
 export type InsertB2bCurationEvent = z.infer<typeof insertB2bCurationEventSchema>;
 export type B2bCurationEvent = typeof b2bCurationEvents.$inferSelect;
+
+// --- SOVEREIGN SMS ROUTER COMPLIANCE TABLES ---
+
+export const smsIntentEnum = pgEnum("sms_intent", [
+  "PLATFORM_OTP", "PLATFORM_CARE", "PLATFORM_MKTG",
+  "CUSTOMER_OTP", "CUSTOMER_CARE", "CUSTOMER_MKTG"
+]);
+
+export const smsOptOuts = pgTable("sms_opt_outs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  phoneNumber: text("phone_number").notNull(),
+  siteConfigId: uuid("site_config_id").references(() => siteConfigs.id), // Change uuid to text if your siteConfigs.id uses text()
+  reason: text("reason").notNull().default("STOP keyword received"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const smsLogs = pgTable("sms_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  siteConfigId: uuid("site_config_id").references(() => siteConfigs.id).notNull(),
+  twilioMessageSid: text("twilio_message_sid"),
+  messagingServiceSid: text("messaging_service_sid").notNull(),
+  intent: smsIntentEnum("intent").notNull(),
+  toPhoneNumber: text("to_phone_number").notNull(),
+  fromPhoneNumber: text("from_phone_number"),
+  body: text("body").notNull(),
+  status: text("status").notNull().default("queued"),
+  segments: integer("segments").default(1).notNull(),
+  cost: numeric("cost", { precision: 10, scale: 4 }),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

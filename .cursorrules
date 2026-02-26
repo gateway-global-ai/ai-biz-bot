@@ -1,3 +1,8 @@
+# 🏛️ GLOBAL ARCHITECTURE MANDATE (CRITICAL)
+1. **The Source of Truth:** Before proposing any architectural changes, creating new database tables, or modifying core routing, you MUST read `/docs/ARCHITECTURE.md`.
+2. **The Graveyard:** The `_legacy_archive/` directory contains deprecated code. YOU MUST NEVER read from, import from, or modify anything inside `_legacy_archive/`.
+3. **The Monolith Ban:** The `server/routes.ts` file is currently considered legacy technical debt (~7,500 lines). YOU MUST NEVER add new routes to this file. All new routes must be created as modular files inside `server/routes/` and mounted cleanly.
+
 # Platform Architecture Guidelines
 ## 1. Credentials & Signing
 - **Secret Manager**: Located at `server/utils/secretManager.ts`. Use `@google-cloud/secret-manager`.

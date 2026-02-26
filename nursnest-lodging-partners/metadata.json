@@ -1,8 +1,0 @@
-{
-  "name": "Nursnest Lodging Partners",
-  "description": "A multilingual travel assistant powered by Gemini with Google Maps integration for real-time location data and itinerary planning.",
-  "requestFramePermissions": [
-    "geolocation",
-    "microphone"
-  ]
-}
