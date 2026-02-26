@@ -6,6 +6,8 @@ import { MapSkeleton } from '../animations/MapSkeleton';
 import { DashboardCard, BusinessIntelligenceData } from '../tour/DashboardCard';
 import { TourRunner, TourSpec } from '../tour/TourRunner';
 import { HotelResultsPanel, HotelResultsPanelData } from './HotelResultsPanel';
+import { HotelInventoryGrid } from './HotelInventoryGrid';
+import WarrantResultsPanel, { WarrantResultsData } from './WarrantResultsPanel';
 
 interface ToolRouterProps {
   toolType: string;
@@ -37,6 +39,17 @@ export const ToolRouter: React.FC<ToolRouterProps> = ({
     case 'enrich_hotels_with_rates':
     case 'search_hotels':
       return <HotelResultsPanel data={metadata as HotelResultsPanelData} />;
+    case 'hotel_inventory':
+      return (
+        <HotelInventoryGrid
+          data={metadata?.data ?? {}}
+          checkIn={metadata?.checkIn}
+          checkOut={metadata?.checkOut}
+        />
+      );
+    case 'warrant_results':
+    case 'fetch_city_warrants':
+      return <WarrantResultsPanel data={metadata as WarrantResultsData} />;
     default:
       console.warn(`[ToolRouter] Unknown tool type: ${toolType}`);
       return null;

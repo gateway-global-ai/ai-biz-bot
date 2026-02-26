@@ -29,11 +29,13 @@ import CustomerManager from "@/pages/biz-dashboard/CustomerManager";
 import TwilioAccountManager from "@/pages/developer/TwilioAccountManager";
 import MvpLanding from "@/pages/showcase/MvpLanding";
 import LandingV2 from "@/pages/showcase/LandingV2";
+import ResellerRecruitment from "@/pages/showcase/ResellerRecruitment";
 import KimiAudioDemo from "@/pages/showcase/KimiAudioDemo";
 import TwilioHealthCheck from "@/pages/developer/TwilioHealthCheck";
 import SystemHealthCheck from "@/pages/developer/SystemHealthCheck";
 import TelephonyManager from "@/pages/developer/TelephonyManager";
 import BillingPage from "@/pages/account/BillingPage";
+import PayoutDashboard from "@/components/reseller/PayoutDashboard";
 import GoogleDrivePage from "@/pages/integrations/GoogleDrivePage";
 import GoogleCalendarPage from "@/pages/biz-dashboard/GoogleCalendarPage";
 import GoogleTasksPage from "@/pages/biz-dashboard/GoogleTasksPage";
@@ -49,6 +51,8 @@ import CommandChat from "@/pages/agents/CommandChat";
 import InquiryManagement from "@/pages/owner/InquiryManagement";
 import CallTracking from "@/pages/biz-dashboard/CallTracking";
 import TransparencyDashboard from "@/pages/biz-dashboard/TransparencyDashboard";
+import ClaimSite from "@/pages/customer/ClaimSite";
+import BailRescue from "@/pages/customer/BailRescue";
 import ContactForm from "@/pages/customer/ContactForm";
 import CustomerChatInterface from "@/pages/customer/CustomerChatInterface";
 import OwnerChatInterface from "@/pages/owner/OwnerChatInterface";
@@ -290,6 +294,7 @@ function AppRouter() {
       <Route path="/gateway-admin" component={GatewayAdmin} />
       <Route path="/telephony" component={TelephonyManager} />
       <Route path="/billing" component={BillingPage} />
+      <Route path="/reseller/payouts" component={PayoutDashboard} />
       <Route path="/google-drive" component={GoogleDrivePage} />
       <Route path="/google-calendar" component={GoogleCalendarPage} />
       <Route path="/google-tasks" component={GoogleTasksPage} />
@@ -402,6 +407,7 @@ function App() {
               <Route path="/login" component={Login} />
               <Route path="/contact" component={ContactForm} />
               <Route path="/v2" component={LandingV2} />
+              <Route path="/franchise" component={ResellerRecruitment} />
               <Route path="/kimi-audio" component={KimiAudioDemo} />
               <Route path="/sdk" component={SdkShowcase} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
@@ -421,6 +427,10 @@ function App() {
               <Route path="/test-b2b" component={AgentPortal} />
               <Route path="/test-b2b-olympic" component={OlympicB2b} />
               <Route path="/test-b2b-wireframe" component={TestB2b} />
+              {/* Site claim / invite flow — public, token-gated */}
+              <Route path="/claim/:token" component={ClaimSite} />
+              {/* Bail rescue — outside payer deep-link from SMS */}
+              <Route path="/rescue/:token" component={BailRescue} />
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
               <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />

@@ -24,6 +24,7 @@ import { Code2 } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
+import { useEntryPoints } from '@/hooks/useEntryPoints';
 
 import Pidea_logo_header__7_ from "@assets/Pidea logo header (7).png";
 
@@ -259,6 +260,26 @@ export default function BusinessPage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatLayout, setChatLayout] = useState<'floating' | 'fixed' | 'fullscreen'>('floating');
   const [initialView, setInitialView] = useState<'chat' | 'voice'>('voice');
+
+  // Dynamic Entry Point Engine — knowledgeLibrary not available on generic landing page;
+  // defaults are used and the owner can configure via AiBizBotAdmin → Gateway tab.
+  const { entryPoints, agents } = useEntryPoints(undefined);
+  const [activeMetaPrompt, setActiveMetaPrompt] = useState<string | undefined>();
+  const [activeAgentId, setActiveAgentId] = useState<string | undefined>();
+  const [activeDirectoryMode, setActiveDirectoryMode] = useState(false);
+
+  const openEntryPoint = (node: typeof entryPoints.heroPrimary) => {
+    if (!node.enabled) return;
+    if (node.type === 'LEGACY_PASSTHROUGH') {
+      if (node.url) window.open(node.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setActiveMetaPrompt(node.metaPrompt || undefined);
+    setActiveAgentId(node.agentId || undefined);
+    setActiveDirectoryMode(node.type === 'AGENT_DIRECTORY');
+    setInitialView(node.type === 'CHAT_AGENT' ? 'chat' : 'voice');
+    setIsChatOpen(true);
+  };
   
   // Voice configuration - default to Premium (Clear Voice) for demo
   const voiceConfig = VoiceClientFactory.getDefaultConfig('premium');
@@ -952,11 +973,8 @@ export default function BusinessPage() {
           <div className="w-full max-w-5xl mx-auto flex flex-col items-center gap-6 md:gap-8">
             <div 
               style={{ marginBottom: '10px', cursor: 'pointer' }}
-              onClick={() => {
-                setInitialView('voice');
-                setIsChatOpen(true);
-              }}
-              title="Click to start voice conversation"
+              onClick={() => openEntryPoint(entryPoints.heroPrimary)}
+              title={entryPoints.heroPrimary.label || 'Click to start voice conversation'}
             >
               <VoiceVisualizer />
             </div>
@@ -1315,7 +1333,12 @@ export default function BusinessPage() {
         voiceConfig={voiceConfig}
         agentName={selectedPlace ? 'Ava' : 'Gateway AI Assistant'}
         isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
+        onClose={() => {
+          setIsChatOpen(false);
+          setActiveMetaPrompt(undefined);
+          setActiveAgentId(undefined);
+          setActiveDirectoryMode(false);
+        }}
         initialView={initialView}
         layoutMode={chatLayout}
         onCycleLayout={() => {
@@ -1324,10 +1347,10 @@ export default function BusinessPage() {
           const nextMode = modes[(currentIndex + 1) % modes.length];
           setChatLayout(nextMode);
         }}
-        onOpenSettings={() => {
-          console.log('[BusinessPage] Open voice settings');
-          // TODO: Open settings modal
-        }}
+        directoryMode={activeDirectoryMode}
+        agentId={activeAgentId}
+        metaPrompt={activeMetaPrompt}
+        agents={agents}
         zIndex={60}
       />
     </div>

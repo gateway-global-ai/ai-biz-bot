@@ -140,6 +140,37 @@ export const TOOL_DECLARATIONS = {
     }
   },
 
+  get_hotel_inventory: {
+    name: "get_hotel_inventory",
+    description: "Fetches live room availability and rates for a specific hotel already linked to the platform. Use when the user asks for availability at THIS business (Boardwalk Suites or any site with a GRN hotel code). Requires check-in and check-out dates.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        platformId: {
+          type: "STRING",
+          description: "Internal UUID from platform_business_map. Omit to use the session anchor."
+        },
+        checkIn: {
+          type: "STRING",
+          description: "Check-in date YYYY-MM-DD"
+        },
+        checkOut: {
+          type: "STRING",
+          description: "Check-out date YYYY-MM-DD"
+        },
+        guests: {
+          type: "INTEGER",
+          description: "Number of adult guests (default 2)"
+        },
+        roomFilter: {
+          type: "STRING",
+          description: "Optional keyword to filter room types, e.g. 'jacuzzi' or 'kitchen'"
+        }
+      },
+      required: ["checkIn", "checkOut"]
+    }
+  },
+
   get_business_details: {
     name: "get_business_details",
     description: "Fetches enriched business data for a Google Place (name, address, hours, rating, etc.). Use when the user asks about a specific business or when you need current place details.",
@@ -343,6 +374,58 @@ export const TOOL_DECLARATIONS = {
         }
       },
       required: ["business_id", "plan"]
+    }
+  },
+
+  // ── Bail Bonds / Legal vertical ──────────────────────────────────────────
+
+  vine_lookup_and_dispatch: {
+    name: "vine_lookup_and_dispatch",
+    description: "Looks up an inmate in the statewide jail roster to confirm custody status and bond amount, then dispatches an urgent SMS to their outside contact (the indemnitor / payer) with a deep link to arrange bail payment. Use this immediately after the inmate provides their name and the outside contact's phone number.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        inmateFirstName: {
+          type: "STRING",
+          description: "First name of the inmate in custody."
+        },
+        inmateLastName: {
+          type: "STRING",
+          description: "Last name of the inmate in custody."
+        },
+        outsideContactNumber: {
+          type: "STRING",
+          description: "10-digit US phone number of the person on the outside who will pay the bail premium."
+        },
+        platformId: {
+          type: "STRING",
+          description: "Internal UUID. Omit — the session anchor is injected automatically."
+        }
+      },
+      required: ["inmateFirstName", "inmateLastName", "outsideContactNumber"]
+    }
+  },
+
+  fetch_city_warrants: {
+    name: "fetch_city_warrants",
+    description: "Searches the official Baton Rouge City Court open-data database for active warrants by first and last name. Use this whenever a user asks whether they or someone else has a warrant in Baton Rouge.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        firstName: {
+          type: "STRING",
+          description: "The first name of the individual to search."
+        },
+        lastName: {
+          type: "STRING",
+          description: "The last name of the individual to search."
+        },
+        platformId: {
+          type: "STRING",
+          description: "Internal UUID. Omit — the session anchor is injected automatically."
+        }
+      },
+      required: ["firstName", "lastName"]
     }
   },
 

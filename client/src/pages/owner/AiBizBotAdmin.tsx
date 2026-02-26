@@ -11,9 +11,11 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { GatewayRouterPanel } from '@/components/admin/GatewayRouterPanel';
+import { AgentCreatorPanel } from '@/components/admin/AgentCreatorPanel';
 import {
   Bot, Plus, Globe, MessageSquare, Settings, Trash2,
-  Send, Loader2, ExternalLink, Code, Copy, Check,
+  Send, Loader2, ExternalLink, Code, Copy, Check, Network, Users,
   Sparkles, Clock, Star, MapPin, Phone, Zap,
   ShoppingCart, Headphones, Palette, BookOpen, UserPlus, Image as ImageIcon, Building2
 } from 'lucide-react';
@@ -332,7 +334,7 @@ function AdminPanel({
 }) {
   const placeData = site.placeData as any;
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'settings' | 'plan' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'knowledge'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'plan' | 'gateway' | 'agents' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'knowledge'>('settings');
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [deployingTemplateId, setDeployingTemplateId] = useState<string | null>(null);
   const [savingAgentConfig, setSavingAgentConfig] = useState(false);
@@ -523,6 +525,8 @@ function AdminPanel({
   const tabs = [
     { id: 'settings' as const, label: 'Settings', icon: Settings },
     { id: 'plan' as const, label: 'Plan', icon: Sparkles },
+    { id: 'gateway' as const, label: 'Gateway', icon: Network },
+    { id: 'agents' as const, label: 'Agents', icon: Users },
     { id: 'agent' as const, label: 'Agent', icon: Bot },
     ...(sitePlan === 'voice' ? [{ id: 'workspace' as const, label: 'Workspace', icon: Building2 }] : []),
     { id: 'knowledge' as const, label: 'Knowledge', icon: BookOpen },
@@ -668,6 +672,24 @@ function AdminPanel({
 
         {activeTab === 'workspace' && (
           <GoogleWorkspacePanel siteConfigId={site.id} />
+        )}
+
+        {/* Gateway Router — Dynamic Entry Point Engine switchboard */}
+        {activeTab === 'gateway' && (
+          <GatewayRouterPanel
+            siteConfigId={site.id}
+            knowledgeLibrary={site.knowledgeLibrary}
+            onSaved={() => queryClient.invalidateQueries({ queryKey: ['/api/site-configs', site.id] })}
+          />
+        )}
+
+        {/* Agents — Specialty Agent Creator */}
+        {activeTab === 'agents' && (
+          <AgentCreatorPanel
+            siteConfigId={site.id}
+            knowledgeLibrary={site.knowledgeLibrary}
+            onSaved={() => queryClient.invalidateQueries({ queryKey: ['/api/site-configs', site.id] })}
+          />
         )}
 
         {activeTab === 'settings' && (

@@ -96,6 +96,8 @@ export async function logVoiceUsage(
         .update(siteConfigs)
         .set({ minuteBalance: newBalance })
         .where(eq(siteConfigs.id, siteConfigId));
+      // Non-blocking: nudge owner if balance is low (once per site until refill).
+      import("./energyAlerts").then((m) => m.checkEnergyAndNudge(siteConfigId)).catch(() => {});
     }
   }
 

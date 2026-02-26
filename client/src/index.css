@@ -294,6 +294,99 @@ html::-webkit-scrollbar {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Jason Standard — Sovereign OS Design System
+   These utilities are the canonical glass layer for all 9 site templates.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --sovereign-deep:    #0F172A;
+  --sovereign-electric: #6366F1;
+  --sovereign-vivid:   #10B981;
+  --sovereign-muted:   #94A3B8;
+  --sovereign-glass:   rgba(255, 255, 255, 0.04);
+  --sovereign-border:  rgba(99, 102, 241, 0.18);
+  --sovereign-glow:    0 0 20px 4px rgba(99, 102, 241, 0.28);
+  --sovereign-radius:  24px;
+}
+
+@layer utilities {
+  /* Primary glass container — the foundation of every Sovereign card */
+  .sovereign-glass {
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: var(--sovereign-radius);
+  }
+
+  /* Lighter glass for nested panels inside the 40% window */
+  .sovereign-panel {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--sovereign-radius);
+  }
+
+  /* Docked control bar (bottom-anchored) */
+  .sovereign-bar {
+    background: rgba(15, 23, 42, 0.82);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(99, 102, 241, 0.15);
+  }
+
+  /* Indigo-Electric glow — apply to any "Sovereign Detail" element */
+  .sovereign-glow {
+    box-shadow: var(--sovereign-glow);
+  }
+
+  /* Pulse keyframe bound to the Sovereign Electric color */
+  .animate-sovereign-pulse {
+    animation: sovereign-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* Emerald "1% Insight" badge */
+  .badge-insight {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10B981;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    border-radius: 9999px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    text-transform: uppercase;
+  }
+
+  /* Monospace data chip for IDs / metrics */
+  .data-chip {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--sovereign-muted);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+  }
+}
+
+@keyframes sovereign-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+  50%       { box-shadow: 0 0 18px 4px rgba(99, 102, 241, 0.35); }
+}
+
+@keyframes glass-in {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-glass-in {
+  animation: glass-in 0.3s ease-out forwards;
+}
+
 /* Carousel slide animations */
 @keyframes slideOutLeft {
   from {

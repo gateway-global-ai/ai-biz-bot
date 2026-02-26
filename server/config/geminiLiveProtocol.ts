@@ -12,8 +12,8 @@
  * Protocol version: v1beta
  */
 
-// Environment variable validation
-const GEMINI_MODEL = process.env.GEMINI_MODEL || '';
+// Environment variable validation (use GEMINI_MODEL_ID per platform standards)
+const GEMINI_MODEL_ID = process.env.GEMINI_MODEL_ID || '';
 const GEMINI_VOICE_NAME = process.env.GEMINI_VOICE_NAME || 'Puck';
 const GEMINI_API_VERSION = process.env.GEMINI_API_VERSION || '';
 
@@ -27,11 +27,11 @@ export function validateGeminiConfig(): void {
   const errors: string[] = [];
 
   // Validate model name
-  if (!GEMINI_MODEL) {
-    errors.push('GEMINI_MODEL is not set in environment variables');
-  } else if (!GEMINI_MODEL.includes('native-audio-preview')) {
+  if (!GEMINI_MODEL_ID) {
+    errors.push('GEMINI_MODEL_ID is not set in environment variables');
+  } else if (!GEMINI_MODEL_ID.includes('native-audio-preview')) {
     errors.push(
-      `Invalid model for Live API: ${GEMINI_MODEL}\n` +
+      `Invalid model for Live API: ${GEMINI_MODEL_ID}\n` +
       `Expected: models/gemini-2.5-flash-native-audio-preview-12-2025`
     );
   }
@@ -84,7 +84,7 @@ export function validateGeminiConfig(): void {
 export function getGeminiLiveSetup(systemInstruction?: string, tools?: any[]) {
   const setup: any = {
     setup: {
-      model: GEMINI_MODEL,
+      model: GEMINI_MODEL_ID,
       generation_config: {
         response_modalities: ["AUDIO"], // MUST be uppercase
         speech_config: {
@@ -139,7 +139,7 @@ export function getGeminiWebSocketUrl(apiKey: string): string {
  * Configuration Constants
  */
 export const GEMINI_CONFIG = {
-  MODEL: GEMINI_MODEL,
+  MODEL: GEMINI_MODEL_ID,
   API_VERSION: GEMINI_API_VERSION,
   VOICE_NAME: GEMINI_VOICE_NAME,
   INPUT_SAMPLE_RATE: parseInt(process.env.GEMINI_INPUT_SAMPLE_RATE || '16000'),

@@ -440,12 +440,37 @@ export const insertTaskSchema = createInsertSchema(tasks).omit({
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
 
+// ── Resellers (Digital Franchise) ─────────────────────────────────────────────
+// Self-referential hierarchy: a reseller can have a parent (sub-reseller model).
+// commission_rate stored as decimal 0–1, e.g. 0.10 = 10%.
+// stripe_account_id = Stripe Connect Express account for automated payouts.
+export const resellers = pgTable("resellers", {
+  id:               varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  parentResellerId: varchar("parent_reseller_id").references((): any => resellers.id, { onDelete: "set null" }),
+  stripeAccountId:  text("stripe_account_id"),
+  commissionRate:   numeric("commission_rate", { precision: 5, scale: 4 }).notNull().default("0.10"),
+  name:             text("name"),
+  email:            text("email"),
+  phone:            text("phone"),
+  createdAt:        timestamp("created_at").defaultNow().notNull(),
+  updatedAt:        timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertResellerSchema = createInsertSchema(resellers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertReseller = z.infer<typeof insertResellerSchema>;
+export type Reseller = typeof resellers.$inferSelect;
+
 // Admin users for OTP authentication
 export const adminUsers = pgTable("admin_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   phone: text("phone").notNull().unique(),
   name: text("name"),
   role: text("role").default("admin"), // admin, superadmin
+  resellerId: varchar("reseller_id").references(() => resellers.id),
   isActive: boolean("is_active").default(true),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -965,6 +990,23 @@ export const siteConfigs = pgTable("site_configs", {
   provisionedPhoneNumber: text("provisioned_phone_number"),
   /** Twilio IncomingPhoneNumber SID for the provisioned number. */
   provisionedPhoneSid: text("provisioned_phone_sid"),
+  /** Reseller (Digital Franchise) who owns this site – for commission attribution. */
+  resellerId: varchar("reseller_id").references(() => resellers.id),
+  /** When the low-energy SMS nudge was last sent; reset on refill so nudge can fire again. */
+  lastNudgeSentAt: timestamp("last_nudge_sent_at"),
+  // ── Site Claim / Assignment lifecycle ──────────────────────────────────────
+  /** Secure random hex token embedded in the SMS claim link. */
+  claimToken:               varchar("claim_token", { length: 64 }),
+  /** Token expiry — defaults to 7 days from when the invite is sent. */
+  claimTokenExpiresAt:      timestamp("claim_token_expires_at"),
+  /** The E.164 phone number the invite SMS was dispatched to. */
+  assignedToPhone:          text("assigned_to_phone"),
+  /** Claim lifecycle: 'unclaimed' | 'invite_sent' | 'payment_pending' | 'claimed' */
+  claimStatus:              text("claim_status").notNull().default("unclaimed"),
+  /** Timestamp when the site was successfully claimed and payment confirmed. */
+  claimedAt:                timestamp("claimed_at"),
+  /** Stripe Checkout session ID used for the $49.99 activation payment. */
+  claimCheckoutSessionId:   text("claim_checkout_session_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1007,6 +1049,36 @@ export const insertVoiceUsageLogSchema = createInsertSchema(voiceUsageLogs).omit
 
 export type InsertVoiceUsageLog = z.infer<typeof insertVoiceUsageLogSchema>;
 export type VoiceUsageLog = typeof voiceUsageLogs.$inferSelect;
+
+// ── Reseller Commissions ledger ────────────────────────────────────────────────
+// One row per commission event.  Amounts in cents to avoid floating-point drift.
+// Status lifecycle: pending → paid | cancelled
+// Event types: subscription | top_up | manual
+export const resellerCommissions = pgTable("reseller_commissions", {
+  id:                 varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resellerId:         varchar("reseller_id")
+                        .references(() => resellers.id, { onDelete: "cascade" })
+                        .notNull(),
+  siteConfigId:       varchar("site_config_id")
+                        .references(() => siteConfigs.id, { onDelete: "set null" }),
+  eventType:          text("event_type").notNull(),   // 'subscription' | 'top_up' | 'manual'
+  grossAmountCents:   integer("gross_amount_cents").notNull(),  // revenue that triggered commission
+  commissionCents:    integer("commission_cents").notNull(),    // reseller's cut in cents
+  status:             text("status").notNull().default("pending"), // 'pending' | 'paid' | 'cancelled'
+  stripeTransferId:   text("stripe_transfer_id"),     // set once Stripe transfer fires
+  note:               text("note"),                   // optional operator note for manual events
+  createdAt:          timestamp("created_at").defaultNow().notNull(),
+  paidAt:             timestamp("paid_at"),            // set when status → paid
+});
+
+export const insertResellerCommissionSchema = createInsertSchema(resellerCommissions).omit({
+  id: true,
+  createdAt: true,
+  paidAt: true,
+  stripeTransferId: true,
+});
+export type InsertResellerCommission = z.infer<typeof insertResellerCommissionSchema>;
+export type ResellerCommission = typeof resellerCommissions.$inferSelect;
 
 // ── Google Workspace Integration ──────────────────────────────────────────────
 // Per-site workspace configuration (tied to siteConfigs, not customerAccounts,

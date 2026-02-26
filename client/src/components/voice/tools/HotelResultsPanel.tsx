@@ -1,24 +1,12 @@
 /**
- * HotelResultsPanel — renders enriched hotel data in the 40% Content Window.
- *
- * Accepts the JSON payload produced by `enrich_hotels_with_rates` /
- * `search_hotels` tool calls and displays each hotel as a card containing:
- *   • Name
- *   • Photo (Google Places photo URI when available, fallback placeholder)
- *   • Star / review score
- *   • Lowest available price from GRN Connect
- *
- * Usage in ToolRouter:
- *   case 'enrich_hotels_with_rates':
- *   case 'search_hotels':
- *     return <HotelResultsPanel data={metadata} ... />;
+ * HotelResultsPanel — Sovereign OS edition.
+ * Renders enriched hotel data in the 40% Content Window.
+ * Jason Standard: glass cards, rounded-sui, indigo borders, framer-motion.
  */
 import React from 'react';
-import { Star, MapPin, DollarSign } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Star, MapPin, DollarSign, Building2 } from 'lucide-react';
 
-// ---------------------------------------------------------------------------
-// Types (intentionally loose — data arrives from dynamic tool calls)
-// ---------------------------------------------------------------------------
 interface GrnHotel {
   hotel_name?: string;
   grn_hotel_id?: string;
@@ -33,7 +21,6 @@ interface GrnHotel {
     minRate?: number;
     rates?: Array<{ room_type?: string; net_price?: number; currency?: string }>;
   };
-  // From Places API enrichment (optional)
   googlePlaceId?: string;
   photoUri?: string;
   rating?: number;
@@ -53,7 +40,6 @@ interface MatchedHotel {
   grn?: GrnHotel | null;
   matchScore?: number;
   matched?: boolean;
-  // enrich_hotels_with_rates returns flat GRN structure merged with availability
   hotel_name?: string;
   grn_hotel_id?: string;
   city_name?: string;
@@ -69,11 +55,7 @@ export interface HotelResultsPanelData {
   hotelsWithAvailability?: number;
   checkin?: string;
   checkout?: string;
-  searchQuery?: {
-    location?: string;
-    query?: string;
-  };
-  // Allow arbitrary extra keys from tool responses
+  searchQuery?: { location?: string; query?: string };
   [key: string]: unknown;
 }
 
@@ -81,47 +63,24 @@ interface HotelResultsPanelProps {
   data: HotelResultsPanelData;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-function getHotelName(hotel: MatchedHotel): string {
-  return (
-    hotel.hotel_name ||
-    hotel.grn?.hotel_name ||
-    hotel.google?.name ||
-    'Unknown Hotel'
-  );
+function getHotelName(h: MatchedHotel) {
+  return h.hotel_name || h.grn?.hotel_name || h.google?.name || 'Unknown Hotel';
 }
-
-function getHotelAddress(hotel: MatchedHotel): string {
-  return (
-    hotel.grn?.address ||
-    hotel.google?.address ||
-    hotel.grn?.city_name ||
-    ''
-  );
+function getHotelAddress(h: MatchedHotel) {
+  return h.grn?.address || h.google?.address || h.grn?.city_name || '';
 }
-
-function getStarRating(hotel: MatchedHotel): number {
-  return (
-    hotel.star_rating ??
-    hotel.grn?.star_rating ??
-    0
-  );
+function getStarRating(h: MatchedHotel) {
+  return h.star_rating ?? h.grn?.star_rating ?? 0;
 }
-
-function getReviewScore(hotel: MatchedHotel): number | null {
-  return hotel.google?.rating ?? hotel.grn?.rating ?? null;
+function getReviewScore(h: MatchedHotel): number | null {
+  return h.google?.rating ?? h.grn?.rating ?? null;
 }
-
-function getMinRate(hotel: MatchedHotel): number | null {
-  const avail = hotel.availability ?? hotel.grn?.availability;
+function getMinRate(h: MatchedHotel): number | null {
+  const avail = h.availability ?? h.grn?.availability;
   return avail?.available ? (avail.minRate ?? null) : null;
 }
-
-function getPhotoUri(hotel: MatchedHotel): string | null {
-  // Use server-provided photoUri only (avoids exposing API key client-side)
-  return hotel.grn?.photoUri ?? null;
+function getPhotoUri(h: MatchedHotel): string | null {
+  return h.grn?.photoUri ?? null;
 }
 
 function StarRow({ count }: { count: number }) {
@@ -130,44 +89,52 @@ function StarRow({ count }: { count: number }) {
       {Array.from({ length: 5 }, (_, i) => (
         <Star
           key={i}
-          className={`w-3 h-3 ${i < count ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}`}
+          className={`w-3 h-3 ${i < count ? 'fill-amber-400 text-amber-400' : 'text-slate-700'}`}
         />
       ))}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Hotel Card
-// ---------------------------------------------------------------------------
-function HotelCard({ hotel }: { hotel: MatchedHotel }) {
-  const name      = getHotelName(hotel);
-  const address   = getHotelAddress(hotel);
-  const stars     = getStarRating(hotel);
-  const score     = getReviewScore(hotel);
-  const minRate   = getMinRate(hotel);
-  const photoUri  = getPhotoUri(hotel);
+function HotelCard({ hotel, index }: { hotel: MatchedHotel; index: number }) {
+  const name     = getHotelName(hotel);
+  const address  = getHotelAddress(hotel);
+  const stars    = getStarRating(hotel);
+  const score    = getReviewScore(hotel);
+  const minRate  = getMinRate(hotel);
+  const photoUri = getPhotoUri(hotel);
+  const hasRate  = minRate !== null;
 
   return (
-    <div className="flex flex-col bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.28, ease: 'easeOut', delay: index * 0.055 }}
+      whileHover={{ scale: 1.03, y: -3, transition: { type: 'spring', stiffness: 320, damping: 22 } }}
+      className="flex flex-col rounded-sui overflow-hidden bg-slate-900/50 backdrop-blur-xl border border-indigo-500/15 hover:border-indigo-500/30 shadow-xl transition-shadow duration-300"
+    >
       {/* Photo */}
-      <div className="relative h-32 bg-slate-100 flex items-center justify-center overflow-hidden shrink-0">
+      <div className="relative h-32 bg-slate-800/60 flex items-center justify-center overflow-hidden shrink-0">
         {photoUri ? (
           <img
             src={photoUri}
             alt={name}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity duration-300"
             onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
           />
         ) : (
-          <div className="flex flex-col items-center justify-center text-slate-300 gap-1">
-            <MapPin className="w-8 h-8" />
-            <span className="text-xs">No photo</span>
+          <div className="flex flex-col items-center justify-center text-slate-600 gap-1.5">
+            <Building2 className="w-7 h-7" />
+            <span className="text-[10px]">No photo</span>
           </div>
         )}
+
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent pointer-events-none" />
+
         {/* Availability badge */}
-        {minRate !== null && (
-          <div className="absolute top-2 right-2 bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+        {hasRate && (
+          <div className="absolute top-2 right-2 badge-insight">
             Available
           </div>
         )}
@@ -175,11 +142,11 @@ function HotelCard({ hotel }: { hotel: MatchedHotel }) {
 
       {/* Info */}
       <div className="p-3 flex flex-col gap-1.5 flex-1">
-        <p className="font-semibold text-slate-900 text-sm leading-tight line-clamp-2">{name}</p>
+        <p className="font-bold text-white text-sm leading-tight line-clamp-2">{name}</p>
 
         {address && (
-          <p className="text-xs text-slate-500 flex items-start gap-1">
-            <MapPin className="w-3 h-3 mt-0.5 shrink-0" />
+          <p className="text-[10px] text-slate-500 flex items-start gap-1">
+            <MapPin className="w-3 h-3 mt-0.5 shrink-0 text-slate-600" />
             <span className="line-clamp-1">{address}</span>
           </p>
         )}
@@ -188,32 +155,29 @@ function HotelCard({ hotel }: { hotel: MatchedHotel }) {
           <div className="flex flex-col gap-0.5">
             {stars > 0 && <StarRow count={stars} />}
             {score !== null && (
-              <span className="text-xs text-amber-600 font-medium">
-                {score.toFixed(1)} review score
+              <span className="text-[10px] text-amber-400 font-medium">
+                {score.toFixed(1)} ★
               </span>
             )}
           </div>
 
-          {minRate !== null && (
+          {hasRate && (
             <div className="text-right">
-              <div className="flex items-center gap-0.5 text-emerald-700 font-bold text-sm">
+              <div className="flex items-center gap-0.5 text-emerald-400 font-bold text-sm">
                 <DollarSign className="w-3.5 h-3.5" />
-                {minRate.toFixed(0)}
+                {minRate!.toFixed(0)}
               </div>
-              <p className="text-[10px] text-slate-400">/ night</p>
+              <p className="text-[10px] text-slate-600">/ night</p>
             </div>
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Panel
-// ---------------------------------------------------------------------------
 export function HotelResultsPanel({ data }: HotelResultsPanelProps) {
-  const hotels = data.hotels ?? [];
+  const hotels   = data.hotels ?? [];
   const location = data.searchQuery?.location;
   const checkin  = data.checkin;
   const checkout = data.checkout;
@@ -221,44 +185,51 @@ export function HotelResultsPanel({ data }: HotelResultsPanelProps) {
 
   if (!hotels.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 text-slate-500 gap-2">
-        <MapPin className="w-8 h-8 text-slate-300" />
-        <p className="text-sm font-medium">No hotels found</p>
-        {location && <p className="text-xs text-slate-400">for "{location}"</p>}
-      </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="flex flex-col items-center justify-center py-8 gap-3"
+      >
+        <div className="w-12 h-12 rounded-sui bg-slate-800/60 border border-indigo-500/15 flex items-center justify-center">
+          <MapPin className="w-6 h-6 text-slate-500" />
+        </div>
+        <p className="text-sm font-medium text-slate-400">No hotels found</p>
+        {location && <p className="text-xs text-slate-600">for "{location}"</p>}
+      </motion.div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center justify-between px-1">
         <div>
-          <p className="text-sm font-semibold text-slate-800">
+          <p className="text-sm font-bold text-white">
             {count} hotel{count !== 1 ? 's' : ''}{location ? ` in ${location}` : ''}
           </p>
           {checkin && checkout && (
-            <p className="text-xs text-slate-500">{checkin} → {checkout}</p>
+            <p className="data-chip mt-1 inline-block">{checkin} → {checkout}</p>
           )}
         </div>
-        <span className="text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-          GRN + Google
-        </span>
+        <span className="data-chip">GRN + Google</span>
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-2 gap-2.5">
-        {hotels.map((hotel, idx) => (
-          <HotelCard
-            key={
-              hotel.grn_hotel_id ??
-              hotel.grn?.grn_hotel_id ??
-              hotel.google?.placeId ??
-              String(idx)
-            }
-            hotel={hotel}
-          />
-        ))}
+      <div className="grid grid-cols-2 gap-3">
+        <AnimatePresence>
+          {hotels.map((hotel, idx) => (
+            <HotelCard
+              key={
+                hotel.grn_hotel_id ??
+                hotel.grn?.grn_hotel_id ??
+                hotel.google?.placeId ??
+                String(idx)
+              }
+              hotel={hotel}
+              index={idx}
+            />
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );

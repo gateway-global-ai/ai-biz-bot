@@ -98,7 +98,10 @@ import {
   ogSettings,
   inquiries,
   platformBusinessMap,
+  resellers,
+  commissions,
 } from "@shared/schema";
+import type { Reseller } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
 
@@ -519,6 +522,26 @@ export class DatabaseStorage implements IStorage {
 
   async updateAdminUserLastLogin(id: string): Promise<void> {
     await db.update(adminUsers).set({ lastLoginAt: new Date() }).where(eq(adminUsers.id, id));
+  }
+
+  async updateAdminUser(id: string, updates: Partial<{ resellerId: string | null; name: string | null; role: string }>): Promise<AdminUser | undefined> {
+    const [updated] = await db.update(adminUsers).set(updates).where(eq(adminUsers.id, id)).returning();
+    return updated;
+  }
+
+  async createReseller(data: { name?: string; email?: string; phone?: string }): Promise<Reseller> {
+    const [created] = await db.insert(resellers).values(data).returning();
+    return created;
+  }
+
+  async getResellerById(id: string): Promise<Reseller | undefined> {
+    const [r] = await db.select().from(resellers).where(eq(resellers.id, id));
+    return r;
+  }
+
+  async updateReseller(id: string, updates: Partial<{ stripeConnectId: string | null; name: string | null; email: string | null; phone: string | null }>): Promise<Reseller | undefined> {
+    const [updated] = await db.update(resellers).set({ ...updates, updatedAt: new Date() }).where(eq(resellers.id, id)).returning();
+    return updated;
   }
 
   // OTP Code operations

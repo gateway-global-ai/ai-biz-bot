@@ -110,6 +110,20 @@ export class GeminiStreamingClient implements IVoiceClient {
       }
     }
 
+    // Client-side [IMMEDIATE DIRECTIVE] fallback:
+    // The server proxy compiles a definitive instruction via the Contextual Snap when
+    // agentId/metaPrompt are in sessionContext. This prepend acts as belt-and-suspenders —
+    // if the server cannot reach the DB (network error, missing siteConfigId), the client's
+    // instruction already carries the directive so the AI never reverts to a generic greeting.
+    // NOTE: Do NOT also send a client-side kickstart message — the server fires one server-side
+    // after setupComplete at the correct time (before audio is active on the client).
+    if (business.entryPointMetaPrompt) {
+      const labelContext = business.name ? `on the "${business.name}" website` : 'on the website';
+      const immediateDirective = `[IMMEDIATE DIRECTIVE — CLIENT FALLBACK]: The user just clicked a button ${labelContext}. Execute the following instruction in your very first response without waiting for user input: ${business.entryPointMetaPrompt}\n\nRULE: You MUST speak first. Do not wait for the user.\n\n`;
+      systemInstruction = immediateDirective + systemInstruction;
+      console.log('[GeminiStreamingClient] Prepended [IMMEDIATE DIRECTIVE] fallback to system instruction');
+    }
+
     try {
       // Use current host (Nginx will proxy to correct port)
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -226,8 +240,12 @@ export class GeminiStreamingClient implements IVoiceClient {
           },
           // Identity anchor: server proxy reads sessionContext.siteConfigId and injects it
           // into MCP tool args so the model never needs to emit the UUID directly.
+          // entryPointAgentId + entryPointMetaPrompt power the Contextual Snap —
+          // the proxy compiles the master system instruction server-side.
           sessionContext: {
             siteConfigId: business.id,
+            ...(business.entryPointAgentId ? { agentId: business.entryPointAgentId } : {}),
+            ...(business.entryPointMetaPrompt ? { metaPrompt: business.entryPointMetaPrompt } : {}),
           },
         };
         

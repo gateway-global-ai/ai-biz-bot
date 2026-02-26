@@ -8,6 +8,10 @@ import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding
 import knowledgeRoutes from "./routes/knowledge-routes";
 import businessRoutes from "./routes/businessRoutes";
 import siteConfigRoutes from "./routes/siteConfigRoutes";
+import { claimRoutes, handleClaimCheckoutCompleted } from "./routes/claimRoutes";
+import ingestPlanRoutes from "./routes/ingestPlanRoutes";
+import bailRescueRoutes from "./routes/bailRescueRoutes";
+import agentResearchRoutes from "./routes/agentResearch";
 import { registerMenuRoutes } from "./routes/menu-routes";
 import healthRoutes from "./routes/healthRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
@@ -32,7 +36,7 @@ import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, in
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
-import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
+import { sendOtp, verifyOtp, verifySession, logout, requireAuth } from "./auth";
 import { customerSendOtp, customerVerifyOtp, customerVerifySession, customerLogout, customerUpdateProfile, customerGetBusinesses, customerClaimBusiness } from "./customerAuth";
 import { runDemoEnrichment } from "./services/demo-enrichment";
 import { generateFullReport } from "./services/reviewAnalysisService";
@@ -179,6 +183,125 @@ export async function registerRoutes(
   app.patch("/api/customer/profile", customerUpdateProfile);
   app.get("/api/customer/businesses", customerGetBusinesses);
   app.post("/api/customer/claim-business", customerClaimBusiness);
+
+  // ============ Reseller (Stripe Connect) ============
+  app.post("/api/reseller/onboard", requireAuth, async (req: any, res) => {
+    try {
+      const session = req.session as { adminUserId: string };
+      const adminUser = await storage.getAdminUserById(session.adminUserId);
+      if (!adminUser) return res.status(401).json({ error: "Admin user not found" });
+      let resellerId = (adminUser as any).resellerId ?? null;
+      let reseller = resellerId ? await storage.getResellerById(resellerId) : null;
+      if (!reseller) {
+        const created = await storage.createReseller({ name: adminUser.name ?? undefined, phone: adminUser.phone ?? undefined });
+        reseller = created;
+        resellerId = created.id;
+        await storage.updateAdminUser(adminUser.id, { resellerId });
+      }
+      const { getStripeClient } = await import("./stripeClient");
+      const stripe = getStripeClient();
+      if (reseller.stripeConnectId) {
+        const link = await stripe.accountLinks.create({
+          account: reseller.stripeConnectId,
+          refresh_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/reseller/payouts?refresh=1`,
+          return_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/reseller/payouts?success=1`,
+          type: "account_onboarding",
+        });
+        return res.json({ url: link.url });
+      }
+      const account = await stripe.accounts.create({
+        type: "express",
+        country: "US",
+        email: (adminUser as any).email ?? undefined,
+        capabilities: { transfers: { requested: true } },
+      });
+      await storage.updateReseller(reseller.id, { stripeConnectId: account.id });
+      const link = await stripe.accountLinks.create({
+        account: account.id,
+        refresh_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/reseller/payouts?refresh=1`,
+        return_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/reseller/payouts?success=1`,
+        type: "account_onboarding",
+      });
+      res.json({ url: link.url });
+    } catch (e: any) {
+      console.error("[Reseller] onboard error:", e?.message);
+      res.status(500).json({ error: e?.message ?? "Onboarding failed" });
+    }
+  });
+
+  app.get("/api/reseller/status", requireAuth, async (req: any, res) => {
+    try {
+      const session = req.session as { adminUserId: string };
+      const adminUser = await storage.getAdminUserById(session.adminUserId);
+      if (!adminUser) return res.status(401).json({ error: "Admin user not found" });
+      const resellerId = (adminUser as any).resellerId ?? null;
+      if (!resellerId) return res.status(403).json({ error: "Reseller account not linked" });
+      const reseller = await storage.getResellerById(resellerId);
+      if (!reseller?.stripeConnectId) return res.json({ stripeConnectId: null, balance: null });
+      const { getStripeClient } = await import("./stripeClient");
+      const stripe = getStripeClient();
+      const balance = await stripe.balance.retrieve({ stripeAccount: reseller.stripeConnectId });
+      const available = (balance.available?.[0]?.amount ?? 0) / 100;
+      res.json({ stripeConnectId: reseller.stripeConnectId, balance: available });
+    } catch (e: any) {
+      console.error("[Reseller] status error:", e?.message);
+      res.status(500).json({ error: e?.message ?? "Failed to load status" });
+    }
+  });
+
+  app.get("/api/reseller/commissions", requireAuth, async (req: any, res) => {
+    try {
+      const session = req.session as { adminUserId: string };
+      const adminUser = await storage.getAdminUserById(session.adminUserId);
+      if (!adminUser) return res.status(401).json({ error: "Admin user not found" });
+      const resellerId = (adminUser as any).resellerId ?? null;
+      if (!resellerId) return res.status(403).json({ error: "Reseller account not linked" });
+      const { db } = await import("./db");
+      const { commissions: commissionsTable } = await import("@shared/schema");
+      const list = await db.select().from(commissionsTable).where(eq(commissionsTable.resellerId, resellerId));
+      const totalEarnings = list.reduce((s, c) => s + Number(c.commission), 0);
+      const activeClients = new Set(list.map((c) => c.siteConfigId).filter(Boolean)).size;
+      const energyBounties = list.filter((c) => c.type === "REFILL").reduce((s, c) => s + Number(c.commission), 0);
+      res.json({
+        commissions: list.map((c) => ({
+          id: c.id,
+          siteConfigId: c.siteConfigId,
+          amount: Number(c.amount),
+          commission: Number(c.commission),
+          type: c.type,
+          status: c.status,
+          createdAt: c.createdAt,
+        })),
+        totalEarnings,
+        activeClients,
+        energyBounties,
+      });
+    } catch (e: any) {
+      console.error("[Reseller] commissions error:", e?.message);
+      res.status(500).json({ error: e?.message ?? "Failed to load commissions" });
+    }
+  });
+
+  app.post("/api/reseller/track-intent", async (req, res) => {
+    try {
+      const body = req.body as { platformId?: string; roomType?: string; netPrice?: number };
+      const { platformId, roomType, netPrice } = body;
+      if (!platformId || netPrice == null) {
+        return res.json({ tracked: false, estimatedCommission: 0 });
+      }
+      const siteConfigId = await storage.getSiteConfigIdByPlatformId(platformId);
+      if (!siteConfigId) return res.json({ tracked: false, estimatedCommission: 0 });
+      const site = await storage.getSiteConfigById(siteConfigId);
+      const resellerId = (site as any)?.resellerId ?? null;
+      if (!resellerId) return res.json({ tracked: false, estimatedCommission: 0 });
+      const amount = Number(netPrice) || 0;
+      const estimatedCommission = Math.round(amount * 0.1 * 100) / 100;
+      res.json({ tracked: true, estimatedCommission });
+    } catch (e: any) {
+      console.error("[Reseller] track-intent error:", e?.message);
+      res.status(500).json({ error: e?.message ?? "Failed to track intent" });
+    }
+  });
 
   // ============ Demo Lead / Magic Link Onboarding ============
 
@@ -6647,6 +6770,99 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
+  // ── Jail Handshake Webhook (/webhook/voice/jail) ─────────────────────────
+  // Dedicated endpoint for the bail bonds number.
+  // Automatically accepts the collect-call charge (DTMF "1") before connecting
+  // the AI over WebSocket in Push-to-Talk mode.
+  //
+  // Configure the Twilio phone number's Voice webhook URL to:
+  //   POST https://your-domain.com/webhook/voice/jail?siteConfigId=<uuid>
+  //
+  app.post("/webhook/voice/jail", validateTwilioSignature, async (req, res) => {
+    try {
+      const { From, To, CallSid, CallStatus } = req.body;
+
+      // siteConfigId is passed as a query param in the Twilio webhook URL
+      const siteConfigId: string | null = (req.query.siteConfigId as string) || null;
+
+      console.log(`[JailVoice] Jail call from ${From}, CallSid: ${CallSid}, Site: ${siteConfigId ?? "none"}`);
+
+      // Log the call
+      const config = await storage.getTelephonyConfig().catch(() => null);
+      if (config) {
+        await storage.createCallLog({
+          configId: config.id,
+          direction: "inbound",
+          phoneNumber: From,
+          status: CallStatus || "ringing",
+          callSid: CallSid,
+          duration: 0,
+          siteConfigId,
+        });
+      }
+
+      // Energy guard
+      if (siteConfigId) {
+        const hasBalance = await hasEnergyBalance(siteConfigId);
+        if (!hasBalance) {
+          res.set("Content-Type", "text/xml");
+          return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>AAA Bail Services is currently unavailable. Please call back later.</Say>
+  <Hangup/>
+</Response>`);
+        }
+      }
+
+      const host = process.env.REPLIT_DEV_DOMAIN ||
+        (process.env.REPL_SLUG ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : req.get("host") || "localhost:5000");
+      const wsProtocol = host.includes("localhost") ? "ws" : "wss";
+      const streamUrl  = `${wsProtocol}://${host}/ws/voice-stream`;
+
+      // Bail-specific system prompt injected via custom parameter so voiceStream.ts
+      // can use it in the Gemini setup message.
+      const jailPrompt = encodeURIComponent(
+        "You are the 24/7 Virtual Bail Agent for AAA Bail Services. " +
+        "Because callers are often in noisy holding cells, you must start every call with: " +
+        "'AAA Bail Services. We accepted the call. Press 1 to speak, tell me your name and the " +
+        "phone number of the person who can pay your bond, then press 1 again.' " +
+        "Only respond after they finish their transmission. " +
+        "Once you have the inmate name and outside phone number, immediately use the vine_lookup_and_dispatch tool."
+      );
+
+      res.set("Content-Type", "text/xml");
+      // ┌─ Jail Handshake ──────────────────────────────────────────────────────
+      // 1. <Pause length="3"/> — wait for the "Press 1 to accept" jail system prompt
+      // 2. <Play digits="1"/>  — send DTMF 1 to accept the collect call charges
+      // 3. <Connect><Stream>   — hand off to the Gemini AI over WebSocket (PTT mode)
+      // └───────────────────────────────────────────────────────────────────────
+      return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Pause length="3"/>
+  <Play digits="1"/>
+  <Connect>
+    <Stream url="${streamUrl}">
+      <Parameter name="agentName"    value="Bail Agent"/>
+      <Parameter name="personality"  value="urgent and empathetic bail bond specialist"/>
+      <Parameter name="ptt"          value="1"/>
+      ${siteConfigId ? `<Parameter name="siteConfigId" value="${escapeXml(siteConfigId)}"/>` : ""}
+      <Parameter name="systemPrompt" value="${escapeXml(decodeURIComponent(jailPrompt))}"/>
+    </Stream>
+  </Connect>
+  <Say>The call has ended. Goodbye.</Say>
+</Response>`);
+
+    } catch (err: any) {
+      console.error("[JailVoice] Error:", err);
+      res.set("Content-Type", "text/xml");
+      return res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>AAA Bail Services is experiencing a technical issue. Please call our main line at 2 2 5, 3 0 8, 3 4 0 0.</Say>
+  <Hangup/>
+</Response>`);
+    }
+  });
+
   // Voice status callback - tracks call completion
   app.post("/webhook/voice/status", validateTwilioSignature, async (req, res) => {
     try {
@@ -7765,9 +7981,35 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
       if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
-        const { siteConfigId, plan } = session.metadata ?? {};
+        const meta = session.metadata ?? {};
+        const { siteConfigId, plan } = meta;
+        const siteId = meta.siteId ?? siteConfigId;
 
-        if (siteConfigId && plan) {
+        // ── Site Claim Activation ─────────────────────────────────────────────
+        if (meta.claimToken && meta.siteId) {
+          await handleClaimCheckoutCompleted(session);
+          // Claim activation is fully handled in claimRoutes — skip other branches
+        } else if (meta.type === 'ENERGY_REFILL' && siteId) {
+          const site = await storage.getSiteConfigById(siteId);
+          if (site) {
+            const minutes = meta.packageType === 'pro' ? 1200 : 500;
+            const current = site.minuteBalance ?? 0;
+            await storage.updateSiteConfig(siteId, { minuteBalance: current + minutes, lastNudgeSentAt: null } as any);
+            try {
+              const { processCommission } = await import('./services/commission');
+              await processCommission(session, siteId);
+            } catch (e: any) {
+              console.error('[Stripe] ENERGY_REFILL processCommission failed (non-fatal):', e?.message);
+            }
+            try {
+              const { broadcastLiveEvent } = await import('./services/eventBridge');
+              broadcastLiveEvent(siteId, { type: 'ENERGY_REFILL_SUCCESS', data: { minutes } });
+            } catch (e: any) {
+              console.error('[Stripe] ENERGY_REFILL broadcast failed (non-fatal):', e?.message);
+            }
+            console.log(`[Stripe] Energy refill → site ${siteId} +${minutes} min`);
+          }
+        } else if (siteConfigId && plan) {
           await storage.updateSiteConfig(siteConfigId, { plan } as any);
           console.log(`[Stripe] Plan upgraded → site ${siteConfigId} is now on "${plan}"`);
 
@@ -7822,6 +8064,67 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       res.json({ publishableKey: key });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/billing/history", async (req, res) => {
+    try {
+      const bearerToken = (req.headers.authorization || "").replace("Bearer ", "").trim();
+      let customerAccount: { id: string; stripeCustomerId: string | null } | null = null;
+      if (bearerToken) {
+        const dbSession = await storage.getValidCustomerSession(bearerToken);
+        if (dbSession) {
+          const account = await storage.getCustomerAccountById(dbSession.customerAccountId);
+          if (account?.isActive) customerAccount = { id: account.id, stripeCustomerId: account.stripeCustomerId ?? null };
+        }
+      }
+      if (!customerAccount) return res.status(401).json({ error: "Authentication required" });
+      if (!customerAccount.stripeCustomerId) return res.json({ invoices: [] });
+      const { getStripeClient } = await import("./stripeClient");
+      const stripe = getStripeClient();
+      const list = await stripe.invoices.list({
+        customer: customerAccount.stripeCustomerId,
+        limit: 12,
+        status: "paid",
+      });
+      const invoices = (list.data ?? []).map((inv: any) => ({
+        id: inv.id,
+        created: inv.created,
+        amount_paid: inv.amount_paid,
+        invoice_pdf: inv.invoice_pdf,
+        description: inv.lines?.data?.[0]?.description ?? inv.description ?? "Invoice",
+        category: inv.metadata?.category ?? "platform",
+      }));
+      res.json({ invoices });
+    } catch (error: any) {
+      console.error("[Billing] history error:", error?.message);
+      res.status(500).json({ error: error?.message ?? "Failed to load history" });
+    }
+  });
+
+  app.post("/api/billing/create-refill-session", async (req, res) => {
+    try {
+      const schema = z.object({ siteId: z.string().min(1), packageType: z.enum(["basic", "pro"]) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "siteId and packageType (basic|pro) required" });
+      const { siteId, packageType } = parsed.data;
+      const site = await storage.getSiteConfigById(siteId);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const { getStripeClient, STRIPE_ENERGY_PRICE_IDS } = await import("./stripeClient");
+      const priceId = STRIPE_ENERGY_PRICE_IDS[packageType];
+      if (!priceId) return res.status(400).json({ error: "Energy refill price not configured for this package" });
+      const stripe = getStripeClient();
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        line_items: [{ price: priceId, quantity: 1 }],
+        metadata: { siteId, type: "ENERGY_REFILL", packageType, category: "usage" },
+        success_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/billing?refill=success`,
+        cancel_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/billing?refill=cancelled`,
+      });
+      res.json({ url: session.url });
+    } catch (error: any) {
+      console.error("[Billing] create-refill-session error:", error?.message);
+      res.status(500).json({ error: error?.message ?? "Failed to create checkout session" });
     }
   });
 
@@ -8183,6 +8486,18 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   app.use("/api/knowledge", knowledgeRoutes);
   app.use("/api/business", businessRoutes);
   app.use("/api/site-configs", siteConfigRoutes);
+
+  // Register Site Claim / Assignment routes (assign + preview + OTP + Stripe checkout)
+  app.use(claimRoutes);
+
+  // Intelligence Ingestion: POST /api/ingest-plan
+  app.use(ingestPlanRoutes);
+
+  // Bail Rescue public API: GET /api/bail-rescue/:token, POST /api/bail-rescue/:token/checkout
+  app.use(bailRescueRoutes);
+
+  // Agent Deep Research: POST /api/generate-agent-persona
+  app.use(agentResearchRoutes);
 
   // Register Menu and Cart routes
   registerMenuRoutes(app);

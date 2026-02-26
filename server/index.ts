@@ -8,7 +8,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startTaskScheduler } from "./taskScheduler";
 import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
-import { setupBrowserVoiceRoutes, setupBrowserVoiceWebSocket, setupBrowserAudioTempRoute } from "./browserVoice";
+import { setupBrowserAudioTempRoute } from "./browserVoice";
 import { setupGeminiLiveWebSocket } from "./geminiVoice";
 import { storage } from "./storage";
 import { validateGeminiConfig } from "./config/geminiLiveProtocol";
@@ -501,22 +501,32 @@ app.use((req, res, next) => {
   // Set up audio temp route for serving temporary audio files
   setupAudioTempRoute(app);
   
-  // Set up browser voice AI routes and temp audio serving
-  setupBrowserVoiceRoutes(app);
+  // Temp audio serving for browser (legacy path; voice uses Gemini Live)
   setupBrowserAudioTempRoute(app);
   
-  // Set up WebSocket for Twilio Media Streams (Kimi-Audio voice calls)
+  // WebSocket: Twilio ↔ Gemini 2.5 Flash (PSTN)
   setupVoiceStreamWebSocket(httpServer);
-  
-  // Set up WebSocket for browser-based voice AI
-  setupBrowserVoiceWebSocket(httpServer);
 
-  // Set up WebSocket for Gemini Multimodal Live Proxy (Clear Voice Premium)
+  // WebSocket: Browser ↔ Gemini 2.5 Flash Live (unified: /ws/gemini-live and /ws/browser-voice)
   setupGeminiLiveWebSocket(httpServer);
 
   // Initialize the WebSocket router (must be AFTER all routes are registered)
   const { setupWebSocketRouter } = await import("./websocketRouter");
   setupWebSocketRouter(httpServer);
+
+  // Socket.io event bridge for live transcript feed (dashboard)
+  const { Server: SocketIOServer } = await import("socket.io");
+  const { initEventBridge } = await import("./services/eventBridge");
+  const io = new SocketIOServer(httpServer, {
+    cors: { origin: process.env.NODE_ENV === "production" ? false : "*" },
+  });
+  initEventBridge(io);
+
+  const { initPayoutCron } = await import("./cron/processPayouts");
+  initPayoutCron();
+
+  const { initFleetHealthCron } = await import("./cron/fleetHealth");
+  initFleetHealthCron();
 
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

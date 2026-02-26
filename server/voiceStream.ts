@@ -25,7 +25,7 @@ const GEMINI_LIVE_MODEL =
   process.env.GEMINI_MODEL_ID || "gemini-2.0-flash-live-001";
 
 interface TwilioStreamMessage {
-  event: "connected" | "start" | "media" | "mark" | "stop";
+  event: "connected" | "start" | "media" | "mark" | "stop" | "dtmf";
   sequenceNumber?: string;
   streamSid?: string;
   start?: {
@@ -48,6 +48,11 @@ interface TwilioStreamMessage {
     accountSid: string;
     callSid: string;
   };
+  /** DTMF digit events from Twilio (keypad presses during a media stream) */
+  dtmf?: {
+    digit: string;
+    duration: number;
+  };
 }
 
 export function setupVoiceStreamWebSocket(server: Server): void {
@@ -68,6 +73,15 @@ export function setupVoiceStreamWebSocket(server: Server): void {
     /** μ-law payloads queued while the Gemini Live session is still in setup. */
     const audioQueue: string[] = [];
     let callEndHandled = false;
+    /** Optional system prompt override (set by jail/custom webhook via TwiML parameter). */
+    let systemPromptOverride: string | null = null;
+
+    // ── Push-to-Talk (PTT) DTMF Gate ─────────────────────────────────────────
+    // Enabled when customParameters.ptt === "1" (set in TwiML <Stream>).
+    // Press "1" to open mic → audio flows to Gemini.
+    // Press "1" again to close mic → sends end-of-utterance so Gemini responds.
+    let pttEnabled = false;
+    let isMicOpen = false;
 
     /** Open a persistent WebSocket to the Gemini Live API and wire up audio relay. */
     function openGeminiLive(agentName: string, personality: string): void {
@@ -98,7 +112,8 @@ export function setupVoiceStreamWebSocket(server: Server): void {
             system_instruction: {
               parts: [
                 {
-                  text: `You are ${agentName}, a ${personality} AI voice assistant from Gateway Global AI.
+                  text: systemPromptOverride ??
+                    `You are ${agentName}, a ${personality} AI voice assistant from Gateway Global AI.
 Keep responses concise and conversational (under 100 words).
 Speak naturally as if on a phone call. Be warm and attentive.`,
                 },
@@ -228,12 +243,21 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
               callSid = message.start.callSid;
               streamSid = message.start.streamSid;
               const params = message.start.customParameters ?? {};
-              const agentName = params.agentName || "AI Assistant";
-              const personality = params.personality || "helpful";
+              const agentName    = params.agentName    || "AI Assistant";
+              const personality  = params.personality  || "helpful";
               const siteConfigId = params.siteConfigId || null;
+              // Optional override system prompt (e.g., jail handshake sets this)
+              systemPromptOverride = params.systemPrompt ?? null;
+
+              // PTT mode: enabled via TwiML <Stream> customParameter ptt="1"
+              pttEnabled = params.ptt === "1";
+              if (pttEnabled) {
+                isMicOpen = false;
+                console.log(`[VoiceStream] PTT mode enabled — caller must press 1 to open mic`);
+              }
 
               console.log(
-                `[VoiceStream] Stream started – Call: ${callSid}, Site: ${siteConfigId ?? "unknown"}`
+                `[VoiceStream] Stream started – Call: ${callSid}, Site: ${siteConfigId ?? "unknown"}${pttEnabled ? " [PTT]" : ""}${systemPromptOverride ? " [CustomPrompt]" : ""}`
               );
 
               // Create (or reuse) session and start the stopwatch.
@@ -260,11 +284,29 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
 
           case "media":
             if (message.media && callSid) {
+              // PTT gate: when PTT mode is active, only pipe audio when mic is open
+              if (pttEnabled && !isMicOpen) break;
+
               const payload = message.media.payload;
               if (geminiReady) {
                 sendAudioToGemini(payload);
               } else {
                 audioQueue.push(payload);
+              }
+            }
+            break;
+
+          case "dtmf":
+            // Push-to-Talk: digit "1" toggles the microphone gate
+            if (pttEnabled && message.dtmf?.digit === "1") {
+              isMicOpen = !isMicOpen;
+              console.log(`[VoiceStream] PTT ${isMicOpen ? "OPEN" : "CLOSED"} (DTMF 1) – Call: ${callSid}`);
+
+              if (!isMicOpen && geminiWs?.readyState === WebSocket.OPEN) {
+                // Closing the mic: signal end-of-utterance so Gemini begins processing
+                geminiWs.send(
+                  JSON.stringify({ realtime_input: { audio_stream_end: {} } })
+                );
               }
             }
             break;

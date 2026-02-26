@@ -4,6 +4,8 @@ import { IncomingMessage } from "http";
 import { registerWebSocketRoute } from "./websocketRouter";
 import { TOOL_DECLARATIONS } from "./config/geminiToolDeclarations";
 import { handleToolCall } from "./services/toolHandler";
+import { broadcastLiveEvent } from "./services/eventBridge";
+import { storage } from "./storage";
 
 /** Shape of the structured result returned by MCP tool handlers. */
 interface McpToolResult {
@@ -24,10 +26,12 @@ interface McpToolResult {
 export function setupGeminiLiveWebSocket(server: Server): void {
   const wss = new WebSocketServer({ noServer: true });
 
-  // Register with the central router
+  // Register with the central router (unified Gemini Live for all browser voice)
   registerWebSocketRoute('/ws/gemini-live', wss, 'GeminiVoice');
+  console.log('[GeminiVoice] WebSocket proxy initialized on /ws/gemini-live');
 
-  console.log("[GeminiVoice] WebSocket proxy initialized on /ws/gemini-live");
+  registerWebSocketRoute('/ws/browser-voice', wss, 'GeminiVoice');
+  console.log('[BrowserVoice] Route retained and unified under Gemini Native Audio');
 
   wss.on("connection", (clientWs: WebSocket, request: IncomingMessage) => {
     console.log(`[GeminiVoice] New client connected to Gemini Proxy from ${request.socket.remoteAddress}`);
@@ -56,8 +60,11 @@ export function setupGeminiLiveWebSocket(server: Server): void {
     // Identity Anchor — captured from the client's setup sessionContext and injected
     // into every MCP tool call so the model never needs to emit the UUID itself.
     let sessionSiteConfigId: string | null = null;
+    // Contextual Snap — per-click agentId and metaPrompt from the Dynamic Entry Point Engine.
+    let sessionAgentId: string | null = null;
+    let sessionMetaPrompt: string | null = null;
 
-    const processClientMessage = (data: Buffer) => {
+    const processClientMessage = async (data: Buffer) => {
       // The client, GeminiStreamingClient, sends JSON strings. It does not send binary data.
       try {
         const messageString = data.toString();
@@ -71,6 +78,13 @@ export function setupGeminiLiveWebSocket(server: Server): void {
             sessionSiteConfigId = message.sessionContext.siteConfigId;
             console.log(`[GeminiVoice] Identity anchor set: siteConfigId=${sessionSiteConfigId}`);
           }
+          // Contextual Snap: capture agentId and metaPrompt from the entry point click.
+          if (message.sessionContext?.agentId) {
+            sessionAgentId = message.sessionContext.agentId;
+          }
+          if (message.sessionContext?.metaPrompt) {
+            sessionMetaPrompt = message.sessionContext.metaPrompt;
+          }
           // Strip sessionContext before forwarding to Google — it is an internal field only.
           delete message.sessionContext;
 
@@ -82,21 +96,77 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           }
           message.setup.model = modelId; // Override any model sent by the client.
 
+          // --- CONTEXTUAL SNAP: Compile master system instruction server-side ---
+          // Priority: agentPersona + sovereignTruths + metaPrompt → overrides client instruction.
+          if (sessionSiteConfigId && (sessionAgentId || sessionMetaPrompt)) {
+            try {
+              const siteConfig = await storage.getSiteConfigById(sessionSiteConfigId);
+              if (siteConfig) {
+                const kl = (siteConfig.knowledgeLibrary as Record<string, any>) ?? {};
+                const agents = (kl.agents as Record<string, any>) ?? {};
+
+                // Resolve agent persona — fallback to default concierge description
+                const agentDef = (sessionAgentId && sessionAgentId !== 'default')
+                  ? (agents[sessionAgentId] ?? null)
+                  : null;
+                const agentPersona = agentDef?.persona
+                  ?? 'You are the primary Site Concierge for this business. Be helpful, concise, and friendly.';
+
+                // Extract sovereign truths for grounding
+                const sovereignTruths = kl.sovereignTruths
+                  ? `\n\nCORE KNOWLEDGE (follow these facts precisely):\n${JSON.stringify(kl.sovereignTruths, null, 2)}`
+                  : '';
+
+                // Resolve allowed tools — empty means all tools remain injected
+                const allowedTools: string[] = agentDef?.allowedTools ?? [];
+
+                // Compile the master instruction
+                const compiledInstruction = `${agentPersona}${sovereignTruths}${
+                  sessionMetaPrompt
+                    ? `\n\nIMMEDIATE DIRECTIVE (execute in your very first response):\n${sessionMetaPrompt}\n\nRULE: You MUST execute the IMMEDIATE DIRECTIVE in your very first spoken response. Do not wait for the user to speak first.`
+                    : ''
+                }`;
+
+                // Override the system_instruction with the compiled version
+                message.setup.system_instruction = { parts: [{ text: compiledInstruction }] };
+                console.log(`[GeminiVoice] Contextual Snap applied: agentId=${sessionAgentId}, metaPrompt=${!!sessionMetaPrompt}`);
+
+                // Filter tools to the agent's allowlist (empty allowedTools = keep all)
+                if (allowedTools.length > 0) {
+                  const filteredDeclarations = Object.values(TOOL_DECLARATIONS).filter(
+                    t => allowedTools.includes(t.name)
+                  );
+                  const filteredTools = filteredDeclarations.map(tool => ({
+                    functionDeclarations: [{ name: tool.name, description: tool.description, parameters: tool.parameters }]
+                  }));
+                  if (filteredTools.length > 0) {
+                    message.setup.tools = filteredTools;
+                    console.log(`[GeminiVoice] Tool isolation: ${filteredTools.length}/${Object.keys(TOOL_DECLARATIONS).length} tools active for agentId=${sessionAgentId}`);
+                  }
+                }
+              }
+            } catch (snapErr) {
+              console.error('[GeminiVoice] Contextual Snap fetch error (falling back to client instruction):', snapErr);
+            }
+          }
+
           // #region agent log
           fetch('http://localhost:7243/ingest/6f0f5ac2-b8b0-4db0-890a-ab1f1e0dff06',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'geminiVoice.ts:58',message:'Processing setup message',data:{model:message.setup?.model,hasTools:!!message.setup?.tools},timestamp:Date.now(),hypothesisId:'H2,H5'})}).catch(()=>{});
           // #endregion
-          // Convert TOOL_DECLARATIONS to Gemini Live API format
-          const tools = Object.values(TOOL_DECLARATIONS).map(tool => ({
-            functionDeclarations: [{
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.parameters
-            }]
-          }));
-          
-          if (tools.length > 0) {
-            message.setup.tools = tools;
-            console.log(`📤 [PROXY -> GOOGLE] Injecting ${tools.length} tools into setup`);
+
+          // Inject full tool set if not already set by Contextual Snap (no allowedTools filter)
+          if (!message.setup.tools || (Array.isArray(message.setup.tools) && message.setup.tools.length === 0) || !sessionAgentId) {
+            const tools = Object.values(TOOL_DECLARATIONS).map(tool => ({
+              functionDeclarations: [{
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.parameters
+              }]
+            }));
+            if (tools.length > 0) {
+              message.setup.tools = tools;
+              console.log(`📤 [PROXY -> GOOGLE] Injecting ${tools.length} tools into setup`);
+            }
           }
           
           console.log('📤 [PROXY -> GOOGLE] Sending Setup:', JSON.stringify(message, null, 2));
@@ -117,6 +187,12 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           googleWs.send(JSON.stringify(audioMessageForGoogle));
         } else if (message.setup || message.realtime_input) {
           googleWs.send(JSON.stringify(message)); // Send modified message with tools
+        } else if (message.clientContent) {
+          // Forward explicit clientContent turns from the client (e.g. text injection, manual kickstarts)
+          googleWs.send(JSON.stringify(message));
+        } else if (message.tool_response) {
+          // Forward tool responses back to Google
+          googleWs.send(JSON.stringify(message));
         } else {
           console.warn('[GeminiVoice] Received unknown message type from client:', messageString.slice(0, 200));
         }
@@ -157,6 +233,23 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           // #region agent log
           fetch('http://localhost:7243/ingest/6f0f5ac2-b8b0-4db0-890a-ab1f1e0dff06',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'geminiVoice.ts:96',message:'setupComplete received',data:{clientReady:clientWs.readyState===WebSocket.OPEN},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
           // #endregion
+
+          // FIXER KICKSTART: If a metaPrompt is active, force Gemini to speak first
+          // based on the button click context — zero-latency relevance, no "How can I help?"
+          if (sessionMetaPrompt && googleWs.readyState === WebSocket.OPEN) {
+            const kickstart = {
+              clientContent: {
+                turns: [{
+                  role: "user",
+                  parts: [{ text: "I just clicked the button. Please execute your directive immediately." }]
+                }],
+                turnComplete: true
+              }
+            };
+            googleWs.send(JSON.stringify(kickstart));
+            console.log(`[GeminiVoice] Fixer Kickstart fired for agentId=${sessionAgentId}`);
+          }
+
           // NOW it's safe to tell the client to start audio
           if (clientWs.readyState === WebSocket.OPEN) {
             clientWs.send(JSON.stringify({ type: "server_ready", status: "ready" }));
@@ -169,20 +262,20 @@ export function setupGeminiLiveWebSocket(server: Server): void {
             if (part.functionCall) {
               const functionCall = part.functionCall;
 
-              // Security Interceptor: inject the session-level siteConfigId into MCP
-              // tool args if it is missing, preventing the model from hallucinating a UUID
-              // or omitting the parameter for cross-tenant calls.
-              const MCP_TOOLS = ['mcp_search_drive', 'mcp_read_calendar'];
-              if (MCP_TOOLS.includes(functionCall.name)) {
+              // Security Interceptor: inject the session-level siteConfigId into site-anchored
+              // tool args if missing, preventing the model from hallucinating a UUID.
+              const SITE_ANCHORED_TOOLS = ['mcp_search_drive', 'mcp_read_calendar', 'get_hotel_inventory', 'fetch_city_warrants', 'vine_lookup_and_dispatch'];
+              if (SITE_ANCHORED_TOOLS.includes(functionCall.name)) {
                 const args = (functionCall.args as any) ?? {};
                 if (!args.siteConfigId && sessionSiteConfigId) {
                   functionCall.args = { ...args, siteConfigId: sessionSiteConfigId };
                   console.log(`[GeminiVoice] Injected siteConfigId into ${functionCall.name} args`);
                 }
               }
-              
+
+              const toolCallContext = sessionSiteConfigId ? { siteConfigId: sessionSiteConfigId } : undefined;
               try {
-                const result = await handleToolCall(functionCall);
+                const result = await handleToolCall(functionCall, toolCallContext);
                 const fcArgs = (functionCall.args as any) ?? {};
                 
                 // Send function result back to Google
@@ -261,6 +354,29 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                         audio_cue: r.audio_cue,
                       };
                     }
+                  } else if (functionCall.name === 'get_hotel_inventory') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: functionCall.name,
+                      tool_type: 'hotel_inventory',
+                      data: result,
+                      checkIn: fcArgs.checkIn,
+                      checkOut: fcArgs.checkOut,
+                    };
+                  } else if (functionCall.name === 'fetch_city_warrants') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: functionCall.name,
+                      tool_type: 'warrant_results',
+                      ...(result as object),
+                    };
+                  } else if (functionCall.name === 'vine_lookup_and_dispatch') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: functionCall.name,
+                      tool_type: 'vine_status',
+                      ...(result as object),
+                    };
                   }
 
                   if (toolMetadata) {
@@ -287,6 +403,25 @@ export function setupGeminiLiveWebSocket(server: Server): void {
               // Don't forward function calls to client - we handle them server-side
               continue;
             }
+            // Live transcript: broadcast text parts to dashboard (site-specific room)
+            const textContent = (part as { text?: string | { text?: string } }).text;
+            const textStr = typeof textContent === "string" ? textContent : textContent?.text;
+            if (textStr && sessionSiteConfigId) {
+              broadcastLiveEvent(sessionSiteConfigId, {
+                type: "TRANSCRIPT_PARTIAL",
+                data: {
+                  text: textStr,
+                  speaker: "navigator",
+                  timestamp: new Date().toISOString(),
+                },
+              });
+            }
+          }
+          if (response.turnComplete && sessionSiteConfigId) {
+            broadcastLiveEvent(sessionSiteConfigId, {
+              type: "TRANSCRIPT_FINAL",
+              data: { turnComplete: true, timestamp: new Date().toISOString() },
+            });
           }
         }
         // Capture specific error messages from the Google backend

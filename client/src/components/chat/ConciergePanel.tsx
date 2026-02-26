@@ -15,9 +15,10 @@
  * - Auto-restart on settings change
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  X, Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield 
+  X, Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield, ArrowLeft
 } from 'lucide-react';
 import { VoiceClientFactory } from '../../services/voice/VoiceClientFactory';
 import { IVoiceClient } from '../../services/voice/IVoiceClient';
@@ -26,6 +27,8 @@ import { VoiceSettings } from '../voice/VoiceSettings';
 import { ToolRouter } from '../voice/tools/ToolRouter';
 import { SuccessAnimation } from '../voice/animations/SuccessAnimation';
 import { useVoiceAnimations } from '../voice/animations/useVoiceAnimations';
+import { AgentDirectoryMenu } from '../voice/AgentDirectoryMenu';
+import { AgentsMap, AgentDefinition } from '../../types/entryPoints';
 
 interface ConciergePanelProps {
   business: BusinessContext;
@@ -41,6 +44,18 @@ interface ConciergePanelProps {
   onOpenAdmin?: () => void;
   className?: string;
   zIndex?: number;
+  /**
+   * Dynamic Entry Point Engine props.
+   * When directoryMode=true the panel opens the AgentDirectoryMenu first
+   * and waits for the user to select a specialty agent before connecting.
+   */
+  directoryMode?: boolean;
+  /** Pre-selected agentId from a direct VOICE_AGENT / CHAT_AGENT entry point. */
+  agentId?: string;
+  /** Click-time metaPrompt — sent in sessionContext, compiled server-side by the proxy. */
+  metaPrompt?: string;
+  /** Available specialty agents from knowledgeLibrary.agents */
+  agents?: AgentsMap;
 }
 
 interface ChatMessage {
@@ -63,10 +78,39 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   onCycleLayout,
   onOpenAdmin,
   className = '',
-  zIndex = 50
+  zIndex = 50,
+  directoryMode = false,
+  agentId: initialAgentId,
+  metaPrompt: initialMetaPrompt,
+  agents = {},
 }) => {
   const siteConfigId = business.id;
   const isValidSiteConfigId = !!(siteConfigId && siteConfigId !== 'undefined' && siteConfigId !== '');
+
+  // --- Dynamic Entry Point State ---
+  // showDirectory=true means we wait for the user to pick an agent before connecting.
+  const [showDirectory, setShowDirectory] = useState(directoryMode && !initialAgentId);
+  const [activeAgentId, setActiveAgentId] = useState<string | undefined>(initialAgentId);
+  const [activeMetaPrompt, setActiveMetaPrompt] = useState<string | undefined>(initialMetaPrompt);
+  const [activeAgentName, setActiveAgentName] = useState<string | undefined>(agentName);
+
+  // Reset directory state whenever the panel opens
+  useEffect(() => {
+    if (isOpen) {
+      setShowDirectory(directoryMode && !initialAgentId);
+      setActiveAgentId(initialAgentId);
+      setActiveMetaPrompt(initialMetaPrompt);
+      setActiveAgentName(agentName);
+    }
+  }, [isOpen, directoryMode, initialAgentId, initialMetaPrompt, agentName]);
+
+  const handleAgentSelect = useCallback((selectedId: string, selectedAgent: AgentDefinition) => {
+    setActiveAgentId(selectedId);
+    setActiveAgentName(selectedAgent.name);
+    // Use the agent's persona as the metaPrompt — the proxy will compile it with sovereignTruths
+    setActiveMetaPrompt(selectedAgent.persona);
+    setShowDirectory(false);
+  }, []);
 
   // --- State ---
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -85,7 +129,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
   // --- Engine Initialization ---
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || showDirectory) {
       if (clientRef.current) {
         clientRef.current.disconnect();
         clientRef.current = null;
@@ -209,8 +253,14 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         });
 
         // 4. Connect using the fetched, validated system prompt and validated config.
-        // The `connect` method in GeminiStreamingClient will now receive this.
-        const handoverBusinessContext = { ...business, systemPromptOverride: siteConfig.systemPromptOverride };
+        // entryPointAgentId and entryPointMetaPrompt flow into sessionContext in
+        // GeminiStreamingClient — the proxy compiles the master instruction server-side.
+        const handoverBusinessContext = {
+          ...business,
+          systemPromptOverride: siteConfig.systemPromptOverride,
+          entryPointAgentId: activeAgentId,
+          entryPointMetaPrompt: activeMetaPrompt,
+        };
 
         await newClient.connect(handoverBusinessContext, agent, validatedVoiceConfig);
         clientRef.current = newClient;
@@ -235,7 +285,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         clientRef.current = null;
       }
     };
-  }, [isOpen, currentVoiceConfig, siteConfigId, business.name]); // agent/business objects excluded intentionally — only stable primitives used as deps
+  // showDirectory triggers reconnect when the user selects an agent from the directory
+  }, [isOpen, showDirectory, currentVoiceConfig, siteConfigId, business.name, activeAgentId, activeMetaPrompt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-scroll
   useEffect(() => {
@@ -349,16 +400,29 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     >
       
       {/* 1. TOP HEADER - 15% */}
-      <div className="h-[15%] flex items-center justify-between px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white shrink-0">
+      <div className="h-[15%] flex items-center justify-between px-4 py-2 bg-[#1e293b] border-b border-white/10 text-white shrink-0">
         <div className="flex items-center gap-3">
+          {/* Back button — shown when user entered via directory and can return to agent list */}
+          {directoryMode && !showDirectory && (
+            <button
+              onClick={() => { setShowDirectory(true); setMessages([]); }}
+              className="p-1.5 hover:bg-white/10 rounded-lg transition-colors mr-1"
+              title="Back to Agent Directory"
+            >
+              <ArrowLeft size={16} />
+            </button>
+          )}
           <div className={`w-3 h-3 rounded-full ${
+            showDirectory ? 'bg-indigo-400 animate-pulse' :
             connectionStatus === 'connected' ? 'bg-green-400 animate-pulse shadow-lg shadow-green-400/50' : 
             connectionStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' :
             'bg-red-400'
           }`} />
           <div>
-            <h3 className="font-bold text-base">{agentName || agent.role}</h3>
-            <p className="text-[10px] text-white/70 tracking-wide font-medium">
+            <h3 className="font-bold text-base">
+              {showDirectory ? 'Agent Directory' : (activeAgentName || agentName || agent.role)}
+            </h3>
+            <p className="text-[10px] text-white/60 tracking-wide font-medium">
               {business.name.toUpperCase()}
             </p>
           </div>
@@ -453,19 +517,40 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       </div>
 
       {/* 3. CONTENT WINDOW - 40% (Multimodal Communication Area) */}
-      <div className="h-[40%] bg-white overflow-y-auto shrink-0 border-y border-gray-200">
-        {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center px-8 text-gray-400">
-            <Mic className="w-12 h-12 mb-3 text-gray-300" />
-            <p className="text-sm font-medium text-gray-600">Hold the button below to speak</p>
-            <p className="text-xs mt-2 text-gray-400">
-              Voice input & AI responses appear here
-            </p>
-            <p className="text-[10px] mt-4 text-gray-300 max-w-xs">
-              This window supports multimodal content: maps, forms, catalogs, and interactive tools
-            </p>
-          </div>
-        ) : (
+      <div className="h-[40%] bg-[#0f172a] overflow-y-auto shrink-0 border-y border-white/5">
+        <AnimatePresence mode="wait">
+          {showDirectory ? (
+            <motion.div
+              key="directory"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.25 }}
+              className="h-full"
+            >
+              <AgentDirectoryMenu
+                agents={agents}
+                onSelectAgent={handleAgentSelect}
+              />
+            </motion.div>
+          ) : messages.length === 0 ? (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="h-full flex flex-col items-center justify-center text-center px-8"
+            >
+              <Mic className="w-12 h-12 mb-3 text-indigo-500/40" />
+              <p className="text-sm font-medium text-slate-300">Hold the button below to speak</p>
+              {activeAgentName && (
+                <p className="text-xs mt-1 text-indigo-400">Speaking with: {activeAgentName}</p>
+              )}
+              <p className="text-xs mt-2 text-slate-500">
+                Voice input & AI responses appear here
+              </p>
+            </motion.div>
+          ) : (
           <div className="space-y-3 p-4">
             {messages.map((msg) => {
               // Check if this is a tool message (map, form, catalog, etc.)
@@ -538,11 +623,12 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             })}
             <div ref={messagesEndRef} />
           </div>
-        )}
+          )}
+        </AnimatePresence>
       </div>
 
       {/* 4. BOTTOM FOOTER - 25% */}
-      <div className="h-[25%] bg-gradient-to-b from-gray-50 to-white flex flex-col items-center justify-center gap-3 px-4 py-3 shrink-0">
+      <div className="h-[25%] bg-[#0f172a] border-t border-white/5 flex flex-col items-center justify-center gap-3 px-4 py-3 shrink-0">
         
         {/* Optional Action Buttons Row (LEFT - PTT - RIGHT layout) */}
         <div className="flex items-center justify-center gap-3 w-full">
@@ -562,16 +648,18 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             onTouchStart={(e) => { e.preventDefault(); startPTT(); }}
             onTouchEnd={(e) => { e.preventDefault(); stopPTT(); }}
             onContextMenu={(e) => e.preventDefault()}
-            disabled={connectionStatus !== 'connected'}
-            className={`w-[50%] h-14 rounded-xl font-bold text-sm tracking-wider transition-all transform active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed select-none ${
-              isRecording 
-                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/50 ring-4 ring-blue-300/30' 
+            disabled={showDirectory || connectionStatus !== 'connected'}
+            className={`w-[50%] h-14 rounded-xl font-bold text-sm tracking-wider transition-all transform active:scale-95 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed select-none ${
+              showDirectory
+                ? 'bg-indigo-900/50 text-indigo-300'
+                : isRecording 
+                ? 'bg-gradient-to-r from-indigo-500 to-blue-600 text-white shadow-indigo-500/50 ring-4 ring-indigo-300/30' 
                 : isProcessing
                 ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-purple-500/50 animate-pulse'
-                : 'bg-gradient-to-r from-gray-800 to-gray-900 text-white hover:from-blue-600 hover:to-blue-700 shadow-gray-800/50'
+                : 'bg-gradient-to-r from-slate-700 to-slate-800 text-white hover:from-indigo-600 hover:to-blue-700 shadow-slate-900/50'
             }`}
           >
-            {isRecording ? '🎤 LISTENING...' : isProcessing ? '⏳ PROCESSING...' : '🎙️ HOLD TO SPEAK'}
+            {showDirectory ? '← Select an Agent' : isRecording ? '🎤 LISTENING...' : isProcessing ? '⏳ PROCESSING...' : '🎙️ HOLD TO SPEAK'}
           </button>
 
           {/* Right Button: Restart */}
@@ -591,7 +679,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         </div>
 
         {/* Footer Info */}
-        <div className="flex items-center justify-between w-full text-[10px] text-gray-400">
+        <div className="flex items-center justify-between w-full text-[10px] text-slate-500">
           <span>
             {currentVoiceConfig.mode === 'clear_voice' ? '⚡ Clear Voice' : '💬 Standard PTT'}
           </span>
@@ -599,10 +687,12 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             Buffer: {currentVoiceConfig.bufferDelay || 800}ms
           </span>
           <span className={`font-medium ${
-            connectionStatus === 'connected' ? 'text-green-600' : 
-            connectionStatus === 'connecting' ? 'text-yellow-600' : 'text-red-600'
+            showDirectory ? 'text-indigo-400' :
+            connectionStatus === 'connected' ? 'text-emerald-500' : 
+            connectionStatus === 'connecting' ? 'text-yellow-500' : 'text-red-500'
           }`}>
-            {connectionStatus === 'connected' ? '● CONNECTED' : 
+            {showDirectory ? '◈ DIRECTORY' :
+             connectionStatus === 'connected' ? '● CONNECTED' : 
              connectionStatus === 'connecting' ? '◐ CONNECTING' : '○ DISCONNECTED'}
           </span>
         </div>

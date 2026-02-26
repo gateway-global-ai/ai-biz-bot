@@ -47,6 +47,13 @@ export interface BusinessContext {
   /** DB-backed system prompt from site_configs.system_prompt_override. When present,
    *  takes priority over the enriched or default instruction in GeminiStreamingClient. */
   systemPromptOverride?: string | null;
+  /**
+   * Dynamic Entry Point Engine — set by ConciergePanel when the user activates
+   * a specific entry point node. Sent in sessionContext to the proxy which compiles
+   * the master system instruction server-side (Contextual Snap).
+   */
+  entryPointAgentId?: string;
+  entryPointMetaPrompt?: string;
 }
 
 export interface AgentConfig {
