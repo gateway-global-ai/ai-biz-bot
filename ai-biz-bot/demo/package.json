@@ -1,9 +1,0 @@
-{
-  "name": "ai-biz-bot-demo",
-  "private": true,
-  "description": "Landing page for AI Biz Bot demos (Chat & Voice + Website Builder)",
-  "scripts": {
-    "start": "npx serve . -p 5173",
-    "open": "open http://localhost:5173"
-  }
-}

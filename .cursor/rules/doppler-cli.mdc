@@ -9,6 +9,7 @@ alwaysApply: false
 - **Secrets:** Use Doppler for dev/stg/prd. Never commit real secrets; use `.env.example` or Doppler.
 - **Run app/scripts with secrets:** `doppler run -- <command>` or `doppler run --config stg -- <command>`.
 - **Copy configs (dev → stg/prd):** `./scripts/doppler-copy-config.sh` or `npm run doppler:copy-config`. Requires `jq`. Override with `FROM_CONFIG`, `TO_CONFIGS`, `PROJECT`.
+- **Copy only Stripe / pricing (so stg/prd get missing vars without overwriting other secrets):** `COPY_KEYS="STRIPE_SECRET_KEY STRIPE_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET STRIPE_A2P_WEBHOOK_SECRET STRIPE_PRICE_AI_PRO STRIPE_PRICE_AI_BASIC" npm run doppler:copy-config`. Add any other key names to the list as needed.
 - **Sync PORT per config:** `npm run doppler:sync-ports` (reads PORT_DEV/STG/PRD and DOPPLER_SERVICE_TOKEN from `.env`).
 - **Permit/health checks:** `doppler run -- npx tsx scripts/check-google-key-permissions.ts` or `npm run check-keys`.
 - **Service tokens:** Servers use `DOPPLER_SERVICE_TOKEN` or `DOPPLER_TOKEN_DEV`/`DOPPLER_TOKEN_STAGE`/`DOPPLER_TOKEN_PRODUCTION`. Stage app runs from the stage repo and needs a token in that repo’s `.env` (or use a token that can read the `stg` config).

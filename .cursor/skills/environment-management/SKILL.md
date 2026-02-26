@@ -21,6 +21,22 @@ When performing tasks in this codebase, always distinguish between Dev, Stage, a
 - Restart with env refresh: `pm2 restart <name> --update-env`
 - Run app with secrets: `doppler run -- npm run dev` (dev) or `doppler run --config stg -- npm start` (stage)
 
+## Pushing dev secrets to Stage and Prod (Doppler)
+
+When **stg** or **prd** are missing variables that exist in **dev** (e.g. Stripe pricing IDs, `STRIPE_PRICE_AI_PRO`, `STRIPE_A2P_WEBHOOK_SECRET`):
+
+1. **Push only specific keys** (recommended so you don’t overwrite stg/prd-only secrets like prod API keys):
+   ```bash
+   COPY_KEYS="STRIPE_SECRET_KEY STRIPE_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET STRIPE_A2P_WEBHOOK_SECRET STRIPE_PRICE_AI_PRO STRIPE_PRICE_AI_BASIC" npm run doppler:copy-config
+   ```
+   Add or remove key names as needed.
+
+2. **Push all dev secrets** to stg and prd (overwrites every secret in target configs):
+   ```bash
+   npm run doppler:copy-config
+   ```
+   After a full copy, re-set any stg/prd-specific values in the Doppler dashboard (e.g. production Stripe keys) if they differ from dev.
+
 ## Reference
 
 - Decoupled strategy: `docs/deployment/DECOUPLED_ENVIRONMENT_STRATEGY.md`
