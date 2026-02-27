@@ -96,22 +96,31 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       setConnectionStatus('connecting');
       try {
         // --- HANDOVER SERVICE LOGIC ---
-        // 1. Fetch the pre-validated configuration from the server.
-        // The siteConfigId is passed as a prop or read from the URL.
-        const response = await fetch(`/api/site-configs/${siteConfigId}`);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
+        // Guard: only call the Handover Service when we have a real DB UUID.
+        // WebsitePreview (demo/preview mode) passes business.id = '' — in that
+        // case we skip the fetch and initialise directly from the props config.
+        const hasValidId = Boolean(siteConfigId) && siteConfigId !== 'undefined' && siteConfigId !== '';
+
+        // Resolved DB record (only populated when hasValidId === true)
+        let dbSiteConfig: Record<string, any> | null = null;
+        let validatedVoiceConfig: VoiceConfig = currentVoiceConfig;
+
+        if (hasValidId) {
+          // 1. Fetch the pre-validated configuration from the Handover Service.
+          const response = await fetch(`/api/site-configs/${siteConfigId}`);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
+          }
+          dbSiteConfig = await response.json();
+
+          // 2. Merge the validated Model ID — Backend Config > Prop > Fallback
+          validatedVoiceConfig = {
+            ...currentVoiceConfig,
+            model: dbSiteConfig!.geminiModelId || currentVoiceConfig.model || process.env.GEMINI_MODEL_ID || "gemini-2.5-flash-native-audio-preview-12-2025"
+          };
         }
-        const siteConfig = await response.json();
 
-        // 2. MERGE the validated Model ID into the current voice config
-        const validatedVoiceConfig: VoiceConfig = {
-          ...currentVoiceConfig,
-          // Priority: Backend Config > Prop > Fallback
-          model: siteConfig.geminiModelId || currentVoiceConfig.model || "gemini-2.5-flash-native-audio-preview-12-2025"
-        };
-
-        console.log('[ConciergePanel] Initializing with verified model:', validatedVoiceConfig.model);
+        console.log('[ConciergePanel] Initializing with model:', validatedVoiceConfig.model, hasValidId ? '(Handover Service)' : '(props — preview mode)');
 
         // 3. Create client with the VALIDATED config
         const newClient = VoiceClientFactory.createClient(validatedVoiceConfig);
@@ -169,9 +178,11 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           setConnectionStatus(connected ? 'connected' : 'disconnected');
         });
 
-        // 4. Connect using the fetched, validated system prompt and validated config.
-        // The `connect` method in GeminiStreamingClient will now receive this.
-        const handoverBusinessContext = { ...business, systemPromptOverride: siteConfig.systemPromptOverride };
+        // 4. Connect — enrich context with DB-validated systemPromptOverride when
+        //    Handover Service ran; in preview mode use business as-is.
+        const handoverBusinessContext = dbSiteConfig
+          ? { ...business, systemPromptOverride: dbSiteConfig.systemPromptOverride }
+          : business;
 
         await newClient.connect(handoverBusinessContext, agent, validatedVoiceConfig);
         clientRef.current = newClient;
@@ -196,7 +207,12 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         clientRef.current = null;
       }
     };
-  }, [isOpen, currentVoiceConfig, business, agent]);
+  // Deps: `siteConfigId` (primitive) replaces the full `business` object reference
+  // so that inline object literals in calling components (e.g. WebsitePreview) do
+  // not create new references on every render and trigger an infinite re-connect.
+  // `currentVoiceConfig` is React state so its identity is already stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, siteConfigId, currentVoiceConfig]);
 
   // Auto-scroll
   useEffect(() => {
