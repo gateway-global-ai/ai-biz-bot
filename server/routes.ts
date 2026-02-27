@@ -8,6 +8,7 @@ import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding
 import knowledgeRoutes from "./routes/knowledge-routes";
 import businessRoutes from "./routes/businessRoutes";
 import siteConfigRoutes from "./routes/siteConfigRoutes";
+import onboardingRoutes from "./routes/onboardingRoutes";
 import { registerMenuRoutes } from "./routes/menu-routes";
 import healthRoutes from "./routes/healthRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
@@ -6951,7 +6952,12 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       return;
     }
 
-    const totalAmount = session.amount_total || (vettingType === 'expedited' ? 13400 : 8900);
+    const { getPricingConfig, toCents } = await import('./utils/pricing');
+    const _pricing = getPricingConfig();
+    const _brandReg   = toCents(_pricing.flat_fee.monthly.amount);
+    const _expedited  = Math.round(Number(process.env.STRIPE_A2P_EXPEDITED_FEE_CENTS ?? 8500));
+    const _standard   = Math.round(Number(process.env.STRIPE_A2P_STANDARD_FEE_CENTS  ?? 4000));
+    const totalAmount = session.amount_total || (vettingType === 'expedited' ? _brandReg + _expedited : _brandReg + _standard);
 
     await storage.updateA2pBrand(brandId, {
       stripePaymentId: session.payment_intent as string,
@@ -6978,6 +6984,14 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
       const { getUncachableStripeClient, getStripePublishableKey } = await import('./stripeClient');
       const stripe = await getUncachableStripeClient();
+      const { getPricingConfig, toCents } = await import('./utils/pricing');
+      const pricing = getPricingConfig();
+
+      // All amounts sourced from pricing_v1.yaml or Doppler env vars.
+      // Math.round() via toCents() prevents floating-point drift.
+      const brandRegCents   = toCents(pricing.flat_fee.monthly.amount);
+      const expeditedCents  = Math.round(Number(process.env.STRIPE_A2P_EXPEDITED_FEE_CENTS  ?? 8500));
+      const standardCents   = Math.round(Number(process.env.STRIPE_A2P_STANDARD_FEE_CENTS   ?? 4000));
 
       const { vettingType = 'standard' } = req.body;
 
@@ -6989,7 +7003,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
               name: 'A2P Brand Registration',
               description: `Brand registration for ${brand.companyName}`,
             },
-            unit_amount: 4900, // $49.00
+            unit_amount: brandRegCents,
           },
           quantity: 1,
         }
@@ -7003,7 +7017,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
               name: 'Expedited Vetting',
               description: 'Priority vetting (24-48 hours)',
             },
-            unit_amount: 8500, // $85.00
+            unit_amount: expeditedCents,
           },
           quantity: 1,
         });
@@ -7015,7 +7029,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
               name: 'Standard Vetting',
               description: 'Standard vetting (3-5 business days)',
             },
-            unit_amount: 4000, // $40.00
+            unit_amount: standardCents,
           },
           quantity: 1,
         });
@@ -7070,7 +7084,12 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         return res.status(400).json({ error: "Payment session mismatch" });
       }
 
-      const totalAmount = vettingType === 'expedited' ? 13400 : 8900;
+      const { getPricingConfig, toCents } = await import('./utils/pricing');
+      const _p2 = getPricingConfig();
+      const _b2 = toCents(_p2.flat_fee.monthly.amount);
+      const _e2 = Math.round(Number(process.env.STRIPE_A2P_EXPEDITED_FEE_CENTS ?? 8500));
+      const _s2 = Math.round(Number(process.env.STRIPE_A2P_STANDARD_FEE_CENTS  ?? 4000));
+      const totalAmount = vettingType === 'expedited' ? _b2 + _e2 : _b2 + _s2;
 
       const updated = await storage.updateA2pBrand(brand.id, {
         stripePaymentId: session.payment_intent as string,
@@ -7891,6 +7910,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   app.use("/api/knowledge", knowledgeRoutes);
   app.use("/api/business", businessRoutes);
   app.use("/api/site-configs", siteConfigRoutes);
+  app.use("/api/onboarding", onboardingRoutes);
 
   // Register Menu and Cart routes
   registerMenuRoutes(app);

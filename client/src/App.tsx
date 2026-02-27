@@ -34,6 +34,7 @@ import TwilioHealthCheck from "@/pages/developer/TwilioHealthCheck";
 import SystemHealthCheck from "@/pages/developer/SystemHealthCheck";
 import TelephonyManager from "@/pages/developer/TelephonyManager";
 import BillingPage from "@/pages/account/BillingPage";
+import OnboardingGateway from "@/pages/account/OnboardingGateway";
 import GoogleDrivePage from "@/pages/integrations/GoogleDrivePage";
 import GoogleCalendarPage from "@/pages/biz-dashboard/GoogleCalendarPage";
 import GoogleTasksPage from "@/pages/biz-dashboard/GoogleTasksPage";
@@ -45,6 +46,7 @@ import MyAccount from "@/pages/account/MyAccount";
 import CustomerSiteManager from "@/pages/owner/CustomerSiteManager";
 import VoiceLeadMachine from "@/pages/biz-dashboard/VoiceLeadMachine";
 import SitesAndLeads from "@/pages/owner/SitesAndLeads";
+import MixingBoard from "@/pages/reseller/MixingBoard";
 import CommandChat from "@/pages/agents/CommandChat";
 import InquiryManagement from "@/pages/owner/InquiryManagement";
 import CallTracking from "@/pages/biz-dashboard/CallTracking";
@@ -290,6 +292,7 @@ function AppRouter() {
       <Route path="/gateway-admin" component={GatewayAdmin} />
       <Route path="/telephony" component={TelephonyManager} />
       <Route path="/billing" component={BillingPage} />
+      <Route path="/compliance-gateway" component={OnboardingGateway} />
       <Route path="/google-drive" component={GoogleDrivePage} />
       <Route path="/google-calendar" component={GoogleCalendarPage} />
       <Route path="/google-tasks" component={GoogleTasksPage} />
@@ -323,6 +326,7 @@ function AppRouter() {
       {/* BusinessPage moved to public routes */}
       <Route path="/lead-machine" component={VoiceLeadMachine} />
       <Route path="/sites-leads" component={SitesAndLeads} />
+      <Route path="/mixing-board" component={MixingBoard} />
       <Route path="/inquiries" component={InquiryManagement} />
       <Route path="/call-tracking" component={CallTracking} />
       <Route path="/transparency" component={TransparencyDashboard} />

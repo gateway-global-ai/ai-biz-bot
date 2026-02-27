@@ -4,7 +4,6 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { PLAN_LIMITS, type PlanType } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +13,6 @@ import {
   Phone,
   Mail,
   Building2,
-  Crown,
   LogOut,
   ArrowLeft,
   Globe,
@@ -29,8 +27,25 @@ import {
   Copy,
   LayoutGrid,
   List,
-  ImageOff,
-} from "lucide-react";
+  ImageOff,  Search,
+  X,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Settings2,
+  Activity,
+  MessageSquare,
+  Mic2,} from "lucide-react";
+
+// ── Pricing constants sourced from .system_design/pricing_v1.yaml ─────────────
+const SOVEREIGN_PRICING = {
+  flatFeeMonthly: 49,
+  overagePhoneVoice: 0.25,
+  overageWebVoice: 0.18,
+  overageA2pSms: 0.125,
+  gracePeriodDays: 30,
+} as const;
 import gatewayLogo from "@assets/gatewaylogo_header_left_1770354860467.png";
 import { ensureApiLoader, loadPlacesLibrary } from "@/utils/googleMapsLoader";
 
@@ -184,6 +199,15 @@ export default function MyAccount() {
     enabled: isAuthenticated,
   });
 
+  const onboardingQuery = useQuery({
+    queryKey: ["/api/onboarding/status"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/onboarding/status");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
+
   const updateProfileMutation = useMutation({
     mutationFn: async (updates: { name?: string; email?: string }) => {
       const res = await fetch("/api/customer/profile", {
@@ -225,6 +249,12 @@ export default function MyAccount() {
   }
 
   const businesses = businessesQuery.data || [];
+  const onboarding = onboardingQuery.data;
+  const graceDaysElapsed = onboarding?.trialDaysElapsed ?? 0;
+  const graceActive = onboarding?.activationDate && (onboarding?.trialDaysRemaining ?? 0) > 0;
+  const graceExpired = onboarding?.activationDate && (onboarding?.trialDaysRemaining ?? 1) <= 0;
+  const gracePct = Math.min(100, Math.round((graceDaysElapsed / SOVEREIGN_PRICING.gracePeriodDays) * 100));
+  const complianceStatus: string | null = onboarding?.complianceStatus ?? null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -260,17 +290,17 @@ export default function MyAccount() {
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
         <div>
           <h1 className="text-3xl font-bold text-white" data-testid="text-my-account-title">
-            My Account
+            Command Center
           </h1>
           <p className="text-slate-400 mt-1">
-            Manage your profile, plan, and business websites.
+            Sovereign AI OS · Account &amp; Governance
           </p>
         </div>
 
-        <Card className="bg-slate-900 border-slate-800 p-6">
+        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
-              <User className="w-6 h-6 text-blue-400" />
+            <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+              <User className="w-5 h-5 text-blue-400" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-white">Profile</h2>
@@ -364,88 +394,192 @@ export default function MyAccount() {
           </div>
         </Card>
 
-        {/* Platform-level entitlements summary — compact, no per-business upgrade here */}
-        <Card className="bg-slate-900 border-slate-800 p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
-              <Crown className="w-6 h-6 text-amber-400" />
+        {/* ── Governance Layer ──────────────────────────────────────────────── */}
+        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
+          data-testid="card-governance-layer">
+
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+              <Activity className="w-5 h-5 text-indigo-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Platform</h2>
-              <p className="text-sm text-slate-400">
-                Each website has its own independent plan. Upgrade individual sites in <strong className="text-slate-300">My Businesses</strong> below.
-              </p>
+              <h2 className="text-lg font-semibold text-white">Governance Layer</h2>
+              <p className="text-sm text-slate-400">MSA v1.0.0 · Sovereign AI OS</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
-              <Mic className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-              <p className="text-lg font-bold text-white">500</p>
-              <p className="text-xs text-slate-400">Voice Min / site</p>
+          <div className="space-y-5">
+            {/* Grace Period Progress Bar */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-grace-period">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-indigo-400" />
+                  <p className="text-sm font-medium text-slate-200">Verizon Grace Period</p>
+                </div>
+                {!onboarding?.activationDate ? (
+                  <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs">
+                    MSA Pending
+                  </Badge>
+                ) : graceActive ? (
+                  <Badge className="bg-indigo-500/10 text-indigo-300 border-indigo-500/20 text-xs">
+                    Day {graceDaysElapsed} of {SOVEREIGN_PRICING.gracePeriodDays}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Active · Full Commitment
+                  </Badge>
+                )}
+              </div>
+
+              {!onboarding?.activationDate ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-500">
+                    Accept the Master Service Agreement to start your 30-day zero-penalty grace period.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => setLocation("/compliance-gateway")}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8"
+                    data-testid="button-accept-msa"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                    Review & Accept MSA
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="h-2 bg-slate-700 rounded-full overflow-hidden mb-2">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${
+                        graceExpired
+                          ? "bg-emerald-500"
+                          : "bg-gradient-to-r from-indigo-500 to-violet-500"
+                      }`}
+                      style={{ width: `${gracePct}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {graceActive
+                      ? `${onboarding?.trialDaysRemaining} days remaining — terminate before Day 30 with no penalty (MSA §2.3)`
+                      : "Grace period elapsed. 12-month commitment is active."}
+                  </p>
+                </>
+              )}
             </div>
-            <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
-              <Globe className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
-              <p className="text-lg font-bold text-white">{businesses.length}</p>
-              <p className="text-xs text-slate-400">Active Website{businesses.length !== 1 ? "s" : ""}</p>
+
+            {/* A2P Compliance Status */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-a2p-compliance">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-indigo-400" />
+                  <p className="text-sm font-medium text-slate-200">A2P 10DLC Registration</p>
+                </div>
+                {complianceStatus === "APPROVED" ? (
+                  <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Compliant
+                  </Badge>
+                ) : complianceStatus === "PENDING" ? (
+                  <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Carrier Review In Progress
+                  </Badge>
+                ) : complianceStatus === "REJECTED" ? (
+                  <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-xs">
+                    <AlertTriangle className="w-3 h-3 mr-1" />
+                    Resubmit Required
+                  </Badge>
+                ) : (
+                  <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs">
+                    <AlertTriangle className="w-3 h-3 mr-1" />
+                    Registration Required
+                  </Badge>
+                )}
+              </div>
+              {(!complianceStatus || complianceStatus === "REJECTED") && (
+                <div className="mt-3">
+                  <p className="text-xs text-slate-500 mb-2">
+                    {complianceStatus === "REJECTED"
+                      ? "Your submission was rejected. Review and resubmit your compliance information."
+                      : "Register your SMS brand & campaign to enable A2P messaging (MSA §4.1)."}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setLocation("/compliance-gateway")}
+                    className="border-slate-600 text-slate-300 hover:border-indigo-500 text-xs h-8"
+                    data-testid="button-a2p-compliance"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                    {complianceStatus === "REJECTED" ? "Resubmit Compliance" : "Begin Registration"}
+                  </Button>
+                </div>
+              )}
             </div>
-            <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
-              <Bot className="w-5 h-5 text-violet-400 mx-auto mb-1" />
-              <p className="text-lg font-bold text-white">AI</p>
-              <p className="text-xs text-slate-400">Concierge on all</p>
-            </div>
+
+            {/* Pricing Anchor — sourced from pricing_v1.yaml */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-pricing-anchor">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <p className="text-sm font-medium text-slate-200">Sovereign AI OS</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-white">${SOVEREIGN_PRICING.flatFeeMonthly}</span>
+                  <span className="text-xs text-slate-400">/mo flat fee</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                + metered overage — billed in arrears per MSA §3.2
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Mic2 className="w-3 h-3 text-blue-400" />
+                  ${SOVEREIGN_PRICING.overagePhoneVoice}/min phone AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Activity className="w-3 h-3 text-indigo-400" />
+                  ${SOVEREIGN_PRICING.overageWebVoice}/min web AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <MessageSquare className="w-3 h-3 text-violet-400" />
+                  ${SOVEREIGN_PRICING.overageA2pSms}/msg A2P SMS
+                </div>
+              </div>            </div>
           </div>
         </Card>
 
-        <Card className="bg-slate-900 border-slate-800 p-6">
+        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
+          data-testid="card-my-businesses">
           <div className="flex items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                <Building2 className="w-6 h-6 text-emerald-400" />
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                <Building2 className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-white">My Businesses</h2>
                 <p className="text-sm text-slate-400">
-                  {businesses.length} website{businesses.length !== 1 ? "s" : ""} — each with its own plan
+                  {businesses.length} site{businesses.length !== 1 ? "s" : ""} registered
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {/* View toggle */}
-              <div className="flex items-center bg-slate-800 rounded-md border border-slate-700 p-0.5">
-                <button
-                  onClick={() => setViewMode("grid")}
-                  className={`p-1.5 rounded transition-colors ${viewMode === "grid" ? "bg-slate-600 text-white" : "text-slate-500 hover:text-slate-300"}`}
-                  data-testid="button-view-grid"
-                  title="Grid view"
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode("list")}
-                  className={`p-1.5 rounded transition-colors ${viewMode === "list" ? "bg-slate-600 text-white" : "text-slate-500 hover:text-slate-300"}`}
-                  data-testid="button-view-list"
-                  title="List view"
-                >
-                  <List className="w-4 h-4" />
-                </button>
-              </div>
-              <Button
-                variant="outline"
-                onClick={() => setShowAddBusiness(!showAddBusiness)}
-                data-testid="button-add-business"
-              >
-                {showAddBusiness ? (
-                  <><X className="w-4 h-4 mr-2" />Cancel</>
-                ) : (
-                  <><Globe className="w-4 h-4 mr-2" />Add Business</>
-                )}
-              </Button>
-            </div>
-          </div>
+            <Button
+              variant="outline"
+              onClick={() => setShowAddBusiness(!showAddBusiness)}
+              className="border-slate-700 text-slate-300 hover:border-indigo-500"
+              data-testid="button-add-business"
+            >
+              {showAddBusiness ? (
+                <><X className="w-4 h-4 mr-2" />Cancel</>
+              ) : (
+                <><Globe className="w-4 h-4 mr-2" />Add Business</>
+              )}
+            </Button>          </div>
 
           {showAddBusiness && (
-            <div className="mb-4 p-4 bg-slate-800/50 border border-slate-700 rounded-md" data-testid="add-business-panel">
+            <div className="mb-4 p-4 bg-white/5 border border-white/10 rounded-xl backdrop-blur-sm"
+              data-testid="add-business-panel">
               <p className="text-sm text-slate-400 mb-3">
                 <Search className="w-4 h-4 inline-block mr-1 -mt-0.5" />
                 Search Google Maps for your business, then select it to generate your AI website.
@@ -465,7 +599,7 @@ export default function MyAccount() {
               <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
             </div>
           ) : businesses.length === 0 && !showAddBusiness ? (
-            <div className="text-center py-8 border border-dashed border-slate-700 rounded-md">
+            <div className="text-center py-8 border border-dashed border-white/10 rounded-2xl">
               <Building2 className="w-10 h-10 mx-auto text-slate-600 mb-3" />
               <p className="text-slate-400 text-sm mb-4">
                 No businesses yet. Generate your first AI-powered website!
@@ -473,82 +607,28 @@ export default function MyAccount() {
               <Button
                 variant="default"
                 onClick={() => setShowAddBusiness(true)}
+                className="bg-indigo-600 hover:bg-indigo-500"
                 data-testid="button-create-first"
               >
                 Get Started
               </Button>
             </div>
           ) : (
-            <div className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "space-y-3"}>
-              {businesses.map((biz: any) => {
-                const bizPlan = (biz.plan || "free") as PlanType;
-
-                const heroUrl = biz.placeId ? `/api/places/photo-proxy/${encodeURIComponent(biz.placeId)}?maxWidth=600` : null;
-                // Generate a gradient fallback color from the business name
-                const colors = ["from-blue-900 to-slate-900","from-violet-900 to-slate-900","from-emerald-900 to-slate-900","from-amber-900 to-slate-900","from-rose-900 to-slate-900"];
-                const colorIdx = biz.name.charCodeAt(0) % colors.length;
-
-                return (
-                  <div
-                    key={biz.id}
-                    className="bg-slate-800/50 border border-slate-700 rounded-lg overflow-hidden"
-                    data-testid={`business-row-${biz.id}`}
-                  >
-                    {/* Grid view: hero image */}
-                    {viewMode === "grid" && (
-                      <div className="relative h-36 w-full bg-slate-900 overflow-hidden group">
-                        {heroUrl ? (
-                          <img
-                            src={heroUrl}
-                            alt={biz.name}
-                            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-300"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                          />
-                        ) : (
-                          <div className={`w-full h-full bg-gradient-to-br ${colors[colorIdx]} flex items-center justify-center`}>
-                            <ImageOff className="w-8 h-8 text-slate-600" />
-                          </div>
-                        )}
-                        {/* Gradient overlay + name */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent" />
-                        <div className="absolute bottom-0 left-0 right-0 p-3">
-                          <p className="text-white font-semibold text-sm leading-tight truncate drop-shadow">{biz.name}</p>
-                          {biz.domain && (
-                            <p className="text-slate-400 text-[10px] truncate">{biz.domain}</p>
-                          )}
-                        </div>
-                        <div className="absolute top-2 right-2 flex items-center gap-1">
-                          <Badge variant="secondary" className={`text-[10px] px-1.5 py-0.5 ${biz.chatbotEnabled ? "bg-emerald-500/80 text-white" : "bg-slate-600/80 text-slate-300"}`}>
-                            {biz.chatbotEnabled ? "Live" : "Draft"}
-                          </Badge>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="p-4">
-                      {/* List view: top row with name + status + manage */}
-                      {viewMode === "list" && (
-                        <div className="flex items-center justify-between gap-4 mb-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-10 h-10 rounded-md bg-blue-500/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                              {heroUrl ? (
-                                <img src={heroUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display="none"; }} />
-                              ) : (
-                                <Bot className="w-5 h-5 text-blue-400" />
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-white font-medium truncate">{biz.name}</p>
-                              {biz.domain && <p className="text-xs text-slate-500 truncate">{biz.domain}</p>}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-300">
-                              {biz.chatbotEnabled ? "Live" : "Draft"}
-                            </Badge>
-                          </div>
-                        </div>
-                      )}
+            <div className="space-y-3">
+              {businesses.map((biz: any) => (
+                <div
+                  key={biz.id}
+                  className="flex items-center justify-between gap-3 p-4 bg-white/5 !border !border-white/10 rounded-2xl backdrop-blur-sm hover:bg-white/[0.07] transition-colors flex-wrap"
+                  data-testid={`business-row-${biz.id}`}
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-5 h-5 text-indigo-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-white font-medium truncate">{biz.name}</p>
+                      {biz.domain && (
+                        <p className="text-xs text-slate-500 truncate">{biz.domain}</p>                      )}
 
                       {/* Grid view: UUID + Manage row */}
                       {viewMode === "grid" && (
@@ -699,9 +779,39 @@ export default function MyAccount() {
                       })()}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Badge
+                      className={`text-xs ${
+                        biz.chatbotEnabled
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                          : "bg-slate-700/50 text-slate-400 border-slate-600/30"
+                      }`}
+                    >
+                      {biz.chatbotEnabled ? "Live" : "Draft"}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setLocation(`/mixing-board?site=${biz.id}`)}
+                      className="border-indigo-500/40 text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/10 text-xs h-8"
+                      data-testid={`button-configure-ai-${biz.id}`}
+                    >
+                      <Settings2 className="w-3 h-3 mr-1.5" />
+                      Configure AI
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setLocation(`/my-account/site/${biz.id}`)}
+                      className="border-slate-700 text-slate-300 hover:border-slate-500 text-xs h-8"
+                      data-testid={`button-manage-${biz.id}`}
+                    >
+                      Manage
+                      <ExternalLink className="w-3 h-3 ml-1.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}            </div>
           )}
         </Card>
       </div>
