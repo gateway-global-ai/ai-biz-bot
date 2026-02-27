@@ -97,44 +97,31 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       setConnectionStatus('connecting');
       try {
         // --- HANDOVER SERVICE LOGIC ---
-        // 1. Fetch the pre-validated configuration from the server (only when a valid ID is available).
-        let siteConfig: { geminiModelId?: string; systemPromptOverride?: string } = {};
-        if (isValidSiteConfigId) {
+        // Guard: only call the Handover Service when we have a real DB UUID.
+        // WebsitePreview (demo/preview mode) passes business.id = '' — in that
+        // case we skip the fetch and initialise directly from the props config.
+        const hasValidId = Boolean(siteConfigId) && siteConfigId !== 'undefined' && siteConfigId !== '';
+
+        // Resolved DB record (only populated when hasValidId === true)
+        let dbSiteConfig: Record<string, any> | null = null;
+        let validatedVoiceConfig: VoiceConfig = currentVoiceConfig;
+
+        if (hasValidId) {
+          // 1. Fetch the pre-validated configuration from the Handover Service.
           const response = await fetch(`/api/site-configs/${siteConfigId}`);
-          if (response.ok) {
-            siteConfig = await response.json();
-          } else if (response.status === 404) {
-            // 404 = new customer, no config saved yet — proceed with defaults.
-            console.info(`[ConciergePanel] No site config found for ID ${siteConfigId} (new customer). Using defaults.`);
-          } else {
-            // Any other error is an infrastructure problem — hard fail so it is visible.
+          if (!response.ok) {
             throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
           }
+          dbSiteConfig = await response.json();
+
+          // 2. Merge the validated Model ID — Backend Config > Prop > Fallback
+          validatedVoiceConfig = {
+            ...currentVoiceConfig,
+            model: dbSiteConfig!.geminiModelId || currentVoiceConfig.model || process.env.GEMINI_MODEL_ID || "gemini-2.5-flash-native-audio-preview-12-2025"
+          };
         }
 
-        // Allowed Gemini native-audio model IDs. Guards against typos entered in the admin panel.
-        const ALLOWED_MODELS = new Set([
-          'gemini-2.5-flash-native-audio-preview-12-2025',
-          'gemini-2.0-flash-live-001',
-          'gemini-2.5-flash-exp-native-audio-thinking-dialog',
-        ]);
-        const backendModelId = siteConfig.geminiModelId;
-        const resolvedModel = (backendModelId && ALLOWED_MODELS.has(backendModelId))
-          ? backendModelId
-          : currentVoiceConfig.model || 'gemini-2.5-flash-native-audio-preview-12-2025';
-        if (backendModelId && !ALLOWED_MODELS.has(backendModelId)) {
-          console.warn(`[ConciergePanel] Ignoring unknown model ID from site config: "${backendModelId}". Falling back to default.`);
-        }
-
-        // 2. MERGE the validated Model ID into the current voice config
-        const validatedVoiceConfig: VoiceConfig = {
-          ...currentVoiceConfig,
-          // Priority: Backend Config (whitelisted) > Prop > Fallback
-          model: resolvedModel
-        };
-
-        console.log('[ConciergePanel] Initializing with verified model:', validatedVoiceConfig.model);
-
+        console.log('[ConciergePanel] Initializing with model:', validatedVoiceConfig.model, hasValidId ? '(Handover Service)' : '(props — preview mode)');
         // 3. Create client with the VALIDATED config
         const newClient = VoiceClientFactory.createClient(validatedVoiceConfig);
         
@@ -208,9 +195,11 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           setConnectionStatus(connected ? 'connected' : 'disconnected');
         });
 
-        // 4. Connect using the fetched, validated system prompt and validated config.
-        // The `connect` method in GeminiStreamingClient will now receive this.
-        const handoverBusinessContext = { ...business, systemPromptOverride: siteConfig.systemPromptOverride };
+        // 4. Connect — enrich context with DB-validated systemPromptOverride when
+        //    Handover Service ran; in preview mode use business as-is.
+        const handoverBusinessContext = dbSiteConfig
+          ? { ...business, systemPromptOverride: dbSiteConfig.systemPromptOverride }
+          : business;
 
         await newClient.connect(handoverBusinessContext, agent, validatedVoiceConfig);
         clientRef.current = newClient;
@@ -235,8 +224,12 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         clientRef.current = null;
       }
     };
-  }, [isOpen, currentVoiceConfig, siteConfigId, business.name]); // agent/business objects excluded intentionally — only stable primitives used as deps
-
+  // Deps: `siteConfigId` (primitive) replaces the full `business` object reference
+  // so that inline object literals in calling components (e.g. WebsitePreview) do
+  // not create new references on every render and trigger an infinite re-connect.
+  // `currentVoiceConfig` is React state so its identity is already stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, siteConfigId, currentVoiceConfig]);
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

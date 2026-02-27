@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ShareButton from '@/components/ShareButton';
 import { LiveVoiceClient } from '@/services/liveService';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
@@ -262,6 +262,37 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
     voiceClient.current.setStreaming(false);
   }, [isPTTRecording]);
 
+  // Stable references — prevents ConciergePanel's useEffect from re-running on
+  // every render just because these objects are recreated as inline literals.
+  const conciergeBusinessContext = useMemo(() => ({
+    // `id` is intentionally empty — WebsitePreview is a demo/preview surface that
+    // works with Google Places data, not a stored site_configs record.
+    // ConciergePanel guards against undefined/empty IDs and skips the Handover
+    // Service fetch when id is '' (initialises directly from props instead).
+    id: '',
+    placeId: place.place_id || '',
+    name: place.name,
+    address: place.formatted_address || '',
+    hours: place.opening_hours?.weekday_text?.join(', '),
+    services: place.types,
+    primaryColor: '#3b82f6',
+  }), [place.place_id, place.name, place.formatted_address, place.opening_hours, place.types]);
+
+  const conciergeAgentConfig = useMemo(() => ({
+    role: agentRole,
+    personality: 'Helpful, professional, and friendly',
+    objectives: [
+      `Represent ${place.name} and assist customers`,
+      'Answer questions about services, hours, and location',
+      'Help customers book appointments or place orders',
+    ],
+    constraints: [
+      'Be polite and professional',
+      'Stay on topic about the business',
+      'Provide accurate information from business context',
+    ],
+  }), [place.name, agentRole]);
+
   // Priority: AI-generated/custom URL → server photo proxy (by placeId) → live Maps API object → placeholder
   const effectivePlaceId = placeIdProp || place.place_id;
   const heroImage: string | null =
@@ -275,8 +306,7 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
     if (fromApi) return fromApi;
     // For stored photos use place_id with an index offset (best-effort)
     return effectivePlaceId ? null : null;
-  }).filter(Boolean) as string[];
-  const tagline = generateTagline(place);
+  }).filter(Boolean) as string[];  const tagline = generateTagline(place);
   const description = generateDescription(place);
   const mapLink = place.place_id
     ? `https://www.google.com/maps/place/?q=place_id:${place.place_id}`
@@ -1034,30 +1064,8 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
 
       {/* --- REPLACED: Old chat UI with new ConciergePanel --- */}
       <ConciergePanel
-        business={{
-          id: siteConfigId || '',
-          placeId: place.place_id || '',
-          name: place.name,
-          address: place.formatted_address || '',
-          hours: place.opening_hours?.weekday_text?.join(', '),
-          services: place.types,
-          primaryColor: '#3b82f6'
-        }}
-        agent={{
-          role: agentRole,
-          personality: 'Helpful, professional, and friendly',
-          objectives: [
-            `Represent ${place.name} and assist customers`,
-            'Answer questions about services, hours, and location',
-            'Help customers book appointments or place orders'
-          ],
-          constraints: [
-            'Be polite and professional',
-            'Stay on topic about the business',
-            'Provide accurate information from business context'
-          ]
-        }}
-        voiceConfig={voiceConfig}
+        business={conciergeBusinessContext}
+        agent={conciergeAgentConfig}        voiceConfig={voiceConfig}
         agentName={agentName}
         isOpen={isChatOpen}
         onClose={() => {

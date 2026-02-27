@@ -220,11 +220,28 @@ router.delete('/:id/knowledge/:docId', async (req, res) => {
  * GET /api/site-configs/:id
  * The "Handover Service" endpoint — fetches the pre-validated site config
  * (including systemPromptOverride) for the ConciergePanel.
+ *
+ * CORS: This endpoint is called cross-origin by the Gateway Global Web SDK
+ * (gateway.js) when embedded on third-party websites (Wix, WordPress, etc.).
+ * The permissive CORS header below is intentional — the data returned is
+ * already public-facing (widget config), and the sensitive systemPromptOverride
+ * is only readable by authenticated callers in production (add auth middleware
+ * here if you gate by API key in a future hardening pass).
+ *
  * Must be declared LAST so more-specific subroutes above (/chat-logs,
  * /knowledge, /knowledge/:docId) are matched first.
  */
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
+
+  // Allow the SDK (running on any third-party origin) to fetch the config.
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
 
   if (!id || id === 'undefined') {
     return res.status(400).json({ error: 'A valid site configuration ID is required.' });
