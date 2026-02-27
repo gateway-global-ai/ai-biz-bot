@@ -1,81 +1,57 @@
-import Stripe from 'stripe';
+/**
+ * server/stripeClient.ts
+ *
+ * Doppler-native Stripe client. Credentials sourced exclusively from
+ * process.env.STRIPE_SECRET_KEY and process.env.STRIPE_PUBLISHABLE_KEY,
+ * injected at runtime by `doppler run --`.
+ *
+ * Previous implementation fetched credentials from the Replit Connector
+ * service (REPLIT_CONNECTORS_HOSTNAME + REPL_IDENTITY). That dependency
+ * has been removed as part of the Zero-Leak Architecture migration.
+ */
 
-let connectionSettings: any;
+import Stripe from "stripe";
 
-async function getCredentials() {
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
-  const xReplitToken = process.env.REPL_IDENTITY
-    ? 'repl ' + process.env.REPL_IDENTITY
-    : process.env.WEB_REPL_RENEWAL
-      ? 'depl ' + process.env.WEB_REPL_RENEWAL
-      : null;
-
-  if (!xReplitToken) {
-    throw new Error('X_REPLIT_TOKEN not found for repl/depl');
+function requireEnv(key: string): string {
+  const value = process.env[key];
+  if (!value) {
+    throw new Error(
+      `[StripeClient] Required environment variable "${key}" is not set. ` +
+      `Ensure it is configured in Doppler and the process was started with "doppler run --".`
+    );
   }
-
-  const connectorName = 'stripe';
-  const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
-  const targetEnvironment = isProduction ? 'production' : 'development';
-
-  const url = new URL(`https://${hostname}/api/v2/connection`);
-  url.searchParams.set('include_secrets', 'true');
-  url.searchParams.set('connector_names', connectorName);
-  url.searchParams.set('environment', targetEnvironment);
-
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Accept': 'application/json',
-      'X_REPLIT_TOKEN': xReplitToken
-    }
-  });
-
-  const data = await response.json();
-  
-  connectionSettings = data.items?.[0];
-
-  if (!connectionSettings || (!connectionSettings.settings.publishable || !connectionSettings.settings.secret)) {
-    throw new Error(`Stripe ${targetEnvironment} connection not found`);
-  }
-
-  return {
-    publishableKey: connectionSettings.settings.publishable,
-    secretKey: connectionSettings.settings.secret,
-  };
+  return value;
 }
 
-export async function getUncachableStripeClient() {
-  const { secretKey } = await getCredentials();
-
-  return new Stripe(secretKey, {
-    apiVersion: '2025-11-17.clover',
+/**
+ * Returns a fresh Stripe client on every call (uncachable) so that
+ * key rotation in Doppler takes effect without a process restart.
+ */
+export async function getUncachableStripeClient(): Promise<Stripe> {
+  return new Stripe(requireEnv("STRIPE_SECRET_KEY"), {
+    apiVersion: "2025-11-17.clover",
   });
 }
 
-export async function getStripePublishableKey() {
-  const { publishableKey } = await getCredentials();
-  return publishableKey;
+export async function getStripePublishableKey(): Promise<string> {
+  return requireEnv("STRIPE_PUBLISHABLE_KEY");
 }
 
-export async function getStripeSecretKey() {
-  const { secretKey } = await getCredentials();
-  return secretKey;
+export async function getStripeSecretKey(): Promise<string> {
+  return requireEnv("STRIPE_SECRET_KEY");
 }
 
-let stripeSync: any = null;
-
-export async function getStripeSync() {
-  if (!stripeSync) {
-    const { StripeSync } = await import('stripe-replit-sync');
-    const secretKey = await getStripeSecretKey();
-
-    stripeSync = new StripeSync({
-      poolConfig: {
-        connectionString: process.env.DATABASE_URL!,
-        max: 2,
-      },
-      stripeSecretKey: secretKey,
-    });
-  }
-  return stripeSync;
+/**
+ * getStripeSync — PENDING MIGRATION.
+ * The previous implementation used `stripe-replit-sync` which is a
+ * Replit-platform-specific package. This function is not currently used
+ * in any active billing flow. It will be replaced with a Stripe Connect
+ * webhook sync implementation once the Stripe Dashboard is configured
+ * per TODO_STRIPE.md.
+ */
+export async function getStripeSync(): Promise<never> {
+  throw new Error(
+    "[StripeClient] getStripeSync() is not yet implemented in the Doppler environment. " +
+    "See TODO_STRIPE.md — 'Stripe Connect / Sync Migration' for the implementation roadmap."
+  );
 }

@@ -30,6 +30,26 @@ const knowledgeDocSchema = z.object({
   addedAt: z.string(),
 });
 
+// Mixing Board config schemas (migration 0012)
+const agentConfigSchema = z.object({
+  name: z.string().optional(),
+  role: z.string().optional(),
+  discProfile: z.string().optional(),
+  basePrompt: z.string().optional(),
+}).nullable().optional();
+
+const voiceConfigSchema = z.object({
+  voiceName: z.string().optional(),
+  language: z.string().optional(),
+  isPushToTalk: z.boolean().optional(),
+}).nullable().optional();
+
+const themeConfigSchema = z.object({
+  primaryColor: z.string().optional(),
+  fontFamily: z.string().optional(),
+  borderRadius: z.string().optional(),
+}).nullable().optional();
+
 const createSchema = z.object({
   name: z.string().min(1).max(200),
   domain: z.string().optional(),
@@ -58,6 +78,10 @@ const createSchema = z.object({
 
 const patchSchema = createSchema.partial().extend({
   knowledgeLibrary: z.array(knowledgeDocSchema).nullable().optional(),
+  // Mixing Board JSONB fields (migration 0012)
+  agentConfig: agentConfigSchema,
+  voiceConfig: voiceConfigSchema,
+  themeConfig: themeConfigSchema,
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────

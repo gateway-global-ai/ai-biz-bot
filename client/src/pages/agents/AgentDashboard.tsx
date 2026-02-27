@@ -128,14 +128,14 @@ export default function AgentDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 p-6">
+    <div className="min-h-screen p-6">
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-2">
-            <Sparkles className="w-8 h-8 text-indigo-400" />
-            <h1 className="text-3xl font-bold text-white">Agent Dashboard</h1>
+            <Sparkles className="w-8 h-8 text-indigo-500" />
+            <h1 className="text-3xl font-bold text-slate-900">Agent Dashboard</h1>
           </div>
-          <p className="text-slate-400">Create, configure, and interact with your AI agents</p>
+          <p className="text-slate-500">Create, configure, and interact with your AI agents</p>
         </div>
 
         {isLoading ? (
@@ -149,7 +149,7 @@ export default function AgentDashboard() {
               return (
                 <Card 
                   key={agent.id}
-                  className="bg-slate-900 border-slate-700 overflow-hidden group hover:border-indigo-500/50 transition-all duration-300"
+                  className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl overflow-hidden group hover:border-indigo-300 transition-all duration-300"
                   data-testid={`card-agent-${agent.id}`}
                 >
                   <div className="relative h-48 overflow-hidden">
@@ -166,22 +166,22 @@ export default function AgentDashboard() {
                           <Button 
                             size="icon" 
                             variant="ghost" 
-                            className="h-8 w-8 bg-slate-900/80 hover:bg-slate-800"
+                            className="h-8 w-8 bg-white/80 hover:bg-white"
                             data-testid={`button-agent-menu-${agent.id}`}
                           >
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-slate-800 border-slate-700">
+                        <DropdownMenuContent align="end" className="bg-white border-slate-200">
                           <DropdownMenuItem 
-                            className="text-slate-300 hover:text-white cursor-pointer"
+                            className="text-slate-700 hover:text-slate-900 cursor-pointer"
                             onClick={() => setEditingAgent(agent)}
                             data-testid={`button-edit-agent-${agent.id}`}
                           >
                             <Pencil className="w-4 h-4 mr-2" /> Edit Agent
                           </DropdownMenuItem>
                           <DropdownMenuItem 
-                            className="text-slate-300 hover:text-white cursor-pointer"
+                            className="text-slate-700 hover:text-slate-900 cursor-pointer"
                             onClick={() => navigateToEnvironment(agent.id, 'lab')}
                           >
                             <FlaskConical className="w-4 h-4 mr-2" /> Fine Tune
@@ -228,7 +228,7 @@ export default function AgentDashboard() {
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                           <MessageCircle className="w-4 h-4 text-purple-400" />
-                          <span className="text-sm font-medium text-white" data-testid={`text-chat-link-label-${agent.id}`}>Public Chat Link</span>
+                          <span className="text-sm font-medium text-slate-900" data-testid={`text-chat-link-label-${agent.id}`}>Public Chat Link</span>
                         </div>
                         <div className="flex gap-1">
                           <Button
@@ -257,7 +257,7 @@ export default function AgentDashboard() {
                         <Input
                           value={`${window.location.origin}/chat/${agent.id}`}
                           readOnly
-                          className="text-xs bg-slate-800/50 border-slate-700 text-slate-300 font-mono"
+                          className="text-xs bg-white/60 border-slate-200 text-slate-600 font-mono"
                           onClick={(e) => (e.target as HTMLInputElement).select()}
                           data-testid={`input-chat-url-${agent.id}`}
                         />
@@ -267,7 +267,7 @@ export default function AgentDashboard() {
                     <div className="flex flex-col gap-2">
                       <Button
                         variant="outline"
-                        className="w-full justify-start border-purple-500/30 text-purple-300 hover:bg-purple-500/10 hover:border-purple-500/50"
+                        className="w-full justify-start border-purple-300 text-purple-700 hover:bg-purple-50 hover:border-purple-400"
                         onClick={() => navigateToEnvironment(agent.id, 'vibe')}
                         data-testid={`button-vibe-${agent.id}`}
                       >
@@ -280,7 +280,7 @@ export default function AgentDashboard() {
                       
                       <Button
                         variant="outline"
-                        className="w-full justify-start border-blue-500/30 text-blue-300 hover:bg-blue-500/10 hover:border-blue-500/50"
+                        className="w-full justify-start border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400"
                         onClick={() => navigateToEnvironment(agent.id, 'office')}
                         data-testid={`button-office-${agent.id}`}
                       >
@@ -293,7 +293,7 @@ export default function AgentDashboard() {
                       
                       <Button
                         variant="outline"
-                        className="w-full justify-start border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-500/50"
+                        className="w-full justify-start border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:border-emerald-400"
                         onClick={() => navigateToEnvironment(agent.id, 'lab')}
                         data-testid={`button-lab-${agent.id}`}
                       >
@@ -306,7 +306,7 @@ export default function AgentDashboard() {
                       
                       <Button
                         variant="outline"
-                        className="w-full justify-start border-amber-500/30 text-amber-300 hover:bg-amber-500/10 hover:border-amber-500/50"
+                        className="w-full justify-start border-amber-300 text-amber-700 hover:bg-amber-50 hover:border-amber-400"
                         onClick={() => navigateToEnvironment(agent.id, 'classroom')}
                         data-testid={`button-classroom-${agent.id}`}
                       >
@@ -325,28 +325,28 @@ export default function AgentDashboard() {
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
                 <Card 
-                  className="bg-slate-900/50 border-2 border-dashed border-slate-700 hover:border-indigo-500/50 cursor-pointer transition-all duration-300 min-h-[380px] flex items-center justify-center"
+                  className="bg-white/20 backdrop-blur-md border-2 border-dashed border-slate-300 hover:border-indigo-400 cursor-pointer transition-all duration-300 min-h-[380px] flex items-center justify-center"
                   data-testid="card-add-agent"
                 >
                   <div className="text-center p-6">
-                    <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
-                      <Plus className="w-8 h-8 text-indigo-400" />
+                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                      <Plus className="w-8 h-8 text-indigo-500" />
                     </div>
-                    <h3 className="text-lg font-semibold text-white mb-1">Create New Agent</h3>
+                    <h3 className="text-lg font-semibold text-slate-900 mb-1">Create New Agent</h3>
                     <p className="text-sm text-slate-500">Add a new AI agent to your team</p>
                   </div>
                 </Card>
               </DialogTrigger>
-              <DialogContent className="bg-slate-900 border-slate-700 max-w-2xl">
+              <DialogContent className="bg-white border-slate-200 max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle className="text-white flex items-center gap-2">
-                    <Bot className="w-5 h-5 text-indigo-400" />
+                  <DialogTitle className="text-slate-900 flex items-center gap-2">
+                    <Bot className="w-5 h-5 text-indigo-500" />
                     Create New Agent
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 pt-4">
                   <div>
-                    <label className="text-sm text-slate-400 mb-2 block flex items-center gap-2">
+                    <label className="text-sm text-slate-500 mb-2 block flex items-center gap-2">
                       <ImageIcon className="w-4 h-4" /> Choose Your Agent Avatar
                     </label>
                     <div className="grid grid-cols-5 gap-3">
@@ -357,7 +357,7 @@ export default function AgentDashboard() {
                           className={`relative group rounded-lg overflow-hidden border-2 transition-all ${
                             newAgent.avatarId === avatar.id 
                               ? 'border-indigo-500 ring-2 ring-indigo-500/50' 
-                              : 'border-slate-700 hover:border-slate-500'
+                              : 'border-slate-200 hover:border-slate-400'
                           }`}
                           data-testid={`avatar-option-${avatar.id}`}
                         >
@@ -380,17 +380,17 @@ export default function AgentDashboard() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="text-sm text-slate-400 mb-1 block">Agent Name</label>
+                      <label className="text-sm text-slate-500 mb-1 block">Agent Name</label>
                       <Input 
                         value={newAgent.name}
                         onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
                         placeholder="Give your agent a name"
-                        className="bg-slate-800 border-slate-600"
+                        className="bg-white/60 border-slate-200"
                         data-testid="input-agent-name"
                       />
                     </div>
                     <div>
-                      <label className="text-sm text-slate-400 mb-1 block">Voice</label>
+                      <label className="text-sm text-slate-500 mb-1 block">Voice</label>
                       <Select 
                         value={newAgent.voiceId} 
                         onValueChange={(value) => {
@@ -398,7 +398,7 @@ export default function AgentDashboard() {
                           setNewAgent({ ...newAgent, voiceId: value, voiceName: voice?.name || value });
                         }}
                       >
-                        <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-agent-voice">
+                        <SelectTrigger className="bg-white/60 border-slate-200" data-testid="select-agent-voice">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -427,31 +427,31 @@ export default function AgentDashboard() {
 
         {/* Edit Agent Dialog */}
         <Dialog open={!!editingAgent} onOpenChange={(open) => !open && setEditingAgent(null)}>
-          <DialogContent className="bg-slate-900 border-slate-700">
+          <DialogContent className="bg-white border-slate-200">
             <DialogHeader>
-              <DialogTitle className="text-white">Edit Agent</DialogTitle>
+              <DialogTitle className="text-slate-900">Edit Agent</DialogTitle>
             </DialogHeader>
             {editingAgent && (
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm text-slate-400 block mb-2">Agent Name</label>
+                  <label className="text-sm text-slate-500 block mb-2">Agent Name</label>
                   <Input
                     data-testid="input-edit-agent-name"
                     value={editingAgent.name}
                     onChange={(e) => setEditingAgent({ ...editingAgent, name: e.target.value })}
-                    className="bg-slate-800 border-slate-600"
+                    className="bg-white/60 border-slate-200"
                     placeholder="Enter agent name"
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-slate-400 block mb-2">Avatar</label>
+                  <label className="text-sm text-slate-500 block mb-2">Avatar</label>
                   <div className="grid grid-cols-5 gap-2">
                     {AVATAR_OPTIONS.map(avatar => (
                       <button
                         key={avatar.id}
                         onClick={() => setEditingAgent({ ...editingAgent, avatarId: avatar.id })}
                         className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-                          editingAgent.avatarId === avatar.id ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-slate-600'
+                          editingAgent.avatarId === avatar.id ? 'border-indigo-500 ring-2 ring-indigo-500/50' : 'border-slate-200'
                         }`}
                       >
                         <img src={avatar.src} alt={avatar.name} className="w-full h-full object-cover" />
@@ -465,7 +465,7 @@ export default function AgentDashboard() {
                   </div>
                 </div>
                 <div>
-                  <label className="text-sm text-slate-400 block mb-2">Voice</label>
+                  <label className="text-sm text-slate-500 block mb-2">Voice</label>
                   <Select
                     value={editingAgent.voiceId}
                     onValueChange={(v) => {
@@ -473,7 +473,7 @@ export default function AgentDashboard() {
                       setEditingAgent({ ...editingAgent, voiceId: v, voiceName: voice?.name || v });
                     }}
                   >
-                    <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-edit-agent-voice">
+                    <SelectTrigger className="bg-white/60 border-slate-200" data-testid="select-edit-agent-voice">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -486,12 +486,12 @@ export default function AgentDashboard() {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm text-slate-400 block mb-2">Status</label>
+                  <label className="text-sm text-slate-500 block mb-2">Status</label>
                   <Select
                     value={editingAgent.status}
                     onValueChange={(v) => setEditingAgent({ ...editingAgent, status: v })}
                   >
-                    <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-edit-agent-status">
+                    <SelectTrigger className="bg-white/60 border-slate-200" data-testid="select-edit-agent-status">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -505,7 +505,7 @@ export default function AgentDashboard() {
                   <Button
                     variant="outline"
                     onClick={() => setEditingAgent(null)}
-                    className="flex-1 border-slate-600"
+                    className="flex-1 border-slate-200"
                     data-testid="button-cancel-edit"
                   >
                     Cancel

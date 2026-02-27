@@ -777,6 +777,28 @@ export const insertBotTemplateSchema = createInsertSchema(botTemplates).omit({
 export type InsertBotTemplate = z.infer<typeof insertBotTemplateSchema>;
 export type BotTemplate = typeof botTemplates.$inferSelect;
 
+// Enum for the Reseller Franchise Hierarchy (MSA v1.1.0 Addendum §1)
+export const accountTypeEnum = pgEnum("account_type", [
+  "DIRECT",       // Standard self-serve signup (default)
+  "RESELLER",     // Master UUID with sub-account provisioning authority
+  "SUB_ACCOUNT",  // End-customer provisioned under a RESELLER Master UUID
+]);
+
+// Enums for the Onboarding & Compliance Gateway (MSA v1.0.0)
+export const onboardingStatusEnum = pgEnum("onboarding_status", [
+  "PENDING_MSA",
+  "PENDING_COMPLIANCE",
+  "ACTIVE",
+  "SUSPENDED",
+]);
+
+export const complianceStatusEnum = pgEnum("compliance_status", [
+  "NOT_SUBMITTED",
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+]);
+
 // Customer Accounts - separate from admin users, for business owners
 export const customerAccounts = pgTable("customer_accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -790,6 +812,36 @@ export const customerAccounts = pgTable("customer_accounts", {
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  // ── Onboarding & Compliance Gateway (MSA v1.0.0) ──────────────────────────
+  onboardingStatus: onboardingStatusEnum("onboarding_status").default("PENDING_MSA").notNull(),
+  activationDate: timestamp("activation_date"),
+  trialEndDate: timestamp("trial_end_date"),       // activationDate + 30 days (pricing_v1.yaml)
+  msaAcceptedAt: timestamp("msa_accepted_at"),
+  msaVersion: text("msa_version"),                 // SHA-256 hash of the accepted MSA version string
+  complianceStatus: complianceStatusEnum("compliance_status").default("NOT_SUBMITTED").notNull(),
+  businessName: text("business_name"),
+  ein: text("ein"),                                // Format: XX-XXXXXXX
+  physicalAddress: jsonb("physical_address"),      // { street, city, state, zip, country }
+  smsUseCase: text("sms_use_case"),
+  complianceRejectionReason: text("compliance_rejection_reason"),
+  // ── Reseller Franchise Hierarchy (MSA v1.1.0 Addendum) ────────────────────
+  accountType: accountTypeEnum("account_type").default("DIRECT").notNull(),
+  // Self-referencing FK: links SUB_ACCOUNT back to its RESELLER Master UUID.
+  // Declared as varchar (not uuid type) to match the id column type on this table.
+  parentAccountId: varchar("parent_account_id").references((): any => customerAccounts.id),
+  wholesaleRate: numeric("wholesale_rate", { precision: 10, scale: 2 }).default("49.00"),
+  // markupRate: custom retail pricing the reseller charges end-customers.
+  // Shape: { phoneVoiceAi: number, webVoiceAi: number, a2pSms: number }
+  markupRate: jsonb("markup_rate"),
+  // Running Net Margin ledger for reseller payouts (precision: 12 for million-dollar brokerages).
+  resellerCommissionBalance: numeric("reseller_commission_balance", { precision: 12, scale: 2 }).default("0.00"),
+  // Stripe Connect account ID for automated margin disbursement. Nullable until onboarded.
+  stripeConnectedAccountId: text("stripe_connected_account_id"),
+  // Reseller pre-signature timestamp (§1.3): must be set before end-user can sign MSA.
+  resellerMsaConfirmedAt: timestamp("reseller_msa_confirmed_at"),
+  // A2P Content Provider designation (§1.5 / carrier audit requirement).
+  // Shape: { name: string, role: "Content Provider", acknowledgedAt: ISO8601 }
+  a2pContentProvider: jsonb("a2p_content_provider"),
 });
 
 export const insertCustomerAccountSchema = createInsertSchema(customerAccounts).omit({
@@ -947,6 +999,12 @@ export const siteConfigs = pgTable("site_configs", {
   heroImageUrl: text("hero_image_url"),
   /** Prompt used to generate the hero image (stored for regeneration) */
   heroImagePrompt: text("hero_image_prompt"),
+  /** Agent Persona config: { name, role, discProfile, basePrompt } */
+  agentConfig: jsonb("agent_config"),
+  /** Audio / voice settings: { voiceName, language, isPushToTalk } */
+  voiceConfig: jsonb("voice_config"),
+  /** Showroom UI theme tokens: { primaryColor, fontFamily, borderRadius } */
+  themeConfig: jsonb("theme_config"),
   /** Granular resource ledger: prepaid quotas per cost center (all default 0). */
   voicePhoneAiMinutes: integer("voice_phone_ai_minutes").default(0).notNull(),
   voiceWebAiMinutes: integer("voice_web_ai_minutes").default(0).notNull(),

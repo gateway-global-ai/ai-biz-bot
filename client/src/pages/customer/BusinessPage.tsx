@@ -662,21 +662,21 @@ export default function BusinessPage() {
   const showOverlay = stage === 'phone-gate' || stage === 'sending-link' || stage === 'training' || stage === 'demo-ready' || stage === 'name-gate';
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
-        <img src={Pidea_logo_header__7_} alt="Gateway Global AI" className="h-20 w-auto relative z-10" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' }} />
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-white/20 shadow-sm px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
+        <img src={Pidea_logo_header__7_} alt="Gateway Global AI" className="h-20 w-auto relative z-10" style={{ filter: 'drop-shadow(0 2px 8px rgba(19,70,160,0.15))' }} />
         <div className="flex items-center gap-2 justify-end">
           <ShareButton
             shareTitle="Gateway Global AI - AI-Powered Business Websites"
             shareText="Gateway Global AI creates professional AI-powered websites for businesses with voice concierge and chat support."
-            variant="dark"
+            variant="light"
             testIdPrefix="main-share"
           />
           {isCustomerAuth ? (
             <Button
               variant="ghost"
               size="sm"
-              className="text-slate-300 text-xs"
+              className="text-slate-600 text-xs"
               onClick={() => setLocation('/my-account')}
               data-testid="button-my-account"
             >
@@ -687,7 +687,7 @@ export default function BusinessPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-slate-300 text-xs"
+              className="text-slate-600 text-xs"
               onClick={() => setShowCustomerLoginModal(true)}
               data-testid="button-customer-login"
             >
@@ -963,7 +963,7 @@ export default function BusinessPage() {
             <div className="max-w-2xl w-full" data-testid="container-place-search">
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-                <div className="relative bg-slate-900 rounded-xl border-0 p-2 flex items-center gap-2">
+                <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
                   <div ref={pickerContainerRef} className="flex-1 min-w-0" />
                   {!mapsKey && (
                     <div className="pr-3">
@@ -992,7 +992,7 @@ export default function BusinessPage() {
         {selectedPlace && stage === 'landing' && (
           <div className="absolute inset-0 z-20 bg-slate-950/95 backdrop-blur-sm flex items-center justify-center px-6">
             <div className="max-w-lg w-full">
-              <Card className="bg-slate-900/90 border-blue-500/30 backdrop-blur-md">
+              <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
                 <CardContent className="p-6">
                   <div className="flex flex-col gap-4">
                     {selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getURI === 'function' ? (
@@ -1109,7 +1109,7 @@ export default function BusinessPage() {
       </section>
       */}
       {/* Enterprise Form */}
-      <section className="py-16 px-6 bg-slate-900/30 border-y border-slate-900">
+      <section className="py-16 px-6 bg-slate-900/20 border-y border-white/5">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
             <h2 className="text-3xl font-bold text-white">Request Enterprise Access</h2>
@@ -1128,7 +1128,7 @@ export default function BusinessPage() {
             </div>
           </div>
 
-          <Card className="bg-slate-900/50 border-slate-800">
+          <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
             <CardContent className="p-8">
               {!isSubmitted ? (
                 <form onSubmit={handleSubmit} className="space-y-4">
