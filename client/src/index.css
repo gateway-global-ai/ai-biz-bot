@@ -16,7 +16,7 @@ html::-webkit-scrollbar {
   --opaque-button-border-intensity: -8;
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
-  --background: 220 14% 96%;
+  --background: 224 71% 4%;
   --foreground: 220 13% 13%;
   --border: 220 13% 88%;
   --card: 220 14% 94%;
@@ -179,7 +179,7 @@ html::-webkit-scrollbar {
 
   body {
     @apply font-sans antialiased text-foreground;
-    background: radial-gradient(at top left, #f1f5f9 0%, #ffffff 100%);
+    background: hsl(var(--background));
     min-height: 100vh;
   }
 }

@@ -1,12 +1,13 @@
 /**
  * Server-side Gemini text generation helper.
  * Used by review analysis, pitch generation, and other BI features.
+ * api-lockdown: use GEMINI_MODEL_ID only; set in Doppler.
  */
 
 import axios from 'axios';
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const GEMINI_MODEL_ID = process.env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025';
 
 /**
  * Call Gemini generateContent and return the generated text.
@@ -18,7 +19,7 @@ export async function generateWithGemini(prompt: string): Promise<string> {
   }
 
   const response = await axios.post(
-    `${BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+    `${BASE_URL}/models/${GEMINI_MODEL_ID}:generateContent?key=${apiKey}`,
     {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {

@@ -15,6 +15,8 @@ export interface VoiceMessage {
     emotion?: string;
     sentiment?: number;
     disc?: DISCProfile;
+    tool_type?: string;
+    [key: string]: any;
   };
 }
 

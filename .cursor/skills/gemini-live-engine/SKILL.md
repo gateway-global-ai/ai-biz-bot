@@ -11,7 +11,7 @@ Use this skill when modifying the WebSocket proxy or audio streaming logic for t
 - **Input Format**: Raw 16-bit PCM audio @ 16kHz, little-endian.
 - **Output Format**: Raw 16-bit PCM audio @ 24kHz, little-endian.
 - **Model ID (GA)**: `gemini-live-2.5-flash-native-audio`.
-- **Preview model** (used in code until GA): `models/gemini-2.5-flash-native-audio-preview-12-2025` (set via `GEMINI_MODEL` or Doppler).
+- **Preview model** (used in code until GA): `models/gemini-2.5-flash-native-audio-preview-12-2025` (set via `GEMINI_MODEL_ID` in Doppler; fallback via `GEMINI_MODEL_FALLBACK`).
 
 ## Behavioral Guardrails
 

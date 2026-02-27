@@ -11,6 +11,7 @@ import siteConfigRoutes from "./routes/siteConfigRoutes";
 import onboardingRoutes from "./routes/onboardingRoutes";
 import { registerMenuRoutes } from "./routes/menu-routes";
 import healthRoutes from "./routes/healthRoutes";
+import a2pPreflightRoutes from "./routes/a2pPreflightRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import { registerB2bRoutes } from "./routes/b2b-routes";
 import twilio from "twilio";
@@ -6640,15 +6641,34 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   // Create A2P brand registration
   app.post("/api/a2p/brands", async (req, res) => {
     try {
-      const { 
-        companyName, firstName, lastName, email, phone,
-        country, taxId, website, vertical,
-        stockExchange, stockSymbol, customerId
+      const {
+        companyName,
+        firstName,
+        lastName,
+        email,
+        phone,
+        country,
+        taxId,
+        website,
+        vertical,
+        stockExchange,
+        stockSymbol,
+        customerId,
+        legalNameConfirmed,
+        legalNameConfirmedAt,
+        associationId,
       } = req.body;
 
       if (!companyName || !firstName || !lastName || !email || !phone) {
-        return res.status(400).json({ 
-          error: "Missing required fields: companyName, firstName, lastName, email, phone" 
+        return res.status(400).json({
+          error: "Missing required fields: companyName, firstName, lastName, email, phone",
+        });
+      }
+
+      if (legalNameConfirmed !== true) {
+        return res.status(400).json({
+          error:
+            "Legal name must be confirmed by agent before brand registration can be submitted.",
         });
       }
 
@@ -6659,14 +6679,17 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         lastName,
         email,
         phone,
-        country: country || 'US',
+        country: country || "US",
         taxId,
         website,
         vertical,
         stockExchange,
         stockSymbol,
         customerId,
-        brandStatus: 'draft',
+        legalNameConfirmed: true,
+        legalNameConfirmedAt: legalNameConfirmedAt ? new Date(legalNameConfirmedAt) : new Date(),
+        associationId: associationId || undefined,
+        brandStatus: "draft",
       });
 
       res.json({ 
@@ -7911,6 +7934,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   app.use("/api/business", businessRoutes);
   app.use("/api/site-configs", siteConfigRoutes);
   app.use("/api/onboarding", onboardingRoutes);
+  app.use("/api/a2p/preflight", a2pPreflightRoutes);
 
   // Register Menu and Cart routes
   registerMenuRoutes(app);

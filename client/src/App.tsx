@@ -65,8 +65,7 @@ import OlympicB2b from "@/pages/showcase/OlympicB2b";
 import AgentPortal from "@/pages/showcase/AgentPortal";
 import NotFound from "@/pages/admin/not-found";
 import { ErrorNavigator } from "@/pages/error/ErrorNavigator";
-import { useBreadcrumbTracker } from "@/hooks/use-breadcrumb";
-import { Loader2 } from "lucide-react";
+import { useBreadcrumbTracker } from "@/hooks/use-breadcrumb";import BrandAdminPage from "@/pages/brand-admin";import { Loader2 } from "lucide-react";
 
 function BreadcrumbTracker() {
   useBreadcrumbTracker();
@@ -287,6 +286,7 @@ function AppRouter() {
       <Route path="/agent/:agentId/classroom" component={TheClassroom} />
       <Route path="/nexus-classroom" component={ImmersiveClassroom} />
       <Route path="/agent/:agentId/telephony" component={AgentTelephony} />
+      <Route path="/brand-admin" component={BrandAdminPage} />
       <Route path="/agent-manager" component={AgentManager} />
       <Route path="/customers" component={CustomerManager} />
       <Route path="/gateway-admin" component={GatewayAdmin} />

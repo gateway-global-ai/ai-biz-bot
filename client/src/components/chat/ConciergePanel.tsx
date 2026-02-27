@@ -37,6 +37,7 @@ interface ConciergePanelProps {
   layoutMode?: 'floating' | 'fixed' | 'fullscreen';
   onClose: () => void;
   onCycleLayout?: () => void;
+  onOpenSettings?: () => void;
   /** When set, header shows "Admin Mode" button that opens admin (e.g. partner dashboard). */
   onOpenAdmin?: () => void;
   className?: string;

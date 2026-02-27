@@ -12,13 +12,15 @@ interface ToolRouterProps {
   metadata: any;
   onSubmit: (value: string) => void;
   onCancel: () => void;
+  onTriggerSpeech?: (text: string) => void;
 }
 
 export const ToolRouter: React.FC<ToolRouterProps> = ({ 
   toolType, 
   metadata, 
   onSubmit, 
-  onCancel 
+  onCancel,
+  onTriggerSpeech
 }) => {
   switch (toolType) {
     case 'manual_input':
@@ -31,13 +33,12 @@ export const ToolRouter: React.FC<ToolRouterProps> = ({
         />
       );
     case 'get_business_details':
-      return <PlaceDetailsPanel data={metadata} />;
+      return <PlaceDetailsPanel placeId={metadata.placeId} />;
     case 'get_business_intelligence':
-      return <DashboardCard data={metadata as BusinessIntelligenceData} />;
+      return <DashboardCard data={metadata as BusinessIntelligenceData} onTriggerSpeech={onTriggerSpeech ?? (() => {})} />;
     case 'enrich_hotels_with_rates':
     case 'search_hotels':
-      return <HotelResultsPanel data={metadata as HotelResultsPanelData} />;
-    default:
+      return <HotelResultsPanel data={metadata as HotelResultsPanelData} />;    default:
       console.warn(`[ToolRouter] Unknown tool type: ${toolType}`);
       return null;
   }

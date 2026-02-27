@@ -377,28 +377,52 @@ export const insertAgentSchema = createInsertSchema(agents).omit({
 export type InsertAgent = z.infer<typeof insertAgentSchema>;
 export type Agent = typeof agents.$inferSelect;
 
-// Customers/Leads table
-export const customers = pgTable("customers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+// Association Master UUID (e.g. LVR/GLVAR) — groups customers/brands under one parent
+export const associations = pgTable("associations", {
+  id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  email: text("email"),
-  phone: text("phone"),
-  company: text("company"),
-  city: text("city"),
-  state: text("state"),
-  country: text("country"),
-  source: text("source"), // where the lead came from
-  status: text("status").notNull().default("new"), // new, contacted, qualified, converted, lost
-  notes: text("notes"),
-  stripeCustomerId: text("stripe_customer_id"),
-  subscriptionId: text("subscription_id"),
-  subscriptionStatus: text("subscription_status").default("none"),
-  agentId: varchar("agent_id").references(() => agents.id),
-  lastContactAt: timestamp("last_contact_at"),
-  followUpAt: timestamp("follow_up_at"),
+  shortCode: text("short_code").notNull().unique(),
+  mlsCode: text("mls_code"),
+  sponsorBilling: boolean("sponsor_billing").default(false),
+  sponsorLimit: integer("sponsor_limit"),
+  defaultPersona: text("default_persona").default("real_estate_sovereign"),
+  defaultIndustry: text("default_industry").default("real_estate"),
+  contactEmail: text("contact_email"),
+  website: text("website"),
+  masterBrandSid: text("master_brand_sid"),
+  masterEin: text("master_ein"),
+  allowedIpRanges: text("allowed_ip_ranges").array(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Customers/Leads table
+export const customers = pgTable(
+  "customers",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    email: text("email"),
+    phone: text("phone"),
+    company: text("company"),
+    city: text("city"),
+    state: text("state"),
+    country: text("country"),
+    source: text("source"), // where the lead came from
+    status: text("status").notNull().default("new"), // new, contacted, qualified, converted, lost
+    notes: text("notes"),
+    stripeCustomerId: text("stripe_customer_id"),
+    subscriptionId: text("subscription_id"),
+    subscriptionStatus: text("subscription_status").default("none"),
+    agentId: varchar("agent_id").references(() => agents.id),
+    associationId: uuid("association_id").references(() => associations.id),
+    lastContactAt: timestamp("last_contact_at"),
+    followUpAt: timestamp("follow_up_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [index("idx_customers_association_id").on(table.associationId)]
+);
 
 export const insertCustomerSchema = createInsertSchema(customers).omit({
   id: true,
@@ -546,6 +570,7 @@ export type TwilioSubAccount = typeof twilioSubAccounts.$inferSelect;
 export const a2pBrands = pgTable("a2p_brands", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   customerId: varchar("customer_id").references(() => customers.id),
+  associationId: uuid("association_id").references(() => associations.id),
   // Twilio Brand Registration SID
   brandSid: text("brand_sid"),
   brandStatus: text("brand_status").default("pending"), // pending, approved, rejected, failed
@@ -562,6 +587,9 @@ export const a2pBrands = pgTable("a2p_brands", {
   lastName: text("last_name").notNull(),
   email: text("email").notNull(),
   phone: text("phone").notNull(),
+  // EIN Exact-Match Data Guard (A6)
+  legalNameConfirmed: boolean("legal_name_confirmed").notNull().default(false),
+  legalNameConfirmedAt: timestamp("legal_name_confirmed_at"),
   // Vetting
   vettingStatus: text("vetting_status"), // null, pending, passed, failed
   vettingProvider: text("vetting_provider"), // campaign-verify, aegis

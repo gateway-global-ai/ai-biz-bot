@@ -10,8 +10,9 @@ import { HOTEL_MCP_TOOLS } from "./mcp-hotels.js";
 import { executeHotelTool } from "./mcp-hotels-executor.js";
 
 const DEFAULT_VOICE = "Puck";
-const GEMINI_MODEL = "gemini-3.0-flash";
-const GEMINI_MODEL_FALLBACK = "gemini-2.0-flash";
+// api-lockdown: use GEMINI_MODEL_ID only; set in Doppler
+const GEMINI_MODEL_ID = process.env.GEMINI_MODEL_ID || "models/gemini-2.5-flash-native-audio-preview-12-2025";
+const GEMINI_MODEL_FALLBACK = process.env.GEMINI_MODEL_FALLBACK || process.env.GEMINI_MODEL_ID;
 const INTERACTIONS_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 
 /** Interactions API output types */
@@ -52,7 +53,7 @@ export async function transcribeWithGemini(wavBuffer: Buffer): Promise<string> {
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL_FALLBACK,
+    model: GEMINI_MODEL_FALLBACK || GEMINI_MODEL_ID,
     generationConfig: {
       maxOutputTokens: 256,
       temperature: 0,
@@ -107,7 +108,7 @@ When the user asks about hotels, travel, or accommodations, use the search_hotel
 Keep voice responses SHORT (under 100 words). Summarize tool results concisely for the caller.`;
 
   const tools = getInteractionsTools();
-  let modelId = GEMINI_MODEL;
+  let modelId = GEMINI_MODEL_ID;
   let interactionId: string | null = previousInteractionId ?? null;
   let nextInput: string | Array<{ type: string; name: string; call_id: string; result: unknown }> = userMessage;
   const maxIterations = 5;
@@ -139,7 +140,7 @@ Keep voice responses SHORT (under 100 words). Summarize tool results concisely f
     if (!res.ok) {
       const errText = await res.text();
       if (i === 0 && (res.status === 404 || errText.includes("404"))) {
-        modelId = GEMINI_MODEL_FALLBACK;
+        modelId = GEMINI_MODEL_FALLBACK || GEMINI_MODEL_ID;
         continue;
       }
       console.error("[VoiceGemini] Interactions API error:", res.status, errText);

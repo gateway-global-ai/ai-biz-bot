@@ -46,11 +46,11 @@ const HeroSection: React.FC<Props> = ({ data, isVoiceActive, voiceVolume, onVoic
             {data.tagline}
           </div>
 
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-8 text-white drop-shadow-sm leading-tight">
+          <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight mb-8 text-slate-100 drop-shadow-sm leading-tight">
             {data.name}
           </h1>
 
-          <p className="text-lg md:text-xl text-slate-200/90 max-w-2xl mb-12 leading-relaxed font-light">
+          <p className="text-lg md:text-xl text-slate-100 max-w-2xl mb-12 leading-relaxed font-light">
             {data.description}
           </p>
         </div>

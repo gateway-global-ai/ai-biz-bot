@@ -340,8 +340,8 @@ export function registerB2bRoutes(app: Express) {
 
       return res.json({
         success: true,
-        configuredModel: process.env.GEMINI_MODEL || "gemini-3.0-flash",
-        configuredFallback: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.5-flash",
+        configuredModel: process.env.GEMINI_MODEL_ID || "models/gemini-2.5-flash-native-audio-preview-12-2025",
+        configuredFallback: process.env.GEMINI_MODEL_FALLBACK || process.env.GEMINI_MODEL_ID,
         availableModels,
         totalCount: availableModels.length
       });
@@ -403,11 +403,11 @@ Using your knowledge of real-world events, respond with a JSON object only (no m
 
 If the query is ambiguous or you cannot determine a real event/venue, set "eventName" to "" and "venueName" to "".`;
 
-      const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.0-flash";
-      const GEMINI_MODEL_FALLBACK = process.env.GEMINI_MODEL_FALLBACK || "gemini-2.5-flash";
+      const GEMINI_MODEL_ID = process.env.GEMINI_MODEL_ID || "models/gemini-2.5-flash-native-audio-preview-12-2025";
+      const GEMINI_MODEL_FALLBACK = process.env.GEMINI_MODEL_FALLBACK || process.env.GEMINI_MODEL_ID;
 
       let geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL_ID}:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -428,7 +428,7 @@ If the query is ambiguous or you cannot determine a real event/venue, set "event
         steps.push({ 
           step: "gemini", 
           status: "warning", 
-          message: `${GEMINI_MODEL} failed (${geminiRes.status}), trying fallback ${GEMINI_MODEL_FALLBACK}`,
+          message: `${GEMINI_MODEL_ID} failed (${geminiRes.status}), trying fallback ${GEMINI_MODEL_FALLBACK}`,
           data: resText.slice(0, 200) 
         });
         
