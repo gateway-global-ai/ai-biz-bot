@@ -662,8 +662,8 @@ export default function BusinessPage() {
   const showOverlay = stage === 'phone-gate' || stage === 'sending-link' || stage === 'training' || stage === 'demo-ready' || stage === 'name-gate';
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <nav className="sticky top-0 z-50 bg-white/5 backdrop-blur-xl border-b border-white/10 shadow-sm px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
+    <div className="min-h-screen bg-background text-foreground">
+      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-border shadow-sm px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
         <img src={Pidea_logo_header__7_} alt="Gateway Global AI" className="h-20 w-auto relative z-10" style={{ filter: 'drop-shadow(0 2px 8px rgba(19,70,160,0.15))' }} />
         <div className="flex items-center gap-2 justify-end">
           <ShareButton
@@ -954,16 +954,16 @@ export default function BusinessPage() {
             >
               <VoiceVisualizer />
             </div>
-            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white text-center" data-testid="text-hero-heading">
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-foreground text-center" data-testid="text-hero-heading">
               Free Custom Websites<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-3xl md:text-[48px]">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 text-3xl md:text-[48px]">
                 AI Voice and Chat Enabled
               </span>
             </h1>
             <div className="max-w-2xl w-full" data-testid="container-place-search">
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-                <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
+                <div className="relative bg-white rounded-2xl border border-border p-2 flex items-center gap-2 shadow-lg">
                   <div ref={pickerContainerRef} className="flex-1 min-w-0" />
                   {!mapsKey && (
                     <div className="pr-3">
@@ -980,9 +980,9 @@ export default function BusinessPage() {
               )}
               {!mapsError && <p className="text-xs text-slate-600 mt-3 text-center">Powered by Google Places</p>}
             </div>
-            <p className="text-xl text-slate-400 max-w-2xl text-center leading-relaxed font-light">
+            <p className="text-xl text-muted-foreground max-w-2xl text-center leading-relaxed font-light">
               Fully Developed Web Site In 1 Hour!<br/>
-              <span className="text-white font-medium">No Credit Card Required.</span>
+              <span className="text-foreground font-medium">No Credit Card Required.</span>
             </p>
           </div>
         </div>

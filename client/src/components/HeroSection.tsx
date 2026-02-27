@@ -21,7 +21,7 @@ const HeroSection: React.FC<Props> = ({ data, isVoiceActive, voiceVolume, onVoic
   const bgImage = data.images.length > 0 ? data.images[0] : 'https://picsum.photos/1600/900?grayscale&blur=2';
 
   return (
-    <div className="relative h-[85vh] min-h-[600px] w-full bg-slate-900 text-white overflow-hidden rounded-[2rem] shadow-xl shadow-slate-200/5 transition-all duration-500 ease-in-out group">
+    <div className="relative h-[85vh] min-h-[600px] w-full bg-white text-white overflow-hidden rounded-[2rem] shadow-xl shadow-slate-200/20 transition-all duration-500 ease-in-out group">
       {/* Background Image with Zoom Effect */}
       <div className="absolute inset-0 select-none">
         <img
@@ -29,7 +29,7 @@ const HeroSection: React.FC<Props> = ({ data, isVoiceActive, voiceVolume, onVoic
           alt={data.name}
           className="w-full h-full object-cover transition-transform duration-[2s] ease-out scale-105 group-hover:scale-110 opacity-60"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-900/30 via-slate-900/60 to-slate-900" />
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-900/20 via-slate-900/50 to-slate-900/80" />
       </div>
 
       {/* Dynamic Overlay for Voice Mode */}
