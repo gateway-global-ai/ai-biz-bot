@@ -102,6 +102,44 @@ import {
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
 
+// Placeholder for a future validation service (UPA).
+const UPAValidator = {
+  validate: async (prompt: string) => ({ isValid: true as const, reason: "" }),
+};
+
+/** Explicit site_configs column map (includes granular resource ledger so dashboard 4-card and plan work). */
+const siteConfigsColumns = {
+  id: siteConfigs.id,
+  ownerId: siteConfigs.ownerId,
+  name: siteConfigs.name,
+  domain: siteConfigs.domain,
+  placeId: siteConfigs.placeId,
+  placeData: siteConfigs.placeData,
+  assignedAgentId: siteConfigs.assignedAgentId,
+  botTemplateId: siteConfigs.botTemplateId,
+  systemPromptOverride: siteConfigs.systemPromptOverride,
+  modelProvider: siteConfigs.modelProvider,
+  modelName: siteConfigs.modelName,
+  chatbotEnabled: siteConfigs.chatbotEnabled,
+  voiceConciergeEnabled: siteConfigs.voiceConciergeEnabled,
+  widgetPosition: siteConfigs.widgetPosition,
+  widgetColor: siteConfigs.widgetColor,
+  greetingMessage: siteConfigs.greetingMessage,
+  placeholderText: siteConfigs.placeholderText,
+  knowledgeLibrary: siteConfigs.knowledgeLibrary,
+  plan: siteConfigs.plan,
+  heroImageUrl: siteConfigs.heroImageUrl,
+  heroImagePrompt: siteConfigs.heroImagePrompt,
+  agentConfig: siteConfigs.agentConfig,
+  voiceConfig: siteConfigs.voiceConfig,
+  themeConfig: siteConfigs.themeConfig,
+  voicePhoneAiMinutes: siteConfigs.voicePhoneAiMinutes,
+  voiceWebAiMinutes: siteConfigs.voiceWebAiMinutes,
+  smsMessages: siteConfigs.smsMessages,
+  chatBotMessages: siteConfigs.chatBotMessages,
+  createdAt: siteConfigs.createdAt,
+  updatedAt: siteConfigs.updatedAt,
+};
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;

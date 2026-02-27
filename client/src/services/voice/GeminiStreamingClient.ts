@@ -15,6 +15,9 @@ import { IVoiceClient } from './IVoiceClient';
 import { VoiceMessage, VoiceConfig, BusinessContext, AgentConfig } from '@/types/voice';
 import { resolvePlatformUrl, resolvePlatformWs } from '@/sdk/platformConfig';
 
+/** Global PTT silence threshold (ms). Turn-taking gavel — hard-wired for Gateway Global AI signature feel. */
+export const SPEECH_RECOGNITION_THRESHOLD_MS = 800;
+
 function encode(bytes: Uint8Array) {
   let binary = '';
   const len = bytes.byteLength;
@@ -219,7 +222,7 @@ export class GeminiStreamingClient implements IVoiceClient {
               response_modalities: ["audio"], // ✅ Fixed to lowercase for v1beta protocol
               speech_config: {
                 voice_config: {
-                  prebuilt_voice_config: { voice_name: 'Puck' }
+                  prebuilt_voice_config: { voice_name: this.config.voiceName || 'Puck' }
                 }
               }
             },
@@ -407,8 +410,7 @@ export class GeminiStreamingClient implements IVoiceClient {
       this.streaming = true;
       this.resumeAudioContexts();
     } else {
-      // Smart buffer: Base delay is 800ms for reliable PTT
-      const baseDelay = this.config.bufferDelay || 800;
+      const baseDelay = SPEECH_RECOGNITION_THRESHOLD_MS;
       
       this.stopTimeout = window.setTimeout(() => {
         this.streaming = false;
@@ -463,7 +465,7 @@ export class GeminiStreamingClient implements IVoiceClient {
       this.inputSource.connect(this.workletNode);
       this.workletNode.connect(this.inputAudioContext.destination);
       
-      console.log('[GeminiStreamingClient] ✅ AudioWorklet initialized (zero UI interference)');
+      console.log('[GeminiStreamingClient] 🟢 AudioWorklet initialized: PTT Hard-Wired at 800ms');
     } catch (err) {
       console.error('[GeminiStreamingClient] ❌ AudioWorklet failed, ensure clear-voice-processor.js is in /public:', err);
       throw err;
