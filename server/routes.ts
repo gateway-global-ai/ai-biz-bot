@@ -7,6 +7,7 @@ import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding
 import knowledgeRoutes from "./routes/knowledge-routes";
 import businessRoutes from "./routes/businessRoutes";
 import siteConfigRoutes from "./routes/siteConfigRoutes";
+import onboardingRoutes from "./routes/onboardingRoutes";
 import { registerMenuRoutes } from "./routes/menu-routes";
 import healthRoutes from "./routes/healthRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
@@ -4393,133 +4394,6 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     res.send(script);
   });
 
-  // ============================================
-  // SITE CONFIG (AI BIZ BOT ADMIN) API
-  // ============================================
-
-  app.get("/api/site-configs", async (_req, res) => {
-    try {
-      const configs = await storage.getSiteConfigs();
-      res.json(configs);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/site-configs", async (req, res) => {
-    try {
-      const schema = z.object({
-        name: z.string().min(1).max(200),
-        domain: z.string().optional(),
-        placeId: z.string().optional(),
-        placeData: z.any().optional(),
-        assignedAgentId: z.string().nullable().optional(),
-        systemPromptOverride: z.string().optional(),
-        chatbotEnabled: z.boolean().optional(),
-        voiceConciergeEnabled: z.boolean().optional(),
-        widgetPosition: z.string().optional(),
-        widgetColor: z.string().optional(),
-        greetingMessage: z.string().optional(),
-      });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const config = await storage.createSiteConfig(parsed.data);
-      res.status(201).json(config);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.patch("/api/site-configs/:id", async (req, res) => {
-    try {
-      const schema = z.object({
-        name: z.string().min(1).max(200).optional(),
-        domain: z.string().nullable().optional(),
-        placeId: z.string().nullable().optional(),
-        placeData: z.any().optional(),
-        assignedAgentId: z.string().nullable().optional(),
-        systemPromptOverride: z.string().nullable().optional(),
-        chatbotEnabled: z.boolean().optional(),
-        voiceConciergeEnabled: z.boolean().optional(),
-        widgetPosition: z.string().optional(),
-        widgetColor: z.string().optional(),
-        greetingMessage: z.string().nullable().optional(),
-        knowledgeLibrary: z.array(z.object({ id: z.string(), title: z.string(), content: z.string(), addedAt: z.string() })).nullable().optional(),
-      });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const updated = await storage.updateSiteConfig(req.params.id, parsed.data as any);
-      if (!updated) return res.status(404).json({ error: "Site config not found" });
-      res.json(updated);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.delete("/api/site-configs/:id", async (req, res) => {
-    try {
-      await storage.deleteSiteConfig(req.params.id);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/site-configs/:id/chat-logs", async (req, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 50;
-      const logs = await storage.getChatLogs(req.params.id, limit);
-      res.json(logs);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/site-configs/:id/knowledge", async (req, res) => {
-    try {
-      const site = await storage.getSiteConfigById(req.params.id);
-      if (!site) return res.status(404).json({ error: "Site not found" });
-      const lib = (site as any).knowledgeLibrary;
-      res.json(Array.isArray(lib) ? lib : []);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/site-configs/:id/knowledge", async (req, res) => {
-    try {
-      const schema = z.object({ title: z.string().min(1).max(200), content: z.string().max(500000) });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const site = await storage.getSiteConfigById(req.params.id);
-      if (!site) return res.status(404).json({ error: "Site not found" });
-      const existing = Array.isArray((site as any).knowledgeLibrary) ? (site as any).knowledgeLibrary : [];
-      const doc = {
-        id: crypto.randomUUID(),
-        title: parsed.data.title,
-        content: parsed.data.content,
-        addedAt: new Date().toISOString(),
-      };
-      const updated = await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: [...existing, doc] } as any);
-      res.json(updated?.knowledgeLibrary ?? [...existing, doc]);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.delete("/api/site-configs/:id/knowledge/:docId", async (req, res) => {
-    try {
-      const site = await storage.getSiteConfigById(req.params.id);
-      if (!site) return res.status(404).json({ error: "Site not found" });
-      const existing = Array.isArray((site as any).knowledgeLibrary) ? (site as any).knowledgeLibrary : [];
-      const next = existing.filter((d: any) => d.id !== req.params.docId);
-      await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: next } as any);
-      res.json({ success: true, knowledgeLibrary: next });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   // List demo leads for chat admin (new customers + demo URLs)
   app.get("/api/admin/demo-leads", async (req, res) => {
     try {
@@ -6681,7 +6555,12 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       return;
     }
 
-    const totalAmount = session.amount_total || (vettingType === 'expedited' ? 13400 : 8900);
+    const { getPricingConfig, toCents } = await import('./utils/pricing');
+    const _pricing = getPricingConfig();
+    const _brandReg   = toCents(_pricing.flat_fee.monthly.amount);
+    const _expedited  = Math.round(Number(process.env.STRIPE_A2P_EXPEDITED_FEE_CENTS ?? 8500));
+    const _standard   = Math.round(Number(process.env.STRIPE_A2P_STANDARD_FEE_CENTS  ?? 4000));
+    const totalAmount = session.amount_total || (vettingType === 'expedited' ? _brandReg + _expedited : _brandReg + _standard);
 
     await storage.updateA2pBrand(brandId, {
       stripePaymentId: session.payment_intent as string,
@@ -6708,6 +6587,14 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
       const { getUncachableStripeClient, getStripePublishableKey } = await import('./stripeClient');
       const stripe = await getUncachableStripeClient();
+      const { getPricingConfig, toCents } = await import('./utils/pricing');
+      const pricing = getPricingConfig();
+
+      // All amounts sourced from pricing_v1.yaml or Doppler env vars.
+      // Math.round() via toCents() prevents floating-point drift.
+      const brandRegCents   = toCents(pricing.flat_fee.monthly.amount);
+      const expeditedCents  = Math.round(Number(process.env.STRIPE_A2P_EXPEDITED_FEE_CENTS  ?? 8500));
+      const standardCents   = Math.round(Number(process.env.STRIPE_A2P_STANDARD_FEE_CENTS   ?? 4000));
 
       const { vettingType = 'standard' } = req.body;
 
@@ -6719,7 +6606,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
               name: 'A2P Brand Registration',
               description: `Brand registration for ${brand.companyName}`,
             },
-            unit_amount: 4900, // $49.00
+            unit_amount: brandRegCents,
           },
           quantity: 1,
         }
@@ -6733,7 +6620,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
               name: 'Expedited Vetting',
               description: 'Priority vetting (24-48 hours)',
             },
-            unit_amount: 8500, // $85.00
+            unit_amount: expeditedCents,
           },
           quantity: 1,
         });
@@ -6745,7 +6632,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
               name: 'Standard Vetting',
               description: 'Standard vetting (3-5 business days)',
             },
-            unit_amount: 4000, // $40.00
+            unit_amount: standardCents,
           },
           quantity: 1,
         });
@@ -6800,7 +6687,12 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         return res.status(400).json({ error: "Payment session mismatch" });
       }
 
-      const totalAmount = vettingType === 'expedited' ? 13400 : 8900;
+      const { getPricingConfig, toCents } = await import('./utils/pricing');
+      const _p2 = getPricingConfig();
+      const _b2 = toCents(_p2.flat_fee.monthly.amount);
+      const _e2 = Math.round(Number(process.env.STRIPE_A2P_EXPEDITED_FEE_CENTS ?? 8500));
+      const _s2 = Math.round(Number(process.env.STRIPE_A2P_STANDARD_FEE_CENTS  ?? 4000));
+      const totalAmount = vettingType === 'expedited' ? _b2 + _e2 : _b2 + _s2;
 
       const updated = await storage.updateA2pBrand(brand.id, {
         stripePaymentId: session.payment_intent as string,
@@ -7495,24 +7387,10 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   app.use("/api/knowledge", knowledgeRoutes);
   app.use("/api/business", businessRoutes);
   app.use("/api/site-configs", siteConfigRoutes);
+  app.use("/api/onboarding", onboardingRoutes);
 
   // Register Menu and Cart routes
   registerMenuRoutes(app);
-
-  // Register Site Config routes
-  app.get("/api/site-configs/:id", async (req, res) => {
-    const { id } = req.params;
-    if (!id || id === 'undefined') {
-      return res.status(400).json({ error: 'A valid site configuration ID is required.' });
-    }
-    try {
-      const config = await storage.getSiteConfigById(id);
-      if (!config) return res.status(404).json({ error: "Site config not found" });
-      res.json(config);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
 
   // Register Inquiry routes
   registerInquiryRoutes(app);

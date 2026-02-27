@@ -1,12 +1,98 @@
 import { useState, useRef, useEffect } from "react";
-import { MessageSquare, X, Send, Loader2, Phone, Settings, Code2, User, Building2 } from "lucide-react";
+import { Send, Loader2, Code2, User, Building2, Zap, CheckCircle2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { UpsellData } from "@/types/voice";
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp?: Date;
+  isUpsell?: boolean;
+  upsellData?: UpsellData;
+}
+
+// ─── Upsell product catalog ────────────────────────────────────────────────────
+
+const UPSELL_CATALOG: Record<string, Omit<UpsellData, "functionCallId">> = {
+  workspace: {
+    productName: "Google Workspace Setup",
+    price: 99,
+    pitch: "Professional email, Drive, Meet & Calendar — fully configured for your business.",
+    ctaRoute: "/compliance-gateway",
+  },
+  a2p: {
+    productName: "A2P 10DLC Registration",
+    price: 49,
+    pitch: "Register your SMS brand & campaign to avoid carrier filtering and maximize deliverability.",
+    ctaRoute: "/compliance-gateway",
+  },
+};
+
+// ─── Upsell Card ────────────────────────────────────────────────────────────────
+
+function UpsellCard({ data, effectiveColor }: { data: UpsellData; effectiveColor: string }) {
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [isDone, setIsDone] = useState(false);
+
+  const handleCta = () => {
+    if (isDone || isInstalling) return;
+    setIsInstalling(true);
+    // Simulated async install state — replace with real Stripe/onboarding flow
+    setTimeout(() => {
+      setIsInstalling(false);
+      setIsDone(true);
+    }, 2000);
+  };
+
+  return (
+    <div
+      className="rounded-2xl border border-indigo-400/30 bg-indigo-950/60 backdrop-blur-sm p-4 max-w-[85%]"
+      data-testid="card-upsell"
+    >
+      <div className="flex items-start gap-3">
+        <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl shrink-0 mt-0.5">
+          <Zap className="w-4 h-4 text-indigo-400" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold text-white">{data.productName}</p>
+            <span className="text-xs font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-2 py-0.5">
+              ${data.price}
+            </span>
+          </div>
+          {data.pitch && (
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">{data.pitch}</p>
+          )}
+          <Button
+            size="sm"
+            onClick={handleCta}
+            disabled={isInstalling || isDone}
+            className="mt-3 h-8 text-xs font-medium"
+            style={{ background: isDone ? "#10b981" : effectiveColor }}
+            data-testid="button-upsell-cta"
+          >
+            {isDone ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
+                Added — we'll follow up!
+              </>
+            ) : isInstalling ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                Processing…
+              </>
+            ) : (
+              <>
+                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                Get Started — ${data.price}
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export type ChatInterfaceMode = "customer" | "owner" | "developer";
@@ -120,11 +206,70 @@ export default function StandardizedChatInterface({
         }),
       });
       const data = await res.json();
+
+      // ── Upsell intercept: model function call "suggestIntegration" ──────────
+      // The server may include { functionCall: { name: "suggestIntegration",
+      //   args: { product: "workspace" | "a2p" }, callId: string } } alongside
+      // or instead of a plain text response.
+      if (data.functionCall?.name === "suggestIntegration") {
+        const { product, callId } = data.functionCall.args ?? {};
+        const catalog = UPSELL_CATALOG[product];
+        if (catalog) {
+          const upsellMsg: ChatMessage = {
+            role: "assistant",
+            content: "",
+            timestamp: new Date(),
+            isUpsell: true,
+            upsellData: { ...catalog, functionCallId: callId ?? `upsell-${Date.now()}` },
+          };
+          setMessages((prev) => [...prev, upsellMsg]);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // ── Keyword fallback: detect upsell triggers in plain text responses ───
+      const responseText = data.response || "";
+      const workspaceKeywords = /google workspace|g suite|business email/i;
+      const a2pKeywords = /a2p|10dlc|sms registration|sms compliance/i;
+
+      if (workspaceKeywords.test(responseText) && currentMode === "owner") {
+        const upsellMsg: ChatMessage = {
+          role: "assistant",
+          content: responseText,
+          timestamp: new Date(),
+          isUpsell: true,
+          upsellData: {
+            ...UPSELL_CATALOG.workspace,
+            functionCallId: `upsell-kw-${Date.now()}`,
+          },
+        };
+        setMessages((prev) => [...prev, upsellMsg]);
+        setIsLoading(false);
+        return;
+      }
+
+      if (a2pKeywords.test(responseText) && currentMode === "owner") {
+        const upsellMsg: ChatMessage = {
+          role: "assistant",
+          content: responseText,
+          timestamp: new Date(),
+          isUpsell: true,
+          upsellData: {
+            ...UPSELL_CATALOG.a2p,
+            functionCallId: `upsell-kw-${Date.now()}`,
+          },
+        };
+        setMessages((prev) => [...prev, upsellMsg]);
+        setIsLoading(false);
+        return;
+      }
+
       setMessages((prev) => [
         ...prev,
-        { 
-          role: "assistant", 
-          content: data.response || "Sorry, I could not respond.",
+        {
+          role: "assistant",
+          content: responseText || "Sorry, I could not respond.",
           timestamp: new Date(),
         },
       ]);
@@ -208,17 +353,31 @@ export default function StandardizedChatInterface({
             key={i}
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
-            <div
-              className={`px-3 py-2.5 rounded-xl text-sm max-w-[85%] whitespace-pre-wrap ${
-                msg.role === "user"
-                  ? "rounded-br-sm text-white"
-                  : "bg-slate-800 text-slate-300 rounded-bl-sm"
-              }`}
-              style={msg.role === "user" ? { background: effectiveColor } : undefined}
-              data-testid={`text-chat-message-${i}`}
-            >
-              {msg.content}
-            </div>
+            {msg.isUpsell && msg.upsellData ? (
+              <div className="flex flex-col gap-2 max-w-[90%]">
+                {msg.content && (
+                  <div
+                    className="px-3 py-2.5 rounded-xl text-sm bg-slate-800 text-slate-300 rounded-bl-sm whitespace-pre-wrap"
+                    data-testid={`text-chat-message-${i}`}
+                  >
+                    {msg.content}
+                  </div>
+                )}
+                <UpsellCard data={msg.upsellData} effectiveColor={effectiveColor} />
+              </div>
+            ) : (
+              <div
+                className={`px-3 py-2.5 rounded-xl text-sm max-w-[85%] whitespace-pre-wrap ${
+                  msg.role === "user"
+                    ? "rounded-br-sm text-white"
+                    : "bg-slate-800 text-slate-300 rounded-bl-sm"
+                }`}
+                style={msg.role === "user" ? { background: effectiveColor } : undefined}
+                data-testid={`text-chat-message-${i}`}
+              >
+                {msg.content}
+              </div>
+            )}
           </div>
         ))}
         {isLoading && (

@@ -15,13 +15,8 @@ import {
   Waves,
   Activity,
   FileText,
-  ChevronRight,
-  ChevronDown,
-  AlertCircle,
   CheckCircle,
-  TrendingUp,
   Zap,
-  Clock,
   BarChart3,
   Download,
   X
@@ -35,8 +30,6 @@ interface VoiceSettingsProps {
   contained?: boolean;
   currentMode: 'clear_voice' | 'standard';
   currentConfig: {
-    bufferDelay: number;
-    silenceThreshold: number;
     analysis: {
       detectEmotion: boolean;
       detectSentiment: boolean;
@@ -51,7 +44,6 @@ type TabType = 'settings' | 'performance' | 'logs';
 
 interface PerformanceMetric {
   timestamp: number;
-  bufferDelay: number;
   responseTime: number;
   cutoffDetected: boolean;
   phrase: string;
@@ -70,8 +62,6 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('settings');
   
   // Settings State
-  const [bufferDelay, setBufferDelay] = useState(currentConfig.bufferDelay);
-  const [silenceThreshold, setSilenceThreshold] = useState(currentConfig.silenceThreshold);
   const [enableEmotion, setEnableEmotion] = useState(currentConfig.analysis.detectEmotion);
   const [enableSentiment, setEnableSentiment] = useState(currentConfig.analysis.detectSentiment);
   const [enableDISC, setEnableDISC] = useState(currentConfig.analysis.detectDISC);
@@ -94,21 +84,17 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
 
   // --- Handlers ---
   const captureMetrics = () => {
-    // Hook into the voice client to capture real metrics
     const metric: PerformanceMetric = {
       timestamp: Date.now(),
-      bufferDelay: bufferDelay,
-      responseTime: 0, // Will be populated by actual client
+      responseTime: 0,
       cutoffDetected: false,
       phrase: ''
     };
-    setPerformanceLog(prev => [...prev.slice(-49), metric]); // Keep last 50
+    setPerformanceLog(prev => [...prev.slice(-49), metric]);
   };
 
   const applySettings = () => {
     const newConfig = {
-      bufferDelay,
-      silenceThreshold,
       analysis: {
         detectEmotion: enableEmotion,
         detectSentiment: enableSentiment,
@@ -116,23 +102,19 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
       }
     };
     onConfigChange(newConfig);
-    addSystemLog(`✓ Settings applied: Buffer=${bufferDelay}ms, Threshold=${silenceThreshold}dB`);
+    addSystemLog(`✓ Settings applied`);
     addSystemLog(`🔄 Auto-restarting voice engine with new configuration...`);
     
-    // Auto-close settings panel after 2 seconds to show the restart
     setTimeout(() => {
       onClose();
     }, 2000);
   };
 
   const resetToDefaults = () => {
-    const defaults = selectedEngine === 'stream' 
-      ? { buffer: 800, threshold: -45 }  // ✅ Updated to 800ms optimal
-      : { buffer: 1000, threshold: -40 };
-    
-    setBufferDelay(defaults.buffer);
-    setSilenceThreshold(defaults.threshold);
-    addSystemLog(`↺ Reset to ${selectedEngine === 'stream' ? 'Streaming' : 'PTT'} defaults`);
+    setEnableEmotion(currentConfig.analysis.detectEmotion);
+    setEnableSentiment(currentConfig.analysis.detectSentiment);
+    setEnableDISC(currentConfig.analysis.detectDISC);
+    addSystemLog(`↺ Reset to defaults`);
   };
 
   const addSystemLog = (message: string) => {
@@ -142,7 +124,7 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
 
   const exportLogs = () => {
     const data = {
-      settings: { bufferDelay, silenceThreshold, enableEmotion, enableSentiment, enableDISC },
+      settings: { enableEmotion, enableSentiment, enableDISC },
       performance: performanceLog,
       systemLogs: systemLogs
     };
@@ -154,15 +136,6 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
     a.click();
     addSystemLog('📥 Logs exported');
   };
-
-  // --- Buffer Delay Presets ---
-  const bufferPresets = [
-    { value: 250, label: 'Aggressive', desc: '~0.95s response', risk: 'High' },
-    { value: 500, label: 'Fast', desc: '~1.2s response', risk: 'Medium' },
-    { value: 800, label: 'Optimal', desc: '~1.5s response', risk: 'None' },
-    { value: 1000, label: 'Balanced', desc: '~1.7s response', risk: 'None' },
-    { value: 2000, label: 'Conservative', desc: '~2.7s response', risk: 'None' }
-  ];
 
   // --- Metrics Calculations ---
   const avgResponseTime = performanceLog.length 
@@ -264,92 +237,16 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
           {/* SETTINGS TAB */}
           {activeTab === 'settings' && (
             <div className="space-y-6">
-              
-              {/* Buffer Delay */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">
-                  Buffer Delay <span className="text-blue-600">(Response Speed)</span>
-                </label>
-                
-                {/* Presets */}
-                <div className="grid grid-cols-4 gap-3 mb-4">
-                  {bufferPresets.map(preset => (
-                    <button
-                      key={preset.value}
-                      onClick={() => setBufferDelay(preset.value)}
-                      className={`p-3 rounded-lg border-2 transition-all ${
-                        bufferDelay === preset.value
-                          ? 'border-blue-600 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="text-lg font-bold text-gray-900">{preset.value}ms</div>
-                      <div className="text-xs text-gray-600">{preset.label}</div>
-                      <div className="text-xs text-gray-500 mt-1">{preset.desc}</div>
-                      <div className={`text-xs font-medium mt-1 ${
-                        preset.risk === 'High' ? 'text-orange-600' : 
-                        preset.risk === 'Low' ? 'text-blue-600' : 'text-green-600'
-                      }`}>
-                        Risk: {preset.risk}
-                      </div>
-                    </button>
-                  ))}
-                </div>
 
-                {/* Fine-tune Slider */}
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-gray-600">Fine-tune:</span>
-                    <span className="text-lg font-bold text-blue-600">{bufferDelay}ms</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="100"
-                    max="2000"
-                    step="50"
-                    value={bufferDelay}
-                    onChange={(e) => setBufferDelay(parseInt(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <div className="flex justify-between text-xs text-gray-400 mt-1">
-                    <span>100ms (Risky)</span>
-                    <span>2000ms (Safe)</span>
-                  </div>
+              {/* PTT Hard-Wired Notice */}
+              <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-green-900">Response Timing: Hard-Wired at 800ms</p>
+                  <p className="text-xs text-green-700 mt-1">
+                    The silence detection threshold is fixed at the Gateway Global AI conversational sweet spot. No tuning required.
+                  </p>
                 </div>
-
-                {/* Warning */}
-                {bufferDelay < 300 && (
-                  <div className="flex items-start gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg mt-3">
-                    <AlertCircle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-orange-800">
-                      <strong>Warning:</strong> Buffer delay below 300ms may cut off trailing words. 
-                      Test thoroughly before using in production.
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Silence Threshold */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Silence Detection Threshold
-                </label>
-                <div className="flex items-center gap-4">
-                  <input
-                    type="range"
-                    min="-60"
-                    max="-30"
-                    value={silenceThreshold}
-                    onChange={(e) => setSilenceThreshold(parseInt(e.target.value))}
-                    className="flex-1 h-2 bg-gray-200 rounded-lg"
-                  />
-                  <span className="text-lg font-mono font-bold text-gray-900 w-20">
-                    {silenceThreshold}dB
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500 mt-2">
-                  Lower = More sensitive (may trigger on background noise) | Higher = Less sensitive
-                </p>
               </div>
 
               {/* Audio Analysis */}
@@ -402,21 +299,13 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
             <div className="space-y-6">
               
               {/* Metrics Cards */}
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                   <div className="flex items-center gap-2 mb-2">
-                    <Clock className="w-5 h-5 text-blue-600" />
+                    <Zap className="w-5 h-5 text-blue-600" />
                     <span className="text-sm font-medium text-blue-900">Avg Response</span>
                   </div>
                   <div className="text-3xl font-bold text-blue-600">{avgResponseTime}s</div>
-                </div>
-                
-                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Zap className="w-5 h-5 text-green-600" />
-                    <span className="text-sm font-medium text-green-900">Buffer Delay</span>
-                  </div>
-                  <div className="text-3xl font-bold text-green-600">{bufferDelay}ms</div>
                 </div>
 
                 <div className={`p-4 rounded-lg border ${
@@ -425,7 +314,7 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
                     : 'bg-orange-50 border-orange-200'
                 }`}>
                   <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className={`w-5 h-5 ${
+                    <BarChart3 className={`w-5 h-5 ${
                       parseFloat(cutoffRate) < 5 ? 'text-green-600' : 'text-orange-600'
                     }`} />
                     <span className="text-sm font-medium text-gray-900">Cutoff Rate</span>
@@ -471,7 +360,6 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
                       <thead className="bg-gray-100 sticky top-0">
                         <tr>
                           <th className="px-3 py-2 text-left text-gray-600">Time</th>
-                          <th className="px-3 py-2 text-left text-gray-600">Buffer</th>
                           <th className="px-3 py-2 text-left text-gray-600">Response</th>
                           <th className="px-3 py-2 text-left text-gray-600">Status</th>
                         </tr>
@@ -482,7 +370,6 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
                             <td className="px-3 py-2 text-gray-600">
                               {new Date(metric.timestamp).toLocaleTimeString()}
                             </td>
-                            <td className="px-3 py-2 font-mono text-gray-900">{metric.bufferDelay}ms</td>
                             <td className="px-3 py-2 font-mono text-gray-900">{metric.responseTime.toFixed(2)}s</td>
                             <td className="px-3 py-2">
                               {metric.cutoffDetected ? (

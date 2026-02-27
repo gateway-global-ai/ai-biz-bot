@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ShareButton from '@/components/ShareButton';
 import { LiveVoiceClient } from '@/services/liveService';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
@@ -254,6 +254,37 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
     setIsPTTRecording(false);
     voiceClient.current.setStreaming(false);
   }, [isPTTRecording]);
+
+  // Stable references — prevents ConciergePanel's useEffect from re-running on
+  // every render just because these objects are recreated as inline literals.
+  const conciergeBusinessContext = useMemo(() => ({
+    // `id` is intentionally empty — WebsitePreview is a demo/preview surface that
+    // works with Google Places data, not a stored site_configs record.
+    // ConciergePanel guards against undefined/empty IDs and skips the Handover
+    // Service fetch when id is '' (initialises directly from props instead).
+    id: '',
+    placeId: place.place_id || '',
+    name: place.name,
+    address: place.formatted_address || '',
+    hours: place.opening_hours?.weekday_text?.join(', '),
+    services: place.types,
+    primaryColor: '#3b82f6',
+  }), [place.place_id, place.name, place.formatted_address, place.opening_hours, place.types]);
+
+  const conciergeAgentConfig = useMemo(() => ({
+    role: agentRole,
+    personality: 'Helpful, professional, and friendly',
+    objectives: [
+      `Represent ${place.name} and assist customers`,
+      'Answer questions about services, hours, and location',
+      'Help customers book appointments or place orders',
+    ],
+    constraints: [
+      'Be polite and professional',
+      'Stay on topic about the business',
+      'Provide accurate information from business context',
+    ],
+  }), [place.name, agentRole]);
 
   const heroImage = place.photos && place.photos.length > 0 ? getPhotoUrl(place.photos[0]) : null;
   const galleryImages = (place.photos || []).slice(1, 4).map(p => getPhotoUrl(p, 600)).filter(Boolean) as string[];
@@ -1010,28 +1041,8 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
 
       {/* --- REPLACED: Old chat UI with new ConciergePanel --- */}
       <ConciergePanel
-        business={{
-          placeId: place.place_id || '',
-          name: place.name,
-          address: place.formatted_address || '',
-          hours: place.opening_hours?.weekday_text?.join(', '),
-          services: place.types,
-          primaryColor: '#3b82f6'
-        }}
-        agent={{
-          role: agentRole,
-          personality: 'Helpful, professional, and friendly',
-          objectives: [
-            `Represent ${place.name} and assist customers`,
-            'Answer questions about services, hours, and location',
-            'Help customers book appointments or place orders'
-          ],
-          constraints: [
-            'Be polite and professional',
-            'Stay on topic about the business',
-            'Provide accurate information from business context'
-          ]
-        }}
+        business={conciergeBusinessContext}
+        agent={conciergeAgentConfig}
         voiceConfig={voiceConfig}
         agentName={agentName}
         isOpen={isChatOpen}

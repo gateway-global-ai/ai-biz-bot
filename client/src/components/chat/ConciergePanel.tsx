@@ -15,7 +15,7 @@
  * - Auto-restart on settings change
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, startTransition } from 'react';
 import { 
   X, Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield 
 } from 'lucide-react';
@@ -96,22 +96,51 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       setConnectionStatus('connecting');
       try {
         // --- HANDOVER SERVICE LOGIC ---
-        // 1. Fetch the pre-validated configuration from the server.
-        // The siteConfigId is passed as a prop or read from the URL.
-        const response = await fetch(`/api/site-configs/${siteConfigId}`);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
+        // Guard: only call the Handover Service when we have a real DB UUID.
+        // WebsitePreview (demo/preview mode) passes business.id = '' — in that
+        // case we skip the fetch and initialise directly from the props config.
+        const hasValidId = Boolean(siteConfigId) && siteConfigId !== 'undefined' && siteConfigId !== '';
+
+        // Resolved DB record (only populated when hasValidId === true)
+        let dbSiteConfig: Record<string, any> | null = null;
+        let validatedVoiceConfig: VoiceConfig = currentVoiceConfig;
+
+        if (hasValidId) {
+          // 1. Fetch the pre-validated configuration from the Handover Service.
+          const response = await fetch(`/api/site-configs/${siteConfigId}`);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
+          }
+          dbSiteConfig = await response.json();
+
+          // 2. Merge the validated Model ID and voice name — Backend Config > Prop > Fallback
+          const dbVoiceConfig = dbSiteConfig!.voiceConfig as { voiceName?: string } | null | undefined;
+          validatedVoiceConfig = {
+            ...currentVoiceConfig,
+            model: dbSiteConfig!.modelName || currentVoiceConfig.model || process.env.GEMINI_MODEL_ID || "gemini-2.5-flash-native-audio-preview-12-2025",
+            voiceName: dbVoiceConfig?.voiceName ?? currentVoiceConfig.voiceName,
+          };
         }
-        const siteConfig = await response.json();
 
-        // 2. MERGE the validated Model ID into the current voice config
-        const validatedVoiceConfig: VoiceConfig = {
-          ...currentVoiceConfig,
-          // Priority: Backend Config > Prop > Fallback
-          model: siteConfig.geminiModelId || currentVoiceConfig.model || "gemini-2.5-flash-native-audio-preview-12-2025"
-        };
+        // 3. Build resolvedAgent — DB persona takes priority over static prop.
+        //    agentConfig fields: { name, role, discProfile, basePrompt }
+        const dbAgentConfig = dbSiteConfig?.agentConfig as {
+          name?: string;
+          role?: string;
+          discProfile?: string;
+          basePrompt?: string;
+        } | null | undefined;
 
-        console.log('[ConciergePanel] Initializing with verified model:', validatedVoiceConfig.model);
+        const resolvedAgent: AgentConfig = dbAgentConfig ? {
+          ...agent,
+          role: [dbAgentConfig.name, dbAgentConfig.role].filter(Boolean).join(', ') || agent.role,
+          personality: [
+            dbAgentConfig.basePrompt,
+            dbAgentConfig.discProfile ? `DISC Profile: ${dbAgentConfig.discProfile}` : undefined
+          ].filter(Boolean).join('. ') || agent.personality,
+        } : agent;
+
+        console.log('[ConciergePanel] Initializing with model:', validatedVoiceConfig.model, '| Persona:', resolvedAgent.role, hasValidId ? '(Handover Service)' : '(props — preview mode)');
 
         // 3. Create client with the VALIDATED config
         const newClient = VoiceClientFactory.createClient(validatedVoiceConfig);
@@ -162,18 +191,20 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         });
 
         newClient.onVolumeChange((volume) => {
-          setVolumeLevel(volume);
+          startTransition(() => setVolumeLevel(volume));
         });
 
         newClient.onConnectionChange((connected) => {
           setConnectionStatus(connected ? 'connected' : 'disconnected');
         });
 
-        // 4. Connect using the fetched, validated system prompt and validated config.
-        // The `connect` method in GeminiStreamingClient will now receive this.
-        const handoverBusinessContext = { ...business, systemPromptOverride: siteConfig.systemPromptOverride };
+        // 4. Connect — enrich context with DB-validated systemPromptOverride when
+        //    Handover Service ran; in preview mode use business as-is.
+        const handoverBusinessContext = dbSiteConfig
+          ? { ...business, systemPromptOverride: dbSiteConfig.systemPromptOverride }
+          : business;
 
-        await newClient.connect(handoverBusinessContext, agent, validatedVoiceConfig);
+        await newClient.connect(handoverBusinessContext, resolvedAgent, validatedVoiceConfig);
         clientRef.current = newClient;
         
         console.log('[ConciergePanel] Voice engine connected successfully');
@@ -196,7 +227,12 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         clientRef.current = null;
       }
     };
-  }, [isOpen, currentVoiceConfig, business, agent]);
+  // Deps: `siteConfigId` (primitive) replaces the full `business` object reference
+  // so that inline object literals in calling components (e.g. WebsitePreview) do
+  // not create new references on every render and trigger an infinite re-connect.
+  // `currentVoiceConfig` is React state so its identity is already stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, siteConfigId, currentVoiceConfig]);
 
   // Auto-scroll
   useEffect(() => {
@@ -555,9 +591,6 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           <span>
             {currentVoiceConfig.mode === 'clear_voice' ? '⚡ Clear Voice' : '💬 Standard PTT'}
           </span>
-          <span>
-            Buffer: {currentVoiceConfig.bufferDelay || 800}ms
-          </span>
           <span className={`font-medium ${
             connectionStatus === 'connected' ? 'text-green-600' : 
             connectionStatus === 'connecting' ? 'text-yellow-600' : 'text-red-600'
@@ -575,8 +608,6 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         contained
         currentMode={currentVoiceConfig.mode === 'clear_voice' ? 'clear_voice' : 'standard'}
         currentConfig={{
-          bufferDelay: currentVoiceConfig.bufferDelay || 800,
-          silenceThreshold: currentVoiceConfig.silenceThreshold || -45,
           analysis: {
             detectEmotion: currentVoiceConfig.enableAnalysis?.emotion || currentVoiceConfig.analysis?.emotion || false,
             detectSentiment: currentVoiceConfig.enableAnalysis?.sentiment || currentVoiceConfig.analysis?.sentiment || false,
@@ -588,7 +619,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             ...currentVoiceConfig,
             ...newConfig
           });
-          addMessage('system', `Settings updated: Buffer ${newConfig.bufferDelay}ms. Reconnecting...`);
+          addMessage('system', 'Settings updated. Reconnecting...');
         }}
       />
     </div>

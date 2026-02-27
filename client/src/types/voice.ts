@@ -21,7 +21,7 @@ export interface VoiceMessage {
 export interface VoiceConfig {
   mode: 'clear_voice' | 'standard_ptt'; // 'clear_voice' = streaming, 'standard_ptt' = transactional
   latency: 'ultra-low' | 'standard';
-  bufferDelay: number; // milliseconds (e.g., 800 for PTT)
+  bufferDelay?: number; // Hard-wired to SPEECH_RECOGNITION_THRESHOLD_MS (800ms); not user-configurable
   silenceThreshold?: number; // Optional silence detection threshold
   enableAnalysis: {
     emotion: boolean;
@@ -34,6 +34,8 @@ export interface VoiceConfig {
     disc: boolean;
   };
   model: string; // e.g., 'gemini-2.5-flash-native-audio-preview-12-2025'
+  /** Prebuilt voice name from Mixing Board (e.g. Puck, Kore, Charon). Defaults to Puck if unset. */
+  voiceName?: string;
 }
 
 export interface BusinessContext {
@@ -60,9 +62,30 @@ export interface DISCProfile {
   conscientiousness: number;
 }
 
+/**
+ * Payload attached to a ChatMessage when the model triggers an upsell
+ * via the suggestIntegration function call.
+ */
+export interface UpsellData {
+  /** Display name of the product being upsold. */
+  productName: string;
+  /** Price in USD (e.g. 99 for $99). */
+  price: number;
+  /** Unique function-call ID for tool-response tracking. */
+  functionCallId: string;
+  /** Short pitch line shown on the card. */
+  pitch?: string;
+  /** Route to navigate to after purchase, if applicable. */
+  ctaRoute?: string;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp?: Date;
   metadata?: Record<string, any>;
+  /** When true the message renders an upsell card instead of plain text. */
+  isUpsell?: boolean;
+  /** Required when isUpsell is true. */
+  upsellData?: UpsellData;
 }
