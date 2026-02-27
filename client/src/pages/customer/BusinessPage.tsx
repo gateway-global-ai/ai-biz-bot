@@ -663,8 +663,8 @@ export default function BusinessPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-border shadow-sm px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
-        <img src={gatewaySquareLogo} alt="Gateway Global AI" className="h-12 w-auto relative z-10" style={{ filter: 'drop-shadow(0 2px 8px rgba(19,70,160,0.15))' }} />
+      <nav className="sticky top-0 z-50 bg-white/30 backdrop-blur-xl border-b border-white/20 shadow-sm px-6 py-1.5 flex items-center justify-between gap-4 overflow-visible">
+        <img src={gatewaySquareLogo} alt="Gateway Global AI" className="h-24 w-auto relative z-10" style={{ filter: 'drop-shadow(0 2px 8px rgba(19,70,160,0.15))' }} />
         <div className="flex items-center gap-2 justify-end">
           <ShareButton
             shareTitle="Gateway Global AI - AI-Powered Business Websites"
