@@ -372,10 +372,10 @@ export default function BusinessPage() {
         if (shadow) {
           const style = document.createElement('style');
           style.textContent = `
-            input { background:transparent!important;color:#e2e8f0!important;font-size:1.1rem!important;
+            input { background:transparent!important;color:#0f172a!important;font-size:1.1rem!important;
                     font-family:inherit!important;border:none!important;outline:none!important;
                     width:100%!important;padding:4px 0!important; }
-            input::placeholder { color:#64748b!important; }
+            input::placeholder { color:#94a3b8!important; }
           `;
           shadow.appendChild(style);
         } else {
