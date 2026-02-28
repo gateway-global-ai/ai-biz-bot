@@ -1,0 +1,55 @@
+---
+description: Enforces modular routing and prevents additions to the routes.ts monolith.
+globs: server/routes.ts, server/routes/**/*.ts
+alwaysApply: true
+---
+# Modular Routing Enforcement
+
+## Context
+Our `server/routes.ts` file has grown too large (7,500+ lines) and is a risk for context collapse and dual-registration bugs.
+
+## Directives
+1. **NO NEW ROUTES IN routes.ts:** Do not add any new `app.get()`, `app.post()`, or `router.*` definitions directly into `server/routes.ts`.
+2. **MODULAR ONLY:** All new endpoints must be created in a dedicated feature file inside the `server/routes/` directory (e.g., `server/routes/bailBondsRoutes.ts`).
+3. **MOUNTING:** You may only modify `server/routes.ts` to *import and mount* a new modular router (e.g., `app.use('/api/bail-bonds', bailBondsRouter)`).
+4. **REFACTORING:** If tasked with modifying an existing route in `server/routes.ts`, your first priority should be extracting it into a modular file in `server/routes/` if safely possible.
+
+## Existing Modular Route Files (reference)
+- `server/routes/b2b-routes.ts` — B2B Travel OS
+- `server/routes/businessRoutes.ts` — Business data
+- `server/routes/healthRoutes.ts` — Health checks
+- `server/routes/inquiry-routes.ts` — Inquiries
+- `server/routes/knowledge-routes.ts` — Knowledge base
+- `server/routes/menu-routes.ts` — Menus & e-commerce
+- `server/routes/siteConfigRoutes.ts` — Site configurations
+- `server/routes/twilioWebhooks.ts` — Twilio inbound webhooks
+- `server/routes/voiceTranscribe.ts` — Voice transcription
+- `server/routes/workspace-onboarding.ts` — Google Workspace onboarding
+
+## Pattern for Creating a New Modular Route File
+
+```typescript
+// server/routes/myFeatureRoutes.ts
+import { Router } from "express";
+import { storage } from "../storage";
+
+const router = Router();
+
+router.get("/", async (req, res) => {
+  // handler
+});
+
+router.post("/", async (req, res) => {
+  // handler
+});
+
+export default router;
+// or: export { router as myFeatureRoutes };
+```
+
+Then in `server/routes.ts`, add ONLY the mount line:
+```typescript
+import myFeatureRoutes from "./routes/myFeatureRoutes";
+// ...
+app.use("/api/my-feature", myFeatureRoutes);
+```

@@ -1,7 +1,0 @@
-{
-  "name": "AI Agent Behavioral + Twilio",
-  "description": "An advanced dashboard for configuring AI agent personalities using DISC behavioral profiles and ARCH communication patterns.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
-}

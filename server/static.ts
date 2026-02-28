@@ -15,20 +15,21 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath));
 
-  // SPA fallback - serve index.html for client-side routes
-  // CRITICAL: Skip WebSocket upgrade requests entirely
+  // SPA fallback — serve index.html for all client-side routes.
+  // IMPORTANT: Nginx unconditionally forwards Connection: upgrade for every proxied
+  // request (even plain GETs), so checking that header causes ALL requests to be
+  // skipped. Only the RFC-6455-required `Upgrade: websocket` header reliably
+  // identifies a true WebSocket handshake.
   app.use((req, res, next) => {
-    // WebSocket upgrade requests have these headers - don't touch them!
-    if (req.headers.upgrade === 'websocket' || req.headers.connection?.toLowerCase().includes('upgrade')) {
+    if (req.headers.upgrade?.toLowerCase() === 'websocket') {
       return next();
     }
-    
-    // Skip API routes and static files
+
+    // Skip API routes and static asset requests
     if (req.path.startsWith('/ws/') || req.path.startsWith('/api/') || req.path.includes('.')) {
       return next();
     }
-    
-    // Serve index.html for client-side routes
+
     if (req.method === 'GET') {
       res.sendFile(path.resolve(distPath, "index.html"));
     } else {

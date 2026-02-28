@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index, pgEnum, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -832,6 +832,28 @@ export const insertBotTemplateSchema = createInsertSchema(botTemplates).omit({
 export type InsertBotTemplate = z.infer<typeof insertBotTemplateSchema>;
 export type BotTemplate = typeof botTemplates.$inferSelect;
 
+// Enum for the Reseller Franchise Hierarchy (MSA v1.1.0 Addendum §1)
+export const accountTypeEnum = pgEnum("account_type", [
+  "DIRECT",       // Standard self-serve signup (default)
+  "RESELLER",     // Master UUID with sub-account provisioning authority
+  "SUB_ACCOUNT",  // End-customer provisioned under a RESELLER Master UUID
+]);
+
+// Enums for the Onboarding & Compliance Gateway (MSA v1.0.0)
+export const onboardingStatusEnum = pgEnum("onboarding_status", [
+  "PENDING_MSA",
+  "PENDING_COMPLIANCE",
+  "ACTIVE",
+  "SUSPENDED",
+]);
+
+export const complianceStatusEnum = pgEnum("compliance_status", [
+  "NOT_SUBMITTED",
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+]);
+
 // Customer Accounts - separate from admin users, for business owners
 export const customerAccounts = pgTable("customer_accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -845,6 +867,36 @@ export const customerAccounts = pgTable("customer_accounts", {
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  // ── Onboarding & Compliance Gateway (MSA v1.0.0) ──────────────────────────
+  onboardingStatus: onboardingStatusEnum("onboarding_status").default("PENDING_MSA").notNull(),
+  activationDate: timestamp("activation_date"),
+  trialEndDate: timestamp("trial_end_date"),       // activationDate + 30 days (pricing_v1.yaml)
+  msaAcceptedAt: timestamp("msa_accepted_at"),
+  msaVersion: text("msa_version"),                 // SHA-256 hash of the accepted MSA version string
+  complianceStatus: complianceStatusEnum("compliance_status").default("NOT_SUBMITTED").notNull(),
+  businessName: text("business_name"),
+  ein: text("ein"),                                // Format: XX-XXXXXXX
+  physicalAddress: jsonb("physical_address"),      // { street, city, state, zip, country }
+  smsUseCase: text("sms_use_case"),
+  complianceRejectionReason: text("compliance_rejection_reason"),
+  // ── Reseller Franchise Hierarchy (MSA v1.1.0 Addendum) ────────────────────
+  accountType: accountTypeEnum("account_type").default("DIRECT").notNull(),
+  // Self-referencing FK: links SUB_ACCOUNT back to its RESELLER Master UUID.
+  // Declared as varchar (not uuid type) to match the id column type on this table.
+  parentAccountId: varchar("parent_account_id").references((): any => customerAccounts.id),
+  wholesaleRate: numeric("wholesale_rate", { precision: 10, scale: 2 }).default("49.00"),
+  // markupRate: custom retail pricing the reseller charges end-customers.
+  // Shape: { phoneVoiceAi: number, webVoiceAi: number, a2pSms: number }
+  markupRate: jsonb("markup_rate"),
+  // Running Net Margin ledger for reseller payouts (precision: 12 for million-dollar brokerages).
+  resellerCommissionBalance: numeric("reseller_commission_balance", { precision: 12, scale: 2 }).default("0.00"),
+  // Stripe Connect account ID for automated margin disbursement. Nullable until onboarded.
+  stripeConnectedAccountId: text("stripe_connected_account_id"),
+  // Reseller pre-signature timestamp (§1.3): must be set before end-user can sign MSA.
+  resellerMsaConfirmedAt: timestamp("reseller_msa_confirmed_at"),
+  // A2P Content Provider designation (§1.5 / carrier audit requirement).
+  // Shape: { name: string, role: "Content Provider", acknowledgedAt: ISO8601 }
+  a2pContentProvider: jsonb("a2p_content_provider"),
 });
 
 export const insertCustomerAccountSchema = createInsertSchema(customerAccounts).omit({
@@ -1027,6 +1079,17 @@ export const siteConfigs = pgTable("site_configs", {
   claimedAt:                timestamp("claimed_at"),
   /** Stripe Checkout session ID used for the $49.99 activation payment. */
   claimCheckoutSessionId:   text("claim_checkout_session_id"),
+  /** Agent Persona config: { name, role, discProfile, basePrompt } */
+  agentConfig: jsonb("agent_config"),
+  /** Audio / voice settings: { voiceName, language, isPushToTalk } */
+  voiceConfig: jsonb("voice_config"),
+  /** Showroom UI theme tokens: { primaryColor, fontFamily, borderRadius } */
+  themeConfig: jsonb("theme_config"),
+  /** Granular resource ledger: prepaid quotas per cost center (all default 0). */
+  voicePhoneAiMinutes: integer("voice_phone_ai_minutes").default(0).notNull(),
+  voiceWebAiMinutes: integer("voice_web_ai_minutes").default(0).notNull(),
+  smsMessages: integer("sms_messages").default(0).notNull(),
+  chatBotMessages: integer("chat_bot_messages").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -2140,3 +2203,35 @@ export const insertEnrichmentSnapshotSchema = createInsertSchema(
 ).omit({ id: true, createdAt: true });
 export type InsertEnrichmentSnapshot = z.infer<typeof insertEnrichmentSnapshotSchema>;
 export type EnrichmentSnapshot = typeof platformBusinessEnrichmentSnapshots.$inferSelect;
+
+// --- SOVEREIGN SMS ROUTER COMPLIANCE TABLES ---
+
+export const smsIntentEnum = pgEnum("sms_intent", [
+  "PLATFORM_OTP", "PLATFORM_CARE", "PLATFORM_MKTG",
+  "CUSTOMER_OTP", "CUSTOMER_CARE", "CUSTOMER_MKTG"
+]);
+
+export const smsOptOuts = pgTable("sms_opt_outs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  phoneNumber: text("phone_number").notNull(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id),
+  reason: text("reason").notNull().default("STOP keyword received"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const smsLogs = pgTable("sms_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
+  twilioMessageSid: text("twilio_message_sid"),
+  messagingServiceSid: text("messaging_service_sid").notNull(),
+  intent: smsIntentEnum("intent").notNull(),
+  toPhoneNumber: text("to_phone_number").notNull(),
+  fromPhoneNumber: text("from_phone_number"),
+  body: text("body").notNull(),
+  status: text("status").notNull().default("queued"),
+  segments: integer("segments").default(1).notNull(),
+  cost: numeric("cost", { precision: 10, scale: 4 }),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

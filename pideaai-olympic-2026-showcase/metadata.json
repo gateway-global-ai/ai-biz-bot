@@ -1,7 +1,0 @@
-{
-  "name": "PideaAI Travel - Olympic 2026 Showcase",
-  "description": "An interactive map-centric travel experience showcasing Winter Olympics 2026 travel packages by PideaAI.",
-  "requestFramePermissions": [
-    "geolocation"
-  ]
-}

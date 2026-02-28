@@ -1,10 +1,8 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ShareButton from '@/components/ShareButton';
 import { LiveVoiceClient } from '@/services/liveService';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
-import { ReferralFooter } from '@/components/layout/ReferralFooter';
-import { useEntryPoints } from '@/hooks/useEntryPoints';
 
 interface PlaceData {
   name: string;
@@ -47,19 +45,11 @@ interface PlaceData {
 
 interface WebsitePreviewProps {
   place: PlaceData;
-  siteConfigId?: string;
-  /** AI-generated or custom hero image URL saved in site_configs */
-  heroImageUrl?: string | null;
-  /** Google Place ID — used to fetch hero from Places photo proxy if no heroImageUrl */
-  placeId?: string | null;
   onBack: () => void;
-  /** knowledgeLibrary JSONB from site_configs — powers the Dynamic Entry Point Engine */
-  knowledgeLibrary?: unknown;
 }
 
 function getPhotoUrl(photo: any, maxWidth = 1200): string | null {
   if (!photo) return null;
-  // Live Google Maps JS API objects
   if (typeof photo.getURI === 'function') return photo.getURI({ maxWidth });
   if (typeof photo.getUrl === 'function') return photo.getUrl({ maxWidth });
   return null;
@@ -101,37 +91,12 @@ interface ChatMessage {
   content: string;
 }
 
-export default function WebsitePreview({ place, siteConfigId, heroImageUrl: heroImageUrlProp, placeId: placeIdProp, onBack, knowledgeLibrary }: WebsitePreviewProps) {
+export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
   const agentName = 'Ava';
   const agentRole = 'CONCIERGE';
-
-  // --- Dynamic Entry Point Engine ---
-  const { entryPoints, agents } = useEntryPoints(knowledgeLibrary);
-  const [activeMetaPrompt, setActiveMetaPrompt] = useState<string | undefined>();
-  const [activeAgentId, setActiveAgentId] = useState<string | undefined>();
-  const [activeDirectoryMode, setActiveDirectoryMode] = useState(false);
-
-  const openEntryPoint = (node: typeof entryPoints.heroPrimary, voice = false) => {
-    if (!node.enabled) return;
-    if (node.type === 'LEGACY_PASSTHROUGH') {
-      if (node.url) {
-        if (node.openMode === 'window') {
-          setIsChatOpen(true); // TODO: iframe mode
-        } else {
-          window.open(node.url, '_blank', 'noopener,noreferrer');
-        }
-      }
-      return;
-    }
-    setActiveMetaPrompt(node.metaPrompt || undefined);
-    setActiveAgentId(node.agentId || undefined);
-    setActiveDirectoryMode(node.type === 'AGENT_DIRECTORY');
-    setInitialView(node.type === 'CHAT_AGENT' ? 'chat' : 'voice');
-    setIsChatOpen(true);
-  };
   
   // --- NEW: ConciergePanel State ---
   const [chatLayout, setChatLayout] = useState<'floating' | 'fixed' | 'fullscreen'>('fixed');
@@ -290,20 +255,39 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
     voiceClient.current.setStreaming(false);
   }, [isPTTRecording]);
 
-  // Priority: AI-generated/custom URL → server photo proxy (by placeId) → live Maps API object → placeholder
-  const effectivePlaceId = placeIdProp || place.place_id;
-  const heroImage: string | null =
-    heroImageUrlProp ||
-    (effectivePlaceId ? `/api/places/photo-proxy/${encodeURIComponent(effectivePlaceId)}?maxWidth=1200` : null) ||
-    (place.photos && place.photos.length > 0 ? getPhotoUrl(place.photos[0]) : null);
+  // Stable references — prevents ConciergePanel's useEffect from re-running on
+  // every render just because these objects are recreated as inline literals.
+  const conciergeBusinessContext = useMemo(() => ({
+    // `id` is intentionally empty — WebsitePreview is a demo/preview surface that
+    // works with Google Places data, not a stored site_configs record.
+    // ConciergePanel guards against undefined/empty IDs and skips the Handover
+    // Service fetch when id is '' (initialises directly from props instead).
+    id: '',
+    placeId: place.place_id || '',
+    name: place.name,
+    address: place.formatted_address || '',
+    hours: place.opening_hours?.weekday_text?.join(', '),
+    services: place.types,
+    primaryColor: '#3b82f6',
+  }), [place.place_id, place.name, place.formatted_address, place.opening_hours, place.types]);
 
-  // Gallery: use proxy for stored photos, live API for live Place objects
-  const galleryImages = (place.photos || []).slice(1, 4).map((p, i) => {
-    const fromApi = getPhotoUrl(p, 600);
-    if (fromApi) return fromApi;
-    // For stored photos use place_id with an index offset (best-effort)
-    return effectivePlaceId ? null : null;
-  }).filter(Boolean) as string[];
+  const conciergeAgentConfig = useMemo(() => ({
+    role: agentRole,
+    personality: 'Helpful, professional, and friendly',
+    objectives: [
+      `Represent ${place.name} and assist customers`,
+      'Answer questions about services, hours, and location',
+      'Help customers book appointments or place orders',
+    ],
+    constraints: [
+      'Be polite and professional',
+      'Stay on topic about the business',
+      'Provide accurate information from business context',
+    ],
+  }), [place.name, agentRole]);
+
+  const heroImage = place.photos && place.photos.length > 0 ? getPhotoUrl(place.photos[0]) : null;
+  const galleryImages = (place.photos || []).slice(1, 4).map(p => getPhotoUrl(p, 600)).filter(Boolean) as string[];
   const tagline = generateTagline(place);
   const description = generateDescription(place);
   const mapLink = place.place_id
@@ -335,18 +319,16 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
             variant="light"
             testIdPrefix="preview-share"
           />
-          {entryPoints.header.enabled && (
-            <button
-              onClick={() => openEntryPoint(entryPoints.header)}
-              className="p-2 sm:px-4 sm:py-2 text-sm font-medium rounded-full transition-colors flex items-center gap-2 shadow-lg bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20"
-              data-testid="button-preview-concierge"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-              </svg>
-              <span className="hidden sm:inline">{entryPoints.header.label}</span>
-            </button>
-          )}
+          <button
+            onClick={() => { setIsChatOpen(true); setIsVoiceMode(false); }}
+            className="p-2 sm:px-4 sm:py-2 text-sm font-medium rounded-full transition-colors flex items-center gap-2 shadow-lg bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20"
+            data-testid="button-preview-concierge"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+            </svg>
+            <span className="hidden sm:inline">Concierge</span>
+          </button>
         </div>
       </nav>
 
@@ -354,14 +336,9 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
         <div className="relative h-[85vh] min-h-[600px] w-full bg-slate-900 text-white overflow-hidden rounded-b-[4rem] shadow-2xl group">
           <div className="absolute inset-0 select-none">
             {heroImage ? (
-              <img
-                src={heroImage}
-                alt={place.name}
-                className="w-full h-full object-cover transition-transform duration-[2s] ease-out scale-105 group-hover:scale-110 opacity-70"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
+              <img src={heroImage} alt={place.name} className="w-full h-full object-cover transition-transform duration-[2s] ease-out scale-105 group-hover:scale-110 opacity-60" />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-blue-950 via-slate-900 to-slate-950" />
+              <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900" />
             )}
             <div className="absolute inset-0 bg-gradient-to-b from-slate-900/30 via-slate-900/60 to-slate-900" />
           </div>
@@ -380,35 +357,25 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
             </div>
             <div className="w-full mt-4 flex flex-col items-center">
               <div className="flex flex-col sm:flex-row gap-5 w-full sm:w-auto">
-                {/* Hero Primary — dynamic entry point */}
-                {entryPoints.heroPrimary.enabled && (
-                  <button
-                    onClick={() => openEntryPoint(entryPoints.heroPrimary, true)}
-                    className="group relative flex items-center justify-center gap-3 px-8 py-4 bg-white text-slate-900 rounded-full font-bold transition-all hover:scale-105 hover:shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] active:scale-95"
-                    data-testid="button-preview-voice"
-                  >
-                    <span className="relative z-10 flex items-center gap-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-blue-600">
-                        <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
-                        <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 9.364 1.5 1.5 0 01-3 0 6.751 6.751 0 01-6-9.364v-1.5a.75.75 0 01.75-.75z" />
-                      </svg>
-                      {entryPoints.heroPrimary.label}
-                    </span>
-                  </button>
-                )}
-                {/* Hero Secondary — dynamic entry point */}
-                {entryPoints.heroSecondary.enabled && (
-                  <button
-                    onClick={() => openEntryPoint(entryPoints.heroSecondary)}
-                    className="flex items-center justify-center gap-2 px-8 py-4 bg-white/5 hover:bg-white/10 text-white rounded-full font-semibold transition-all backdrop-blur-sm border border-white/10 hover:border-white/20"
-                    data-testid="button-preview-chat"
-                  >
-                    <span>{entryPoints.heroSecondary.label}</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.355 0-2.697-.056-4.024-.166-1.137-.09-1.98-1.057-1.98-2.193v-4.286c0-.897.494-1.685 1.257-2.071m-6.429 1.256c.004-.326.244-.593.57-.615 1.355-.091 2.697-.167 4.024-.167 1.328 0 2.67.076 4.025.167.326.022.566.29.569.615v4.285c-.003.327-.243.594-.57.615-1.355.092-2.697.168-4.024.168-1.04 0-2.052-.046-3.045-.118H7.5v2.25l-2.25-2.25h-.75c-.327-.021-.567-.288-.569-.615V9.767z" />
+                <button onClick={() => { setIsChatOpen(true); if (!isVoiceMode) toggleVoiceMode(); }} className="group relative flex items-center justify-center gap-3 px-8 py-4 bg-white text-slate-900 rounded-full font-bold transition-all hover:scale-105 hover:shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] active:scale-95" data-testid="button-preview-voice">
+                  <span className="relative z-10 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-blue-600">
+                      <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+                      <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 9.364 1.5 1.5 0 01-3 0 6.751 6.751 0 01-6-9.364v-1.5a.75.75 0 01.75-.75z" />
                     </svg>
-                  </button>
-                )}
+                    Voice Concierge
+                  </span>
+                </button>
+                <button
+                  onClick={() => { setIsChatOpen(true); setIsVoiceMode(false); }}
+                  className="flex items-center justify-center gap-2 px-8 py-4 bg-white/5 hover:bg-white/10 text-white rounded-full font-semibold transition-all backdrop-blur-sm border border-white/10 hover:border-white/20"
+                  data-testid="button-preview-chat"
+                >
+                  <span>Chat Concierge</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.355 0-2.697-.056-4.024-.166-1.137-.09-1.98-1.057-1.98-2.193v-4.286c0-.897.494-1.685 1.257-2.071m-6.429 1.256c.004-.326.244-.593.57-.615 1.355-.091 2.697-.167 4.024-.167 1.328 0 2.67.076 4.025.167.326.022.566.29.569.615v4.285c-.003.327-.243.594-.57.615-1.355.092-2.697.168-4.024.168-1.04 0-2.052-.046-3.045-.118H7.5v2.25l-2.25-2.25h-.75c-.327-.021-.567-.288-.569-.615V9.767z" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
@@ -1010,9 +977,9 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
                     </div>
                     <div className="p-4 space-y-3">
                       {[
-                        { title: 'AI Business Summary', desc: 'Auto-generated business description using AI analysis of all Place data, reviews, and category context.', icon: 'M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z', source: 'Gemini 2.5 + Google Places', status: place.editorial_summary ? 'Available' : 'Can Generate' },
-                        { title: 'AI Business Reviews', desc: 'AI-synthesized review analysis: sentiment trends, common praises/complaints, and key takeaways from all reviews.', icon: 'M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z', source: 'Gemini 2.5 + Reviews API', status: reviews.length > 0 ? 'Can Generate' : 'Needs Reviews' },
-                        { title: 'AI Area Reviews', desc: 'Neighborhood and area analysis including nearby attractions, walkability, transit access, and local character.', icon: 'M15 10.5a3 3 0 11-6 0 3 3 0 016 0z M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z', source: 'Gemini 2.5 + Google Maps Grounding', status: place.geometry ? 'Can Generate' : 'Needs Location' },
+                        { title: 'AI Business Summary', desc: 'Auto-generated business description using AI analysis of all Place data, reviews, and category context.', icon: 'M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z', source: 'Kimi 2.5 + Google Places', status: place.editorial_summary ? 'Available' : 'Can Generate' },
+                        { title: 'AI Business Reviews', desc: 'AI-synthesized review analysis: sentiment trends, common praises/complaints, and key takeaways from all reviews.', icon: 'M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z', source: 'Kimi 2.5 + Reviews API', status: reviews.length > 0 ? 'Can Generate' : 'Needs Reviews' },
+                        { title: 'AI Area Reviews', desc: 'Neighborhood and area analysis including nearby attractions, walkability, transit access, and local character.', icon: 'M15 10.5a3 3 0 11-6 0 3 3 0 016 0z M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z', source: 'Kimi 2.5 + Google Maps Grounding', status: place.geometry ? 'Can Generate' : 'Needs Location' },
                         { title: 'AI Competitor Analysis', desc: 'SWOT analysis comparing the business with nearby competitors in the same category.', icon: 'M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6', source: 'Google Places Aggregate API', status: place.types?.length ? 'Can Generate' : 'Needs Types' },
                         { title: 'Weather Widget', desc: 'Real-time weather conditions and forecast for the business location using Google Maps Grounding.', icon: 'M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z', source: 'Google Maps Grounding Lite', status: place.geometry ? 'Can Generate' : 'Needs Location' },
                         { title: '5 Most Recent Reviews', desc: 'Displays the latest 5 customer reviews sorted by recency with full text and rating.', icon: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z', source: 'Google Places Reviews API', status: reviews.length > 0 ? `${Math.min(5, reviews.length)} Available` : 'Needs Reviews' },
@@ -1074,38 +1041,14 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
 
       {/* --- REPLACED: Old chat UI with new ConciergePanel --- */}
       <ConciergePanel
-        business={{
-          id: siteConfigId || '',
-          placeId: place.place_id || '',
-          name: place.name,
-          address: place.formatted_address || '',
-          hours: place.opening_hours?.weekday_text?.join(', '),
-          services: place.types,
-          primaryColor: '#3b82f6'
-        }}
-        agent={{
-          role: agentRole,
-          personality: 'Helpful, professional, and friendly',
-          objectives: [
-            `Represent ${place.name} and assist customers`,
-            'Answer questions about services, hours, and location',
-            'Help customers book appointments or place orders'
-          ],
-          constraints: [
-            'Be polite and professional',
-            'Stay on topic about the business',
-            'Provide accurate information from business context'
-          ]
-        }}
+        business={conciergeBusinessContext}
+        agent={conciergeAgentConfig}
         voiceConfig={voiceConfig}
         agentName={agentName}
         isOpen={isChatOpen}
         onClose={() => {
           setIsChatOpen(false);
           setIsChatMenuOpen(false);
-          setActiveMetaPrompt(undefined);
-          setActiveAgentId(undefined);
-          setActiveDirectoryMode(false);
         }}
         initialView={initialView}
         layoutMode={chatLayout}
@@ -1117,10 +1060,6 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
         }}
         onOpenAdmin={() => setIsAdminOpen(true)}
         zIndex={50}
-        directoryMode={activeDirectoryMode}
-        agentId={activeAgentId}
-        metaPrompt={activeMetaPrompt}
-        agents={agents}
       />
 
       {/* OLD CHAT UI REMOVED - Now using ConciergePanel above */}
@@ -1368,37 +1307,38 @@ export default function WebsitePreview({ place, siteConfigId, heroImageUrl: hero
         </div>
       )}
 
-      <ReferralFooter siteConfigId={siteConfigId} />
-
-      {!isChatOpen && !isAdminOpen && (entryPoints.floatVoice.enabled || entryPoints.floatChat.enabled) && (
+      {!isChatOpen && !isAdminOpen && (
         <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
-          {/* Float Voice FAB — dynamic entry point */}
-          {entryPoints.floatVoice.enabled && (
-            <button
-              onClick={() => openEntryPoint(entryPoints.floatVoice, true)}
-              className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-full shadow-xl hover:shadow-2xl transition-all hover:scale-105 flex items-center justify-center"
-              data-testid="button-preview-voice-fab"
-              title={entryPoints.floatVoice.label}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
-                <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
-                <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
-              </svg>
-            </button>
-          )}
-          {/* Float Chat FAB — dynamic entry point */}
-          {entryPoints.floatChat.enabled && (
-            <button
-              onClick={() => openEntryPoint(entryPoints.floatChat)}
-              className="w-14 h-14 bg-slate-800 text-white rounded-full shadow-xl hover:bg-slate-700 transition-transform hover:scale-105 flex items-center justify-center"
-              data-testid="button-preview-chat-fab"
-              title={entryPoints.floatChat.label}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-              </svg>
-            </button>
-          )}
+          {/* Voice FAB */}
+          <button
+            onClick={() => {
+              setInitialView('voice');
+              setIsChatOpen(true);
+            }}
+            className="w-14 h-14 bg-gradient-to-br from-purple-600 to-blue-600 text-white rounded-full shadow-xl hover:shadow-2xl transition-all hover:scale-105 flex items-center justify-center"
+            data-testid="button-preview-voice-fab"
+            title="Start voice conversation"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+              <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+              <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
+            </svg>
+          </button>
+          
+          {/* Chat FAB */}
+          <button
+            onClick={() => {
+              setInitialView('chat');
+              setIsChatOpen(true);
+            }}
+            className="w-14 h-14 bg-blue-600 text-white rounded-full shadow-xl hover:bg-blue-500 transition-transform hover:scale-105 flex items-center justify-center"
+            data-testid="button-preview-chat-fab"
+            title="Start text chat"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+            </svg>
+          </button>
         </div>
       )}
     </div>

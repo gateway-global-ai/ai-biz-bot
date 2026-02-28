@@ -13,6 +13,10 @@
 
 import { IVoiceClient } from './IVoiceClient';
 import { VoiceMessage, VoiceConfig, BusinessContext, AgentConfig } from '@/types/voice';
+import { resolvePlatformUrl, resolvePlatformWs } from '@/sdk/platformConfig';
+
+/** Global PTT silence threshold (ms). Turn-taking gavel — hard-wired for Gateway Global AI signature feel. */
+export const SPEECH_RECOGNITION_THRESHOLD_MS = 800;
 
 function encode(bytes: Uint8Array) {
   let binary = '';
@@ -125,9 +129,10 @@ export class GeminiStreamingClient implements IVoiceClient {
     }
 
     try {
-      // Use current host (Nginx will proxy to correct port)
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/gemini-live`;
+      // resolvePlatformWs() returns an absolute wss:// URL when running as an
+      // embedded SDK on a third-party domain; falls back to window.location.host
+      // when running inside the main app so existing behaviour is unchanged.
+      const wsUrl = resolvePlatformWs('/ws/gemini-live');
       
       console.log('[GeminiStreamingClient] Connecting to:', wsUrl);
       this.socket = new WebSocket(wsUrl);
@@ -231,7 +236,7 @@ export class GeminiStreamingClient implements IVoiceClient {
               response_modalities: ["audio"], // ✅ Fixed to lowercase for v1beta protocol
               speech_config: {
                 voice_config: {
-                  prebuilt_voice_config: { voice_name: 'Puck' }
+                  prebuilt_voice_config: { voice_name: this.config.voiceName || 'Puck' }
                 }
               }
             },
@@ -423,8 +428,7 @@ export class GeminiStreamingClient implements IVoiceClient {
       this.streaming = true;
       this.resumeAudioContexts();
     } else {
-      // Smart buffer: Base delay is 800ms for reliable PTT
-      const baseDelay = this.config.bufferDelay || 800;
+      const baseDelay = SPEECH_RECOGNITION_THRESHOLD_MS;
       
       this.stopTimeout = window.setTimeout(() => {
         this.streaming = false;
@@ -446,7 +450,11 @@ export class GeminiStreamingClient implements IVoiceClient {
     
     try {
       // ✅ Step 1: Load the AudioWorklet module (runs on background thread)
-      await this.inputAudioContext.audioWorklet.addModule('/clear-voice-processor.js');
+      // Resolve the worklet URL against the platform so it loads from the correct
+      // origin when the SDK is embedded on a third-party site.
+      await this.inputAudioContext.audioWorklet.addModule(
+        resolvePlatformUrl('/clear-voice-processor.js')
+      );
       
       // ✅ Step 2: Create the source from microphone
       this.inputSource = this.inputAudioContext.createMediaStreamSource(this.currentStream);
@@ -475,7 +483,7 @@ export class GeminiStreamingClient implements IVoiceClient {
       this.inputSource.connect(this.workletNode);
       this.workletNode.connect(this.inputAudioContext.destination);
       
-      console.log('[GeminiStreamingClient] ✅ AudioWorklet initialized (zero UI interference)');
+      console.log('[GeminiStreamingClient] 🟢 AudioWorklet initialized: PTT Hard-Wired at 800ms');
     } catch (err) {
       console.error('[GeminiStreamingClient] ❌ AudioWorklet failed, ensure clear-voice-processor.js is in /public:', err);
       throw err;
@@ -654,7 +662,7 @@ export class GeminiStreamingClient implements IVoiceClient {
       if (business.services) params.set('services', business.services.join(','));
 
       const response = await fetch(
-        `/api/business/${encodeURIComponent(business.placeId)}/enriched-instruction?${params.toString()}`
+        resolvePlatformUrl(`/api/business/${encodeURIComponent(business.placeId)}/enriched-instruction?${params.toString()}`)
       );
       if (!response.ok) return null;
       const data = await response.json();
