@@ -35,6 +35,7 @@ import TwilioHealthCheck from "@/pages/developer/TwilioHealthCheck";
 import SystemHealthCheck from "@/pages/developer/SystemHealthCheck";
 import TelephonyManager from "@/pages/developer/TelephonyManager";
 import BillingPage from "@/pages/account/BillingPage";
+import NovaVerifyPage from "@/pages/account/NovaVerifyPage";
 import PayoutDashboard from "@/components/reseller/PayoutDashboard";
 import GoogleDrivePage from "@/pages/integrations/GoogleDrivePage";
 import GoogleCalendarPage from "@/pages/biz-dashboard/GoogleCalendarPage";
@@ -294,6 +295,7 @@ function AppRouter() {
       <Route path="/gateway-admin" component={GatewayAdmin} />
       <Route path="/telephony" component={TelephonyManager} />
       <Route path="/billing" component={BillingPage} />
+      <Route path="/nova-verify/:businessType/:clientId" component={NovaVerifyPage} />
       <Route path="/reseller/payouts" component={PayoutDashboard} />
       <Route path="/google-drive" component={GoogleDrivePage} />
       <Route path="/google-calendar" component={GoogleCalendarPage} />

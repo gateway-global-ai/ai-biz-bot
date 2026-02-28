@@ -520,6 +520,26 @@ export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({
 export type InsertAuthSession = z.infer<typeof insertAuthSessionSchema>;
 export type AuthSession = typeof authSessions.$inferSelect;
 
+// NOVA Sovereign IDV sessions — constitution: .system_design/nova_sovereign_ruleset_v1.yaml
+export const novaIdvSessions = pgTable("nova_idv_sessions", {
+  sessionId: uuid("session_id").primaryKey(),
+  businessId: uuid("business_id").notNull(),
+  clientPhone: text("client_phone"),
+  clientEmail: text("client_email"),
+  protocolLevel: integer("protocol_level").notNull(),
+  otpVerified: boolean("otp_verified").default(false),
+  magicLinkVerified: boolean("magic_link_verified").default(false),
+  biometricVerified: boolean("biometric_verified").default(false),
+  idVerified: boolean("id_verified").default(false),
+  signatureUrl: text("signature_url"),
+  invoiceId: uuid("invoice_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export type NovaIdvSession = typeof novaIdvSessions.$inferSelect;
+export type InsertNovaIdvSession = typeof novaIdvSessions.$inferInsert;
+
 // Demo leads for business website onboarding flow
 export const demoLeads = pgTable("demo_leads", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

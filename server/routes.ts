@@ -12,6 +12,7 @@ import { claimRoutes, handleClaimCheckoutCompleted } from "./routes/claimRoutes"
 import ingestPlanRoutes from "./routes/ingestPlanRoutes";
 import bailRescueRoutes from "./routes/bailRescueRoutes";
 import agentResearchRoutes from "./routes/agentResearch";
+import novaSovereignRouter from "./routes/novaSovereignRoutes";
 import { registerMenuRoutes } from "./routes/menu-routes";
 import healthRoutes from "./routes/healthRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
@@ -8498,6 +8499,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
   // Agent Deep Research: POST /api/generate-agent-persona
   app.use(agentResearchRoutes);
+
+  // NOVA Sovereign Billing: POST /api/nova/billing/push, POST /api/nova/billing/receive
+  app.use("/api/nova", novaSovereignRouter);
 
   // Register Menu and Cart routes
   registerMenuRoutes(app);

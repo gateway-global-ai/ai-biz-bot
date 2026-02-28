@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { validateSovereignEnv, PROGRAMMATIC_EMAIL_CANONICAL_KEYS } from "./config/sovereignEnvGuard";
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
 import fs from "fs";
@@ -607,6 +608,23 @@ app.use((req, res, next) => {
   } catch (error) {
     console.error('Server startup aborted due to invalid configuration');
     process.exit(1);
+  }
+
+  // Sovereign env guard: when SOVEREIGN_ENV_STRICT=true, require canonical env keys (see docs/SOVEREIGN_ENV_MANIFEST.md)
+  if (process.env.SOVEREIGN_ENV_STRICT === "true") {
+    try {
+      validateSovereignEnv();
+      // When Workspace is enabled, require programmatic email keys before any email flow
+      if (process.env.ENABLE_GOOGLE_WORKSPACE === "true") {
+        validateSovereignEnv(PROGRAMMATIC_EMAIL_CANONICAL_KEYS);
+      }
+    } catch (err: any) {
+      if (err?.code === "SOVEREIGN_CONFIGURATION_ERROR") {
+        console.error(err.message);
+        process.exit(1);
+      }
+      throw err;
+    }
   }
 
   httpServer

@@ -1,0 +1,25 @@
+---
+description: Doppler–GitHub Bridge — agents must not write or rename GitHub Secrets
+globs: "**/.github/**,**/.env.example,**/doppler*.sh,**/sync-doppler*.sh,docs/API_KEYS_DOPPLER.md,docs/SOVEREIGN_ENV_MANIFEST.md,docs/GITHUB_SECRET_MANIFEST.md"
+alwaysApply: false
+---
+
+# Doppler–GitHub Bridge (Gate 0)
+
+**Doppler is the Vault; GitHub Secrets are a read-only reflection.** When the Doppler GitHub Integration is enabled, only Doppler writes GitHub Secrets. Agents must never create, rename, or delete GitHub Secrets or GitHub Variables that are synced from Doppler.
+
+## Forbidden
+
+- Do **not** add, edit, rename, or delete repository secrets or environment secrets in workflows or docs in a way that implies you are the source of truth for secret values.
+- Do **not** instruct users to paste secret values into GitHub Secrets when Doppler sync is (or will be) used; values belong in Doppler.
+- Do **not** add workflow steps that upload or overwrite GitHub Secrets (e.g. `gh secret set`) for keys that are managed by Doppler.
+
+## Required
+
+- When adding or renaming an env key: update **Doppler** (dashboard), then update [.env.example](.env.example) and [docs/SOVEREIGN_ENV_MANIFEST.md](docs/SOVEREIGN_ENV_MANIFEST.md); run `npm run check-env-manifest`. Do not create the key in GitHub Secrets manually.
+- When editing `.github/` workflows or env-related docs, follow [docs/GITHUB_SECRET_MANIFEST.md](docs/GITHUB_SECRET_MANIFEST.md) and [docs/SOVEREIGN_ENV_MANIFEST.md](docs/SOVEREIGN_ENV_MANIFEST.md).
+
+## Reference
+
+- Full bridge and agent rules: [docs/GITHUB_SECRET_MANIFEST.md](../../docs/GITHUB_SECRET_MANIFEST.md).
+- Naming and runtime guard: [docs/SOVEREIGN_ENV_MANIFEST.md](../../docs/SOVEREIGN_ENV_MANIFEST.md).

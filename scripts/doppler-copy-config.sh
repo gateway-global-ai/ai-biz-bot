@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Copy Doppler secrets from one config to others (e.g. dev → stg, dev → prd).
 # Uses Doppler CLI: export from source config, upload to target configs.
+# Token vars (DOPPLER_TOKEN, DOPPLER_TOKEN_DEV/STG/PRD) are excluded so dev token is never copied.
+# If you use the Doppler web UI to copy config instead, exclude those keys there too — or never store them in Doppler (keep them only in each server's .env). See docs/SOVEREIGN_ENV_MANIFEST.md.
 # See: https://docs.doppler.com/docs/how-do-i-duplicate-migrate-secrets-between-configs
 #
 # Usage:
@@ -38,9 +40,10 @@ for TO_CONFIG in $TO_CONFIGS; do
     continue
   fi
   echo "Copying $FROM_CONFIG → $TO_CONFIG ..."
+  # Exclude Doppler CLI token vars so we never copy dev token to stg/prd. Those live only in each server's .env.
   doppler secrets upload --project "$PROJECT" --config "$TO_CONFIG" --raw \
     <(doppler secrets --project "$PROJECT" --config "$FROM_CONFIG" --json --raw | \
-      jq 'del(.DOPPLER_PROJECT, .DOPPLER_ENVIRONMENT, .DOPPLER_CONFIG) | to_entries | map({(.key): (.value | .raw)}) | add')
+      jq 'del(.DOPPLER_PROJECT, .DOPPLER_ENVIRONMENT, .DOPPLER_CONFIG, .DOPPLER_TOKEN, .DOPPLER_TOKEN_DEV, .DOPPLER_TOKEN_STG, .DOPPLER_TOKEN_PRD) | to_entries | map({(.key): (.value | .raw)}) | add')
   echo "  Done: $TO_CONFIG"
 done
 

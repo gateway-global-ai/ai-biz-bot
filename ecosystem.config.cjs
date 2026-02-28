@@ -1,7 +1,9 @@
 const path = require('path');
 const fs = require('fs');
 
-// Load .env so DOPPLER_SERVICE_TOKEN / DOPPLER_TOKEN_* are available when PM2 reads this config
+// Load .env so Doppler token env vars are available when PM2 reads this config.
+// Canonical names: DOPPLER_TOKEN_DEV (dev), DOPPLER_TOKEN_STG (stg), DOPPLER_TOKEN_PRD (prd).
+// CLI reads DOPPLER_TOKEN; each app sets it from the matching _DEV/_STG/_PRD var.
 const envPath = path.join(__dirname, '.env');
 if (fs.existsSync(envPath)) {
   const content = fs.readFileSync(envPath, 'utf8');
@@ -52,7 +54,7 @@ module.exports = {
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
-        DOPPLER_TOKEN: process.env.DOPPLER_SERVICE_TOKEN || process.env.DOPPLER_TOKEN_DEV
+        DOPPLER_TOKEN: process.env.DOPPLER_TOKEN || process.env.DOPPLER_TOKEN_DEV
       }
     },
     {
@@ -69,7 +71,7 @@ module.exports = {
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
-        DOPPLER_TOKEN: process.env.DOPPLER_SERVICE_TOKEN || process.env.DOPPLER_TOKEN_PRODUCTION
+        DOPPLER_TOKEN: process.env.DOPPLER_TOKEN || process.env.DOPPLER_TOKEN_PRD
       }
     }
   ]
