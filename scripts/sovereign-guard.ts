@@ -107,8 +107,7 @@ function getStagedFiles(): string[] {
   const fileListArg = process.argv.indexOf("--file-list");
   if (fileListArg !== -1 && process.argv[fileListArg + 1]) {
     const listPath = process.argv[fileListArg + 1];
-    const { readFileSync } = await import("fs");
-    return readFileSync(listPath, "utf8").split("\n").filter(Boolean);
+    return fs.readFileSync(listPath, "utf8").split("\n").filter(Boolean);
   }
   try {
     const output = execSync('git diff --cached --name-only --diff-filter=ACM', {
