@@ -22,6 +22,7 @@ import telephonyRoutes from "./routes/telephonyRoutes"; // Platinum Core: Teleph
 import billingRoutes from "./routes/billingRoutes";       // Support Spine: Reseller, Stripe, Subscription, Billing
 import a2pRoutes from "./routes/a2pRoutes";             // Support Spine: A2P 10-DLC Compliance
 import workspaceRoutes from "./routes/workspaceRoutes"; // Google Workspace + Drive + Calendar + Tasks + Analyst
+import intelligenceRoutes from "./routes/intelligenceRoutes"; // Business Intelligence: SerpAPI data mining pipeline
 import agentSystemRoutes from "./routes/agentSystemRoutes"; // DISC + Agents + Orgs + Projects + BotTemplates
 import chatRoutes from "./routes/chatRoutes";           // Website Chat + Chat + Conversations
 import twilio from "twilio";
@@ -127,6 +128,9 @@ export async function registerRoutes(
 
   // Google Workspace, Drive, Calendar, Tasks, Analyst
   app.use(workspaceRoutes);
+
+  // Business Intelligence: SerpAPI data mining pipeline (Sage / Data Miner)
+  app.use(intelligenceRoutes);
 
   // Agent System: DISC, Agents, Organizations, Projects, BotTemplates
   app.use(agentSystemRoutes);

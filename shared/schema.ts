@@ -1054,6 +1054,8 @@ export const siteConfigs = pgTable("site_configs", {
   placeholderText: text("placeholder_text").default("Type a message..."),
   /** Knowledge library: array of { id, title, content, addedAt } for agent training. */
   knowledgeLibrary: jsonb("knowledge_library"),
+  /** Total reviews harvested via SerpAPI pipeline — used for billing ($0.10/review above 10). */
+  reviewsHarvested: integer("reviews_harvested").default(0),
   /** Per-business subscription plan: 'free' | 'pro' | 'voice' | 'enterprise' */
   plan: text("plan").default("free"),
   /** AI-generated or custom hero image URL stored on the platform */

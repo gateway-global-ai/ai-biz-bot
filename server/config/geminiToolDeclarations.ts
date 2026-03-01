@@ -460,5 +460,80 @@ export const TOOL_DECLARATIONS = {
       },
       required: ["platformId", "customerEmail", "customerName", "planName"]
     }
+  },
+
+  // ── Business Intelligence Tools (Data Miner / Sage) ──────────────────────────
+
+  resolve_data_id: {
+    name: "resolve_data_id",
+    description: "Resolve a business name string to a stable SerpAPI data_id. The data_id never rotates — unlike Google's place_id. Use this first to anchor any business before review harvesting.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        query: {
+          type: "STRING",
+          description: "The business name and location as a string (e.g., 'Boardwalk Suites Lafayette')."
+        },
+        ll: {
+          type: "STRING",
+          description: "Optional GPS coordinates in SerpAPI format: @lat,lng,zoom. Improves local search accuracy."
+        },
+        site_config_id: {
+          type: "STRING",
+          description: "Optional. If provided, stores the resolved data_id to the platform_business_map for this site."
+        }
+      },
+      required: ["query"]
+    }
+  },
+
+  ingest_serpapi_reviews: {
+    name: "ingest_serpapi_reviews",
+    description: "Harvest all available Google Maps reviews for a business using its stable SerpAPI data_id. Paginates automatically through the full review corpus. First 10 reviews per site are free; additional reviews billed at $0.10 each.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        data_id: {
+          type: "STRING",
+          description: "The stable SerpAPI data_id for the business (from resolve_data_id)."
+        },
+        max_reviews: {
+          type: "INTEGER",
+          description: "Maximum reviews to harvest. Range: 1-500. Default: 100."
+        },
+        sort_by: {
+          type: "STRING",
+          description: "Review sort order: qualityScore (default, most relevant), newestFirst, ratingHigh, or ratingLow."
+        },
+        site_config_id: {
+          type: "STRING",
+          description: "Optional. If provided, stores the raw review snapshot in the database."
+        }
+      },
+      required: ["data_id"]
+    }
+  },
+
+  compile_knowledge_base: {
+    name: "compile_knowledge_base",
+    description: "Analyze harvested reviews with Gemini to produce a structured SWOT intelligence brief. Auto-tunes the recommended DISC profile for the business's ideal agent. Inserts the compiled markdown document into the site's knowledgeLibrary.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        data_id: {
+          type: "STRING",
+          description: "The stable SerpAPI data_id for the business."
+        },
+        business_name: {
+          type: "STRING",
+          description: "The full business name as it should appear in the compiled brief."
+        },
+        site_config_id: {
+          type: "STRING",
+          description: "The site config ID where the compiled intelligence brief will be stored."
+        }
+      },
+      required: ["data_id", "business_name", "site_config_id"]
+    }
   }
 };
