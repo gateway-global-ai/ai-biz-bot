@@ -2700,30 +2700,15 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       let responseText = "I understand. Let me help you with that.";
       
       // Generate AI response using Gemini (sole provider)
-      if (SpeechResult) {
-        if (process.env.GEMINI_API_KEY) {
-          // Sovereign: Gemini is the sole AI provider for voice gather responses
-              try {
-                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-                const prompt = `You are a helpful AI phone assistant for Gateway Global. Respond naturally to this caller's request. Keep your response under 200 words for phone readability.\n\nCaller said: "${SpeechResult}"\n\nRespond helpfully:`;
-                const result = await model.generateContent(prompt);
-                responseText = result.response.text() || responseText;
-              } catch (geminiError) {
-                console.error('[Voice Gather] Gemini fallback error:', geminiError);
-              }
-            }
-          }
-        } else if (process.env.GEMINI_API_KEY) {
-          try {
-            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-            const prompt = `You are a helpful AI phone assistant for Gateway Global. Respond naturally to this caller's request. Keep your response under 200 words for phone readability.\n\nCaller said: "${SpeechResult}"\n\nRespond helpfully:`;
-            const result = await model.generateContent(prompt);
-            responseText = result.response.text() || responseText;
-          } catch (geminiError) {
-            console.error('[Voice Gather] Gemini error:', geminiError);
-          }
+      if (SpeechResult && process.env.GEMINI_API_KEY) {
+        try {
+          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          const prompt = `You are a helpful AI phone assistant for Gateway Global. Respond naturally to this caller's request. Keep your response under 200 words for phone readability.\n\nCaller said: "${SpeechResult}"\n\nRespond helpfully:`;
+          const result = await model.generateContent(prompt);
+          responseText = result.response.text() || responseText;
+        } catch (geminiError) {
+          console.error('[Voice Gather] Gemini error:', geminiError);
         }
       }
       
