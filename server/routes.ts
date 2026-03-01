@@ -3663,10 +3663,10 @@ ${businessContext}`;
 
       let response: string;
       try {
-        response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens })).response;
+        ({ response } = await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens }));
       } catch (firstError: any) {
         console.warn('Admin command chat first attempt failed, retrying:', firstError.message);
-        response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens })).response;
+        ({ response } = await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens }));
       }
 
       res.json({ response });
@@ -3761,7 +3761,7 @@ You are helpful, concise, and conversational. Answer questions about the busines
       ];
 
       const { gatewayChat } = await import('./ai-gateway');
-      const result = await gatewayChat({
+      const { response, provider, model } = await gatewayChat({
         messages: gatewayMessages,
         provider: resolvedProvider,
         model: resolvedModel,
@@ -3772,13 +3772,13 @@ You are helpful, concise, and conversational. Answer questions about the busines
       if (siteConfigId && !isPlatformChat) {
         try {
           await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'user', content: message });
-          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'assistant', content: result.response });
+          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'assistant', content: response });
         } catch (logErr) {
           console.error("[Website Chat] Failed to log chat:", logErr);
         }
       }
 
-      res.json({ response: result.response, provider: result.provider, model: result.model });
+      res.json({ response, provider, model });
     } catch (error: any) {
       console.error("[Website Chat] Error:", error.message);
       res.status(500).json({ error: "Failed to get response" });
@@ -3891,10 +3891,10 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       // Retry once on transient failures
       let response: string;
       try {
-        response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens })).response;
+        ({ response } = await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens }));
       } catch (firstError: any) {
         console.warn('Chat first attempt failed, retrying:', firstError.message);
-        response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens })).response;
+        ({ response } = await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens }));
       }
 
       res.json({ response });
