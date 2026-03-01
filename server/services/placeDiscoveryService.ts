@@ -44,10 +44,11 @@ async function getFreshPlaceIdViaGroundingLite(searchSignature: string): Promise
 
 /**
  * Fallback: get Place ID via Places API (New) searchText.
- * Uses GOOGLE_MAPS_API_KEY or GOOGLE_API_KEY.
+ * Uses getServerMapsApiKey() (GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_GROUNDING_LITE_API_KEY, GOOGLE_PLACES_API_KEY, GOOGLE_API_KEY).
  */
 async function getFreshPlaceIdViaPlacesSearch(searchSignature: string): Promise<string | null> {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY;
+  const { getServerMapsApiKey } = await import("../config/mapsApiKey");
+  const apiKey = getServerMapsApiKey();
   if (!apiKey) return null;
 
   try {

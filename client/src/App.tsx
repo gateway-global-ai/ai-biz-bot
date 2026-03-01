@@ -29,13 +29,13 @@ import CustomerManager from "@/pages/biz-dashboard/CustomerManager";
 import TwilioAccountManager from "@/pages/developer/TwilioAccountManager";
 import MvpLanding from "@/pages/showcase/MvpLanding";
 import LandingV2 from "@/pages/showcase/LandingV2";
-import ResellerRecruitment from "@/pages/showcase/ResellerRecruitment";
-import KimiAudioDemo from "@/pages/showcase/KimiAudioDemo";
+// KimiAudioDemo removed — Gemini Live handles all voice demos
 import TwilioHealthCheck from "@/pages/developer/TwilioHealthCheck";
 import SystemHealthCheck from "@/pages/developer/SystemHealthCheck";
 import TelephonyManager from "@/pages/developer/TelephonyManager";
 import BillingPage from "@/pages/account/BillingPage";
-import PayoutDashboard from "@/components/reseller/PayoutDashboard";
+import OnboardingGateway from "@/pages/account/OnboardingGateway";
+import NovaVerifyPage from "@/pages/account/NovaVerifyPage";
 import GoogleDrivePage from "@/pages/integrations/GoogleDrivePage";
 import GoogleCalendarPage from "@/pages/biz-dashboard/GoogleCalendarPage";
 import GoogleTasksPage from "@/pages/biz-dashboard/GoogleTasksPage";
@@ -47,12 +47,11 @@ import MyAccount from "@/pages/account/MyAccount";
 import CustomerSiteManager from "@/pages/owner/CustomerSiteManager";
 import VoiceLeadMachine from "@/pages/biz-dashboard/VoiceLeadMachine";
 import SitesAndLeads from "@/pages/owner/SitesAndLeads";
+import MixingBoard from "@/pages/reseller/MixingBoard";
 import CommandChat from "@/pages/agents/CommandChat";
 import InquiryManagement from "@/pages/owner/InquiryManagement";
 import CallTracking from "@/pages/biz-dashboard/CallTracking";
 import TransparencyDashboard from "@/pages/biz-dashboard/TransparencyDashboard";
-import ClaimSite from "@/pages/customer/ClaimSite";
-import BailRescue from "@/pages/customer/BailRescue";
 import ContactForm from "@/pages/customer/ContactForm";
 import CustomerChatInterface from "@/pages/customer/CustomerChatInterface";
 import OwnerChatInterface from "@/pages/owner/OwnerChatInterface";
@@ -66,14 +65,7 @@ import TestB2b from "@/pages/showcase/TestB2b";
 import OlympicB2b from "@/pages/showcase/OlympicB2b";
 import AgentPortal from "@/pages/showcase/AgentPortal";
 import NotFound from "@/pages/admin/not-found";
-import { ErrorNavigator } from "@/pages/error/ErrorNavigator";
-import { useBreadcrumbTracker } from "@/hooks/use-breadcrumb";
 import { Loader2 } from "lucide-react";
-
-function BreadcrumbTracker() {
-  useBreadcrumbTracker();
-  return null;
-}
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
 
 function ServerPanel() {
@@ -141,7 +133,7 @@ function GlobalConfig() {
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">AI Provider</p>
-            <p className="text-white font-medium">Moonshot AI (Kimi K2.5)</p>
+            <p className="text-white font-medium">Google Gemini</p>
           </div>
           <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Telephony Provider</p>
@@ -149,7 +141,7 @@ function GlobalConfig() {
           </div>
           <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Voice AI</p>
-            <p className="text-white font-medium">Kimi-Audio (Replicate)</p>
+            <p className="text-white font-medium">Gemini Native Audio</p>
           </div>
           <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Task Scheduler</p>
@@ -294,7 +286,8 @@ function AppRouter() {
       <Route path="/gateway-admin" component={GatewayAdmin} />
       <Route path="/telephony" component={TelephonyManager} />
       <Route path="/billing" component={BillingPage} />
-      <Route path="/reseller/payouts" component={PayoutDashboard} />
+      <Route path="/account/nova-verify" component={NovaVerifyPage} />
+      <Route path="/compliance-gateway" component={OnboardingGateway} />
       <Route path="/google-drive" component={GoogleDrivePage} />
       <Route path="/google-calendar" component={GoogleCalendarPage} />
       <Route path="/google-tasks" component={GoogleTasksPage} />
@@ -328,6 +321,7 @@ function AppRouter() {
       {/* BusinessPage moved to public routes */}
       <Route path="/lead-machine" component={VoiceLeadMachine} />
       <Route path="/sites-leads" component={SitesAndLeads} />
+      <Route path="/mixing-board" component={MixingBoard} />
       <Route path="/inquiries" component={InquiryManagement} />
       <Route path="/call-tracking" component={CallTracking} />
       <Route path="/transparency" component={TransparencyDashboard} />
@@ -397,18 +391,15 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <CustomerAuthProvider>
-            <BreadcrumbTracker />
             <Switch>
               {/* Public routes */}
-              <Route path="/error" component={ErrorNavigator} />
               <Route path="/" component={BusinessPage} />
               <Route path="/business" component={BusinessPage} />
               <Route path="/demo" component={BusinessPage} />
               <Route path="/login" component={Login} />
               <Route path="/contact" component={ContactForm} />
               <Route path="/v2" component={LandingV2} />
-              <Route path="/franchise" component={ResellerRecruitment} />
-              <Route path="/kimi-audio" component={KimiAudioDemo} />
+              {/* /kimi-audio route removed — Gemini Live handles all voice demos */}
               <Route path="/sdk" component={SdkShowcase} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
               <Route path="/chat/customer" component={CustomerChatInterface} />
@@ -427,10 +418,6 @@ function App() {
               <Route path="/test-b2b" component={AgentPortal} />
               <Route path="/test-b2b-olympic" component={OlympicB2b} />
               <Route path="/test-b2b-wireframe" component={TestB2b} />
-              {/* Site claim / invite flow — public, token-gated */}
-              <Route path="/claim/:token" component={ClaimSite} />
-              {/* Bail rescue — outside payer deep-link from SMS */}
-              <Route path="/rescue/:token" component={BailRescue} />
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
               <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />

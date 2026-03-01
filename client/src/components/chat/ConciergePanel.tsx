@@ -15,10 +15,9 @@
  * - Auto-restart on settings change
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useRef, startTransition } from 'react';
 import { 
-  X, Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield, ArrowLeft
+  X, Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield 
 } from 'lucide-react';
 import { VoiceClientFactory } from '../../services/voice/VoiceClientFactory';
 import { IVoiceClient } from '../../services/voice/IVoiceClient';
@@ -27,8 +26,6 @@ import { VoiceSettings } from '../voice/VoiceSettings';
 import { ToolRouter } from '../voice/tools/ToolRouter';
 import { SuccessAnimation } from '../voice/animations/SuccessAnimation';
 import { useVoiceAnimations } from '../voice/animations/useVoiceAnimations';
-import { AgentDirectoryMenu } from '../voice/AgentDirectoryMenu';
-import { AgentsMap, AgentDefinition } from '../../types/entryPoints';
 
 interface ConciergePanelProps {
   business: BusinessContext;
@@ -44,18 +41,6 @@ interface ConciergePanelProps {
   onOpenAdmin?: () => void;
   className?: string;
   zIndex?: number;
-  /**
-   * Dynamic Entry Point Engine props.
-   * When directoryMode=true the panel opens the AgentDirectoryMenu first
-   * and waits for the user to select a specialty agent before connecting.
-   */
-  directoryMode?: boolean;
-  /** Pre-selected agentId from a direct VOICE_AGENT / CHAT_AGENT entry point. */
-  agentId?: string;
-  /** Click-time metaPrompt — sent in sessionContext, compiled server-side by the proxy. */
-  metaPrompt?: string;
-  /** Available specialty agents from knowledgeLibrary.agents */
-  agents?: AgentsMap;
 }
 
 interface ChatMessage {
@@ -78,39 +63,9 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   onCycleLayout,
   onOpenAdmin,
   className = '',
-  zIndex = 50,
-  directoryMode = false,
-  agentId: initialAgentId,
-  metaPrompt: initialMetaPrompt,
-  agents = {},
+  zIndex = 50
 }) => {
   const siteConfigId = business.id;
-  const isValidSiteConfigId = !!(siteConfigId && siteConfigId !== 'undefined' && siteConfigId !== '');
-
-  // --- Dynamic Entry Point State ---
-  // showDirectory=true means we wait for the user to pick an agent before connecting.
-  const [showDirectory, setShowDirectory] = useState(directoryMode && !initialAgentId);
-  const [activeAgentId, setActiveAgentId] = useState<string | undefined>(initialAgentId);
-  const [activeMetaPrompt, setActiveMetaPrompt] = useState<string | undefined>(initialMetaPrompt);
-  const [activeAgentName, setActiveAgentName] = useState<string | undefined>(agentName);
-
-  // Reset directory state whenever the panel opens
-  useEffect(() => {
-    if (isOpen) {
-      setShowDirectory(directoryMode && !initialAgentId);
-      setActiveAgentId(initialAgentId);
-      setActiveMetaPrompt(initialMetaPrompt);
-      setActiveAgentName(agentName);
-    }
-  }, [isOpen, directoryMode, initialAgentId, initialMetaPrompt, agentName]);
-
-  const handleAgentSelect = useCallback((selectedId: string, selectedAgent: AgentDefinition) => {
-    setActiveAgentId(selectedId);
-    setActiveAgentName(selectedAgent.name);
-    // Use the agent's persona as the metaPrompt — the proxy will compile it with sovereignTruths
-    setActiveMetaPrompt(selectedAgent.persona);
-    setShowDirectory(false);
-  }, []);
 
   // --- State ---
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -129,7 +84,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
   // --- Engine Initialization ---
   useEffect(() => {
-    if (!isOpen || showDirectory) {
+    if (!isOpen) {
       if (clientRef.current) {
         clientRef.current.disconnect();
         clientRef.current = null;
@@ -141,43 +96,51 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       setConnectionStatus('connecting');
       try {
         // --- HANDOVER SERVICE LOGIC ---
-        // 1. Fetch the pre-validated configuration from the server (only when a valid ID is available).
-        let siteConfig: { geminiModelId?: string; systemPromptOverride?: string } = {};
-        if (isValidSiteConfigId) {
+        // Guard: only call the Handover Service when we have a real DB UUID.
+        // WebsitePreview (demo/preview mode) passes business.id = '' — in that
+        // case we skip the fetch and initialise directly from the props config.
+        const hasValidId = Boolean(siteConfigId) && siteConfigId !== 'undefined' && siteConfigId !== '';
+
+        // Resolved DB record (only populated when hasValidId === true)
+        let dbSiteConfig: Record<string, any> | null = null;
+        let validatedVoiceConfig: VoiceConfig = currentVoiceConfig;
+
+        if (hasValidId) {
+          // 1. Fetch the pre-validated configuration from the Handover Service.
           const response = await fetch(`/api/site-configs/${siteConfigId}`);
-          if (response.ok) {
-            siteConfig = await response.json();
-          } else if (response.status === 404) {
-            // 404 = new customer, no config saved yet — proceed with defaults.
-            console.info(`[ConciergePanel] No site config found for ID ${siteConfigId} (new customer). Using defaults.`);
-          } else {
-            // Any other error is an infrastructure problem — hard fail so it is visible.
+          if (!response.ok) {
             throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
           }
+          dbSiteConfig = await response.json();
+
+          // 2. Merge the validated Model ID and voice name — Backend Config > Prop > Fallback
+          const dbVoiceConfig = dbSiteConfig!.voiceConfig as { voiceName?: string } | null | undefined;
+          validatedVoiceConfig = {
+            ...currentVoiceConfig,
+            model: dbSiteConfig!.modelName || currentVoiceConfig.model || process.env.GEMINI_MODEL_ID || "gemini-2.5-flash-native-audio-preview-12-2025",
+            voiceName: dbVoiceConfig?.voiceName ?? currentVoiceConfig.voiceName,
+          };
         }
 
-        // Allowed Gemini native-audio model IDs. Guards against typos entered in the admin panel.
-        const ALLOWED_MODELS = new Set([
-          'gemini-2.5-flash-native-audio-preview-12-2025',
-          'gemini-2.0-flash-live-001',
-          'gemini-2.5-flash-exp-native-audio-thinking-dialog',
-        ]);
-        const backendModelId = siteConfig.geminiModelId;
-        const resolvedModel = (backendModelId && ALLOWED_MODELS.has(backendModelId))
-          ? backendModelId
-          : currentVoiceConfig.model || 'gemini-2.5-flash-native-audio-preview-12-2025';
-        if (backendModelId && !ALLOWED_MODELS.has(backendModelId)) {
-          console.warn(`[ConciergePanel] Ignoring unknown model ID from site config: "${backendModelId}". Falling back to default.`);
-        }
+        // 3. Build resolvedAgent — DB persona takes priority over static prop.
+        //    agentConfig fields: { name, role, discProfile, basePrompt }
+        const dbAgentConfig = dbSiteConfig?.agentConfig as {
+          name?: string;
+          role?: string;
+          discProfile?: string;
+          basePrompt?: string;
+        } | null | undefined;
 
-        // 2. MERGE the validated Model ID into the current voice config
-        const validatedVoiceConfig: VoiceConfig = {
-          ...currentVoiceConfig,
-          // Priority: Backend Config (whitelisted) > Prop > Fallback
-          model: resolvedModel
-        };
+        const resolvedAgent: AgentConfig = dbAgentConfig ? {
+          ...agent,
+          role: [dbAgentConfig.name, dbAgentConfig.role].filter(Boolean).join(', ') || agent.role,
+          personality: [
+            dbAgentConfig.basePrompt,
+            dbAgentConfig.discProfile ? `DISC Profile: ${dbAgentConfig.discProfile}` : undefined
+          ].filter(Boolean).join('. ') || agent.personality,
+        } : agent;
 
-        console.log('[ConciergePanel] Initializing with verified model:', validatedVoiceConfig.model);
+        console.log('[ConciergePanel] Initializing with model:', validatedVoiceConfig.model, '| Persona:', resolvedAgent.role, hasValidId ? '(Handover Service)' : '(props — preview mode)');
 
         // 3. Create client with the VALIDATED config
         const newClient = VoiceClientFactory.createClient(validatedVoiceConfig);
@@ -220,23 +183,6 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             } else if (msg.metadata?.tool_type) {
               // Tool result without text (e.g. map, business intelligence)
               addMessage('assistant', undefined, msg.metadata);
-
-              // Show SuccessAnimation when an onboarding email is confirmed sent
-              if (msg.metadata.tool_type === 'email_sent') {
-                setShowSuccessAnimation(true);
-                setTimeout(() => setShowSuccessAnimation(false), 3000);
-              }
-
-              // Surface upgrade / workspace-connect notices from MCP tool errors.
-              if (msg.metadata.tool_type === 'mcp_action') {
-                let notice: string | undefined;
-                if (msg.metadata.ui_action === 'SHOW_UPGRADE_MODAL') {
-                  notice = '⚠️ Voice or Enterprise plan required to use Workspace tools. Upgrade in your Admin Panel.';
-                } else if (msg.metadata.ui_action === 'SHOW_WORKSPACE_CONNECT') {
-                  notice = '🔗 Google Workspace is not connected. Go to Admin Panel → Workspace tab to connect it.';
-                }
-                if (notice) addMessage('system', notice);
-              }
             }
           } else if (msg.type === 'error') {
             setIsProcessing(false);
@@ -245,24 +191,20 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         });
 
         newClient.onVolumeChange((volume) => {
-          setVolumeLevel(volume);
+          startTransition(() => setVolumeLevel(volume));
         });
 
         newClient.onConnectionChange((connected) => {
           setConnectionStatus(connected ? 'connected' : 'disconnected');
         });
 
-        // 4. Connect using the fetched, validated system prompt and validated config.
-        // entryPointAgentId and entryPointMetaPrompt flow into sessionContext in
-        // GeminiStreamingClient — the proxy compiles the master instruction server-side.
-        const handoverBusinessContext = {
-          ...business,
-          systemPromptOverride: siteConfig.systemPromptOverride,
-          entryPointAgentId: activeAgentId,
-          entryPointMetaPrompt: activeMetaPrompt,
-        };
+        // 4. Connect — enrich context with DB-validated systemPromptOverride when
+        //    Handover Service ran; in preview mode use business as-is.
+        const handoverBusinessContext = dbSiteConfig
+          ? { ...business, systemPromptOverride: dbSiteConfig.systemPromptOverride }
+          : business;
 
-        await newClient.connect(handoverBusinessContext, agent, validatedVoiceConfig);
+        await newClient.connect(handoverBusinessContext, resolvedAgent, validatedVoiceConfig);
         clientRef.current = newClient;
         
         console.log('[ConciergePanel] Voice engine connected successfully');
@@ -285,8 +227,12 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         clientRef.current = null;
       }
     };
-  // showDirectory triggers reconnect when the user selects an agent from the directory
-  }, [isOpen, showDirectory, currentVoiceConfig, siteConfigId, business.name, activeAgentId, activeMetaPrompt]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Deps: `siteConfigId` (primitive) replaces the full `business` object reference
+  // so that inline object literals in calling components (e.g. WebsitePreview) do
+  // not create new references on every render and trigger an infinite re-connect.
+  // `currentVoiceConfig` is React state so its identity is already stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, siteConfigId, currentVoiceConfig]);
 
   // Auto-scroll
   useEffect(() => {
@@ -400,29 +346,16 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     >
       
       {/* 1. TOP HEADER - 15% */}
-      <div className="h-[15%] flex items-center justify-between px-4 py-2 bg-[#1e293b] border-b border-white/10 text-white shrink-0">
+      <div className="h-[15%] flex items-center justify-between px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white shrink-0">
         <div className="flex items-center gap-3">
-          {/* Back button — shown when user entered via directory and can return to agent list */}
-          {directoryMode && !showDirectory && (
-            <button
-              onClick={() => { setShowDirectory(true); setMessages([]); }}
-              className="p-1.5 hover:bg-white/10 rounded-lg transition-colors mr-1"
-              title="Back to Agent Directory"
-            >
-              <ArrowLeft size={16} />
-            </button>
-          )}
           <div className={`w-3 h-3 rounded-full ${
-            showDirectory ? 'bg-indigo-400 animate-pulse' :
             connectionStatus === 'connected' ? 'bg-green-400 animate-pulse shadow-lg shadow-green-400/50' : 
             connectionStatus === 'connecting' ? 'bg-yellow-400 animate-pulse' :
             'bg-red-400'
           }`} />
           <div>
-            <h3 className="font-bold text-base">
-              {showDirectory ? 'Agent Directory' : (activeAgentName || agentName || agent.role)}
-            </h3>
-            <p className="text-[10px] text-white/60 tracking-wide font-medium">
+            <h3 className="font-bold text-base">{agentName || agent.role}</h3>
+            <p className="text-[10px] text-white/70 tracking-wide font-medium">
               {business.name.toUpperCase()}
             </p>
           </div>
@@ -517,40 +450,19 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       </div>
 
       {/* 3. CONTENT WINDOW - 40% (Multimodal Communication Area) */}
-      <div className="h-[40%] bg-[#0f172a] overflow-y-auto shrink-0 border-y border-white/5">
-        <AnimatePresence mode="wait">
-          {showDirectory ? (
-            <motion.div
-              key="directory"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.25 }}
-              className="h-full"
-            >
-              <AgentDirectoryMenu
-                agents={agents}
-                onSelectAgent={handleAgentSelect}
-              />
-            </motion.div>
-          ) : messages.length === 0 ? (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="h-full flex flex-col items-center justify-center text-center px-8"
-            >
-              <Mic className="w-12 h-12 mb-3 text-indigo-500/40" />
-              <p className="text-sm font-medium text-slate-300">Hold the button below to speak</p>
-              {activeAgentName && (
-                <p className="text-xs mt-1 text-indigo-400">Speaking with: {activeAgentName}</p>
-              )}
-              <p className="text-xs mt-2 text-slate-500">
-                Voice input & AI responses appear here
-              </p>
-            </motion.div>
-          ) : (
+      <div className="h-[40%] bg-white overflow-y-auto shrink-0 border-y border-gray-200">
+        {messages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center px-8 text-gray-400">
+            <Mic className="w-12 h-12 mb-3 text-gray-300" />
+            <p className="text-sm font-medium text-gray-600">Hold the button below to speak</p>
+            <p className="text-xs mt-2 text-gray-400">
+              Voice input & AI responses appear here
+            </p>
+            <p className="text-[10px] mt-4 text-gray-300 max-w-xs">
+              This window supports multimodal content: maps, forms, catalogs, and interactive tools
+            </p>
+          </div>
+        ) : (
           <div className="space-y-3 p-4">
             {messages.map((msg) => {
               // Check if this is a tool message (map, form, catalog, etc.)
@@ -623,12 +535,11 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             })}
             <div ref={messagesEndRef} />
           </div>
-          )}
-        </AnimatePresence>
+        )}
       </div>
 
       {/* 4. BOTTOM FOOTER - 25% */}
-      <div className="h-[25%] bg-[#0f172a] border-t border-white/5 flex flex-col items-center justify-center gap-3 px-4 py-3 shrink-0">
+      <div className="h-[25%] bg-gradient-to-b from-gray-50 to-white flex flex-col items-center justify-center gap-3 px-4 py-3 shrink-0">
         
         {/* Optional Action Buttons Row (LEFT - PTT - RIGHT layout) */}
         <div className="flex items-center justify-center gap-3 w-full">
@@ -647,19 +558,16 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             onMouseLeave={stopPTT}
             onTouchStart={(e) => { e.preventDefault(); startPTT(); }}
             onTouchEnd={(e) => { e.preventDefault(); stopPTT(); }}
-            onContextMenu={(e) => e.preventDefault()}
-            disabled={showDirectory || connectionStatus !== 'connected'}
-            className={`w-[50%] h-14 rounded-xl font-bold text-sm tracking-wider transition-all transform active:scale-95 shadow-lg disabled:opacity-40 disabled:cursor-not-allowed select-none ${
-              showDirectory
-                ? 'bg-indigo-900/50 text-indigo-300'
-                : isRecording 
-                ? 'bg-gradient-to-r from-indigo-500 to-blue-600 text-white shadow-indigo-500/50 ring-4 ring-indigo-300/30' 
+            disabled={connectionStatus !== 'connected'}
+            className={`w-[50%] h-14 rounded-xl font-bold text-sm tracking-wider transition-all transform active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed select-none ${
+              isRecording 
+                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/50 ring-4 ring-blue-300/30' 
                 : isProcessing
                 ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-purple-500/50 animate-pulse'
-                : 'bg-gradient-to-r from-slate-700 to-slate-800 text-white hover:from-indigo-600 hover:to-blue-700 shadow-slate-900/50'
+                : 'bg-gradient-to-r from-gray-800 to-gray-900 text-white hover:from-blue-600 hover:to-blue-700 shadow-gray-800/50'
             }`}
           >
-            {showDirectory ? '← Select an Agent' : isRecording ? '🎤 LISTENING...' : isProcessing ? '⏳ PROCESSING...' : '🎙️ HOLD TO SPEAK'}
+            {isRecording ? '🎤 LISTENING...' : isProcessing ? '⏳ PROCESSING...' : '🎙️ HOLD TO SPEAK'}
           </button>
 
           {/* Right Button: Restart */}
@@ -679,20 +587,15 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         </div>
 
         {/* Footer Info */}
-        <div className="flex items-center justify-between w-full text-[10px] text-slate-500">
+        <div className="flex items-center justify-between w-full text-[10px] text-gray-400">
           <span>
             {currentVoiceConfig.mode === 'clear_voice' ? '⚡ Clear Voice' : '💬 Standard PTT'}
           </span>
-          <span>
-            Buffer: {currentVoiceConfig.bufferDelay || 800}ms
-          </span>
           <span className={`font-medium ${
-            showDirectory ? 'text-indigo-400' :
-            connectionStatus === 'connected' ? 'text-emerald-500' : 
-            connectionStatus === 'connecting' ? 'text-yellow-500' : 'text-red-500'
+            connectionStatus === 'connected' ? 'text-green-600' : 
+            connectionStatus === 'connecting' ? 'text-yellow-600' : 'text-red-600'
           }`}>
-            {showDirectory ? '◈ DIRECTORY' :
-             connectionStatus === 'connected' ? '● CONNECTED' : 
+            {connectionStatus === 'connected' ? '● CONNECTED' : 
              connectionStatus === 'connecting' ? '◐ CONNECTING' : '○ DISCONNECTED'}
           </span>
         </div>
@@ -705,8 +608,6 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         contained
         currentMode={currentVoiceConfig.mode === 'clear_voice' ? 'clear_voice' : 'standard'}
         currentConfig={{
-          bufferDelay: currentVoiceConfig.bufferDelay || 800,
-          silenceThreshold: currentVoiceConfig.silenceThreshold || -45,
           analysis: {
             detectEmotion: currentVoiceConfig.enableAnalysis?.emotion || currentVoiceConfig.analysis?.emotion || false,
             detectSentiment: currentVoiceConfig.enableAnalysis?.sentiment || currentVoiceConfig.analysis?.sentiment || false,
@@ -718,7 +619,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             ...currentVoiceConfig,
             ...newConfig
           });
-          addMessage('system', `Settings updated: Buffer ${newConfig.bufferDelay}ms. Reconnecting...`);
+          addMessage('system', 'Settings updated. Reconnecting...');
         }}
       />
     </div>

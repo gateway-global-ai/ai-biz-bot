@@ -24,7 +24,7 @@ import { Code2 } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
-import { useEntryPoints } from '@/hooks/useEntryPoints';
+import { ensureApiLoader, loadPlacesLibrary } from '@/utils/googleMapsLoader';
 
 import Pidea_logo_header__7_ from "@assets/Pidea logo header (7).png";
 
@@ -225,7 +225,6 @@ export default function BusinessPage() {
   });
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [mapsKey, setMapsKey] = useState<string | null>(null);
-  const [libLoaded, setLibLoaded] = useState(false);
   const [selectedPlace, setSelectedPlace] = useState<SelectedPlace | null>(null);
   const [mapsError, setMapsError] = useState<string | null>(null);
   const pickerContainerRef = useRef<HTMLDivElement>(null);
@@ -236,7 +235,7 @@ export default function BusinessPage() {
   const [gateStep, setGateStep] = useState<'phone' | 'otp'>('phone');
   const [otpCode, setOtpCode] = useState('');
   const [pendingLeadId, setPendingLeadId] = useState<string | null>(null);
-  const [previewTimer, setPreviewTimer] = useState(30); // 30-second gate before phone capture
+  const [previewTimer, setPreviewTimer] = useState(600); // 10 minutes to view preview and complete OTP
   const [trainingProgress, setTrainingProgress] = useState(0);
   const [demoLeadId, setDemoLeadId] = useState<string | null>(null);
   const [ownerName, setOwnerName] = useState('');
@@ -260,26 +259,6 @@ export default function BusinessPage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatLayout, setChatLayout] = useState<'floating' | 'fixed' | 'fullscreen'>('floating');
   const [initialView, setInitialView] = useState<'chat' | 'voice'>('voice');
-
-  // Dynamic Entry Point Engine — knowledgeLibrary not available on generic landing page;
-  // defaults are used and the owner can configure via AiBizBotAdmin → Gateway tab.
-  const { entryPoints, agents } = useEntryPoints(undefined);
-  const [activeMetaPrompt, setActiveMetaPrompt] = useState<string | undefined>();
-  const [activeAgentId, setActiveAgentId] = useState<string | undefined>();
-  const [activeDirectoryMode, setActiveDirectoryMode] = useState(false);
-
-  const openEntryPoint = (node: typeof entryPoints.heroPrimary) => {
-    if (!node.enabled) return;
-    if (node.type === 'LEGACY_PASSTHROUGH') {
-      if (node.url) window.open(node.url, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    setActiveMetaPrompt(node.metaPrompt || undefined);
-    setActiveAgentId(node.agentId || undefined);
-    setActiveDirectoryMode(node.type === 'AGENT_DIRECTORY');
-    setInitialView(node.type === 'CHAT_AGENT' ? 'chat' : 'voice');
-    setIsChatOpen(true);
-  };
   
   // Voice configuration - default to Premium (Clear Voice) for demo
   const voiceConfig = VoiceClientFactory.getDefaultConfig('premium');
@@ -363,87 +342,77 @@ export default function BusinessPage() {
   }, []);
 
   useEffect(() => {
-    if (!mapsKey) return;
-    if (document.querySelector('script[data-gmpx-lib]')) {
-      setLibLoaded(true);
-      return;
-    }
-    const script = document.createElement('script');
-    script.type = 'module';
-    script.src = 'https://ajax.googleapis.com/ajax/libs/@googlemaps/extended-component-library/0.6.11/index.min.js';
-    script.setAttribute('data-gmpx-lib', 'true');
-    script.onload = () => setLibLoaded(true);
-    script.onerror = () => setMapsError('Failed to load Google Maps library.');
-    document.head.appendChild(script);
-
-    (window as any).gm_authFailure = () => {
-      setMapsError('Google Maps API not activated. Enable "Maps JavaScript API" and "Places API" in Google Cloud Console.');
-    };
-  }, [mapsKey]);
-
-  useEffect(() => {
-    if (!libLoaded || !mapsKey || !pickerContainerRef.current) return;
+    // The EEL is loaded via the npm package (googleMapsLoader utility).
+    // No CDN <script> tag needed — custom elements are registered on import.
+    if (!mapsKey || !pickerContainerRef.current) return;
     const container = pickerContainerRef.current;
-    if (container.querySelector('gmpx-api-loader')) return;
 
-    const apiLoader = document.createElement('gmpx-api-loader');
-    apiLoader.setAttribute('key', mapsKey);
-    apiLoader.setAttribute('solution-channel', 'GMP_GE_mapsandplacesautocomplete_v2');
-    container.appendChild(apiLoader);
+    // Inject the <gmpx-api-loader> singleton (document-level guard in utility).
+    ensureApiLoader(mapsKey);
 
-    const placePicker = document.createElement('gmpx-place-picker') as any;
-    placePicker.setAttribute('placeholder', 'What is your business name?');
-    placePicker.setAttribute('data-testid', 'input-place-search');
-    placePicker.style.cssText = 'width:100%;--gmpx-color-surface:transparent;--gmpx-color-on-surface:#e2e8f0;--gmpx-color-on-surface-variant:#64748b;--gmpx-color-primary:#818cf8;--gmpx-color-outline:transparent;--gmpx-font-family-base:inherit;--gmpx-font-size-base:1.1rem;border:none;outline:none;';
-
-    const removeBorder = () => {
-      const shadow = placePicker.shadowRoot;
-      if (shadow) {
-        const style = document.createElement('style');
-        style.textContent = `
-          :host { border: none !important; outline: none !important; }
-          * { border-color: transparent !important; outline: none !important; }
-          .container, .input-container, [class*="container"] { border: none !important; border-color: transparent !important; }
-          input { border: none !important; outline: none !important; background: transparent !important; }
-        `;
-        shadow.appendChild(style);
-      } else {
-        requestAnimationFrame(removeBorder);
-      }
+    // Surface API-key auth failures in the component UI.
+    (window as any).gm_authFailure = () => {
+      setMapsError('Google Maps API not activated. Enable "Maps JavaScript API" and "Places API (New)" in Google Cloud Console.');
     };
-    requestAnimationFrame(removeBorder);
 
-    placePicker.addEventListener('gmpx-placechange', async () => {
-      const place = placePicker.value;
-      if (place && (place.displayName || place.name)) {
-        const placeId = place.id ?? place.place_id ?? undefined;
+    let cancelled = false;
+
+    const setup = async () => {
+      const { PlaceAutocompleteElement } = await loadPlacesLibrary();
+      if (cancelled) return;
+
+      const autocomplete = new PlaceAutocompleteElement();
+      autocomplete.setAttribute('placeholder', 'What is your business name?');
+      autocomplete.setAttribute('data-testid', 'input-place-search');
+      autocomplete.style.cssText = 'width:100%;display:block;';
+
+      // Transparent / borderless styling to match the original design
+      const applyStyles = () => {
+        const shadow = (autocomplete as any).shadowRoot;
+        if (shadow) {
+          const style = document.createElement('style');
+          style.textContent = `
+            input { background:transparent!important;color:#e2e8f0!important;font-size:1.1rem!important;
+                    font-family:inherit!important;border:none!important;outline:none!important;
+                    width:100%!important;padding:4px 0!important; }
+            input::placeholder { color:#64748b!important; }
+          `;
+          shadow.appendChild(style);
+        } else {
+          requestAnimationFrame(applyStyles);
+        }
+      };
+      requestAnimationFrame(applyStyles);
+
+      autocomplete.addEventListener('gmp-placeselect', async (event: any) => {
+        const { placePrediction } = event;
+        if (!placePrediction) return;
+
+        const place = placePrediction.toPlace();
+        await place.fetchFields({
+          fields: ['id', 'displayName', 'formattedAddress', 'location', 'types', 'rating',
+                   'userRatingCount', 'nationalPhoneNumber', 'websiteURI', 'photos', 'regularOpeningHours'],
+        });
+
+        if (!place.displayName) return;
+
+        const placeId = place.id ?? undefined;
         let geometry: { lat: number; lng: number } | undefined;
         if (place.location) {
-          const loc = place.location;
-          const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
-          const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
-          if (typeof lat === 'number' && typeof lng === 'number') {
-            geometry = { lat, lng };
-          }
-        } else if (place.geometry?.location) {
-          const loc = place.geometry.location;
-          const lat = typeof loc.lat === 'function' ? loc.lat() : loc.lat;
-          const lng = typeof loc.lng === 'function' ? loc.lng() : loc.lng;
-          if (typeof lat === 'number' && typeof lng === 'number') {
-            geometry = { lat, lng };
-          }
+          geometry = { lat: place.location.lat(), lng: place.location.lng() };
         }
+
         const placeData: SelectedPlace = {
-          name: place.displayName || place.name || '',
-          formatted_address: place.formattedAddress || place.formatted_address || '',
+          name: place.displayName || '',
+          formatted_address: place.formattedAddress || '',
           rating: place.rating ?? undefined,
-          user_ratings_total: place.userRatingCount ?? place.user_ratings_total ?? undefined,
-          formatted_phone_number: place.nationalPhoneNumber ?? place.formatted_phone_number ?? undefined,
-          website: place.websiteURI ?? place.website ?? undefined,
+          user_ratings_total: place.userRatingCount ?? undefined,
+          formatted_phone_number: place.nationalPhoneNumber ?? undefined,
+          website: place.websiteURI ?? undefined,
           types: place.types || [],
           place_id: placeId,
           photos: place.photos || [],
-          opening_hours: place.regularOpeningHours ?? place.opening_hours ?? undefined,
+          opening_hours: place.regularOpeningHours ?? undefined,
           reviews: [],
           geometry,
         };
@@ -486,11 +455,15 @@ export default function BusinessPage() {
             console.error('[Places] Failed to fetch details:', err);
           }
         }
-      }
-    });
+      });
 
-    container.appendChild(placePicker);
-  }, [libLoaded, mapsKey]);
+      container.appendChild(autocomplete);
+    };
+
+    setup().catch(err => console.error('[BusinessPage] Failed to load Places library:', err));
+
+    return () => { cancelled = true; container.innerHTML = ''; };
+  }, [mapsKey]);
 
   const handleGenerateWebsite = useCallback(() => {
     if (!selectedPlace) return;
@@ -522,7 +495,7 @@ export default function BusinessPage() {
 
   useEffect(() => {
     if (stage !== 'preview') return;
-    setPreviewTimer(30); // 30-second gate
+    setPreviewTimer(600); // 10 minutes
     const interval = setInterval(() => {
       setPreviewTimer(prev => {
         if (prev <= 1) {
@@ -689,21 +662,21 @@ export default function BusinessPage() {
   const showOverlay = stage === 'phone-gate' || stage === 'sending-link' || stage === 'training' || stage === 'demo-ready' || stage === 'name-gate';
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
-      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
-        <img src={Pidea_logo_header__7_} alt="Gateway Global AI" className="h-20 w-auto relative z-10" style={{ filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))' }} />
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-white/20 shadow-sm px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
+        <img src={Pidea_logo_header__7_} alt="Gateway Global AI" className="h-20 w-auto relative z-10" style={{ filter: 'drop-shadow(0 2px 8px rgba(19,70,160,0.15))' }} />
         <div className="flex items-center gap-2 justify-end">
           <ShareButton
             shareTitle="Gateway Global AI - AI-Powered Business Websites"
             shareText="Gateway Global AI creates professional AI-powered websites for businesses with voice concierge and chat support."
-            variant="dark"
+            variant="light"
             testIdPrefix="main-share"
           />
           {isCustomerAuth ? (
             <Button
               variant="ghost"
               size="sm"
-              className="text-slate-300 text-xs"
+              className="text-slate-600 text-xs"
               onClick={() => setLocation('/my-account')}
               data-testid="button-my-account"
             >
@@ -714,7 +687,7 @@ export default function BusinessPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-slate-300 text-xs"
+              className="text-slate-600 text-xs"
               onClick={() => setShowCustomerLoginModal(true)}
               data-testid="button-customer-login"
             >
@@ -973,8 +946,11 @@ export default function BusinessPage() {
           <div className="w-full max-w-5xl mx-auto flex flex-col items-center gap-6 md:gap-8">
             <div 
               style={{ marginBottom: '10px', cursor: 'pointer' }}
-              onClick={() => openEntryPoint(entryPoints.heroPrimary)}
-              title={entryPoints.heroPrimary.label || 'Click to start voice conversation'}
+              onClick={() => {
+                setInitialView('voice');
+                setIsChatOpen(true);
+              }}
+              title="Click to start voice conversation"
             >
               <VoiceVisualizer />
             </div>
@@ -987,9 +963,9 @@ export default function BusinessPage() {
             <div className="max-w-2xl w-full" data-testid="container-place-search">
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-                <div className="relative bg-slate-900 rounded-xl border-0 p-2 flex items-center gap-2">
+                <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
                   <div ref={pickerContainerRef} className="flex-1 min-w-0" />
-                  {!libLoaded && mapsKey && (
+                  {!mapsKey && (
                     <div className="pr-3">
                       <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
                     </div>
@@ -1016,7 +992,7 @@ export default function BusinessPage() {
         {selectedPlace && stage === 'landing' && (
           <div className="absolute inset-0 z-20 bg-slate-950/95 backdrop-blur-sm flex items-center justify-center px-6">
             <div className="max-w-lg w-full">
-              <Card className="bg-slate-900/90 border-blue-500/30 backdrop-blur-md">
+              <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
                 <CardContent className="p-6">
                   <div className="flex flex-col gap-4">
                     {selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getURI === 'function' ? (
@@ -1133,7 +1109,7 @@ export default function BusinessPage() {
       </section>
       */}
       {/* Enterprise Form */}
-      <section className="py-16 px-6 bg-slate-900/30 border-y border-slate-900">
+      <section className="py-16 px-6 bg-slate-900/20 border-y border-white/5">
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
           <div className="space-y-6">
             <h2 className="text-3xl font-bold text-white">Request Enterprise Access</h2>
@@ -1152,7 +1128,7 @@ export default function BusinessPage() {
             </div>
           </div>
 
-          <Card className="bg-slate-900/50 border-slate-800">
+          <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
             <CardContent className="p-8">
               {!isSubmitted ? (
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -1295,8 +1271,7 @@ export default function BusinessPage() {
         onSuccess={(data) => {
           customerLogin(data.token, data.user);
           setShowCustomerLoginModal(false);
-          toast({ title: 'Welcome back!', description: `Signed in as ${data.user.name || 'Business Owner'}` });
-          window.location.href = "/my-account";
+          toast({ title: 'Welcome!', description: `Signed in as ${data.user.name || 'Business Owner'}` });
         }}
         sendOtpEndpoint="/api/customer/send-otp"
         verifyOtpEndpoint="/api/customer/verify-otp"
@@ -1333,12 +1308,7 @@ export default function BusinessPage() {
         voiceConfig={voiceConfig}
         agentName={selectedPlace ? 'Ava' : 'Gateway AI Assistant'}
         isOpen={isChatOpen}
-        onClose={() => {
-          setIsChatOpen(false);
-          setActiveMetaPrompt(undefined);
-          setActiveAgentId(undefined);
-          setActiveDirectoryMode(false);
-        }}
+        onClose={() => setIsChatOpen(false)}
         initialView={initialView}
         layoutMode={chatLayout}
         onCycleLayout={() => {
@@ -1347,10 +1317,10 @@ export default function BusinessPage() {
           const nextMode = modes[(currentIndex + 1) % modes.length];
           setChatLayout(nextMode);
         }}
-        directoryMode={activeDirectoryMode}
-        agentId={activeAgentId}
-        metaPrompt={activeMetaPrompt}
-        agents={agents}
+        onOpenSettings={() => {
+          console.log('[BusinessPage] Open voice settings');
+          // TODO: Open settings modal
+        }}
         zIndex={60}
       />
     </div>

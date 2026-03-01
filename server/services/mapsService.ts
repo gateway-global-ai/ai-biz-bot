@@ -3,8 +3,10 @@
  * Handles Google Places API (New) and SerpApi (Reviews)
  */
 
+import { getServerMapsApiKey } from "../config/mapsApiKey";
+
 // ✅ ACCESS KEYS VIA DOPPLER-SYNCED ENVIRONMENT VARIABLES
-const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_API_KEY;
+const GOOGLE_MAPS_KEY = getServerMapsApiKey();
 const SERP_API_KEY = process.env.SERPAPI_KEY;
 
 /**

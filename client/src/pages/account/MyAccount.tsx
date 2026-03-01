@@ -1,38 +1,47 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { useCustomerAuth } from "@/lib/customerAuth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { PLAN_LIMITS, type PlanType } from "@shared/schema";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
-  User, Phone, Mail, Building2, Crown, LogOut, ArrowLeft,
-  Globe, Bot, Loader2, Check, ExternalLink, Sparkles,
-  Mic, Search, X, Copy, LayoutGrid, List, ImageOff, Brain,
+  User,
+  Phone,
+  Mail,
+  Building2,
+  LogOut,
+  ArrowLeft,
+  Globe,
+  Bot,
+  Loader2,
+  Check,
+  ExternalLink,
+  Search,
+  X,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Settings2,
+  Activity,
+  MessageSquare,
+  Mic2,
 } from "lucide-react";
-import gatewayLogo from "@assets/gatewaylogo_header_left_1770354860467.png";
-import { BillingHistory } from "@/components/dashboard/BillingHistory";
-import WebsitePlanUploader from "@/components/admin/WebsitePlanUploader";
 
-const containerVariants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.07 } },
-};
-const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
-};
-const cardVariants = {
-  hidden: { opacity: 0, y: 10, scale: 0.98 },
-  visible: (i: number) => ({
-    opacity: 1, y: 0, scale: 1,
-    transition: { duration: 0.28, ease: "easeOut", delay: i * 0.06 },
-  }),
-};
+// ── Pricing constants sourced from .system_design/pricing_v1.yaml ─────────────
+const SOVEREIGN_PRICING = {
+  flatFeeMonthly: 49,
+  overagePhoneVoice: 0.25,
+  overageWebVoice: 0.18,
+  overageA2pSms: 0.125,
+  gracePeriodDays: 30,
+} as const;
+import gatewayLogo from "@assets/gatewaylogo_header_left_1770354860467.png";
+import { ensureApiLoader, loadPlacesLibrary } from "@/utils/googleMapsLoader";
 
 export default function MyAccount() {
   const { user, token, logout, updateUser, isAuthenticated, isLoading } = useCustomerAuth();
@@ -44,12 +53,7 @@ export default function MyAccount() {
   const [emailValue, setEmailValue] = useState("");
   const [showAddBusiness, setShowAddBusiness] = useState(false);
   const [addingBusiness, setAddingBusiness] = useState(false);
-  const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [planTabs, setPlanTabs] = useState<Record<string, PlanType>>({});
-  const [intelligenceOpen, setIntelligenceOpen] = useState<Record<string, boolean>>({});
   const [mapsKey, setMapsKey] = useState<string | null>(null);
-  const [mapsLibLoaded, setMapsLibLoaded] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -61,117 +65,117 @@ export default function MyAccount() {
   }, [showAddBusiness]);
 
   useEffect(() => {
-    if (!showAddBusiness || !mapsKey) return;
-    const existingLib = document.querySelector("script[data-gmpx-lib]");
-    if (existingLib) { setMapsLibLoaded(true); return; }
-    const script = document.createElement("script");
-    script.type = "module";
-    script.src = "https://ajax.googleapis.com/ajax/libs/@googlemaps/extended-component-library/0.6.11/index.min.js";
-    script.setAttribute("data-gmpx-lib", "true");
-    script.async = true;
-    script.onload = () => setMapsLibLoaded(true);
-    document.head.appendChild(script);
-  }, [showAddBusiness, mapsKey]);
-
-  useEffect(() => {
-    if (!mapsLibLoaded || !mapsKey || !pickerRef.current || !showAddBusiness) return;
+    // The EEL is loaded via the npm package (googleMapsLoader utility).
+    // No CDN <script> tag needed — custom elements are registered on import.
+    if (!mapsKey || !pickerRef.current || !showAddBusiness) return;
     const container = pickerRef.current;
     container.innerHTML = "";
 
-    const existingLoader = document.querySelector("gmpx-api-loader");
-    if (!existingLoader) {
-      const apiLoader = document.createElement("gmpx-api-loader");
-      apiLoader.setAttribute("key", mapsKey);
-      apiLoader.setAttribute("solution-channel", "GMP_GE_mapsandplacesautocomplete_v2");
-      container.appendChild(apiLoader);
-    }
+    // Inject the <gmpx-api-loader> singleton (document-level guard in utility).
+    ensureApiLoader(mapsKey);
 
-    const placePicker = document.createElement("gmpx-place-picker") as any;
-    placePicker.setAttribute("placeholder", "Search for your business...");
-    placePicker.setAttribute("data-testid", "input-add-business-search");
-    placePicker.style.cssText =
-      "width:100%;--gmpx-color-surface:rgb(15 23 42);--gmpx-color-on-surface:#e2e8f0;" +
-      "--gmpx-color-on-surface-variant:#64748b;--gmpx-color-primary:#818cf8;" +
-      "--gmpx-color-outline:#334155;--gmpx-font-family-base:inherit;--gmpx-font-size-base:0.95rem;" +
-      "border:1px solid #334155;border-radius:14px;";
+    let autocomplete: any = null;
+    let cancelled = false;
 
     const phone = user?.phone || "";
-    const handlePlaceChange = async () => {
-      const place = placePicker.value;
-      if (!place || !(place.displayName || place.name)) return;
 
-      const placeId = place.id ?? place.place_id ?? undefined;
-      const businessName = place.displayName || place.name || "";
-      const businessAddress = place.formattedAddress || place.formatted_address || "";
+    const setup = async () => {
+      const { PlaceAutocompleteElement } = await loadPlacesLibrary();
+      if (cancelled) return;
 
-      let placeData: any = {
-        name: businessName, formatted_address: businessAddress, place_id: placeId,
-      };
-      if (place.types) placeData.types = place.types;
-      if (place.rating) placeData.rating = place.rating;
-      if (place.userRatingCount) placeData.user_ratings_total = place.userRatingCount;
-      if (place.location) {
-        placeData.geometry = { location: { lat: place.location.lat(), lng: place.location.lng() } };
-      }
+      autocomplete = new PlaceAutocompleteElement();
+      autocomplete.setAttribute("placeholder", "Search for your business...");
+      autocomplete.setAttribute("data-testid", "input-add-business-search");
+      autocomplete.style.cssText = "width:100%;display:block;border:1px solid #334155;border-radius:0.5rem;overflow:hidden;";
 
-      if (placeId) {
-        try {
-          const detailsRes = await fetch(`/api/places/details/${encodeURIComponent(placeId)}`);
-          if (detailsRes.ok) {
-            const details = await detailsRes.json();
-            placeData = {
-              ...placeData,
-              ...(details.photos?.length ? { photos: details.photos } : {}),
-              ...(details.opening_hours ? { opening_hours: details.opening_hours } : {}),
-              ...(details.formatted_phone_number ? { formatted_phone_number: details.formatted_phone_number } : {}),
-              ...(details.international_phone_number ? { international_phone_number: details.international_phone_number } : {}),
-              ...(details.website ? { website: details.website } : {}),
-              ...(details.geometry ? { geometry: details.geometry } : {}),
-              ...(details.rating ? { rating: details.rating } : {}),
-              ...(details.user_ratings_total ? { user_ratings_total: details.user_ratings_total } : {}),
-              ...(details.types ? { types: details.types } : {}),
-              ...(details.editorial_summary ? { editorial_summary: details.editorial_summary } : {}),
-              ...(details.business_status ? { business_status: details.business_status } : {}),
-            };
-          }
-        } catch { /* Non-fatal */ }
-      }
-
-      if (!phone) {
-        toast({ title: "Error", description: "Phone number is missing from your account", variant: "destructive" });
-        return;
-      }
-
-      setAddingBusiness(true);
-      try {
-        const res = await fetch("/api/demo/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone, businessName, businessAddress, placeId: placeId || null, placeData }),
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || "Failed to create business");
+      // Apply dark theme inside the shadow DOM
+      requestAnimationFrame(() => {
+        const shadow = autocomplete?.shadowRoot;
+        if (shadow) {
+          const style = document.createElement("style");
+          style.textContent = `
+            input { background:rgb(15 23 42)!important;color:#e2e8f0!important;font-size:0.95rem!important;
+                    font-family:inherit!important;border:none!important;outline:none!important;
+                    width:100%!important;padding:8px 12px!important; }
+            input::placeholder { color:#64748b!important; }
+          `;
+          shadow.appendChild(style);
         }
-        await queryClient.invalidateQueries({ queryKey: ["/api/customer/businesses"] });
-        setShowAddBusiness(false);
-        toast({ title: "Business Added", description: `${businessName} has been created.` });
-      } catch (err: any) {
-        toast({ title: "Error", description: err.message || "Failed to add business", variant: "destructive" });
-      } finally {
-        setAddingBusiness(false);
-      }
+      });
+
+      const handlePlaceSelect = async (event: any) => {
+        const { placePrediction } = event;
+        if (!placePrediction) return;
+
+        const place = placePrediction.toPlace();
+        await place.fetchFields({ fields: ["id", "displayName", "formattedAddress", "location", "types", "rating", "userRatingCount"] });
+
+        if (!place.displayName) return;
+
+        const placeId = place.id ?? undefined;
+        const businessName = place.displayName || "";
+        const businessAddress = place.formattedAddress || "";
+
+        let placeData: any = {
+          name: businessName,
+          formatted_address: businessAddress,
+          place_id: placeId,
+        };
+        if (place.types) placeData.types = place.types;
+        if (place.rating) placeData.rating = place.rating;
+        if (place.userRatingCount) placeData.user_ratings_total = place.userRatingCount;
+        if (place.location) {
+          placeData.geometry = { location: { lat: place.location.lat(), lng: place.location.lng() } };
+        }
+
+        if (!phone) {
+          toast({ title: "Error", description: "Phone number is missing from your account", variant: "destructive" });
+          return;
+        }
+
+        setAddingBusiness(true);
+        try {
+          const res = await fetch("/api/demo/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phone,
+              businessName,
+              businessAddress,
+              placeId: placeId || null,
+              placeData,
+            }),
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || "Failed to create business");
+          }
+          await queryClient.invalidateQueries({ queryKey: ["/api/customer/businesses"] });
+          setShowAddBusiness(false);
+          toast({ title: "Business Added", description: `${businessName} has been created.` });
+        } catch (err: any) {
+          toast({ title: "Error", description: err.message || "Failed to add business", variant: "destructive" });
+        } finally {
+          setAddingBusiness(false);
+        }
+      };
+
+      autocomplete.addEventListener("gmp-placeselect", handlePlaceSelect);
+      container.appendChild(autocomplete);
+
+      setTimeout(() => {
+        const input = autocomplete?.shadowRoot?.querySelector("input");
+        if (input) (input as HTMLInputElement).focus();
+      }, 300);
     };
 
-    placePicker.addEventListener("gmpx-placechange", handlePlaceChange);
-    container.appendChild(placePicker);
-    setTimeout(() => { placePicker.shadowRoot?.querySelector("input")?.focus(); }, 300);
+    setup().catch(err => console.error("[MyAccount] Failed to load Places library:", err));
 
     return () => {
-      placePicker.removeEventListener("gmpx-placechange", handlePlaceChange);
+      cancelled = true;
       container.innerHTML = "";
     };
-  }, [mapsLibLoaded, mapsKey, showAddBusiness, user?.phone]);
+  }, [mapsKey, showAddBusiness, user?.phone]);
 
   const businessesQuery = useQuery({
     queryKey: ["/api/customer/businesses"],
@@ -186,11 +190,23 @@ export default function MyAccount() {
     enabled: isAuthenticated,
   });
 
+  const onboardingQuery = useQuery({
+    queryKey: ["/api/onboarding/status"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/onboarding/status");
+      return res.json();
+    },
+    enabled: isAuthenticated,
+  });
+
   const updateProfileMutation = useMutation({
     mutationFn: async (updates: { name?: string; email?: string }) => {
       const res = await fetch("/api/customer/profile", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(updates),
       });
       if (!res.ok) throw new Error("Failed to update profile");
@@ -207,19 +223,16 @@ export default function MyAccount() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
-          <Loader2 className="w-8 h-8 text-indigo-400" />
-        </motion.div>
+        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
       </div>
     );
   }
 
   if (!isAuthenticated || !user) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4 text-slate-400">
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4 text-slate-200">
         <p>Please log in to view your account.</p>
-        <Button variant="outline" onClick={() => setLocation("/business")} data-testid="button-go-login"
-          className="border-indigo-500/30 hover:border-indigo-500/60 text-slate-300">
+        <Button variant="outline" onClick={() => setLocation("/business")} data-testid="button-go-login">
           Go to Login
         </Button>
       </div>
@@ -227,485 +240,428 @@ export default function MyAccount() {
   }
 
   const businesses = businessesQuery.data || [];
-  const gradientPalette = [
-    "from-indigo-900/60 to-slate-900",
-    "from-violet-900/60 to-slate-900",
-    "from-emerald-900/60 to-slate-900",
-    "from-amber-900/60 to-slate-900",
-    "from-rose-900/60 to-slate-900",
-  ];
+  const onboarding = onboardingQuery.data;
+  const graceDaysElapsed = onboarding?.trialDaysElapsed ?? 0;
+  const graceActive = onboarding?.activationDate && (onboarding?.trialDaysRemaining ?? 0) > 0;
+  const graceExpired = onboarding?.activationDate && (onboarding?.trialDaysRemaining ?? 1) <= 0;
+  const gracePct = Math.min(100, Math.round((graceDaysElapsed / SOVEREIGN_PRICING.gracePeriodDays) * 100));
+  const complianceStatus: string | null = onboarding?.complianceStatus ?? null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
-      {/* Sovereign nav */}
-      <nav className="sticky top-0 z-50 sovereign-bar px-6 py-3 flex items-center justify-between gap-4">
+      <nav className="sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
         <div className="flex items-center gap-3">
-          <Button size="icon" variant="ghost" onClick={() => setLocation("/business")}
-            className="text-slate-400 hover:text-white hover:bg-slate-800/40" data-testid="button-back-home">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setLocation("/business")}
+            data-testid="button-back-home"
+          >
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <img src={gatewayLogo} alt="Gateway Global AI" className="h-9 w-auto opacity-90" />
+          <img
+            src={gatewayLogo}
+            alt="Gateway Global AI"
+            className="h-10 w-auto opacity-90"
+          />
         </div>
-        <Button variant="ghost" onClick={async () => { await logout(); setLocation("/business"); }}
-          className="text-slate-400 hover:text-white hover:bg-slate-800/40" data-testid="button-logout">
+        <Button
+          variant="ghost"
+          onClick={async () => {
+            await logout();
+            setLocation("/business");
+          }}
+          data-testid="button-logout"
+        >
           <LogOut className="w-4 h-4 mr-2" />
           Sign Out
         </Button>
       </nav>
 
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="max-w-4xl mx-auto px-6 py-8 space-y-5"
-      >
-        {/* Page header */}
-        <motion.div variants={itemVariants}>
-          <h1 className="text-3xl font-bold text-white" data-testid="text-my-account-title">My Account</h1>
-          <p className="text-slate-500 mt-1 text-sm">Manage your profile, plan, and AI-powered business websites.</p>
-        </motion.div>
+      <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white" data-testid="text-my-account-title">
+            Command Center
+          </h1>
+          <p className="text-slate-400 mt-1">
+            Sovereign AI OS · Account &amp; Governance
+          </p>
+        </div>
 
-        {/* Profile card */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-sui bg-slate-900/60 backdrop-blur-xl border border-indigo-500/15 p-6 shadow-xl"
-        >
+        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-11 h-11 rounded-[14px] bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center">
-              <User className="w-5 h-5 text-indigo-400" />
+            <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+              <User className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Profile</h2>
-              <p className="text-xs text-slate-500">Your account information</p>
+              <h2 className="text-lg font-semibold text-white">Profile</h2>
+              <p className="text-sm text-slate-400">Your account information</p>
             </div>
           </div>
 
-          <div className="space-y-3">
-            {/* Phone */}
-            <div className="flex items-center justify-between gap-4 py-2 border-b border-slate-800/60">
-              <div className="flex items-center gap-3 text-xs">
-                <Phone className="w-3.5 h-3.5 text-slate-600" />
-                <span className="text-slate-500">Phone</span>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 text-sm">
+                <Phone className="w-4 h-4 text-slate-500" />
+                <span className="text-slate-400">Phone</span>
               </div>
-              <span className="data-chip" data-testid="text-phone">{user.phone}</span>
+              <span className="text-white font-mono text-sm" data-testid="text-phone">{user.phone}</span>
             </div>
 
-            {/* Name */}
-            <div className="flex items-center justify-between gap-4 py-2 border-b border-slate-800/60">
-              <div className="flex items-center gap-3 text-xs">
-                <User className="w-3.5 h-3.5 text-slate-600" />
-                <span className="text-slate-500">Name</span>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 text-sm">
+                <User className="w-4 h-4 text-slate-500" />
+                <span className="text-slate-400">Name</span>
               </div>
               {editingName ? (
                 <div className="flex items-center gap-2">
-                  <Input value={nameValue} onChange={(e) => setNameValue(e.target.value)}
-                    className="h-7 w-44 bg-slate-800/60 border-slate-700 text-white text-xs rounded-[10px]"
-                    data-testid="input-name" />
-                  <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-400 hover:text-emerald-300"
+                  <Input
+                    value={nameValue}
+                    onChange={(e) => setNameValue(e.target.value)}
+                    className="h-8 w-48 bg-slate-800 border-slate-700 text-white text-sm"
+                    data-testid="input-name"
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
                     onClick={() => updateProfileMutation.mutate({ name: nameValue })}
-                    disabled={updateProfileMutation.isPending} data-testid="button-save-name">
-                    <Check className="w-3.5 h-3.5" />
+                    disabled={updateProfileMutation.isPending}
+                    data-testid="button-save-name"
+                  >
+                    <Check className="w-4 h-4 text-emerald-400" />
                   </Button>
                 </div>
               ) : (
-                <button className="text-white text-sm hover:text-indigo-300 transition-colors cursor-pointer"
-                  onClick={() => { setNameValue(user.name || ""); setEditingName(true); }}
-                  data-testid="button-edit-name">
-                  {user.name || <span className="text-slate-600 italic">Add your name</span>}
+                <button
+                  className="text-white text-sm hover:text-blue-400 transition-colors cursor-pointer"
+                  onClick={() => {
+                    setNameValue(user.name || "");
+                    setEditingName(true);
+                  }}
+                  data-testid="button-edit-name"
+                >
+                  {user.name || "Add your name"}
                 </button>
               )}
             </div>
 
-            {/* Email */}
-            <div className="flex items-center justify-between gap-4 py-2">
-              <div className="flex items-center gap-3 text-xs">
-                <Mail className="w-3.5 h-3.5 text-slate-600" />
-                <span className="text-slate-500">Email</span>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 text-sm">
+                <Mail className="w-4 h-4 text-slate-500" />
+                <span className="text-slate-400">Email</span>
               </div>
               {editingEmail ? (
                 <div className="flex items-center gap-2">
-                  <Input value={emailValue} onChange={(e) => setEmailValue(e.target.value)}
-                    className="h-7 w-44 bg-slate-800/60 border-slate-700 text-white text-xs rounded-[10px]"
-                    type="email" data-testid="input-email" />
-                  <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-400 hover:text-emerald-300"
+                  <Input
+                    value={emailValue}
+                    onChange={(e) => setEmailValue(e.target.value)}
+                    className="h-8 w-48 bg-slate-800 border-slate-700 text-white text-sm"
+                    type="email"
+                    data-testid="input-email"
+                  />
+                  <Button
+                    size="icon"
+                    variant="ghost"
                     onClick={() => updateProfileMutation.mutate({ email: emailValue })}
-                    disabled={updateProfileMutation.isPending} data-testid="button-save-email">
-                    <Check className="w-3.5 h-3.5" />
+                    disabled={updateProfileMutation.isPending}
+                    data-testid="button-save-email"
+                  >
+                    <Check className="w-4 h-4 text-emerald-400" />
                   </Button>
                 </div>
               ) : (
-                <button className="text-white text-sm hover:text-indigo-300 transition-colors cursor-pointer"
-                  onClick={() => { setEmailValue(user.email || ""); setEditingEmail(true); }}
-                  data-testid="button-edit-email">
-                  {user.email || <span className="text-slate-600 italic">Add your email</span>}
+                <button
+                  className="text-white text-sm hover:text-blue-400 transition-colors cursor-pointer"
+                  onClick={() => {
+                    setEmailValue(user.email || "");
+                    setEditingEmail(true);
+                  }}
+                  data-testid="button-edit-email"
+                >
+                  {user.email || "Add your email"}
                 </button>
               )}
             </div>
           </div>
-        </motion.div>
+        </Card>
 
-        {/* Platform entitlements */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-sui bg-slate-900/60 backdrop-blur-xl border border-indigo-500/15 p-6 shadow-xl"
-        >
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-11 h-11 rounded-[14px] bg-amber-500/10 border border-amber-500/15 flex items-center justify-center">
-              <Crown className="w-5 h-5 text-amber-400" />
+        {/* ── Governance Layer ──────────────────────────────────────────────── */}
+        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
+          data-testid="card-governance-layer">
+
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+              <Activity className="w-5 h-5 text-indigo-400" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Platform</h2>
-              <p className="text-xs text-slate-500">
-                Each website has its own independent plan. Upgrade individual sites in{" "}
-                <strong className="text-slate-300">My Businesses</strong> below.
-              </p>
+              <h2 className="text-lg font-semibold text-white">Governance Layer</h2>
+              <p className="text-sm text-slate-400">MSA v1.0.0 · Sovereign AI OS</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { icon: <Mic className="w-4 h-4 text-indigo-400 mx-auto mb-1.5" />, value: "500", label: "Voice Min / site" },
-              { icon: <Globe className="w-4 h-4 text-emerald-400 mx-auto mb-1.5" />, value: String(businesses.length), label: `Active Website${businesses.length !== 1 ? "s" : ""}` },
-              { icon: <Bot className="w-4 h-4 text-violet-400 mx-auto mb-1.5" />, value: "AI", label: "Concierge on all" },
-            ].map((stat, i) => (
-              <motion.div
-                key={i}
-                whileHover={{ y: -2, scale: 1.03 }}
-                transition={{ type: "spring", stiffness: 300, damping: 22 }}
-                className="rounded-[14px] bg-slate-800/40 border border-slate-700/30 hover:border-indigo-500/20 p-3.5 text-center transition-colors"
-              >
-                {stat.icon}
-                <p className="text-xl font-bold text-white">{stat.value}</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">{stat.label}</p>
-              </motion.div>
-            ))}
+          <div className="space-y-5">
+            {/* Grace Period Progress Bar */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-grace-period">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-indigo-400" />
+                  <p className="text-sm font-medium text-slate-200">Verizon Grace Period</p>
+                </div>
+                {!onboarding?.activationDate ? (
+                  <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs">
+                    MSA Pending
+                  </Badge>
+                ) : graceActive ? (
+                  <Badge className="bg-indigo-500/10 text-indigo-300 border-indigo-500/20 text-xs">
+                    Day {graceDaysElapsed} of {SOVEREIGN_PRICING.gracePeriodDays}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Active · Full Commitment
+                  </Badge>
+                )}
+              </div>
+
+              {!onboarding?.activationDate ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-500">
+                    Accept the Master Service Agreement to start your 30-day zero-penalty grace period.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => setLocation("/compliance-gateway")}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8"
+                    data-testid="button-accept-msa"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                    Review & Accept MSA
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="h-2 bg-slate-700 rounded-full overflow-hidden mb-2">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${
+                        graceExpired
+                          ? "bg-emerald-500"
+                          : "bg-gradient-to-r from-indigo-500 to-violet-500"
+                      }`}
+                      style={{ width: `${gracePct}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {graceActive
+                      ? `${onboarding?.trialDaysRemaining} days remaining — terminate before Day 30 with no penalty (MSA §2.3)`
+                      : "Grace period elapsed. 12-month commitment is active."}
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* A2P Compliance Status */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-a2p-compliance">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-indigo-400" />
+                  <p className="text-sm font-medium text-slate-200">A2P 10DLC Registration</p>
+                </div>
+                {complianceStatus === "APPROVED" ? (
+                  <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Compliant
+                  </Badge>
+                ) : complianceStatus === "PENDING" ? (
+                  <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Carrier Review In Progress
+                  </Badge>
+                ) : complianceStatus === "REJECTED" ? (
+                  <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-xs">
+                    <AlertTriangle className="w-3 h-3 mr-1" />
+                    Resubmit Required
+                  </Badge>
+                ) : (
+                  <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs">
+                    <AlertTriangle className="w-3 h-3 mr-1" />
+                    Registration Required
+                  </Badge>
+                )}
+              </div>
+              {(!complianceStatus || complianceStatus === "REJECTED") && (
+                <div className="mt-3">
+                  <p className="text-xs text-slate-500 mb-2">
+                    {complianceStatus === "REJECTED"
+                      ? "Your submission was rejected. Review and resubmit your compliance information."
+                      : "Register your SMS brand & campaign to enable A2P messaging (MSA §4.1)."}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setLocation("/compliance-gateway")}
+                    className="border-slate-600 text-slate-300 hover:border-indigo-500 text-xs h-8"
+                    data-testid="button-a2p-compliance"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                    {complianceStatus === "REJECTED" ? "Resubmit Compliance" : "Begin Registration"}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Pricing Anchor — sourced from pricing_v1.yaml */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-pricing-anchor">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <p className="text-sm font-medium text-slate-200">Sovereign AI OS</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-white">${SOVEREIGN_PRICING.flatFeeMonthly}</span>
+                  <span className="text-xs text-slate-400">/mo flat fee</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                + metered overage — billed in arrears per MSA §3.2
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Mic2 className="w-3 h-3 text-blue-400" />
+                  ${SOVEREIGN_PRICING.overagePhoneVoice}/min phone AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Activity className="w-3 h-3 text-indigo-400" />
+                  ${SOVEREIGN_PRICING.overageWebVoice}/min web AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <MessageSquare className="w-3 h-3 text-violet-400" />
+                  ${SOVEREIGN_PRICING.overageA2pSms}/msg A2P SMS
+                </div>
+              </div>
+            </div>
           </div>
-        </motion.div>
+        </Card>
 
-        {/* Billing history */}
-        <motion.div variants={itemVariants} className="[&_.border]:border-slate-800 [&_.bg-card]:bg-slate-900">
-          <BillingHistory />
-        </motion.div>
-
-        {/* My Businesses */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-sui bg-slate-900/60 backdrop-blur-xl border border-indigo-500/15 p-6 shadow-xl"
-        >
-          <div className="flex items-center justify-between gap-4 mb-5">
+        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
+          data-testid="card-my-businesses">
+          <div className="flex items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-[14px] bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
                 <Building2 className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">My Businesses</h2>
-                <p className="text-xs text-slate-500">
-                  {businesses.length} website{businesses.length !== 1 ? "s" : ""} — each with its own sovereign plan
+                <h2 className="text-lg font-semibold text-white">My Businesses</h2>
+                <p className="text-sm text-slate-400">
+                  {businesses.length} site{businesses.length !== 1 ? "s" : ""} registered
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {/* View toggle */}
-              <div className="flex items-center bg-slate-800/40 rounded-[10px] border border-slate-700/30 p-0.5">
-                <button onClick={() => setViewMode("grid")}
-                  className={`p-1.5 rounded-[8px] transition-colors ${viewMode === "grid" ? "bg-slate-700 text-white" : "text-slate-500 hover:text-slate-300"}`}
-                  data-testid="button-view-grid" title="Grid view">
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                </button>
-                <button onClick={() => setViewMode("list")}
-                  className={`p-1.5 rounded-[8px] transition-colors ${viewMode === "list" ? "bg-slate-700 text-white" : "text-slate-500 hover:text-slate-300"}`}
-                  data-testid="button-view-list" title="List view">
-                  <List className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <Button variant="outline" onClick={() => setShowAddBusiness(!showAddBusiness)}
-                className="border-indigo-500/30 hover:border-indigo-500/60 text-slate-300 hover:text-white rounded-[10px] text-xs h-8"
-                data-testid="button-add-business">
-                {showAddBusiness ? (
-                  <><X className="w-3.5 h-3.5 mr-1.5" />Cancel</>
-                ) : (
-                  <><Globe className="w-3.5 h-3.5 mr-1.5" />Add Business</>
-                )}
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              onClick={() => setShowAddBusiness(!showAddBusiness)}
+              className="border-slate-700 text-slate-300 hover:border-indigo-500"
+              data-testid="button-add-business"
+            >
+              {showAddBusiness ? (
+                <><X className="w-4 h-4 mr-2" />Cancel</>
+              ) : (
+                <><Globe className="w-4 h-4 mr-2" />Add Business</>
+              )}
+            </Button>
           </div>
 
-          {/* Add business panel */}
-          <AnimatePresence>
-            {showAddBusiness && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mb-5 p-4 rounded-[14px] bg-slate-800/40 border border-indigo-500/20 overflow-hidden"
-                data-testid="add-business-panel"
-              >
-                <p className="text-xs text-slate-500 mb-3 flex items-center gap-1.5">
-                  <Search className="w-3.5 h-3.5" />
-                  Search Google Maps for your business to generate a 30-second AI website.
-                </p>
-                <div ref={pickerRef} className="w-full" data-testid="place-picker-container" />
-                {addingBusiness && (
-                  <div className="flex items-center gap-2 mt-3 text-xs text-indigo-400">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Generating your AI website…
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Business list/grid */}
-          {businessesQuery.isLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
-            </div>
-          ) : businesses.length === 0 && !showAddBusiness ? (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-center py-10 border border-dashed border-slate-800/60 rounded-sui"
-            >
-              <div className="w-14 h-14 rounded-sui bg-slate-800/40 border border-slate-700/30 flex items-center justify-center mx-auto mb-4">
-                <Building2 className="w-7 h-7 text-slate-600" />
-              </div>
-              <p className="text-slate-500 text-sm mb-4">No businesses yet. Generate your first AI-powered website!</p>
-              <Button onClick={() => setShowAddBusiness(true)} data-testid="button-create-first"
-                className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-[12px] shadow-lg shadow-indigo-500/20">
-                Get Started
-              </Button>
-            </motion.div>
-          ) : (
-            <div className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "space-y-3"}>
-              {businesses.map((biz: any, bizIdx: number) => {
-                const bizPlan = (biz.plan || "free") as PlanType;
-                const heroUrl = biz.placeId
-                  ? `/api/places/photo-proxy/${encodeURIComponent(biz.placeId)}?maxWidth=600`
-                  : null;
-                const colorIdx = biz.name.charCodeAt(0) % gradientPalette.length;
-
-                return (
-                  <motion.div
-                    key={biz.id}
-                    custom={bizIdx}
-                    variants={cardVariants}
-                    initial="hidden"
-                    animate="visible"
-                    whileHover={{ y: -3, scale: 1.015, transition: { type: "spring", stiffness: 300, damping: 22 } }}
-                    className="rounded-sui bg-slate-800/40 border border-indigo-500/10 hover:border-indigo-500/25 overflow-hidden shadow-xl transition-colors"
-                    data-testid={`business-row-${biz.id}`}
-                  >
-                    {/* Grid hero image */}
-                    {viewMode === "grid" && (
-                      <div className="relative h-36 w-full bg-slate-900/60 overflow-hidden group">
-                        {heroUrl ? (
-                          <img src={heroUrl} alt={biz.name}
-                            className="w-full h-full object-cover opacity-75 group-hover:opacity-95 transition-opacity duration-300 scale-105 group-hover:scale-100"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                        ) : (
-                          <div className={`w-full h-full bg-gradient-to-br ${gradientPalette[colorIdx]} flex items-center justify-center`}>
-                            <ImageOff className="w-7 h-7 text-slate-700" />
-                          </div>
-                        )}
-                        {/* Gradient overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/20 to-transparent" />
-                        <div className="absolute bottom-0 left-0 right-0 p-3">
-                          <p className="text-white font-bold text-sm leading-tight truncate drop-shadow">{biz.name}</p>
-                          {biz.domain && (
-                            <p className="text-slate-500 text-[10px] truncate mt-0.5">{biz.domain}</p>
-                          )}
-                        </div>
-                        <div className="absolute top-2 right-2">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${biz.chatbotEnabled ? "bg-emerald-500/80 text-white" : "bg-slate-700/80 text-slate-400"}`}>
-                            {biz.chatbotEnabled ? "Live" : "Draft"}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="p-4">
-                      {/* List view: name row */}
-                      {viewMode === "list" && (
-                        <div className="flex items-center justify-between gap-4 mb-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-10 h-10 rounded-[12px] bg-indigo-500/10 border border-indigo-500/15 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                              {heroUrl ? (
-                                <img src={heroUrl} alt="" className="w-full h-full object-cover"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                              ) : (
-                                <Bot className="w-4 h-4 text-indigo-400" />
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-white font-semibold text-sm truncate">{biz.name}</p>
-                              {biz.domain && <p className="text-[10px] text-slate-600 truncate">{biz.domain}</p>}
-                            </div>
-                          </div>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${biz.chatbotEnabled ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-700/50 text-slate-500"}`}>
-                            {biz.chatbotEnabled ? "Live" : "Draft"}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* UUID + Manage row */}
-                      <div className="flex items-center justify-between gap-2 mb-4">
-                        <button
-                          className="flex items-center gap-1 group min-w-0"
-                          title="Copy Site ID"
-                          onClick={() => {
-                            navigator.clipboard.writeText(biz.id);
-                            toast({ title: "Copied", description: "Site ID copied to clipboard" });
-                          }}
-                          data-testid={`copy-uuid-${biz.id}`}
-                        >
-                          <span className="data-chip group-hover:border-indigo-500/30 transition-colors truncate max-w-[140px]">{biz.id}</span>
-                          <Copy className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 flex-shrink-0 ml-0.5" />
-                        </button>
-                        <Button size="sm"
-                          className="flex-shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-7 rounded-[10px] shadow shadow-indigo-500/20"
-                          onClick={() => setLocation(`/my-account/site/${biz.id}`)}
-                          data-testid={`button-manage-${biz.id}`}>
-                          Manage <ExternalLink className="w-3 h-3 ml-1" />
-                        </Button>
-                      </div>
-
-                      {/* Plan tab navigator */}
-                      {(() => {
-                        const planKeys = Object.keys(PLAN_LIMITS) as PlanType[];
-                        const selectedTab = planTabs[biz.id] ?? bizPlan;
-                        const tabInfo = PLAN_LIMITS[selectedTab];
-                        const tabIdx = planKeys.indexOf(selectedTab);
-                        const isCurrentPlan = selectedTab === bizPlan;
-                        const isUpgrade = tabIdx > planKeys.indexOf(bizPlan);
-                        const upgradeId = `${biz.id}-${selectedTab}`;
-
-                        return (
-                          <div className="pt-3 border-t border-slate-800/60">
-                            {/* Tab strip */}
-                            <div className="flex gap-0.5 bg-slate-900/60 rounded-[10px] p-0.5 mb-3">
-                              {planKeys.map((pk) => {
-                                const pkInfo = PLAN_LIMITS[pk];
-                                const isActive = pk === selectedTab;
-                                const isCurrent = pk === bizPlan;
-                                return (
-                                  <button
-                                    key={pk}
-                                    onClick={() => setPlanTabs((prev) => ({ ...prev, [biz.id]: pk }))}
-                                    className={`flex-1 px-2 py-1 rounded-[8px] text-[11px] font-medium transition-all ${
-                                      isActive
-                                        ? "bg-indigo-600/80 text-white shadow-sm"
-                                        : "text-slate-500 hover:text-slate-300"
-                                    }`}
-                                    data-testid={`plan-tab-${biz.id}-${pk}`}
-                                  >
-                                    {pkInfo.label}
-                                    {isCurrent && <span className="ml-1 text-[9px] text-emerald-400">✓</span>}
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            {/* Plan details */}
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-baseline gap-2 mb-2">
-                                  <span className="text-base font-bold text-white">
-                                    {tabInfo.price === 0 ? "Free" : `$${tabInfo.price}`}
-                                  </span>
-                                  {tabInfo.price > 0 && (
-                                    <span className="text-[10px] text-slate-500">/mo per site</span>
-                                  )}
-                                  <span className="text-[10px] text-slate-600 italic">{tabInfo.tagline}</span>
-                                </div>
-                                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                                  {tabInfo.features.map((f, i) => (
-                                    <div key={i} className="flex items-start gap-1 text-[10px] text-slate-500">
-                                      <Check className="w-2.5 h-2.5 text-emerald-400 mt-0.5 flex-shrink-0" />
-                                      <span>{f}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-
-                              <div className="flex-shrink-0">
-                                {isCurrentPlan ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-1 rounded-full font-semibold whitespace-nowrap">
-                                    <Check className="w-2.5 h-2.5" />
-                                    Current
-                                  </span>
-                                ) : isUpgrade ? (
-                                  <motion.button
-                                    whileTap={{ scale: 0.96 }}
-                                    className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded-[10px] font-semibold transition-colors shadow shadow-indigo-500/20 whitespace-nowrap disabled:opacity-50"
-                                    disabled={upgradingPlan === upgradeId}
-                                    data-testid={`button-upgrade-${biz.id}-${selectedTab}`}
-                                    onClick={async () => {
-                                      setUpgradingPlan(upgradeId);
-                                      try {
-                                        const res = await fetch("/api/subscriptions/create-checkout-session", {
-                                          method: "POST",
-                                          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                                          body: JSON.stringify({ plan: selectedTab, siteConfigId: biz.id }),
-                                        });
-                                        const data = await res.json();
-                                        if (!res.ok) throw new Error(data.error || "Failed to start checkout");
-                                        window.location.href = data.url;
-                                      } catch (err: any) {
-                                        toast({ title: "Upgrade failed", description: err.message, variant: "destructive" });
-                                        setUpgradingPlan(null);
-                                      }
-                                    }}
-                                  >
-                                    {upgradingPlan === upgradeId ? (
-                                      <><Loader2 className="w-3 h-3 animate-spin" />Redirecting…</>
-                                    ) : (
-                                      <><Sparkles className="w-3 h-3" />Upgrade</>
-                                    )}
-                                  </motion.button>
-                                ) : (
-                                  <span className="text-[10px] text-slate-600 whitespace-nowrap">Lower tier</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Intelligence Ingestion toggle */}
-                      <div className="mt-3">
-                        <button
-                          onClick={() => setIntelligenceOpen((prev) => ({ ...prev, [biz.id]: !prev[biz.id] }))}
-                          className="flex items-center gap-2 w-full px-3 py-2 rounded-xl border border-indigo-500/15 bg-indigo-500/5 hover:bg-indigo-500/10 hover:border-indigo-500/30 text-indigo-300 text-xs font-semibold transition-all duration-200"
-                        >
-                          <Brain className="w-3.5 h-3.5" />
-                          {intelligenceOpen[biz.id] ? "Hide" : "Upload"} Intelligence Plan
-                        </button>
-                        <AnimatePresence>
-                          {intelligenceOpen[biz.id] && (
-                            <motion.div
-                              initial={{ opacity: 0, height: 0 }}
-                              animate={{ opacity: 1, height: "auto" }}
-                              exit={{ opacity: 0, height: 0 }}
-                              transition={{ duration: 0.3, ease: "easeOut" }}
-                              className="overflow-hidden mt-3"
-                            >
-                              <WebsitePlanUploader
-                                siteConfigId={biz.id}
-                                onSuccess={() => toast({ title: "Intelligence ingested", description: `Sovereign Knowledge Library updated for ${biz.name ?? "your site"}.` })}
-                              />
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-
-                    </div>
-                  </motion.div>
-                );
-              })}
+          {showAddBusiness && (
+            <div className="mb-4 p-4 bg-white/5 border border-white/10 rounded-xl backdrop-blur-sm"
+              data-testid="add-business-panel">
+              <p className="text-sm text-slate-400 mb-3">
+                <Search className="w-4 h-4 inline-block mr-1 -mt-0.5" />
+                Search Google Maps for your business, then select it to generate your AI website.
+              </p>
+              <div ref={pickerRef} className="w-full" data-testid="place-picker-container" />
+              {addingBusiness && (
+                <div className="flex items-center gap-2 mt-3 text-sm text-blue-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Generating your AI website...
+                </div>
+              )}
             </div>
           )}
-        </motion.div>
-      </motion.div>
+
+          {businessesQuery.isLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+            </div>
+          ) : businesses.length === 0 && !showAddBusiness ? (
+            <div className="text-center py-8 border border-dashed border-white/10 rounded-2xl">
+              <Building2 className="w-10 h-10 mx-auto text-slate-600 mb-3" />
+              <p className="text-slate-400 text-sm mb-4">
+                No businesses yet. Generate your first AI-powered website!
+              </p>
+              <Button
+                variant="default"
+                onClick={() => setShowAddBusiness(true)}
+                className="bg-indigo-600 hover:bg-indigo-500"
+                data-testid="button-create-first"
+              >
+                Get Started
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {businesses.map((biz: any) => (
+                <div
+                  key={biz.id}
+                  className="flex items-center justify-between gap-3 p-4 bg-white/5 !border !border-white/10 rounded-2xl backdrop-blur-sm hover:bg-white/[0.07] transition-colors flex-wrap"
+                  data-testid={`business-row-${biz.id}`}
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-5 h-5 text-indigo-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-white font-medium truncate">{biz.name}</p>
+                      {biz.domain && (
+                        <p className="text-xs text-slate-500 truncate">{biz.domain}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Badge
+                      className={`text-xs ${
+                        biz.chatbotEnabled
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                          : "bg-slate-700/50 text-slate-400 border-slate-600/30"
+                      }`}
+                    >
+                      {biz.chatbotEnabled ? "Live" : "Draft"}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setLocation(`/mixing-board?site=${biz.id}`)}
+                      className="border-indigo-500/40 text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/10 text-xs h-8"
+                      data-testid={`button-configure-ai-${biz.id}`}
+                    >
+                      <Settings2 className="w-3 h-3 mr-1.5" />
+                      Configure AI
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setLocation(`/my-account/site/${biz.id}`)}
+                      className="border-slate-700 text-slate-300 hover:border-slate-500 text-xs h-8"
+                      data-testid={`button-manage-${biz.id}`}
+                    >
+                      Manage
+                      <ExternalLink className="w-3 h-3 ml-1.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
     </div>
   );
 }

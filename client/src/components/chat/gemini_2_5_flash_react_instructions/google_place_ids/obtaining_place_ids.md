@@ -1,8 +1,10 @@
-To implement this reactive, signature-based architecture and ensure 100% compliance with your new security and API requirements, we use **`GOOGLE_MAPS_GROUNDING_LITE_API_KEY`** (or `MAPS_GROUNDING_LITE_API_KEY` as alias) for Place ID discovery. This keeps "Self-Healing" / discovery separate from production business intelligence gathering.
+To implement this reactive, signature-based architecture and ensure 100% compliance with your new security and API requirements, we use a **single server-side key** for both Maps Grounding Lite and Places API (New).
+
+**Important:** Maps Grounding Lite and Places API (New) must use the **same** key on the server. Using different keys for discovery vs production causes pull failures when data flows between APIs. Client-side keys (e.g. Maps JS) can be different. See `server/config/mapsApiKey.ts` and `docs/API_KEYS_DOPPLER.md`.
 
 ### **1. Updated Universal Translator: Grounding Lite Integration**
 
-The service `server/services/placeDiscoveryService.ts` implements `getFreshPlaceId(searchSignature)`. It tries **Maps Grounding Lite** first when `GOOGLE_MAPS_GROUNDING_LITE_API_KEY` or `MAPS_GROUNDING_LITE_API_KEY` is set, then falls back to **Places API (New) searchText** using `GOOGLE_MAPS_API_KEY` or `GOOGLE_API_KEY`. Use underscore form for env names (e.g. `GOOGLE_MAPS_GROUNDING_LITE_API_KEY`).
+The service `server/services/placeDiscoveryService.ts` implements `getFreshPlaceId(searchSignature)`. It tries **Maps Grounding Lite** first when a key is set, then falls back to **Places API (New) searchText**. Both paths use the same key via `getServerMapsApiKey()` (from `GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_GROUNDING_LITE_API_KEY`, `GOOGLE_PLACES_API_KEY`, or `GOOGLE_API_KEY`).
 
 ---
 
@@ -57,8 +59,8 @@ Verify your Doppler configuration reflects these precise key names to ensure the
 
 | Environment Variable | Purpose | Restriction |
 | --- | --- | --- |
-| **`GOOGLE_MAPS_GROUNDING_LITE_API_KEY`** (or `MAPS_GROUNDING_LITE_API_KEY`) | Place ID discovery (Grounding Lite) | Server-Side / IP Restricted; optional — if unset, discovery uses Places API (New) searchText with Maps key |
-| **`GOOGLE_MAPS_API_KEY`** / **`GOOGLE_API_KEY`** | Production Business Data | Restricted to Places API (New) |
+| **One key for server:** `GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_GROUNDING_LITE_API_KEY`, or `GOOGLE_PLACES_API_KEY` | Place ID discovery (Grounding Lite) and Places API (New) | **Must be the same key.** Different keys for Grounding Lite vs Places cause failures. Server-side / IP restricted. |
+| **`GOOGLE_MAPS_API_KEY`** / **`GOOGLE_API_KEY`** | Same key as above (set one; code uses `getServerMapsApiKey()`) | Restricted to Maps Grounding Lite + Places API (New) on the same key |
 | **`DOPPLER_TOKEN`** | Secret Management (Update-Env) | Write Access for `dev` config |
 
 ### **Next Steps for Jason**

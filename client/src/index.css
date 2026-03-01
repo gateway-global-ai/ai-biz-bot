@@ -178,7 +178,9 @@ html::-webkit-scrollbar {
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-sans antialiased text-foreground;
+    background: radial-gradient(at top left, #f1f5f9 0%, #ffffff 100%);
+    min-height: 100vh;
   }
 }
 

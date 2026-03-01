@@ -104,13 +104,13 @@ function AnalyticsCards({ analytics }: { analytics: Analytics | undefined }) {
       {stats.map((s) => {
         const Icon = s.icon;
         return (
-          <Card key={s.label} className="bg-slate-800/50 border-slate-700">
+          <Card key={s.label} className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <Icon className={`w-4 h-4 ${s.color}`} />
-                <span className="text-xs text-slate-400">{s.label}</span>
+                <span className="text-xs text-slate-500">{s.label}</span>
               </div>
-              <p className="text-2xl font-bold text-white" data-testid={`text-analytics-${s.label.toLowerCase().replace(/\s+/g, '-')}`}>{s.value}</p>
+              <p className="text-2xl font-bold text-slate-900" data-testid={`text-analytics-${s.label.toLowerCase().replace(/\s+/g, '-')}`}>{s.value}</p>
             </CardContent>
           </Card>
         );
@@ -144,15 +144,15 @@ function SiteDetail({ siteId, siteName, onBack }: { siteId: string; siteName: st
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div>
-          <h3 className="text-lg font-bold text-white">{siteName}</h3>
+          <h3 className="text-lg font-bold text-slate-900">{siteName}</h3>
           <p className="text-xs text-slate-400">{visitors.length} visitor{visitors.length !== 1 ? 's' : ''}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+            <CardTitle className="text-sm text-slate-600 flex items-center gap-2">
               <Users className="w-4 h-4 text-purple-400" />
               Visitors
             </CardTitle>
@@ -172,7 +172,7 @@ function SiteDetail({ siteId, siteName, onBack }: { siteId: string; siteName: st
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-sm text-white font-medium truncate">{v.visitorId.slice(0, 12)}...</p>
+                      <p className="text-sm text-slate-900 font-medium truncate">{v.visitorId.slice(0, 12)}...</p>
                       <p className="text-xs text-slate-400">{v.messageCount} message{v.messageCount !== 1 ? 's' : ''}</p>
                     </div>
                     <div className="text-right shrink-0">
@@ -185,9 +185,9 @@ function SiteDetail({ siteId, siteName, onBack }: { siteId: string; siteName: st
           </CardContent>
         </Card>
 
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+            <CardTitle className="text-sm text-slate-600 flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-blue-400" />
               Chat History
             </CardTitle>
@@ -203,7 +203,7 @@ function SiteDetail({ siteId, siteName, onBack }: { siteId: string; siteName: st
               <div className="space-y-3">
                 {chatHistory.map((msg) => (
                   <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-lg p-3 text-sm ${msg.role === 'user' ? 'bg-purple-600/30 text-purple-100' : 'bg-slate-700/50 text-slate-200'}`}>
+                    <div className={`max-w-[85%] rounded-lg p-3 text-sm ${msg.role === 'user' ? 'bg-purple-600/20 text-purple-900' : 'bg-slate-100/80 text-slate-700'}`}>
                       <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                       <p className="text-[10px] text-slate-500 mt-1">{formatDate(msg.createdAt)}</p>
                     </div>
@@ -251,16 +251,16 @@ function VisitorsTab() {
           placeholder="Search sites by name, industry, or location..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+          className="pl-10 bg-white/60 border-slate-200 text-slate-900 placeholder:text-slate-400"
         />
       </div>
 
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-purple-400" /></div>
       ) : filtered.length === 0 ? (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
           <CardContent className="py-12 text-center">
-            <Globe className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+            <Globe className="w-10 h-10 text-slate-400 mx-auto mb-3" />
             <p className="text-slate-400">No generated sites found</p>
             <p className="text-xs text-slate-500 mt-1">Sites will appear here once the Auto Agent generates them</p>
           </CardContent>
@@ -270,7 +270,7 @@ function VisitorsTab() {
           {filtered.map((site) => (
             <Card
               key={site.id}
-              className="bg-slate-800/50 border-slate-700 cursor-pointer hover-elevate"
+              className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl cursor-pointer hover-elevate"
               onClick={() => setSelectedSite({ id: site.id, name: site.name })}
               data-testid={`card-site-${site.id}`}
             >
@@ -281,7 +281,7 @@ function VisitorsTab() {
                       <Globe className="w-5 h-5 text-blue-400" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-white font-medium truncate">{site.name}</p>
+                      <p className="text-slate-900 font-medium truncate">{site.name}</p>
                       <div className="flex items-center gap-3 flex-wrap text-xs text-slate-400">
                         {site.industry && <span>{site.industry}</span>}
                         {site.businessAddress && (
@@ -353,13 +353,13 @@ function LeadsTab() {
         ].map((s) => {
           const Icon = s.icon;
           return (
-            <Card key={s.label} className="bg-slate-800/50 border-slate-700">
+            <Card key={s.label} className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-1">
                   <Icon className={`w-4 h-4 ${s.color}`} />
-                  <span className="text-xs text-slate-400">{s.label}</span>
+                  <span className="text-xs text-slate-500">{s.label}</span>
                 </div>
-                <p className="text-2xl font-bold text-white">{s.value}</p>
+                <p className="text-2xl font-bold text-slate-900">{s.value}</p>
               </CardContent>
             </Card>
           );
@@ -373,16 +373,16 @@ function LeadsTab() {
           placeholder="Search leads by name, industry, phone, or location..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-10 bg-slate-800 border-slate-700 text-white placeholder:text-slate-500"
+          className="pl-10 bg-white/60 border-slate-200 text-slate-900 placeholder:text-slate-400"
         />
       </div>
 
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-purple-400" /></div>
       ) : filtered.length === 0 ? (
-        <Card className="bg-slate-800/50 border-slate-700">
+        <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
           <CardContent className="py-12 text-center">
-            <Building2 className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+            <Building2 className="w-10 h-10 text-slate-400 mx-auto mb-3" />
             <p className="text-slate-400">No leads with generated sites yet</p>
             <p className="text-xs text-slate-500 mt-1">Run the Auto Agent pipeline to discover leads and generate sites</p>
           </CardContent>
@@ -390,7 +390,7 @@ function LeadsTab() {
       ) : (
         <div className="space-y-2">
           {filtered.map((lead) => (
-            <Card key={lead.siteId} className="bg-slate-800/50 border-slate-700" data-testid={`card-lead-${lead.siteId}`}>
+            <Card key={lead.siteId} className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl" data-testid={`card-lead-${lead.siteId}`}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -398,7 +398,7 @@ function LeadsTab() {
                       <Building2 className="w-5 h-5 text-emerald-400" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-white font-medium truncate">{lead.siteName}</p>
+                      <p className="text-slate-900 font-medium truncate">{lead.siteName}</p>
                       <div className="flex items-center gap-3 flex-wrap text-xs text-slate-400">
                         {lead.industry && <span>{lead.industry}</span>}
                         {lead.businessPhone && (
@@ -464,7 +464,7 @@ export default function SitesAndLeads() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white flex items-center gap-3" data-testid="text-sites-leads-title">
+        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3" data-testid="text-sites-leads-title">
           <Globe className="w-7 h-7 text-blue-400" />
           Sites & Leads
         </h1>
@@ -472,7 +472,7 @@ export default function SitesAndLeads() {
       </div>
 
       <Tabs defaultValue="visitors" className="space-y-4">
-        <TabsList className="bg-slate-800 border border-slate-700">
+        <TabsList className="bg-white/60 border border-slate-200">
           <TabsTrigger data-testid="tab-sites-visitors" value="visitors" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">
             <Eye className="w-4 h-4 mr-2" /> Visitors & Chats
           </TabsTrigger>

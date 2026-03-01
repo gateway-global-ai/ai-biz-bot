@@ -1360,7 +1360,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(voiceUsageLogs.siteConfigId, siteConfigId))
       .orderBy(desc(voiceUsageLogs.createdAt))
       .limit(limit);
+
   }
+
+
 }
 
 export const storage = new DatabaseStorage();

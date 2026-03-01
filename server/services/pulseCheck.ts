@@ -15,9 +15,9 @@
 import { storage } from "../storage";
 import { getFreshPlaceId } from "./placeDiscoveryService";
 import { sendSms } from "../twilio";
+import { getServerMapsApiKey } from "../config/mapsApiKey";
 
-const PLACES_API_KEY =
-  process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY;
+const PLACES_API_KEY = getServerMapsApiKey();
 
 /** Milliseconds to wait between consecutive Places API calls — rate-limit guard. */
 const INTER_REQUEST_GAP_MS = 200;
@@ -37,7 +37,7 @@ export interface SitePulseResult {
  */
 async function validatePlaceId(placeId: string): Promise<boolean> {
   if (!PLACES_API_KEY) {
-    console.warn("[PulseCheck] No GOOGLE_MAPS_API_KEY — skipping live validation");
+    console.warn("[PulseCheck] No Google Maps/Places API key — skipping live validation");
     return true;
   }
   try {

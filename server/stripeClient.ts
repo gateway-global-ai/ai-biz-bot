@@ -1,4 +1,16 @@
-import Stripe from 'stripe';
+/**
+ * server/stripeClient.ts
+ *
+ * Doppler-native Stripe client. Credentials sourced exclusively from
+ * process.env.STRIPE_SECRET_KEY and process.env.STRIPE_PUBLISHABLE_KEY,
+ * injected at runtime by `doppler run --`.
+ *
+ * Previous implementation fetched credentials from the Replit Connector
+ * service (REPLIT_CONNECTORS_HOSTNAME + REPL_IDENTITY). That dependency
+ * has been removed as part of the Zero-Leak Architecture migration.
+ */
+
+import Stripe from "stripe";
 
 /**
  * Returns a Stripe client initialised from STRIPE_SECRET_KEY in Doppler.
