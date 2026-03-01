@@ -355,7 +355,7 @@ const router = Router();
       return;
     }
 
-    const { getPricingConfig, toCents } = await import('./utils/pricing');
+    const { getPricingConfig, toCents } = await import('../utils/pricing');
     const _pricing = getPricingConfig();
     const _brandReg   = toCents(_pricing.flat_fee.monthly.amount);
     const _expedited  = Math.round(Number(process.env.STRIPE_A2P_EXPEDITED_FEE_CENTS ?? 8500));
@@ -387,7 +387,7 @@ const router = Router();
 
       const { getUncachableStripeClient, getStripePublishableKey } = await import('./stripeClient');
       const stripe = await getUncachableStripeClient();
-      const { getPricingConfig, toCents } = await import('./utils/pricing');
+      const { getPricingConfig, toCents } = await import('../utils/pricing');
       const pricing = getPricingConfig();
 
       // All amounts sourced from pricing_v1.yaml or Doppler env vars.
@@ -487,7 +487,7 @@ const router = Router();
         return res.status(400).json({ error: "Payment session mismatch" });
       }
 
-      const { getPricingConfig, toCents } = await import('./utils/pricing');
+      const { getPricingConfig, toCents } = await import('../utils/pricing');
       const _p2 = getPricingConfig();
       const _b2 = toCents(_p2.flat_fee.monthly.amount);
       const _e2 = Math.round(Number(process.env.STRIPE_A2P_EXPEDITED_FEE_CENTS ?? 8500));
