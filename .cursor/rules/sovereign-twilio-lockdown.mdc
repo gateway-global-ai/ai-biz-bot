@@ -1,0 +1,30 @@
+---
+description: Sovereign Twilio & SMS Router — Protected. Compliance infrastructure. No unauthorized modifications.
+alwaysApply: true
+---
+
+# Sovereign Twilio & SMS Router — LOCKDOWN
+
+The Twilio integration and Sovereign SMS Router are A2P compliance infrastructure. A single mistake here causes carrier filtering, TCPA violations, or financial liability.
+
+## Protected Files — READ ONLY
+
+- `server/routes/twilioWebhooks.ts` — inbound SMS/Voice webhook receiver
+- `server/services/smsRouter.ts` — Sovereign SMS Router (6-pipe intent dispatch)
+- `server/twilio.ts` — Twilio client initialization
+- `server/taskScheduler.ts` — 24-hour SMS automation scheduler
+- `migrations/0010_sms_compliance_router.sql`
+- `migrations/0011_compliance_reseller_gateway.sql`
+
+## Absolute Prohibitions
+
+- NEVER bypass `validateTwilioSignature()`. Every inbound webhook MUST be HMAC-validated.
+- NEVER hardcode Twilio Account SIDs, Auth Tokens, phone numbers, or Messaging Service SIDs. All credentials come from Doppler.
+- NEVER send SMS without routing through the Sovereign SMS Router intent classifier. Direct `twilio.messages.create()` calls from routes are forbidden.
+- NEVER change the 6-pipe intent enum: `PLATFORM_OTP | PLATFORM_CARE | PLATFORM_MKTG | CUSTOMER_OTP | CUSTOMER_CARE | CUSTOMER_MKTG`. These map to registered A2P campaigns.
+- NEVER disable or stub out opt-out handling. STOP keyword compliance is a legal requirement.
+- NEVER send outbound SMS to a number in `sms_opt_outs` without re-consent.
+
+## If You Need to Add a New SMS Use Case
+
+Route it through the SMS Router. Classify the intent. Do not create a new send path outside the router. Adding a new pipe requires A2P campaign registration — open a compliance task first.

@@ -1,0 +1,45 @@
+---
+description: Sovereign UI Design System — Jason Standard. No deviations. Read the standard before touching any component.
+globs: client/src/**/*.tsx,client/src/**/*.ts
+alwaysApply: false
+---
+
+# Sovereign UI Design System — LOCKDOWN
+
+Every UI component must conform to the Jason Standard. No exceptions. No "I'll fix it later."
+
+## The Non-Negotiable Tokens
+
+| Token | Value | Rule |
+|---|---|---|
+| Border Radius | `rounded-sui` (24px) | ALL primary containers. Never `rounded-xl` or `rounded-lg` on outer wrappers. |
+| Background | `bg-slate-950` / `bg-[#0F172A]` | Never `bg-white` or `bg-gray-*` for content cards. |
+| Glass Card | `bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20` | The standard card pattern. |
+| Blur | `backdrop-blur-xl` (16px) | Always on glass containers. Never solid backgrounds on cards. |
+| Accent | `#6366F1` / `indigo-500` | Action buttons, borders, glow. |
+| Success | `#10B981` / `emerald-400` | Verified states, 1% Insight badges. |
+| Text (secondary) | `text-slate-400` | Never `text-gray-*`. |
+
+## Absolute Prohibitions
+
+- NEVER use `bg-white` or `bg-white/90` on content cards.
+- NEVER use `rounded-xl` or `rounded-lg` on outer wrappers — always `rounded-sui`.
+- NEVER use `text-gray-*` — always `text-slate-*`.
+- NEVER hardcode model IDs in UI components — use `process.env.GEMINI_MODEL_ID`.
+- NEVER build a new card component without importing `motion` from `framer-motion`.
+
+## Required on Every Interactive Card
+
+```tsx
+<motion.div
+  initial={{ opacity: 0, y: 8 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.3, ease: "easeOut" }}
+  whileHover={{ scale: 1.02, y: -2 }}
+  className="relative p-6 rounded-sui bg-slate-900/40 border border-indigo-500/20 backdrop-blur-xl"
+>
+```
+
+## Before Touching Any Component
+
+Read `.cursor/rules/jason-standard.mdc` in full. If it conflicts with these rules, jason-standard.mdc wins — it is the master specification.

@@ -1,0 +1,33 @@
+---
+description: Sovereign Voice Pipeline — Protected. No modifications without explicit CTO directive.
+alwaysApply: true
+---
+
+# Sovereign Voice Pipeline — LOCKDOWN
+
+The Gemini Native Audio voice pipeline is FROZEN infrastructure. It works. Do not touch it.
+
+## Protected Files — READ ONLY
+
+- `server/geminiVoice.ts` — browser `/ws/gemini-live` proxy
+- `server/voiceStream.ts` — Twilio Media Stream → Gemini bridge
+- `server/voiceGemini.ts` — audio WebSocket orchestration
+- `server/voiceSession.ts` — session state management
+- `server/audioCodec.ts` — 16-bit PCM encode/decode
+- `server/config/geminiLiveProtocol.ts` — FINICKY. One wrong change breaks voice entirely.
+- `server/config/geminiSystemInstructions.ts`
+- `server/config/geminiToolDeclarations.ts`
+- `client/src/services/voice/**`
+- `client/public/clear-voice-processor.js` — AudioWorklet. Do not move or rename.
+
+## Absolute Prohibitions
+
+- NEVER hardcode `GEMINI_MODEL_ID` or any model string. Model is set in Doppler only.
+- NEVER modify audio sample rates. Input: 16kHz. Output: 24kHz. These are hardware specs.
+- NEVER add a new AI provider to the voice pipeline. Gemini is the sole voice engine.
+- NEVER change the `/ws/gemini-live` or `/ws/voice-stream` route paths.
+- NEVER modify WebSocket handshake logic without an explicit voice test task.
+
+## If You Think You Need to Change This
+
+You don't. If a bug is confirmed, open a voice-specific task. Do not fix the voice pipeline as a side effect of another task.

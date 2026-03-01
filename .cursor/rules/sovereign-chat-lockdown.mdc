@@ -1,0 +1,32 @@
+---
+description: Sovereign Chat Interface — Protected layout contract. PTT always present. No unauthorized restructuring.
+globs: client/src/components/StandardizedChatInterface.tsx,client/src/components/FloatingChatWidget.tsx,client/src/widgets/ChatVoiceWidget.tsx,client/src/widgets/**,client/src/components/chat/**
+alwaysApply: true
+---
+
+# Sovereign Chat Interface — LOCKDOWN
+
+The chat interface layout is a signed contract between the platform and its customers. It is not a design canvas.
+
+## Non-Negotiable Layout Contract
+
+1. **Three modes, always**: floating → fixed → fullscreen. Single-click cycle. Never remove a mode.
+2. **PTT always present**: The Push-to-Talk button must exist in every layout mode. It is never optional, hidden, or feature-flagged off.
+3. **PTT button size**: Minimum 50% of screen width on mobile. Fixed footer position.
+4. **Chat log always accessible**: Voice transcriptions are logged and visible via the chat window. This is a transparency guarantee to the customer.
+5. **Agent role toggle**: When multiple agents are available, a radio toggle above the PTT button switches roles. Do not remove this.
+
+## Absolute Prohibitions
+
+- NEVER remove or hide the PTT button as a "simplification."
+- NEVER change the floating/fixed/fullscreen cycle to require more than one click per transition.
+- NEVER hardcode system prompts in UI components. System prompts are DB artifacts fetched via `GET /api/site-configs/:id`.
+- NEVER store voice config or agent config in React state as the source of truth. Always fetch from the API.
+- NEVER embed API keys in chat components. All AI calls go through the server proxy.
+
+## Protected Files
+
+- `client/src/components/StandardizedChatInterface.tsx` — canonical chat base
+- `client/src/components/FloatingChatWidget.tsx`
+- `client/src/widgets/ChatVoiceWidget.tsx`
+- `client/src/components/chat/ConciergePanel.tsx`
