@@ -20,7 +20,8 @@
     "doppler:sync-ports": "./scripts/sync-doppler-ports.sh",
     "doppler:copy-config": "./scripts/doppler-copy-config.sh",
     "mcp:generate": "./scripts/gen-cursor-mcp.sh",
-    "prepare": "husky"
+    "prepare": "husky",
+    "sovereign-guard": "doppler run -- npx tsx scripts/sovereign-guard.ts"
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^6.4.0",
