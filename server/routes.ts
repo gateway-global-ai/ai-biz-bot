@@ -5066,6 +5066,34 @@ Keep responses concise and engaging. If asked personal questions, you can share 
 
   // ← extracted to server/routes/telephonyRoutes.ts
 
+
+  // VoiceLead Machine routes
+  registerVlmRoutes(app);
+
+  // Register Agent System routes
+  registerAgentRoutes(app);
+
+  // Register Workspace Onboarding routes
+  registerWorkspaceOnboardingRoutes(app);
+
+  // Register Knowledge Base routes
+  app.use("/api/knowledge", knowledgeRoutes);
+  app.use("/api/business", businessRoutes);
+  app.use("/api/site-configs", siteConfigRoutes);
+  app.use("/api/onboarding", onboardingRoutes);
+
+  // Register Site Claim / Assignment routes (assign + preview + OTP + Stripe checkout)
+  app.use(claimRoutes);
+
+  // Intelligence Ingestion: POST /api/ingest-plan
+  app.use(ingestPlanRoutes);
+
+  // Bail Rescue public API: GET /api/bail-rescue/:token, POST /api/bail-rescue/:token/checkout
+  app.use(bailRescueRoutes);
+
+  // Agent Deep Research: POST /api/generate-agent-persona
+  app.use(agentResearchRoutes);
+
   // NOVA Sovereign Billing: POST /api/nova/billing/push, POST /api/nova/billing/receive
   app.use("/api/nova", novaSovereignRouter);
 

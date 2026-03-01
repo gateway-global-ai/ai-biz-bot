@@ -3324,30 +3324,5 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
-  registerVlmRoutes(app);
-
-  // Register Agent System routes
-  registerAgentRoutes(app);
-
-  // Register Workspace Onboarding routes
-  registerWorkspaceOnboardingRoutes(app);
-
-  // Register Knowledge Base routes
-  router.use("/api/knowledge", knowledgeRoutes);
-  router.use("/api/business", businessRoutes);
-  router.use("/api/site-configs", siteConfigRoutes);
-  router.use("/api/onboarding", onboardingRoutes);
-
-  // Register Site Claim / Assignment routes (assign + preview + OTP + Stripe checkout)
-  router.use(claimRoutes);
-
-  // Intelligence Ingestion: POST /api/ingest-plan
-  router.use(ingestPlanRoutes);
-
-  // Bail Rescue public API: GET /api/bail-rescue/:token, POST /api/bail-rescue/:token/checkout
-  router.use(bailRescueRoutes);
-
-  // Agent Deep Research: POST /api/generate-agent-persona
-  router.use(agentResearchRoutes);
 
 export default router;
