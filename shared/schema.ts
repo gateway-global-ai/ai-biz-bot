@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, pgEnum, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, pgEnum, index, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -2011,3 +2011,37 @@ export const smsLogs = pgTable("sms_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ==========================================
+// Platform Identity — stable internal business identity
+// ==========================================
+
+export const platformBusinessMap = pgTable(
+  "platform_business_map",
+  {
+    platformId: uuid("platform_id").primaryKey().defaultRandom(),
+    siteConfigId: varchar("site_config_id")
+      .notNull()
+      .unique()
+      .references(() => siteConfigs.id, { onDelete: "cascade" }),
+    googleCid: text("google_cid").unique(),
+    googlePlaceId: text("google_place_id"),
+    serpapiDataId: text("serpapi_data_id"),
+    categorySlug: text("category_slug"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_platform_map_place_id").on(table.googlePlaceId),
+    index("idx_platform_map_serpapi_id").on(table.serpapiDataId),
+  ],
+);
+
+export const insertPlatformBusinessMapSchema = createInsertSchema(platformBusinessMap).omit({
+  platformId: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertPlatformBusinessMap = z.infer<typeof insertPlatformBusinessMapSchema>;
+export type PlatformBusinessMap = typeof platformBusinessMap.$inferSelect;

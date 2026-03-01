@@ -61,6 +61,9 @@ import {
   type InsertVlmCallAttempt,
   type Inquiry,
   type InsertInquiry,
+  type PlatformBusinessMap,
+  type InsertPlatformBusinessMap,
+  platformBusinessMap,
   botTemplates,
   telephonyConfigs,
   callLogs,
@@ -1255,3 +1258,74 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Platform Identity — System of Record for stable internal platform_id
+// ──────────────────────────────────────────────────────────────────────────────
+
+export async function getOrCreatePlatformId(siteConfigId: string): Promise<string> {
+  const [existing] = await db
+    .select({ platformId: platformBusinessMap.platformId })
+    .from(platformBusinessMap)
+    .where(eq(platformBusinessMap.siteConfigId, siteConfigId))
+    .limit(1);
+
+  if (existing) return existing.platformId;
+
+  const [siteConfig] = await db
+    .select({ placeId: siteConfigs.placeId })
+    .from(siteConfigs)
+    .where(eq(siteConfigs.id, siteConfigId))
+    .limit(1);
+
+  const inserted = await db
+    .insert(platformBusinessMap)
+    .values({ siteConfigId, googlePlaceId: siteConfig?.placeId ?? null })
+    .onConflictDoNothing()
+    .returning({ platformId: platformBusinessMap.platformId });
+
+  if (inserted.length > 0) return inserted[0].platformId;
+
+  const [raceRow] = await db
+    .select({ platformId: platformBusinessMap.platformId })
+    .from(platformBusinessMap)
+    .where(eq(platformBusinessMap.siteConfigId, siteConfigId))
+    .limit(1);
+
+  if (!raceRow) throw new Error(`[Storage] Failed to resolve platform_id for siteConfigId=${siteConfigId}`);
+  return raceRow.platformId;
+}
+
+export async function resolvePlatformId(
+  input: { siteConfigId?: string; googlePlaceId?: string },
+): Promise<PlatformBusinessMap | null> {
+  if (input.siteConfigId) {
+    const [existing] = await db
+      .select()
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.siteConfigId, input.siteConfigId))
+      .limit(1);
+
+    if (existing) return existing;
+
+    await getOrCreatePlatformId(input.siteConfigId);
+
+    const [row] = await db
+      .select()
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.siteConfigId, input.siteConfigId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  if (input.googlePlaceId) {
+    const [row] = await db
+      .select()
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.googlePlaceId, input.googlePlaceId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  return null;
+}
