@@ -1,0 +1,48 @@
+name: Sovereign Guard
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+jobs:
+  sovereign-guard:
+    name: Rule Enforcement
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Sovereign Guard (full scan on PR)
+        run: |
+          # On PRs, scan all changed files vs base branch
+          # On push to main, scan files changed in the last commit
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          fi
+
+          echo "Files to scan:"
+          echo "$CHANGED"
+          echo ""
+
+          # Write changed files to a temp list and run guard against them
+          echo "$CHANGED" > /tmp/changed-files.txt
+          npx tsx scripts/sovereign-guard.ts --file-list /tmp/changed-files.txt
+
+      - name: Check env manifest cleanliness
+        run: npx tsx scripts/check-env-manifest.ts
+        if: always()
