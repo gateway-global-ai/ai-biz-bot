@@ -1402,7 +1402,7 @@ const webhooksUpdateSchema = z.object({
   });
 
   // TwiML endpoint for test calls
-  app.all("/api/twiml/test", (req, res) => {
+  router.all("/api/twiml/test", (req, res) => {
     const message = req.query.message as string || "This is a test call from Gateway Global AI.";
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
