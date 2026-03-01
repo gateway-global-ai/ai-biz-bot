@@ -384,78 +384,130 @@ export default function BusinessPage() {
       };
       requestAnimationFrame(applyStyles);
 
+      // Happy Path: user clicks a dropdown suggestion
+      // CRITICAL: No fetchFields — all data fetched securely via server proxy
       autocomplete.addEventListener('gmp-placeselect', async (event: any) => {
         const { placePrediction } = event;
         if (!placePrediction) return;
 
+        // Extract place.id directly without client-side API call
         const place = placePrediction.toPlace();
-        await place.fetchFields({
-          fields: ['id', 'displayName', 'formattedAddress', 'location', 'types', 'rating',
-                   'userRatingCount', 'nationalPhoneNumber', 'websiteURI', 'photos', 'regularOpeningHours'],
+        const placeId: string | undefined = place.id ?? undefined;
+        if (!placeId) return;
+
+        setMapsError(null);
+        // Show a minimal card immediately so the user isn't waiting in the dark
+        setSelectedPlace({
+          name: placePrediction.text?.toString() || 'Loading...',
+          formatted_address: '',
+          place_id: placeId,
+          photos: [],
+          types: [],
+          reviews: [],
         });
 
-        if (!place.displayName) return;
-
-        const placeId = place.id ?? undefined;
-        let geometry: { lat: number; lng: number } | undefined;
-        if (place.location) {
-          geometry = { lat: place.location.lat(), lng: place.location.lng() };
-        }
-
-        const placeData: SelectedPlace = {
-          name: place.displayName || '',
-          formatted_address: place.formattedAddress || '',
-          rating: place.rating ?? undefined,
-          user_ratings_total: place.userRatingCount ?? undefined,
-          formatted_phone_number: place.nationalPhoneNumber ?? undefined,
-          website: place.websiteURI ?? undefined,
-          types: place.types || [],
-          place_id: placeId,
-          photos: place.photos || [],
-          opening_hours: place.regularOpeningHours ?? undefined,
-          reviews: [],
-          geometry,
-        };
-        setSelectedPlace(placeData);
-        setMapsError(null);
-
-        if (placeId) {
-          try {
-            const detailsRes = await fetch(`/api/places/details/${encodeURIComponent(placeId)}`);
-            const details = await detailsRes.json();
-            setSelectedPlace(prev => prev ? {
-              ...prev,
-              reviews: details.reviews?.length > 0 ? details.reviews : prev.reviews,
-              user_ratings_total: details.user_ratings_total || prev.user_ratings_total,
-              rating: details.rating || prev.rating,
-              price_level: details.price_level,
-              business_status: details.business_status,
-              url: details.url,
-              vicinity: details.vicinity,
-              utc_offset: details.utc_offset,
-              international_phone_number: details.international_phone_number,
-              address_components: details.address_components,
-              plus_code: details.plus_code,
-              editorial_summary: details.editorial_summary,
-              wheelchair_accessible_entrance: details.wheelchair_accessible_entrance,
-              delivery: details.delivery,
-              dine_in: details.dine_in,
-              takeout: details.takeout,
-              curbside_pickup: details.curbside_pickup,
-              reservable: details.reservable,
-              serves_beer: details.serves_beer,
-              serves_wine: details.serves_wine,
-              serves_breakfast: details.serves_breakfast,
-              serves_lunch: details.serves_lunch,
-              serves_dinner: details.serves_dinner,
-              serves_brunch: details.serves_brunch,
-              serves_vegetarian_food: details.serves_vegetarian_food,
-            } : prev);
-          } catch (err) {
-            console.error('[Places] Failed to fetch details:', err);
-          }
+        try {
+          const detailsRes = await fetch(`/api/places/details/${encodeURIComponent(placeId)}`);
+          if (!detailsRes.ok) throw new Error(`Server returned ${detailsRes.status}`);
+          const details = await detailsRes.json();
+          setSelectedPlace({
+            name: details.name || placePrediction.text?.toString() || '',
+            formatted_address: details.formatted_address || '',
+            place_id: placeId,
+            rating: details.rating || undefined,
+            user_ratings_total: details.user_ratings_total || undefined,
+            formatted_phone_number: details.formatted_phone_number || undefined,
+            international_phone_number: details.international_phone_number || undefined,
+            website: details.website || undefined,
+            types: details.types || [],
+            // Photos: use server photo-proxy URL instead of client-side getURI()
+            photos: placeId ? [{ proxyUrl: `/api/places/photo-proxy/${encodeURIComponent(placeId)}?maxWidth=600` }] : [],
+            opening_hours: details.opening_hours || undefined,
+            reviews: details.reviews || [],
+            geometry: details.geometry || undefined,
+            price_level: details.price_level,
+            business_status: details.business_status,
+            url: details.url,
+            vicinity: details.vicinity,
+            utc_offset: details.utc_offset,
+            address_components: details.address_components,
+            plus_code: details.plus_code,
+            editorial_summary: details.editorial_summary,
+            wheelchair_accessible_entrance: details.wheelchair_accessible_entrance,
+            delivery: details.delivery,
+            dine_in: details.dine_in,
+            takeout: details.takeout,
+            curbside_pickup: details.curbside_pickup,
+            reservable: details.reservable,
+            serves_beer: details.serves_beer,
+            serves_wine: details.serves_wine,
+            serves_breakfast: details.serves_breakfast,
+            serves_lunch: details.serves_lunch,
+            serves_dinner: details.serves_dinner,
+            serves_brunch: details.serves_brunch,
+            serves_vegetarian_food: details.serves_vegetarian_food,
+          });
+        } catch (err) {
+          console.error('[Places] Server fetch failed:', err);
+          setMapsError('Could not load business details. Please try again.');
+          setSelectedPlace(null);
         }
       });
+
+      // Fallback Path: user types and hits Enter without selecting a dropdown item
+      const handleFormSubmit = async (e: Event) => {
+        e.preventDefault();
+        const shadow = (autocomplete as any).shadowRoot;
+        const input: HTMLInputElement | null = shadow?.querySelector('input');
+        const rawQuery = input?.value?.trim();
+        if (!rawQuery) return;
+
+        setMapsError(null);
+        setSelectedPlace({
+          name: rawQuery,
+          formatted_address: 'Searching...',
+          place_id: undefined,
+          photos: [],
+          types: [],
+          reviews: [],
+        });
+
+        try {
+          const searchRes = await fetch('/api/places/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: rawQuery }),
+          });
+          if (!searchRes.ok) throw new Error(`Search returned ${searchRes.status}`);
+          const searchData = await searchRes.json();
+          const first = searchData.results?.[0] || searchData.places?.[0];
+          if (!first) {
+            setMapsError('No businesses found. Try a different name or location.');
+            setSelectedPlace(null);
+            return;
+          }
+          const placeId = first.place_id;
+          setSelectedPlace({
+            name: first.name || rawQuery,
+            formatted_address: first.formatted_address || first.vicinity || '',
+            place_id: placeId,
+            rating: first.rating || undefined,
+            user_ratings_total: first.user_ratings_total || undefined,
+            types: first.types || [],
+            photos: placeId ? [{ proxyUrl: `/api/places/photo-proxy/${encodeURIComponent(placeId)}?maxWidth=600` }] : [],
+            reviews: [],
+            geometry: first.geometry || undefined,
+          });
+        } catch (err) {
+          console.error('[Places] Search failed:', err);
+          setMapsError('Search failed. Please try again.');
+          setSelectedPlace(null);
+        }
+      };
+
+      // Attach Enter-key submit to the nearest ancestor form (added below)
+      const form = container.closest('form');
+      if (form) form.addEventListener('submit', handleFormSubmit);
 
       container.appendChild(autocomplete);
     };
@@ -963,14 +1015,14 @@ export default function BusinessPage() {
             <div className="max-w-2xl w-full" data-testid="container-place-search">
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-                <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
+                <form className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
                   <div ref={pickerContainerRef} className="flex-1 min-w-0" />
                   {!mapsKey && (
                     <div className="pr-3">
                       <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
                     </div>
                   )}
-                </div>
+                </form>
               </div>
               {mapsError && (
                 <p className="text-xs text-amber-400 mt-3 flex items-center gap-1" data-testid="text-maps-error">
@@ -995,20 +1047,13 @@ export default function BusinessPage() {
               <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
                 <CardContent className="p-6">
                   <div className="flex flex-col gap-4">
-                    {selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getURI === 'function' ? (
+                    {selectedPlace.photos && selectedPlace.photos.length > 0 && (selectedPlace.photos[0] as any)?.proxyUrl ? (
                       <div className="w-full h-32 rounded-lg overflow-hidden bg-slate-800">
                         <img
-                          src={selectedPlace.photos[0].getURI({ maxWidth: 400 })}
+                          src={(selectedPlace.photos[0] as any).proxyUrl}
                           alt={selectedPlace.name}
                           className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ) : selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getUrl === 'function' ? (
-                      <div className="w-full h-32 rounded-lg overflow-hidden bg-slate-800">
-                        <img
-                          src={selectedPlace.photos[0].getUrl({ maxWidth: 400 })}
-                          alt={selectedPlace.name}
-                          className="w-full h-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                         />
                       </div>
                     ) : (
