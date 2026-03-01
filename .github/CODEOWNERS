@@ -1,0 +1,54 @@
+# Sovereign CODEOWNERS — Gateway Global AI
+#
+# Protected files require explicit review from the listed owner before merge.
+# This is the "twig on the branch" model: agents work on isolated branches,
+# pull requests touching these files cannot be auto-merged.
+#
+# Enforcement: GitHub branch protection + required PR review.
+# Emergency bypass: CTO merges directly to main (tracked in audit log).
+
+# ── Tier 1: Voice Pipeline ─────────────────────────────────────────────────
+# Any change here can break real-time voice for all customers.
+server/geminiVoice.ts                    @gateway-global-ai/cto
+server/voiceStream.ts                    @gateway-global-ai/cto
+server/voiceGemini.ts                    @gateway-global-ai/cto
+server/voiceSession.ts                   @gateway-global-ai/cto
+server/audioCodec.ts                     @gateway-global-ai/cto
+server/config/geminiLiveProtocol.ts      @gateway-global-ai/cto
+server/config/geminiSystemInstructions.ts @gateway-global-ai/cto
+server/config/geminiToolDeclarations.ts  @gateway-global-ai/cto
+client/src/services/voice/              @gateway-global-ai/cto
+client/public/clear-voice-processor.js  @gateway-global-ai/cto
+
+# ── Tier 1: Twilio & A2P Compliance ───────────────────────────────────────
+# HMAC validation and SMS Router changes can trigger TCPA liability.
+server/routes/twilioWebhooks.ts          @gateway-global-ai/cto
+server/services/smsRouter.ts             @gateway-global-ai/cto
+server/twilio.ts                         @gateway-global-ai/cto
+migrations/0010_sms_compliance_router.sql @gateway-global-ai/cto
+migrations/0011_compliance_reseller_gateway.sql @gateway-global-ai/cto
+
+# ── Tier 1: Database Schema ────────────────────────────────────────────────
+# Schema changes are irreversible in production without a migration.
+shared/schema.ts                         @gateway-global-ai/cto
+migrations/                              @gateway-global-ai/cto
+
+# ── Tier 1: Secrets & Environment ─────────────────────────────────────────
+.env.example                             @gateway-global-ai/cto
+docs/SOVEREIGN_ENV_MANIFEST.md           @gateway-global-ai/cto
+.cursor/rules/                           @gateway-global-ai/cto
+
+# ── Tier 2: Billing & Stripe ──────────────────────────────────────────────
+server/stripeClient.ts                   @gateway-global-ai/cto
+
+# ── Tier 2: Authentication ────────────────────────────────────────────────
+server/auth.ts                           @gateway-global-ai/cto
+server/customerAuth.ts                   @gateway-global-ai/cto
+
+# ── Tier 2: AI Gateway ────────────────────────────────────────────────────
+# Single provider. Changes here affect all agent reasoning.
+server/ai-gateway.ts                     @gateway-global-ai/cto
+
+# ── Tier 3: Core Route Monolith ───────────────────────────────────────────
+# 7,900+ lines. New routes go in server/routes/ — not here.
+server/routes.ts                         @gateway-global-ai/cto
