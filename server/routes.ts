@@ -705,13 +705,14 @@ export async function registerRoutes(
         "Boardwalk Suites Lafayette";
 
       const serpKey = process.env.SERPAPI_API_KEY || process.env.SERPAPI_KEY || process.env.SERP_API_KEY;
-      const googleMapsKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY;
+      const { getServerMapsApiKey } = await import("./config/mapsApiKey");
+      const googleMapsKey = getServerMapsApiKey();
       const geminiKey = process.env.GEMINI_API_KEY;
       const hasValidPlaceId = placeId.length > 20 && !placeId.includes("...");
 
       const dependencyChecks: Array<{ name: string; status: "ok" | "missing" | "error"; message?: string }> = [
         { name: "SERP_API_KEY", status: serpKey ? "ok" : "missing", message: serpKey ? undefined : "Set SERPAPI_API_KEY, SERPAPI_KEY, or SERP_API_KEY" },
-        { name: "GOOGLE_MAPS_API_KEY", status: googleMapsKey ? "ok" : "missing", message: googleMapsKey ? undefined : "Set GOOGLE_MAPS_API_KEY (or GOOGLE_API_KEY)" },
+        { name: "Google Maps/Places key", status: googleMapsKey ? "ok" : "missing", message: googleMapsKey ? undefined : "Set GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_GROUNDING_LITE_API_KEY, or GOOGLE_PLACES_API_KEY" },
         { name: "GEMINI_API_KEY", status: geminiKey ? "ok" : "missing", message: geminiKey ? undefined : "Set GEMINI_API_KEY" },
         { name: "TEST_PLACE_ID", status: hasValidPlaceId ? "ok" : "error", message: hasValidPlaceId ? undefined : `Invalid TEST_PLACE_ID format (${placeId})` },
       ];
@@ -781,7 +782,7 @@ export async function registerRoutes(
         pipelineChecks.push({
           name: "Enriched Business Data",
           status: "skip",
-          message: "GOOGLE_MAPS_API_KEY not set",
+          message: "Google Maps/Places API key not set (GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_GROUNDING_LITE_API_KEY, or GOOGLE_PLACES_API_KEY)",
         });
       } else if (!hasValidPlaceId) {
         pipelineChecks.push({
@@ -838,7 +839,7 @@ export async function registerRoutes(
         pipelineChecks.push({
           name: "System Instruction Building",
           status: "skip",
-          message: "GOOGLE_MAPS_API_KEY not set",
+          message: "Google Maps/Places API key not set (GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_GROUNDING_LITE_API_KEY, or GOOGLE_PLACES_API_KEY)",
         });
       } else if (!hasValidPlaceId) {
         pipelineChecks.push({

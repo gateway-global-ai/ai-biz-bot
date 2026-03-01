@@ -11,6 +11,7 @@ When performing tasks in this codebase, always distinguish between Dev, Stage, a
 - **Dev Environment**: Port `3004`, Doppler config `dev`. PM2 app: `aibizbot-dev.gatewayglobal.ai`.
 - **Stage Environment**: Port `3003`, Doppler config `stg`. PM2 app: `aibizbot-stage.gatewayglobal.ai`.
 - **Prod Environment**: Port `3002`, Doppler config `prd`. PM2 app: `aibizbot.gatewayglobal.ai`.
+- **Ports in Doppler:** Each config has **PORT**. PORT_DEV, PORT_STG, PORT_PRD (in .env) are used by `doppler:sync-ports` so the right port is set per config.
 - **Execution**: Always use `doppler run --` (or `doppler run --config <dev|stg|prd> --`) before any node/npm command that needs secrets.
 - **Secrets in Doppler**: Never commit secrets. Store them in Doppler; use a local `.env` only for `DOPPLER_TOKEN` or `DOPPLER_TOKEN_DEV`/`DOPPLER_TOKEN_STG`/`DOPPLER_TOKEN_PRD` so the CLI and scripts can authenticate (keep that file gitignored). See `.cursor/rules/doppler-cli.mdc` and `.env.example` (DOPPLER section).
 
@@ -30,22 +31,7 @@ On the dev server, set `DOPPLER_TOKEN_DEV` in .env; scripts (e.g. `npm run db:mi
 - Logs: `pm2 logs aibizbot-dev.gatewayglobal.ai` or `pm2 logs aibizbot-stage.gatewayglobal.ai`
 - Restart with env refresh: `pm2 restart <name> --update-env`
 - Run app with secrets: `doppler run -- npm run dev` (dev) or `doppler run --config stg -- npm start` (stage)
-
-## Pushing dev secrets to Stage and Prod (Doppler)
-
-When **stg** or **prd** are missing variables that exist in **dev** (e.g. Stripe pricing IDs, `STRIPE_PRICE_AI_PRO`, `STRIPE_A2P_WEBHOOK_SECRET`):
-
-1. **Push only specific keys** (recommended so you don’t overwrite stg/prd-only secrets like prod API keys):
-   ```bash
-   COPY_KEYS="STRIPE_SECRET_KEY STRIPE_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET STRIPE_A2P_WEBHOOK_SECRET STRIPE_PRICE_AI_PRO STRIPE_PRICE_AI_BASIC" npm run doppler:copy-config
-   ```
-   Add or remove key names as needed.
-
-2. **Push all dev secrets** to stg and prd (overwrites every secret in target configs):
-   ```bash
-   npm run doppler:copy-config
-   ```
-   After a full copy, re-set any stg/prd-specific values in the Doppler dashboard (e.g. production Stripe keys) if they differ from dev.
+- **Port conflict:** PORT comes from Doppler (dev=3004, stg=3003, prd=3002). If "Port X is already in use", run `npm run kill-port` (uses PORT from Doppler). The script stops the PM2 app for that port first so it does not respawn, then kills any process on the port. Then start again (e.g. `doppler run -- npm run dev`).
 
 ## Reference
 

@@ -9,8 +9,8 @@ alwaysApply: false
 - **Secrets:** Use Doppler for dev/stg/prd. Never commit real secrets; use `.env.example` or Doppler.
 - **Run app/scripts with secrets:** `doppler run -- <command>` or `doppler run --config stg -- <command>`.
 - **Copy configs (dev → stg/prd):** `./scripts/doppler-copy-config.sh` or `npm run doppler:copy-config`. Requires `jq`. Override with `FROM_CONFIG`, `TO_CONFIGS`, `PROJECT`.
-- **Copy only Stripe / pricing (so stg/prd get missing vars without overwriting other secrets):** `COPY_KEYS="STRIPE_SECRET_KEY STRIPE_PUBLISHABLE_KEY STRIPE_WEBHOOK_SECRET STRIPE_A2P_WEBHOOK_SECRET STRIPE_PRICE_AI_PRO STRIPE_PRICE_AI_BASIC" npm run doppler:copy-config`. Add any other key names to the list as needed.
-- **Sync PORT per config:** `npm run doppler:sync-ports` (reads PORT_DEV/STG/PRD and `DOPPLER_TOKEN` or `DOPPLER_TOKEN_DEV` from `.env`).
+- **Sync PORT per config:** `npm run doppler:sync-ports` (reads PORT_DEV, PORT_STG, PORT_PRD from `.env`; sets **PORT** in each Doppler config). Server uses PORT from Doppler (default 3004).
+- **Port in use:** Run `npm run kill-port` (uses PORT from Doppler for current config), then start the app again.
 - **Permit/health checks:** `doppler run -- npx tsx scripts/check-google-key-permissions.ts` or `npm run check-keys`.
 - **Token labels (canonical):** CLI reads `DOPPLER_TOKEN`. In .env use: `DOPPLER_TOKEN_DEV` (dev), `DOPPLER_TOKEN_STG` (stg), `DOPPLER_TOKEN_PRD` (prd). Scripts fall back to `DOPPLER_TOKEN_DEV` when `DOPPLER_TOKEN` unset. Do not store these in Doppler; keep them only in each server's .env. If using the Doppler web UI to copy config, exclude token vars so dev token is never copied to stg/prd.
 - **Rule 2 – Force-sync after feature merge:** After every feature merge that touches env or secrets, Doppler MUST be force-synced to match the sanitized `.env.example`: ensure all keys from `.env.example` exist in Doppler dev (add any missing with real values), then run `npm run doppler:copy-config` so stg/prd receive them. See `docs/SOVEREIGN_ENV_MANIFEST.md`.

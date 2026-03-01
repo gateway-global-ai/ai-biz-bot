@@ -61,6 +61,8 @@ This document is the **single source of truth** for environment variable naming.
 | Platform sender (DWD subject) | `PLATFORM_SENDER_EMAIL` | — | Server |
 | Client (Vite) | `VITE_TELEPHONY_API_URL`, `VITE_GOOGLE_MAP_ID`, `VITE_GOOGLE_MAP_ID_MIDNIGHT`, `VITE_GOOGLE_MAPS_KEY` | — | Client |
 
+**Maps/Places rule:** Maps Grounding Lite and Places API (New) must use the **same** server key; different keys cause pull failures. Client keys can differ. Code uses `getServerMapsApiKey()` everywhere. See `server/config/mapsApiKey.ts`, `docs/API_KEYS_DOPPLER.md`.
+
 ---
 
 ## 2b. Declared keys allow-list (.env.example)

@@ -30,7 +30,8 @@ function signCanonical(canonical: string, privateKeyPem: string): string {
 
 function requireEnv(name: string): void {
   if (!process.env[name]?.trim()) {
-    console.error(`[Flight 001] Missing required env: ${name}. Run with: doppler run -- npx tsx scripts/nova-sovereign-handshake-test-flight-001.ts`);
+    console.error(`[Flight 001] Missing required env: ${name}.`);
+    console.error("  Run: npm run nova-handshake:prereq  to list all missing Doppler vars.");
     process.exit(1);
   }
 }

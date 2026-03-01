@@ -593,11 +593,9 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
+  // PORT is set by Doppler per environment (dev=3004, stg=3003, prd=3002). See npm run doppler:sync-ports.
+  // Default 3004 for dev when PORT is not set. Serves both API and client.
+  const port = parseInt(process.env.PORT || "3004", 10);
   // Seed default admin and core agents before starting server
   await seedDefaultAdmin();
   await seedCoreAgents();
@@ -635,7 +633,8 @@ app.use((req, res, next) => {
     })
     .on("error", (err: NodeJS.ErrnoException) => {
       if (err.code === "EADDRINUSE") {
-        console.error(`[express] Port ${port} is already in use. Kill the process using it or set PORT to another value.`);
+        console.error(`[express] Port ${port} is already in use.`);
+        console.error(`  Run: npm run kill-port   (uses PORT from Doppler), then start again.`);
       } else {
         console.error("[express] Server error:", err.message);
       }
