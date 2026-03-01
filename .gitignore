@@ -5,10 +5,14 @@ server/public
 vite.config.ts.*
 *.tar.gz
 
-# Environment files (never commit secrets)
+# Environment files (never commit secrets) — Gate 1: Perimeter Guard
+# CTO WARNING: The ONLY env file committed to the repo is .env.example. It is DOCUMENTATION ONLY.
+# It does not drive production or CI; real values live in Doppler (and optionally server .env). See docs/GITHUB_SECRET_MANIFEST.md.
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
 env.local
 
 # Build artifacts

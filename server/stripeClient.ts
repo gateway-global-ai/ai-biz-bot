@@ -12,46 +12,65 @@
 
 import Stripe from "stripe";
 
-function requireEnv(key: string): string {
-  const value = process.env[key];
-  if (!value) {
-    throw new Error(
-      `[StripeClient] Required environment variable "${key}" is not set. ` +
-      `Ensure it is configured in Doppler and the process was started with "doppler run --".`
-    );
+/**
+ * Returns a Stripe client initialised from STRIPE_SECRET_KEY in Doppler.
+ * Throws clearly if the key is missing so misconfiguration is obvious in logs.
+ */
+export function getStripeClient(): Stripe {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) {
+    throw new Error('[Stripe] STRIPE_SECRET_KEY is not set — add it to Doppler dev config.');
   }
-  return value;
+  return new Stripe(key, { apiVersion: '2025-11-17.clover' });
+}
+
+export function getStripePublishableKey(): string {
+  return process.env.STRIPE_PUBLISHABLE_KEY ?? '';
+}
+
+export function getStripeWebhookSecret(): string {
+  return process.env.STRIPE_WEBHOOK_SECRET ?? '';
 }
 
 /**
- * Returns a fresh Stripe client on every call (uncachable) so that
- * key rotation in Doppler takes effect without a process restart.
+ * Unified map of internal plan keys + energy refill keys → Stripe Price IDs.
+ * All values injected via Doppler at runtime; falls back to '' for energy keys
+ * so the server boots cleanly before Doppler variables are set.
+ * Set STRIPE_PRICE_ENERGY_500 and STRIPE_PRICE_ENERGY_1200 in Doppler once
+ * the one-time Price objects have been created in the Stripe dashboard.
  */
+export const STRIPE_PRICE_IDS: Record<string, string> = {
+  // ── Subscription plans ──────────────────────────────────────────────────────
+  free:       process.env.STRIPE_PRICE_FREE       ?? 'price_1T3Dd8KSRGO5U0L03cdVeUTj',
+  pro:        process.env.STRIPE_PRICE_STARTER    ?? 'price_1T3ELJKSRGO5U0L0P8o0chpB',
+  voice:      process.env.STRIPE_PRICE_PRO        ?? 'price_1T3EMYKSRGO5U0L0hOp1cjxn',
+  enterprise: process.env.STRIPE_PRICE_ENTERPRISE ?? 'price_1T3EOOKSRGO5U0L0sdCDoO25',
+  // ── Phase 3: Partner Energy refill (one-time payments) ─────────────────────
+  // Create one-time Price objects in Stripe dashboard, then set in Doppler.
+  energy_500:  process.env.STRIPE_PRICE_ENERGY_500  ?? '',
+  energy_1200: process.env.STRIPE_PRICE_ENERGY_1200 ?? '',
+  // ── Site Claim Activation ($49.99 one-time) ─────────────────────────────────
+  // One-time Price for new business owners to activate their assigned website.
+  // Create a one-time Price at $49.99 in Stripe, then set in Doppler.
+  claim_activation: process.env.STRIPE_PRICE_CLAIM_ACTIVATION ?? '',
+};
+
+/**
+ * Convenience alias for energy refill lookups keyed by package type.
+ * Kept as a separate export for backwards-compatibility with existing refill routes.
+ */
+export const STRIPE_ENERGY_PRICE_IDS: Record<string, string> = {
+  basic: STRIPE_PRICE_IDS.energy_500,
+  pro:   STRIPE_PRICE_IDS.energy_1200,
+};
+
+// Backwards-compatible alias used by existing routes
 export async function getUncachableStripeClient(): Promise<Stripe> {
-  return new Stripe(requireEnv("STRIPE_SECRET_KEY"), {
-    apiVersion: "2025-11-17.clover",
-  });
+  return getStripeClient();
 }
 
-export async function getStripePublishableKey(): Promise<string> {
-  return requireEnv("STRIPE_PUBLISHABLE_KEY");
+export async function getStripePublishableKeyAsync(): Promise<string> {
+  return getStripePublishableKey();
 }
 
-export async function getStripeSecretKey(): Promise<string> {
-  return requireEnv("STRIPE_SECRET_KEY");
-}
-
-/**
- * getStripeSync — PENDING MIGRATION.
- * The previous implementation used `stripe-replit-sync` which is a
- * Replit-platform-specific package. This function is not currently used
- * in any active billing flow. It will be replaced with a Stripe Connect
- * webhook sync implementation once the Stripe Dashboard is configured
- * per TODO_STRIPE.md.
- */
-export async function getStripeSync(): Promise<never> {
-  throw new Error(
-    "[StripeClient] getStripeSync() is not yet implemented in the Doppler environment. " +
-    "See TODO_STRIPE.md — 'Stripe Connect / Sync Migration' for the implementation roadmap."
-  );
-}
+// getStripeSync removed — stripe-replit-sync was a Replit-only package

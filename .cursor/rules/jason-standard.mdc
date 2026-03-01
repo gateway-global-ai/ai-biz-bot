@@ -1,0 +1,105 @@
+---
+description: "Jason Standard — Sovereign OS Design System. Apply to ALL React and Tailwind UI work across the platform's 9 site templates."
+globs: ["client/src/**/*.tsx", "client/src/**/*.ts", "tailwind.config.ts", "client/src/index.css"]
+alwaysApply: true
+---
+
+# The Jason Standard: Sovereign OS Design System
+
+You are a high-fidelity frontend engineer building a **Silicon Valley masterpiece**. Every component you build or refactor must adhere to this manifest — no exceptions.
+
+## 1. Geometric Sovereignty (The Law)
+
+- **Border Radius**: `rounded-sui` (`24px`) for ALL primary containers, cards, image frames, and the 40% multi-modal window. No other radius for outer wrappers.
+- **Border Width**: Standardize on `1px` — `border border-indigo-500/20` for glass cards, `border-white/10` for nested panels.
+- **Backdrop Blur**: Always `backdrop-blur-xl` (16px) for glass containers. Never use solid backgrounds on content cards.
+
+## 2. The 1% Sovereign Color Palette
+
+| Token | Value | Usage |
+|---|---|---|
+| `sovereign-deep` | `#0F172A` | Primary background; `bg-[#0F172A]` |
+| `sovereign-electric` | `#6366F1` | Action buttons, accents, glow, `bg-indigo-500`, `border-indigo-500/20` |
+| `sovereign-vivid` | `#10B981` | Success, "1% Insight" badges, verified ticks, `text-emerald-400` |
+| `sovereign-muted` | `#94A3B8` | Secondary text, non-critical data, `text-slate-400` |
+
+**Primary Background**: `bg-slate-950` or `bg-[#0F172A]`
+**Glass Card**: `bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20 rounded-sui`
+**Docked Bar**: `bg-slate-900/80 border-t border-indigo-500/15 backdrop-blur-xl`
+
+## 3. Interaction & Motion Logic (Framer Motion Required)
+
+- **ALL** primary card components must import `motion` from `framer-motion`.
+- Standard hover: `whileHover={{ scale: 1.02, y: -2 }}` with `transition={{ type: "spring", stiffness: 300, damping: 20 }}`.
+- Standard entrance: `initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: "easeOut" }}`.
+- View transitions between tool panels: 0.3s `ease-in-out` slide.
+- **Sovereign Pulse**: When an element contains a "Sovereign Detail" (Tier 1 named entity, pinned room, mattress spec, Pro Tip), apply `animate-sovereign-pulse` class + `shadow-[0_0_18px_4px_rgba(99,102,241,0.35)]` indigo glow.
+
+## 4. Typography — The Musk/X Aesthetic
+
+- **Business Names / Section Headers**: `font-bold` + `text-white` — heavy sans-serif (Inter, already loaded).
+- **Platform IDs / Metrics / Prices**: `font-mono text-xs` — use `.data-chip` utility class for monospaced data chips.
+- **"1% Insight" Badges**: Use `.badge-insight` utility class (emerald on dark glass).
+- **Secondary text**: `text-slate-400 leading-relaxed` — never `text-gray-*`.
+- **High-Contrast Principle**: Information density over whitespace. Remove padding where it adds no visual separation.
+
+## 5. Component Architecture Rules
+
+### Glass Card Template (the standard)
+```tsx
+<motion.div
+  initial={{ opacity: 0, y: 8 }}
+  animate={{ opacity: 1, y: 0 }}
+  transition={{ duration: 0.3, ease: "easeOut" }}
+  whileHover={{ scale: 1.02, y: -2 }}
+  className="relative p-6 rounded-sui bg-slate-900/40 border border-indigo-500/20 backdrop-blur-xl shadow-2xl"
+>
+  {/* content */}
+</motion.div>
+```
+
+### "1% Insight" Badge Template
+```tsx
+<span className="badge-insight">1% Insight</span>
+```
+
+### Sovereign Data Chip (for IDs, metrics)
+```tsx
+<span className="data-chip font-mono">{platformId}</span>
+```
+
+### Sovereign Pulse (for pinned / Tier-1 elements)
+```tsx
+<div className="animate-sovereign-pulse rounded-sui">...</div>
+```
+
+### Docked Control Bar
+```tsx
+<div className="fixed bottom-0 left-0 right-0 sovereign-bar px-6 py-3 flex items-center gap-4">
+  {/* Voice, Chat, Share actions */}
+</div>
+```
+
+## 6. The Spatial 40% Window
+
+- Desktop: `w-[40%]` content window, `w-[60%]` map.
+- Mobile: `w-full` stacked.
+- Inner panels use `sovereign-panel` utility class (lighter glass).
+- Image containers: `rounded-sui overflow-hidden` — NEVER `rounded-xl` or `rounded-lg` for outer containers.
+
+## 7. Intelligence Hierarchy Display
+
+When rendering room cards, product cards, or amenity lists:
+1. Check `sovereignName` (Tier 1) — if present, use it as the heading; apply sovereign-pulse glow.
+2. Check `proTip` (Tier 3) — if present, show as an emerald tooltip or italicized insight line.
+3. Check `mattressType` or similar sovereign specs — render as `.data-chip` with indigo border.
+4. `pinned: true` → Feature badge + indigo glow automatically.
+
+## 8. Engineering Discipline
+
+- **Never** use `bg-white` or `bg-white/90` for content cards — always glass.
+- **Never** use `rounded-xl` on outer wrappers — always `rounded-sui`.
+- **Never** hardcode model IDs — use `process.env.GEMINI_MODEL_ID`.
+- **Always** import framer-motion for any component with interactive cards.
+- **Always** use `text-slate-*` not `text-gray-*` for consistency with the Sovereign palette.
+- The agent is only as smart as the information it presents — density over decoration.

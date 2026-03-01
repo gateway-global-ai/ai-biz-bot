@@ -4,6 +4,35 @@ import { businessResearchService } from "./business-research";
 import { getDefaultTemplate } from "./default-templates";
 import { agentTestingService } from "./agent-testing";
 import { z } from "zod";
+import { storage } from "../storage";
+
+/**
+ * Resolves {placeholder} tokens in a system prompt using live business data
+ * from the site_configs.place_data JSON blob stored during business creation.
+ */
+function hydrateSytemPrompt(template: string, placeData: any): string {
+  if (!placeData || typeof template !== 'string') return template;
+
+  const businessName = placeData.name || placeData.displayName?.text || '';
+  const businessAddress = placeData.formatted_address || placeData.formattedAddress || '';
+  const businessPhone = placeData.formatted_phone_number || placeData.internationalPhoneNumber || '';
+  const businessCategory = (placeData.types?.[0] || '').replace(/_/g, ' ');
+
+  // Build hours string from opening_hours or currentOpeningHours
+  let businessHours = '';
+  const periods = placeData.opening_hours?.weekday_text || placeData.openingHours?.weekdayDescriptions;
+  if (Array.isArray(periods)) {
+    businessHours = periods.join(', ');
+  }
+
+  return template
+    .replace(/\{business_name\}/g, businessName)
+    .replace(/\{business_address\}/g, businessAddress)
+    .replace(/\{business_phone\}/g, businessPhone)
+    .replace(/\{business_category\}/g, businessCategory)
+    .replace(/\{business_hours\}/g, businessHours || 'Hours not available')
+    .replace(/\{primary_category\}/g, businessCategory);
+}
 
 /**
  * Agent System API Routes
@@ -65,7 +94,29 @@ export function registerAgentRoutes(app: Express) {
         return res.status(400).json({ error: parsed.error.message });
       }
 
-      const agent = agentSwarmManager.deployAgent(parsed.data);
+      // Resolve system prompt placeholders using live business data
+      let deployParams = { ...parsed.data };
+      try {
+        const siteConfig = await storage.getSiteConfig(parsed.data.businessId);
+        if (siteConfig?.placeData) {
+          const template = agentSwarmManager.getTemplate(parsed.data.templateId);
+          if (template?.systemPrompt) {
+            const hydratedPrompt = hydrateSytemPrompt(template.systemPrompt, siteConfig.placeData);
+            deployParams = {
+              ...deployParams,
+              customConfiguration: {
+                ...deployParams.customConfiguration,
+                customSystemPrompt: hydratedPrompt,
+              },
+            };
+          }
+        }
+      } catch (hydrateErr) {
+        // Non-fatal: deploy with raw template if hydration fails
+        console.warn('[AgentRoutes] Placeholder hydration failed, deploying raw template:', hydrateErr);
+      }
+
+      const agent = agentSwarmManager.deployAgent(deployParams);
       res.json(agent);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -431,6 +482,64 @@ export function registerAgentRoutes(app: Express) {
           voiceOutbound: outboundAgent,
           sms: smsAgent,
         },
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ==========================================
+  // SerpApi Tool Access Control (per-agent)
+  // ==========================================
+
+  /**
+   * Get the SerpApi tools enabled for a specific agent.
+   * Returns the list of SerpApi engine IDs the agent is currently allowed to call.
+   */
+  app.get("/api/agents/:id/serp-tools", (req: Request, res: Response) => {
+    try {
+      const agent = agentSwarmManager.getAgent(req.params.id);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      const tools: string[] = agent.configuration?.serpApiTools ?? [];
+      res.json({ agentId: req.params.id, serpApiTools: tools });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * Update the SerpApi tools enabled for a specific agent.
+   * Body: { serpApiTools: string[] }
+   * Replaces the agent's allowed SerpApi engine list.
+   * Use an empty array to disable all SerpApi access for this agent.
+   *
+   * Example engines: "google_flights", "google_maps", "amazon_search",
+   *   "home_depot_search", "walmart_search", "facebook_profile", "open_table",
+   *   "tripadvisor_search", "google_hotels", "google_travel_explore"
+   */
+  app.patch("/api/agents/:id/serp-tools", (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        serpApiTools: z.array(z.string()),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+      const agent = agentSwarmManager.getAgent(req.params.id);
+      if (!agent) {
+        return res.status(404).json({ error: "Agent not found" });
+      }
+      agentSwarmManager.updateAgentConfiguration(req.params.id, {
+        ...(agent.configuration ?? {}),
+        serpApiTools: parsed.data.serpApiTools,
+      });
+      const updated = agentSwarmManager.getAgent(req.params.id);
+      res.json({
+        agentId: req.params.id,
+        serpApiTools: updated?.configuration?.serpApiTools ?? [],
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

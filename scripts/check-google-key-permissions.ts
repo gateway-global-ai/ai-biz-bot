@@ -2,6 +2,8 @@
 // Permit diagnostics: Twilio, Gemini, Maps Grounding Lite, Places API (New).
 // Run with: doppler run -- npx tsx scripts/check-google-key-permissions.ts
 // Correct Grounding Lite endpoint: https://mapstools.googleapis.com/mcp/search_places (MCP standard).
+//
+// API routes (no key permit required): POST /api/analytics/recovery-success (Error Navigator recovery log).
 
 import axios from 'axios';
 import twilio from 'twilio';

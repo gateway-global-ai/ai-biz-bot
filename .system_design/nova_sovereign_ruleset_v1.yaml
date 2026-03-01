@@ -1,0 +1,419 @@
+# NOVA Sovereign Identity & Billing Suite — Production Ruleset v1
+# Not to be fucked with. Defines Outbound/Inbound API, IDV protocols, and Gemini tool schema.
+# Extends pricing_v1.yaml; never mutate pricing_v1.yaml in place.
+
+nova_sovereign_config:
+  meta:
+    version: "1.0.0"
+    extends: "pricing_v1.yaml"
+    security: "RSA-4096-Encrypted"
+    posture: "Sovereign-B2B-Exclusive"
+    immutable: true
+    msa_ref: ["contracts/MSA_v1.0.0.md", "contracts/MSA_v1.1.0_RESELLER.md"]
+    extraction_ref: "extractions/extraction_2026-02-28.md"
+
+  idv_protocols:
+    level_1:
+      name: "SMS"
+      description: "OTP only. Use for low-value retail, food/drink, basic services."
+      steps: ["OTP_Request", "OTP_Verify"]
+      trigger: "Step.OTP_Verify"
+    level_5:
+      name: "Multi-Factor"
+      description: "OTP + Magic Link + ID Upload + Gemini analyzeID(). Use for professional, medical, construction, auto."
+      steps: ["OTP_Request", "OTP_Verify", "MagicLink", "MagicLink_Sent", "ID_Upload", "ID_Analysis"]
+      trigger: "VerificationStatus.id === true"
+    level_7:
+      name: "Van Damme"
+      description: "Full 5-factor: OTP + Magic Link + Biometric + ID Upload/analysis + E-Signature. Use for real estate, banking, legal."
+      steps: ["OTP_Request", "OTP_Verify", "MagicLink", "MagicLink_Sent", "Biometric", "ID_Upload", "ID_Analysis", "Signature", "Complete"]
+      trigger: "VerificationStatus.otp && VerificationStatus.magicLink && VerificationStatus.biometric && VerificationStatus.id && VerificationStatus.signature"
+
+  billing_groups:
+    # ─── Group 1: Real Estate Master (IDV Level 7) ─────────────────────────────
+    - id: "real_estate_master"
+      idv_requirement: "Protocol_Level_7"
+      categories:
+        - real_estate_agency
+        - moving_company
+        - storage
+        - apartment_complex
+        - condominium_complex
+        - apartment_building
+        - housing_complex
+      invoice_template:
+        # Home Buying stress-test template (real_estate_agency)
+        items:
+          - Title_Search_Fee
+          - Escrow_Fee
+          - Home_Inspection
+          - Realtor_Commission_3pct
+          - Title_Insurance_Premium
+          - Homeowners_Insurance_First_Year
+          - HOA_Setup_Fee
+          - Recording_Fee
+          - Transfer_Tax
+          - Prorated_Property_Tax
+        stress_test_category: "real_estate_agency"
+      document_template:
+        - Purchase_Agreement
+        - Closing_Disclosure
+        - HUD-1_Settlement_Statement
+        - Title_Insurance_Commitment
+        - HOA_Disclosure
+
+    # ─── Group 2: Professional Services (IDV Level 5) ───────────────────────
+    - id: "professional_services"
+      idv_requirement: "Protocol_Level_5"
+      categories:
+        - lawyer
+        - accounting
+        - consultant
+        - insurance_agency
+        - employment_agency
+        - marketing_consultant
+        - chiropractor
+        - physiotherapist
+        - veterinary_care
+        - skin_care_clinic
+        - medical_clinic
+        - foot_care
+      invoice_template:
+        items:
+          - Retainer
+          - Consultation_Fee
+          - Case_Filing_Fee
+          - Expert_Witness_Fee
+          - Facility_Fee
+      document_template:
+        - Retainer_Agreement
+        - NDA
+        - Engagement_Letter
+        - Informed_Consent
+
+    # ─── Group 3: Health & Wellness (IDV Level 5 clinical; Level 1 spa) ─────
+    - id: "health_wellness"
+      idv_requirement: "Protocol_Level_5"
+      categories:
+        - doctor
+        - dentist
+        - hospital
+        - general_hospital
+        - pharmacy
+        - drugstore
+        - medical_lab
+        - massage
+        - massage_spa
+        - spa
+        - yoga_studio
+        - wellness_center
+      invoice_template:
+        items:
+          - Office_Visit
+          - Procedure_Fee
+          - Lab_Fee
+          - Prescription_Fill
+          - Session_Fee
+          - Membership
+      document_template:
+        - Informed_Consent
+        - HIPAA_Authorization
+        - Insurance_Verification_Form
+
+    # ─── Group 4: Hospitality (IDV Level 1 restaurant; Level 3 lodging) ───────
+    - id: "hospitality"
+      idv_requirement: "Protocol_Level_1"
+      categories:
+        - hotel
+        - motel
+        - resort_hotel
+        - bed_and_breakfast
+        - hostel
+        - inn
+        - guest_house
+        - farmstay
+        - cottage
+        - extended_stay_hotel
+        - restaurant
+        - bar
+        - cafe
+        - catering_service
+        - event_venue
+        - wedding_venue
+        - banquet_hall
+        - convention_center
+        - tour_agency
+        - travel_agency
+      invoice_template:
+        items:
+          - Room_Rate
+          - Resort_Fee
+          - Incidentals_Deposit
+          - Room_Tax
+          - F&B_Minimum
+          - Venue_Rental
+          - Security_Deposit
+      document_template:
+        - Hotel_Registration_Card
+        - Event_Contract
+        - Catering_Agreement
+
+    # ─── Group 5: Telecom / SaaS (IDV Level 1) ───────────────────────────────
+    - id: "telecom_saas"
+      idv_requirement: "Protocol_Level_1"
+      categories:
+        - telecommunications_service_provider
+        - business_center
+        - coworking_space
+        - corporate_office
+        - television_studio
+        - internet_cafe
+      invoice_template:
+        items:
+          - Monthly_Service
+          - Activation_Fee
+          - Equipment_Rental
+          - Desk_Day_Rate
+          - Meeting_Room_Fee
+      document_template:
+        - Service_Order_Form
+        - Acceptable_Use_Policy
+
+    # ─── Group 6: Rentals / Auto (IDV Level 5) ───────────────────────────────
+    - id: "rentals_auto"
+      idv_requirement: "Protocol_Level_5"
+      categories:
+        - car_rental
+        - car_dealer
+        - car_repair
+        - car_wash
+        - tire_shop
+        - truck_dealer
+        - parking
+        - parking_garage
+        - parking_lot
+        - gas_station
+        - electric_vehicle_charging_station
+        - ebike_charging_station
+      invoice_template:
+        items:
+          - Daily_Rate
+          - Security_Deposit
+          - CDW_Insurance
+          - Fuel_Charge
+          - Mileage_Overage
+          - Documentation_Fee
+          - Labor
+          - Parts
+      document_template:
+        - Rental_Agreement
+        - Damage_Inspection_Report
+        - Liability_Waiver
+
+    # ─── Group 7: Retail (IDV Level 1) ───────────────────────────────────────
+    - id: "retail"
+      idv_requirement: "Protocol_Level_1"
+      categories:
+        - clothing_store
+        - grocery_store
+        - supermarket
+        - electronics_store
+        - jewelry_store
+        - furniture_store
+        - hardware_store
+        - pet_store
+        - shoe_store
+        - department_store
+        - sporting_goods_store
+        - auto_parts_store
+        - book_store
+        - gift_shop
+        - convenience_store
+        - home_goods_store
+        - home_improvement_store
+        - cell_phone_store
+        - discount_store
+        - bicycle_store
+        - toy_store
+        - liquor_store
+      invoice_template:
+        items:
+          - Item_Price
+          - Sales_Tax
+          - Delivery_Fee
+          - Installation_Fee
+          - Warranty
+          - Core_Charge
+      document_template:
+        - Receipt
+        - Layaway_Agreement
+        - Return_Policy_Acknowledgment
+
+    # ─── Group 8: Banking / Finance (IDV Level 7) ─────────────────────────────
+    - id: "banking_finance"
+      idv_requirement: "Protocol_Level_7"
+      categories:
+        - bank
+        - atm
+        - non_profit_organization
+        - association_or_organization
+      invoice_template:
+        items:
+          - Account_Fee
+          - Wire_Transfer_Fee
+          - Loan_Origination_Fee
+          - Annual_Fee
+          - NSF_Fee
+      document_template:
+        - KYC_AML_Form
+        - Loan_Application
+        - Wire_Transfer_Authorization
+        - Beneficial_Owner_Certification
+
+    # ─── Group 9: Construction / Trades (IDV Level 5) ─────────────────────────
+    - id: "construction_trades"
+      idv_requirement: "Protocol_Level_5"
+      categories:
+        - roofing_contractor
+        - electrician
+        - plumber
+        - painter
+        - general_contractor
+        - locksmith
+        - hair_salon
+        - beauty_salon
+        - nail_salon
+        - barber_shop
+        - florist
+        - laundry
+        - tailor
+        - courier_service
+        - pet_care
+        - pet_boarding_service
+      invoice_template:
+        items:
+          - Project_Quote
+          - Deposit_30pct
+          - Material_Cost
+          - Labor
+          - Permit_Fee
+          - Change_Order
+          - Service_Call
+      document_template:
+        - Construction_Contract
+        - Scope_of_Work
+        - Lien_Waiver
+        - Permit_Application
+
+  gemini_tools:
+    - name: fetch_billing_state
+      description: "Retrieves the current invoice state for a business + client session"
+      parameters:
+        business_id:
+          type: STRING
+          required: true
+          description: "Business UUID"
+        session_id:
+          type: STRING
+          required: true
+          description: "NOVA IDV session UUID"
+      response_schema:
+        invoice_total: NUMBER
+        line_items: ARRAY
+        idv_status: OBJECT
+        protocol_level: INTEGER
+
+    - name: initiate_protocol_7
+      description: "Atomically launches the Level 7 Van Damme IDV flow for high-value transactions"
+      parameters:
+        business_id:
+          type: STRING
+          required: true
+        client_phone:
+          type: STRING
+          required: true
+        invoice_id:
+          type: STRING
+          required: true
+        category:
+          type: STRING
+          required: true
+          description: "Google Places primary type (e.g. real_estate_agency)"
+      response_schema:
+        session_id: STRING
+        otp_sent: BOOLEAN
+        magic_link_sent: BOOLEAN
+        biometric_url: STRING
+
+    - name: analyze_id
+      description: "Sends a government ID image to Gemini for OCR and authenticity verification"
+      parameters:
+        image_base64:
+          type: STRING
+          required: true
+          description: "Base64-encoded JPEG of government ID"
+        session_id:
+          type: STRING
+          required: true
+      response_schema:
+        fullName: STRING
+        idNumber: STRING
+        dob: STRING
+        expiry: STRING
+        isVerified: BOOLEAN
+        summary: STRING
+
+  api:
+    outbound:
+      path: "/api/nova/billing/push"
+      method: POST
+      description: "Push to business owner — invoice, verification request, or Protocol 7 initiation"
+      headers:
+        X-Nova-Signature: "RSA-4096-PKCS1v15-SHA256-Base64"
+        X-Nova-Timestamp: "ISO-8601"
+        X-Nova-Business-ID: "UUID"
+        X-Nova-Protocol-Level: "1 | 5 | 7"
+      operations:
+        - push_invoice
+        - push_verification_request
+        - push_protocol_7_initiation
+
+    inbound:
+      path: "/api/nova/billing/receive"
+      method: POST
+      description: "Receive client verification or payment confirmation"
+      headers:
+        X-Nova-Signature: "RSA-4096-PKCS1v15-SHA256-Base64"
+        X-Nova-Timestamp: "ISO-8601"
+        X-Nova-Business-ID: "UUID"
+        X-Nova-Protocol-Level: "1 | 5 | 7"
+      operations:
+        - receive_otp_result
+        - receive_id_analysis
+        - receive_biometric_result
+        - receive_esignature
+        - receive_payment_confirmation
+
+  database_schema:
+    nova_idv_sessions:
+      description: "IDV session state per business + client; maps to UserData/VerificationStatus"
+      columns:
+        session_id: "UUID PRIMARY KEY"
+        business_id: "UUID NOT NULL"
+        client_phone: "TEXT"
+        client_email: "TEXT"
+        protocol_level: "INTEGER NOT NULL"
+        otp_verified: "BOOLEAN DEFAULT FALSE"
+        magic_link_verified: "BOOLEAN DEFAULT FALSE"
+        biometric_verified: "BOOLEAN DEFAULT FALSE"
+        id_verified: "BOOLEAN DEFAULT FALSE"
+        signature_url: "TEXT"
+        invoice_id: "UUID"
+        created_at: "TIMESTAMPTZ DEFAULT NOW()"
+        updated_at: "TIMESTAMPTZ DEFAULT NOW()"
+
+  server_bridge:
+    route_file: "server/routes/novaSovereignRoutes.ts"
+    mount: "app.use('/api/nova', novaSovereignRouter)"
+    app_route: "/nova-verify/:businessType/:clientId"
+    feature_branch: "feature/nova-sovereign-billing-v1"

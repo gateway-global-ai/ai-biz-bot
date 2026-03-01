@@ -32,6 +32,11 @@ const allowlist = [
   "zod-validation-error",
 ];
 
+// socket.io uses dynamic require() patterns and native addons that esbuild
+// cannot resolve reliably.  Force them external unconditionally — regardless
+// of whether they appear in package.json deps — to prevent bundler crashes.
+const forceExternal = ["socket.io", "socket.io-client"];
+
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
 
@@ -56,7 +61,7 @@ async function buildAll() {
       "process.env.NODE_ENV": '"production"',
     },
     minify: true,
-    external: externals,
+    external: [...new Set([...externals, ...forceExternal])],
     logLevel: "info",
     banner: {
       js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",

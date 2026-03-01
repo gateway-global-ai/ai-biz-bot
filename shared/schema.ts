@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, pgEnum, index, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index, pgEnum, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -47,6 +47,8 @@ export const telephonyConfigs = pgTable("telephony_configs", {
   ownerEmail: text("owner_email"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  /** Links this telephony config to the site/business it serves (for billing attribution). */
+  siteConfigId: varchar("site_config_id"),
 });
 
 export const insertTelephonyConfigSchema = createInsertSchema(telephonyConfigs).omit({
@@ -72,6 +74,14 @@ export const callLogs = pgTable("call_logs", {
   customerEmail: text("customer_email"),
   notes: text("notes"),
   timestamp: timestamp("timestamp").defaultNow(),
+  /** Millisecond-precision call start time recorded when the Media Stream begins. */
+  callStart: timestamp("call_start"),
+  /** Millisecond-precision call end time recorded when the Media Stream stops. */
+  callEnd: timestamp("call_end"),
+  /** Actual call duration in seconds derived from callEnd - callStart (stopwatch). */
+  actualSeconds: integer("actual_seconds"),
+  /** The site/business this call belongs to – used for billing attribution. */
+  siteConfigId: varchar("site_config_id"),
 });
 
 export const insertCallLogSchema = createInsertSchema(callLogs).omit({
@@ -430,12 +440,37 @@ export const insertTaskSchema = createInsertSchema(tasks).omit({
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
 
+// ── Resellers (Digital Franchise) ─────────────────────────────────────────────
+// Self-referential hierarchy: a reseller can have a parent (sub-reseller model).
+// commission_rate stored as decimal 0–1, e.g. 0.10 = 10%.
+// stripe_account_id = Stripe Connect Express account for automated payouts.
+export const resellers = pgTable("resellers", {
+  id:               varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  parentResellerId: varchar("parent_reseller_id").references((): any => resellers.id, { onDelete: "set null" }),
+  stripeAccountId:  text("stripe_account_id"),
+  commissionRate:   numeric("commission_rate", { precision: 5, scale: 4 }).notNull().default("0.10"),
+  name:             text("name"),
+  email:            text("email"),
+  phone:            text("phone"),
+  createdAt:        timestamp("created_at").defaultNow().notNull(),
+  updatedAt:        timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertResellerSchema = createInsertSchema(resellers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertReseller = z.infer<typeof insertResellerSchema>;
+export type Reseller = typeof resellers.$inferSelect;
+
 // Admin users for OTP authentication
 export const adminUsers = pgTable("admin_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   phone: text("phone").notNull().unique(),
   name: text("name"),
   role: text("role").default("admin"), // admin, superadmin
+  resellerId: varchar("reseller_id").references(() => resellers.id),
   isActive: boolean("is_active").default(true),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -484,6 +519,26 @@ export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({
 
 export type InsertAuthSession = z.infer<typeof insertAuthSessionSchema>;
 export type AuthSession = typeof authSessions.$inferSelect;
+
+// NOVA Sovereign IDV sessions — constitution: .system_design/nova_sovereign_ruleset_v1.yaml
+export const novaIdvSessions = pgTable("nova_idv_sessions", {
+  sessionId: uuid("session_id").primaryKey(),
+  businessId: uuid("business_id").notNull(),
+  clientPhone: text("client_phone"),
+  clientEmail: text("client_email"),
+  protocolLevel: integer("protocol_level").notNull(),
+  otpVerified: boolean("otp_verified").default(false),
+  magicLinkVerified: boolean("magic_link_verified").default(false),
+  biometricVerified: boolean("biometric_verified").default(false),
+  idVerified: boolean("id_verified").default(false),
+  signatureUrl: text("signature_url"),
+  invoiceId: uuid("invoice_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export type NovaIdvSession = typeof novaIdvSessions.$inferSelect;
+export type InsertNovaIdvSession = typeof novaIdvSessions.$inferInsert;
 
 // Demo leads for business website onboarding flow
 export const demoLeads = pgTable("demo_leads", {
@@ -983,7 +1038,7 @@ export const siteConfigs = pgTable("site_configs", {
   assignedAgentId: varchar("assigned_agent_id"),
   botTemplateId: varchar("bot_template_id"),
   systemPromptOverride: text("system_prompt_override"),
-  modelProvider: text("model_provider").default("kimi"),
+  modelProvider: text("model_provider").default("gemini"),
   modelName: text("model_name"),
   chatbotEnabled: boolean("chatbot_enabled").default(true),
   voiceConciergeEnabled: boolean("voice_concierge_enabled").default(true),
@@ -999,6 +1054,31 @@ export const siteConfigs = pgTable("site_configs", {
   heroImageUrl: text("hero_image_url"),
   /** Prompt used to generate the hero image (stored for regeneration) */
   heroImagePrompt: text("hero_image_prompt"),
+  /** Prepaid minute balance for the Energy Pool billing system. null = unrestricted. */
+  minuteBalance: integer("minute_balance"),
+  /** Twilio sub-account SID provisioned for this AI Partner deployment. */
+  twilioSubAccountSid: text("twilio_sub_account_sid"),
+  /** Phone number (E.164) provisioned for this AI Partner via CID provisioning. */
+  provisionedPhoneNumber: text("provisioned_phone_number"),
+  /** Twilio IncomingPhoneNumber SID for the provisioned number. */
+  provisionedPhoneSid: text("provisioned_phone_sid"),
+  /** Reseller (Digital Franchise) who owns this site – for commission attribution. */
+  resellerId: varchar("reseller_id").references(() => resellers.id),
+  /** When the low-energy SMS nudge was last sent; reset on refill so nudge can fire again. */
+  lastNudgeSentAt: timestamp("last_nudge_sent_at"),
+  // ── Site Claim / Assignment lifecycle ──────────────────────────────────────
+  /** Secure random hex token embedded in the SMS claim link. */
+  claimToken:               varchar("claim_token", { length: 64 }),
+  /** Token expiry — defaults to 7 days from when the invite is sent. */
+  claimTokenExpiresAt:      timestamp("claim_token_expires_at"),
+  /** The E.164 phone number the invite SMS was dispatched to. */
+  assignedToPhone:          text("assigned_to_phone"),
+  /** Claim lifecycle: 'unclaimed' | 'invite_sent' | 'payment_pending' | 'claimed' */
+  claimStatus:              text("claim_status").notNull().default("unclaimed"),
+  /** Timestamp when the site was successfully claimed and payment confirmed. */
+  claimedAt:                timestamp("claimed_at"),
+  /** Stripe Checkout session ID used for the $49.99 activation payment. */
+  claimCheckoutSessionId:   text("claim_checkout_session_id"),
   /** Agent Persona config: { name, role, discProfile, basePrompt } */
   agentConfig: jsonb("agent_config"),
   /** Audio / voice settings: { voiceName, language, isPushToTalk } */
@@ -1023,6 +1103,105 @@ export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
 export type InsertSiteConfig = z.infer<typeof insertSiteConfigSchema>;
 export type SiteConfig = typeof siteConfigs.$inferSelect;
 
+// ── Voice Usage Logs – Energy Pool Billing ($0.10/min) ────────────────────────
+// One row per completed call. billedMinutes = ceil(rawDurationSeconds / 60).
+// amountCents = billedMinutes * ratePerMinuteCents (default 10 cents).
+export const voiceUsageLogs = pgTable("voice_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** The site/business that was charged for this call */
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  /** Twilio or internal session identifier */
+  callSid: text("call_sid"),
+  /** 'phone' = PSTN/Twilio, 'web' = Gemini Live website voice */
+  callType: text("call_type").notNull().default("phone"), // 'phone' | 'web'
+  /** Raw call duration as reported by Twilio / session timer */
+  rawDurationSeconds: integer("raw_duration_seconds").notNull().default(0),
+  /** Billed minutes after ceiling rounding: ceil(rawDurationSeconds / 60) */
+  billedMinutes: integer("billed_minutes").notNull().default(0),
+  /** Rate in cents per minute (default 10 = $0.10/min) */
+  ratePerMinuteCents: integer("rate_per_minute_cents").notNull().default(10),
+  /** Total charge in cents: billedMinutes * ratePerMinuteCents */
+  billedAmountCents: integer("billed_amount_cents").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVoiceUsageLogSchema = createInsertSchema(voiceUsageLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVoiceUsageLog = z.infer<typeof insertVoiceUsageLogSchema>;
+export type VoiceUsageLog = typeof voiceUsageLogs.$inferSelect;
+
+// ── Reseller Commissions ledger ────────────────────────────────────────────────
+// One row per commission event.  Amounts in cents to avoid floating-point drift.
+// Status lifecycle: pending → paid | cancelled
+// Event types: subscription | top_up | manual
+export const resellerCommissions = pgTable("reseller_commissions", {
+  id:                 varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resellerId:         varchar("reseller_id")
+                        .references(() => resellers.id, { onDelete: "cascade" })
+                        .notNull(),
+  siteConfigId:       varchar("site_config_id")
+                        .references(() => siteConfigs.id, { onDelete: "set null" }),
+  eventType:          text("event_type").notNull(),   // 'subscription' | 'top_up' | 'manual'
+  grossAmountCents:   integer("gross_amount_cents").notNull(),  // revenue that triggered commission
+  commissionCents:    integer("commission_cents").notNull(),    // reseller's cut in cents
+  status:             text("status").notNull().default("pending"), // 'pending' | 'paid' | 'cancelled'
+  stripeTransferId:   text("stripe_transfer_id"),     // set once Stripe transfer fires
+  note:               text("note"),                   // optional operator note for manual events
+  createdAt:          timestamp("created_at").defaultNow().notNull(),
+  paidAt:             timestamp("paid_at"),            // set when status → paid
+});
+
+export const insertResellerCommissionSchema = createInsertSchema(resellerCommissions).omit({
+  id: true,
+  createdAt: true,
+  paidAt: true,
+  stripeTransferId: true,
+});
+export type InsertResellerCommission = z.infer<typeof insertResellerCommissionSchema>;
+export type ResellerCommission = typeof resellerCommissions.$inferSelect;
+
+// ── Google Workspace Integration ──────────────────────────────────────────────
+// Per-site workspace configuration (tied to siteConfigs, not customerAccounts,
+// because each site can independently have the $99 Voice plan).
+export const workspaceConfigurations = pgTable("workspace_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull().unique(),
+
+  // Connection method
+  setupType: text("setup_type").default("oauth"), // 'oauth' | 'hosted'
+
+  // Customer's OAuth credentials (encrypted at rest recommendation)
+  googleEmail: text("google_email"),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiry: timestamp("token_expiry"),
+
+  // Per-app enable state stored as JSONB: { gmail: true, calendar: false, ... }
+  enabledApps: jsonb("enabled_apps").default({}),
+
+  // Drive folder IDs created by platform
+  driveFolderId: text("drive_folder_id"),
+  leadTrackingSheetId: text("lead_tracking_sheet_id"),
+  calendarId: text("calendar_id"),
+  taskListId: text("task_list_id"),
+
+  // Status
+  status: text("status").default("disconnected"), // 'disconnected' | 'connected' | 'error'
+  statusMessage: text("status_message"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWorkspaceConfigurationSchema = createInsertSchema(workspaceConfigurations).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type InsertWorkspaceConfiguration = z.infer<typeof insertWorkspaceConfigurationSchema>;
+export type WorkspaceConfiguration = typeof workspaceConfigurations.$inferSelect;
+
 // Chat logs for web-based AI Biz Bot conversations
 export const chatLogs = pgTable("chat_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1040,6 +1219,18 @@ export const insertChatLogSchema = createInsertSchema(chatLogs).omit({
 
 export type InsertChatLog = z.infer<typeof insertChatLogSchema>;
 export type ChatLog = typeof chatLogs.$inferSelect;
+
+// ── Error Navigator & Recovery Analytics ─────────────────────────────────────
+/** Logs ERROR_LANDING, RECOVERY_SUCCESS, VOICE_TIER_INTEREST for bounce/recovery tracking. */
+export const analyticsLogs = pgTable("analytics_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id),
+  eventType: text("event_type").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AnalyticsLog = typeof analyticsLogs.$inferSelect;
 
 // =========================================
 // Business Data & Tour Guide (Clear Voice)
@@ -1316,64 +1507,7 @@ export const insertOgSettingsSchema = createInsertSchema(ogSettings).omit({
 export type InsertOgSettings = z.infer<typeof insertOgSettingsSchema>;
 export type OgSettings = typeof ogSettings.$inferSelect;
 
-// =========================================
-// Google Workspace Integration
-// =========================================
-
-export const workspaceConfigurations = pgTable("workspace_configurations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
-  
-  // Setup Type
-  setupType: text("setup_type").notNull(), // 'hosted' | 'integrated'
-  
-  // Hosted Email Configuration (gatewayglobal.ai)
-  hostedEmail: text("hosted_email"), // user@gatewayglobal.ai
-  hostedUserId: text("hosted_user_id"), // Google Workspace user ID
-  workspacePlan: text("workspace_plan"), // 'starter' | 'standard'
-  
-  // Integrated Email Configuration (existing email)
-  integratedEmail: text("integrated_email"),
-  
-  // OAuth Credentials (encrypted)
-  accessToken: text("access_token"),
-  refreshToken: text("refresh_token"),
-  tokenExpiry: timestamp("token_expiry"),
-  
-  // Workspace Structure IDs
-  driveFolderId: text("drive_folder_id"), // Root business folder
-  clientsFolderId: text("clients_folder_id"),
-  operationsFolderId: text("operations_folder_id"),
-  marketingFolderId: text("marketing_folder_id"),
-  
-  // Template IDs
-  leadTrackingSheetId: text("lead_tracking_sheet_id"),
-  taskListId: text("task_list_id"),
-  calendarId: text("calendar_id"),
-  
-  // Setup Status
-  setupStatus: text("setup_status").default("pending"), // 'pending' | 'in_progress' | 'completed' | 'failed'
-  setupStep: text("setup_step"), // Current step in setup process
-  setupError: text("setup_error"),
-  
-  // SWOT Analysis Link
-  swotAnalysisId: text("swot_analysis_id"),
-  swotCompletedAt: timestamp("swot_completed_at"),
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertWorkspaceConfigurationSchema = createInsertSchema(workspaceConfigurations).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertWorkspaceConfiguration = z.infer<typeof insertWorkspaceConfigurationSchema>;
-export type WorkspaceConfiguration = typeof workspaceConfigurations.$inferSelect;
-
-// SWOT Analysis Results
+// SWOT Analysis Results (legacy; workspace config is defined above with siteConfigId)
 export const swotAnalyses = pgTable("swot_analyses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
@@ -1893,12 +2027,18 @@ export type Inquiry = typeof inquiries.$inferSelect;
 /** GRN Connect hotels: hotel_code + google_place_id from Spatial Join for re-fetching live rates */
 export const b2bHotels = pgTable("b2b_hotels", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  hotelCode: text("hotel_code").notNull(), // GRN identifier
-  googlePlaceId: text("google_place_id"), // from Spatial Join; used to re-fetch
+  hotelCode: text("hotel_code").notNull(), // GRN identifier (H! prefix stripped for API calls)
+  googlePlaceId: text("google_place_id"), // Google Places ID linked via Spatial Join / matching
+  /** FK to platform_business_map(platform_id). Links GRN hotel to our internal platform identity. */
+  platformId: uuid("platform_id"),
   name: text("name"),
   rawResponse: jsonb("raw_response"), // full GRN response for replay/audit
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+},
+(table) => [
+  index("idx_b2b_hotels_platform_id").on(table.platformId),
+  index("idx_b2b_hotels_hotel_code").on(table.hotelCode),
+]);
 
 export const insertB2bHotelSchema = createInsertSchema(b2bHotels).omit({ id: true, createdAt: true });
 export type InsertB2bHotel = z.infer<typeof insertB2bHotelSchema>;
@@ -1980,53 +2120,34 @@ export const insertB2bCurationEventSchema = createInsertSchema(b2bCurationEvents
 export type InsertB2bCurationEvent = z.infer<typeof insertB2bCurationEventSchema>;
 export type B2bCurationEvent = typeof b2bCurationEvents.$inferSelect;
 
-// --- SOVEREIGN SMS ROUTER COMPLIANCE TABLES ---
+// ============================================================
+// Platform Business Map – one row per onboarded platformId.
+// Maps a platform's site config to external provider IDs.
+// Created by the healing layer (PR #2); enrichment snapshots FK to this.
+// ============================================================
 
-export const smsIntentEnum = pgEnum("sms_intent", [
-  "PLATFORM_OTP", "PLATFORM_CARE", "PLATFORM_MKTG",
-  "CUSTOMER_OTP", "CUSTOMER_CARE", "CUSTOMER_MKTG"
-]);
-
-export const smsOptOuts = pgTable("sms_opt_outs", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  phoneNumber: text("phone_number").notNull(),
-  siteConfigId: uuid("site_config_id").references(() => siteConfigs.id), // Change uuid to text if your siteConfigs.id uses text()
-  reason: text("reason").notNull().default("STOP keyword received"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const smsLogs = pgTable("sms_logs", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  siteConfigId: uuid("site_config_id").references(() => siteConfigs.id).notNull(),
-  twilioMessageSid: text("twilio_message_sid"),
-  messagingServiceSid: text("messaging_service_sid").notNull(),
-  intent: smsIntentEnum("intent").notNull(),
-  toPhoneNumber: text("to_phone_number").notNull(),
-  fromPhoneNumber: text("from_phone_number"),
-  body: text("body").notNull(),
-  status: text("status").notNull().default("queued"),
-  segments: integer("segments").default(1).notNull(),
-  cost: numeric("cost", { precision: 10, scale: 4 }),
-  errorMessage: text("error_message"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-// ==========================================
-// Platform Identity — stable internal business identity
-// ==========================================
-
+/**
+ * Maps each site_config to a stable internal platform_id (UUID).
+ * External identifiers (Google place_id, CID, SerpApi ID) become attributes
+ * that can change over time without affecting internal references.
+ */
 export const platformBusinessMap = pgTable(
   "platform_business_map",
   {
+    /** Stable UUID assigned at onboarding; used as the public platformId. */
     platformId: uuid("platform_id").primaryKey().defaultRandom(),
+    /** FK to the site_configs row that owns this platform. One-to-one. */
     siteConfigId: varchar("site_config_id")
       .notNull()
       .unique()
       .references(() => siteConfigs.id, { onDelete: "cascade" }),
+    /** Google CID (unique per business). */
     googleCid: text("google_cid").unique(),
+    /** Google Place ID (if known). */
     googlePlaceId: text("google_place_id"),
+    /** Cached SerpApi data_id for google_maps / google_maps_reviews engines. */
     serpapiDataId: text("serpapi_data_id"),
+    /** Normalized business-category slug (e.g. 'restaurant', 'hotel'). */
     categorySlug: text("category_slug"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -2042,6 +2163,75 @@ export const insertPlatformBusinessMapSchema = createInsertSchema(platformBusine
   createdAt: true,
   updatedAt: true,
 });
-
 export type InsertPlatformBusinessMap = z.infer<typeof insertPlatformBusinessMapSchema>;
 export type PlatformBusinessMap = typeof platformBusinessMap.$inferSelect;
+
+// ============================================================
+// Platform Business Enrichment Snapshots
+// Raw provider payloads stored per platformId.
+// Written by the admin-only enrich_business_profile tool; never by voice path.
+// ============================================================
+export const platformBusinessEnrichmentSnapshots = pgTable(
+  "platform_business_enrichment_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** FK to platform_business_map(platform_id). */
+    platformId: uuid("platform_id")
+      .references(() => platformBusinessMap.platformId, { onDelete: "cascade" })
+      .notNull(),
+    /**
+     * Provider identifier, e.g.:
+     *   'serpapi_google_maps_place'
+     *   'serpapi_google_maps_reviews_merged'
+     */
+    provider: text("provider").notNull(),
+    /** Optional provider-specific reference key (e.g. SerpApi data_id). */
+    providerRef: text("provider_ref"),
+    /** Raw provider response or merged payload. */
+    payload: jsonb("payload").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_enrichment_snapshots_platform_id").on(table.platformId),
+    index("idx_enrichment_snapshots_provider").on(table.provider),
+    index("idx_enrichment_snapshots_platform_provider").on(table.platformId, table.provider),
+  ],
+);
+
+export const insertEnrichmentSnapshotSchema = createInsertSchema(
+  platformBusinessEnrichmentSnapshots,
+).omit({ id: true, createdAt: true });
+export type InsertEnrichmentSnapshot = z.infer<typeof insertEnrichmentSnapshotSchema>;
+export type EnrichmentSnapshot = typeof platformBusinessEnrichmentSnapshots.$inferSelect;
+
+// --- SOVEREIGN SMS ROUTER COMPLIANCE TABLES ---
+
+export const smsIntentEnum = pgEnum("sms_intent", [
+  "PLATFORM_OTP", "PLATFORM_CARE", "PLATFORM_MKTG",
+  "CUSTOMER_OTP", "CUSTOMER_CARE", "CUSTOMER_MKTG"
+]);
+
+export const smsOptOuts = pgTable("sms_opt_outs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  phoneNumber: text("phone_number").notNull(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id),
+  reason: text("reason").notNull().default("STOP keyword received"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const smsLogs = pgTable("sms_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
+  twilioMessageSid: text("twilio_message_sid"),
+  messagingServiceSid: text("messaging_service_sid").notNull(),
+  intent: smsIntentEnum("intent").notNull(),
+  toPhoneNumber: text("to_phone_number").notNull(),
+  fromPhoneNumber: text("from_phone_number"),
+  body: text("body").notNull(),
+  status: text("status").notNull().default("queued"),
+  segments: integer("segments").default(1).notNull(),
+  cost: numeric("cost", { precision: 10, scale: 4 }),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

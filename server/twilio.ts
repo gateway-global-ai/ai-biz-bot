@@ -127,6 +127,71 @@ export async function provisionPhoneNumber(phoneNumber: string, voiceUrl?: strin
   }
 }
 
+export interface SubAccountProvisionResult {
+  subAccountSid: string;
+  subAccountAuthToken: string;
+  subAccountFriendlyName: string;
+  phoneNumber: string;
+  phoneSid: string;
+}
+
+/**
+ * Creates a new Twilio sub-account for an AI Partner and provisions a local
+ * phone number in that sub-account with the Voice URL pre-configured.
+ * This is the single-call "Provision Number" flow for Resellers.
+ */
+export async function createSubAccountAndProvisionNumber(
+  partnerName: string,
+  areaCode: string,
+  voiceWebhookUrl: string,
+  country: string = 'US',
+): Promise<SubAccountProvisionResult> {
+  // Step 1: Create a Twilio sub-account for the AI Partner
+  const masterClient = await getTwilioClient();
+  const subAccount = await masterClient.api.accounts.create({
+    friendlyName: partnerName,
+  });
+
+  // Step 2: Build a client scoped to the new sub-account
+  const subClient = twilio(subAccount.sid, subAccount.authToken);
+
+  // Step 3: Search for an available local number in the requested area code
+  const areaCodeNum = parseInt(areaCode, 10);
+  if (Number.isNaN(areaCodeNum)) {
+    try {
+      await masterClient.api.accounts(subAccount.sid).update({ status: 'closed' });
+    } catch (_) { /* best-effort cleanup */ }
+    throw new Error(`Invalid area code: ${areaCode}`);
+  }
+  const available = await subClient.availablePhoneNumbers(country)
+    .local
+    .list({ areaCode: areaCodeNum, limit: 1 });
+
+  if (!available.length) {
+    // Clean up the freshly created sub-account before throwing
+    try {
+      await masterClient.api.accounts(subAccount.sid).update({ status: 'closed' });
+    } catch (_) { /* best-effort cleanup */ }
+    throw new Error(`No local numbers available in area code ${areaCode}`);
+  }
+
+  // Step 4: Purchase the first available number and wire up the Voice webhook
+  const purchased = await subClient.incomingPhoneNumbers.create({
+    phoneNumber: available[0].phoneNumber,
+    voiceUrl: voiceWebhookUrl,
+    voiceMethod: 'POST',
+    friendlyName: `${partnerName} AI Line`,
+  });
+
+  return {
+    subAccountSid: subAccount.sid,
+    subAccountAuthToken: subAccount.authToken,
+    subAccountFriendlyName: subAccount.friendlyName,
+    phoneNumber: purchased.phoneNumber,
+    phoneSid: purchased.sid,
+  };
+}
+
 export async function releasePhoneNumber(phoneSid: string): Promise<boolean> {
   try {
     const client = await getTwilioClient();

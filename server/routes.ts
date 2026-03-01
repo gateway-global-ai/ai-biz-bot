@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import path from "path";
 import { storage } from "./storage";
 import { registerVlmRoutes } from "./vlm-routes";
 import { registerAgentRoutes } from "./agents/agent-routes";
@@ -7,11 +8,17 @@ import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding
 import knowledgeRoutes from "./routes/knowledge-routes";
 import businessRoutes from "./routes/businessRoutes";
 import siteConfigRoutes from "./routes/siteConfigRoutes";
+import { claimRoutes, handleClaimCheckoutCompleted } from "./routes/claimRoutes";
+import ingestPlanRoutes from "./routes/ingestPlanRoutes";
+import bailRescueRoutes from "./routes/bailRescueRoutes";
+import agentResearchRoutes from "./routes/agentResearch";
+import novaSovereignRouter from "./routes/novaSovereignRoutes";
 import onboardingRoutes from "./routes/onboardingRoutes";
 import { registerMenuRoutes } from "./routes/menu-routes";
 import healthRoutes from "./routes/healthRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import { registerB2bRoutes } from "./routes/b2b-routes";
+import telephonyRoutes from "./routes/telephonyRoutes"; // Platinum Core: Telephony, Voice, SMS, Webhooks, TTS, PTT
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -25,59 +32,35 @@ import {
   getMessageLogs,
   updateCallerIdName,
   getTwilioFromPhoneNumber,
-  getTwilioClient
+  getTwilioClient,
+  createSubAccountAndProvisionNumber
 } from "./twilio";
 import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, PLAN_LIMITS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
-import { sendOtp, verifyOtp, verifySession, logout } from "./auth";
+import { gatewayChat } from "./ai-gateway"; // Sovereign: Gemini sole provider
+import { sendOtp, verifyOtp, verifySession, logout, requireAuth } from "./auth";
 import { customerSendOtp, customerVerifyOtp, customerVerifySession, customerLogout, customerUpdateProfile, customerGetBusinesses, customerClaimBusiness } from "./customerAuth";
 import { runDemoEnrichment } from "./services/demo-enrichment";
 import { generateFullReport } from "./services/reviewAnalysisService";
 import { enrichBusinessData } from "./services/businessDataService";
 import { buildRichSystemInstruction } from "./services/systemInstructionBuilder";
 import { getFreshPlaceId, getFreshPlaceIdWithSource } from "./services/placeDiscoveryService";
-import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
+import { enrichBusinessProfile } from "./services/enrichBusinessProfile";
+import { handleAdminToolCall, ADMIN_TOOL_DEFINITIONS } from "./tools/adminToolHandlers";
+// kimiK2Server removed — Kimi MCP routes decommissioned (see /api/mcp/* stubs below)
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
-import { getAvailableApis, calculateCosts, analyzeWithKimi, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
+import { getAvailableApis, calculateCosts, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
 import { placesCache, CACHE_TTL } from "./placesCache";
 import crypto from "crypto";
+import { db } from "./db";
+import { workspaceConfigurations, analyticsLogs } from "@shared/schema";
+import { logVoiceUsage, hasEnergyBalance, getEnergyBalance, getVoiceUsageLogs } from "./services/energy-monitor";
+import { eq } from "drizzle-orm";
 
-const updateConfigSchema = z.object({
-  phoneNumber: z.string().nullable().optional(),
-  phoneSid: z.string().nullable().optional(),
-  friendlyName: z.string().nullable().optional(),
-  messagingServiceSid: z.string().nullable().optional(),
-  voiceUrl: z.string().url().nullable().optional().or(z.literal('')),
-  voiceFallbackUrl: z.string().url().nullable().optional().or(z.literal('')),
-  statusCallbackUrl: z.string().url().nullable().optional().or(z.literal('')),
-  smsUrl: z.string().url().nullable().optional().or(z.literal('')),
-  smsFallbackUrl: z.string().url().nullable().optional().or(z.literal('')),
-  errorUrl: z.string().url().nullable().optional().or(z.literal('')),
-  firewallEnabled: z.boolean().optional(),
-  allowedNumbers: z.array(z.string()).optional(),
-  maxCallDuration: z.number().min(1).max(180).optional(),
-  timeout: z.number().min(5).max(120).optional(),
-  callerIdName: z.string().nullable().optional(),
-}).partial();
 
-const firewallUpdateSchema = z.object({
-  firewallEnabled: z.boolean().optional(),
-  allowedNumbers: z.array(z.string()).optional(),
-  ownerPhone: z.string().nullable().optional(),
-  ownerEmail: z.string().email().nullable().optional().or(z.literal('')),
-});
-
-const webhooksUpdateSchema = z.object({
-  phoneSid: z.string(),
-  voiceUrl: z.string().url().optional().or(z.literal('')),
-  voiceFallbackUrl: z.string().url().optional().or(z.literal('')),
-  statusCallback: z.string().url().optional().or(z.literal('')),
-  smsUrl: z.string().url().optional().or(z.literal('')),
-  smsFallbackUrl: z.string().url().optional().or(z.literal('')),
-});
+// schemas moved to telephonyRoutes.ts
 
 const SOCIAL_CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|LinkedInBot|WhatsApp|Slackbot|TelegramBot|Pinterest|Googlebot|bingbot|Discordbot|vkShare/i;
 
@@ -128,6 +111,9 @@ export async function registerRoutes(
   // Health check route (public)
   app.use(healthRoutes);
 
+  // Platinum Core: Telephony, Voice, SMS, Webhooks, TTS, PTT
+  app.use(telephonyRoutes);
+
   app.use(async (req, res, next) => {
     const ua = req.headers["user-agent"] || "";
     if (!SOCIAL_CRAWLER_UA.test(ua)) return next();
@@ -171,6 +157,125 @@ export async function registerRoutes(
   app.patch("/api/customer/profile", customerUpdateProfile);
   app.get("/api/customer/businesses", customerGetBusinesses);
   app.post("/api/customer/claim-business", customerClaimBusiness);
+
+  // ============ Reseller (Stripe Connect) ============
+  app.post("/api/reseller/onboard", requireAuth, async (req: any, res) => {
+    try {
+      const session = req.session as { adminUserId: string };
+      const adminUser = await storage.getAdminUserById(session.adminUserId);
+      if (!adminUser) return res.status(401).json({ error: "Admin user not found" });
+      let resellerId = (adminUser as any).resellerId ?? null;
+      let reseller = resellerId ? await storage.getResellerById(resellerId) : null;
+      if (!reseller) {
+        const created = await storage.createReseller({ name: adminUser.name ?? undefined, phone: adminUser.phone ?? undefined });
+        reseller = created;
+        resellerId = created.id;
+        await storage.updateAdminUser(adminUser.id, { resellerId });
+      }
+      const { getStripeClient } = await import("./stripeClient");
+      const stripe = getStripeClient();
+      if (reseller.stripeConnectId) {
+        const link = await stripe.accountLinks.create({
+          account: reseller.stripeConnectId,
+          refresh_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/reseller/payouts?refresh=1`,
+          return_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/reseller/payouts?success=1`,
+          type: "account_onboarding",
+        });
+        return res.json({ url: link.url });
+      }
+      const account = await stripe.accounts.create({
+        type: "express",
+        country: "US",
+        email: (adminUser as any).email ?? undefined,
+        capabilities: { transfers: { requested: true } },
+      });
+      await storage.updateReseller(reseller.id, { stripeConnectId: account.id });
+      const link = await stripe.accountLinks.create({
+        account: account.id,
+        refresh_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/reseller/payouts?refresh=1`,
+        return_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/reseller/payouts?success=1`,
+        type: "account_onboarding",
+      });
+      res.json({ url: link.url });
+    } catch (e: any) {
+      console.error("[Reseller] onboard error:", e?.message);
+      res.status(500).json({ error: e?.message ?? "Onboarding failed" });
+    }
+  });
+
+  app.get("/api/reseller/status", requireAuth, async (req: any, res) => {
+    try {
+      const session = req.session as { adminUserId: string };
+      const adminUser = await storage.getAdminUserById(session.adminUserId);
+      if (!adminUser) return res.status(401).json({ error: "Admin user not found" });
+      const resellerId = (adminUser as any).resellerId ?? null;
+      if (!resellerId) return res.status(403).json({ error: "Reseller account not linked" });
+      const reseller = await storage.getResellerById(resellerId);
+      if (!reseller?.stripeConnectId) return res.json({ stripeConnectId: null, balance: null });
+      const { getStripeClient } = await import("./stripeClient");
+      const stripe = getStripeClient();
+      const balance = await stripe.balance.retrieve({ stripeAccount: reseller.stripeConnectId });
+      const available = (balance.available?.[0]?.amount ?? 0) / 100;
+      res.json({ stripeConnectId: reseller.stripeConnectId, balance: available });
+    } catch (e: any) {
+      console.error("[Reseller] status error:", e?.message);
+      res.status(500).json({ error: e?.message ?? "Failed to load status" });
+    }
+  });
+
+  app.get("/api/reseller/commissions", requireAuth, async (req: any, res) => {
+    try {
+      const session = req.session as { adminUserId: string };
+      const adminUser = await storage.getAdminUserById(session.adminUserId);
+      if (!adminUser) return res.status(401).json({ error: "Admin user not found" });
+      const resellerId = (adminUser as any).resellerId ?? null;
+      if (!resellerId) return res.status(403).json({ error: "Reseller account not linked" });
+      const { db } = await import("./db");
+      const { commissions: commissionsTable } = await import("@shared/schema");
+      const list = await db.select().from(commissionsTable).where(eq(commissionsTable.resellerId, resellerId));
+      const totalEarnings = list.reduce((s, c) => s + Number(c.commission), 0);
+      const activeClients = new Set(list.map((c) => c.siteConfigId).filter(Boolean)).size;
+      const energyBounties = list.filter((c) => c.type === "REFILL").reduce((s, c) => s + Number(c.commission), 0);
+      res.json({
+        commissions: list.map((c) => ({
+          id: c.id,
+          siteConfigId: c.siteConfigId,
+          amount: Number(c.amount),
+          commission: Number(c.commission),
+          type: c.type,
+          status: c.status,
+          createdAt: c.createdAt,
+        })),
+        totalEarnings,
+        activeClients,
+        energyBounties,
+      });
+    } catch (e: any) {
+      console.error("[Reseller] commissions error:", e?.message);
+      res.status(500).json({ error: e?.message ?? "Failed to load commissions" });
+    }
+  });
+
+  app.post("/api/reseller/track-intent", async (req, res) => {
+    try {
+      const body = req.body as { platformId?: string; roomType?: string; netPrice?: number };
+      const { platformId, roomType, netPrice } = body;
+      if (!platformId || netPrice == null) {
+        return res.json({ tracked: false, estimatedCommission: 0 });
+      }
+      const siteConfigId = await storage.getSiteConfigIdByPlatformId(platformId);
+      if (!siteConfigId) return res.json({ tracked: false, estimatedCommission: 0 });
+      const site = await storage.getSiteConfigById(siteConfigId);
+      const resellerId = (site as any)?.resellerId ?? null;
+      if (!resellerId) return res.json({ tracked: false, estimatedCommission: 0 });
+      const amount = Number(netPrice) || 0;
+      const estimatedCommission = Math.round(amount * 0.1 * 100) / 100;
+      res.json({ tracked: true, estimatedCommission });
+    } catch (e: any) {
+      console.error("[Reseller] track-intent error:", e?.message);
+      res.status(500).json({ error: e?.message ?? "Failed to track intent" });
+    }
+  });
 
   // ============ Demo Lead / Magic Link Onboarding ============
 
@@ -241,7 +346,7 @@ export async function registerRoutes(
           widgetColor: "#2563eb",
           greetingMessage: `Welcome to ${businessName}! How can we help you today?`,
           placeholderText: "Type a message...",
-          modelProvider: "kimi",
+          modelProvider: "gemini",
         });
         console.log(`[Demo] Created site_config ${siteConfig.id} for "${businessName}"${customerAccount ? ` (linked to customer ${customerAccount.id})` : " (no customer account yet)"}`);
       }
@@ -325,7 +430,7 @@ export async function registerRoutes(
           widgetColor: "#2563eb",
           greetingMessage: `Welcome to ${businessName}! How can we help you today?`,
           placeholderText: "Type a message...",
-          modelProvider: "kimi",
+          modelProvider: "gemini",
         });
       }
 
@@ -481,6 +586,32 @@ export async function registerRoutes(
     }
   });
 
+  // Error Navigator & recovery analytics (bounce prevention, VOICE_TIER_INTEREST)
+  app.post("/api/analytics/recovery-success", async (req, res) => {
+    try {
+      const body = req.body || {};
+      const eventType = body.eventType || "RECOVERY_SUCCESS";
+      const siteConfigId = body.siteConfigId ?? null;
+      const metadata =
+        eventType === "RECOVERY_SUCCESS"
+          ? {
+              errorCode: body.errorCode,
+              recoveredPath: body.recoveredPath,
+              timeInError: body.timeInError,
+            }
+          : body.metadata || {};
+      await db.insert(analyticsLogs).values({
+        siteConfigId,
+        eventType,
+        metadata,
+      });
+      res.json({ success: true, message: "Recovery logged." });
+    } catch (error: any) {
+      console.error("[Analytics] recovery-success error:", error);
+      res.status(500).json({ error: "Failed to log recovery" });
+    }
+  });
+
   app.post("/api/admin/backfill-sites", async (req, res) => {
     try {
       if (!isAdminAuthenticated(req)) {
@@ -516,7 +647,7 @@ export async function registerRoutes(
           widgetColor: "#2563eb",
           greetingMessage: `Welcome to ${lead.businessName}! How can we help you today?`,
           placeholderText: "Type a message...",
-          modelProvider: "kimi",
+          modelProvider: "gemini",
         });
         created++;
       }
@@ -779,6 +910,121 @@ export async function registerRoutes(
     }
   });
 
+  /**
+   * Admin: manually trigger business enrichment snapshots via SerpApi.
+   *
+   * POST /api/admin/enrich-business
+   * Body: { platformId: string; maxReviews?: number; force?: boolean }
+   *
+   * Stores raw SerpApi payloads to platform_business_enrichment_snapshots.
+   * Admin-only; never called by voice assistant path.
+   */
+  // Simple in-memory rate limiter for the enrichment endpoint (expensive SerpApi calls).
+  const enrichRateLimits = new Map<string, { count: number; resetTime: number }>();
+  const ENRICH_RATE_LIMIT = 10; // requests per minute per IP
+  const ENRICH_RATE_WINDOW = 60_000; // 1 minute in ms
+
+  app.post("/api/admin/enrich-business", async (req, res) => {
+    try {
+      // Rate limiting (checked before auth to prevent brute-force)
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const rateInfo = enrichRateLimits.get(clientIp);
+      if (rateInfo) {
+        if (now > rateInfo.resetTime) {
+          enrichRateLimits.set(clientIp, { count: 1, resetTime: now + ENRICH_RATE_WINDOW });
+        } else if (rateInfo.count >= ENRICH_RATE_LIMIT) {
+          return res.status(429).json({ error: "Rate limit exceeded. Please try again later." });
+        } else {
+          rateInfo.count++;
+        }
+      } else {
+        enrichRateLimits.set(clientIp, { count: 1, resetTime: now + ENRICH_RATE_WINDOW });
+      }
+
+      if (!isAdminAuthenticated(req)) {
+        return res.status(401).json({ error: "Admin authentication required" });
+      }
+
+      const schema = z.object({
+        platformId: z.string().min(1),
+        maxReviews: z.number().int().min(1).max(500).optional(),
+        force: z.boolean().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+      const result = await enrichBusinessProfile(parsed.data);
+      const httpStatus = result.status === "failed" ? 422 : 200;
+      res.status(httpStatus).json(result);
+    } catch (error: any) {
+      console.error("[AdminEnrichBusiness] Error:", error);
+      res.status(500).json({ error: error?.message || "Enrichment failed" });
+    }
+  });
+
+  /**
+   * Admin: generic admin tool-call endpoint.
+   *
+   * GET  /api/admin/tool-definitions  – list available admin tools (OpenAI-compatible schema)
+   * POST /api/admin/tool-call         – execute a named admin tool
+   *   Body: { tool: string; args?: Record<string, unknown> }
+   *
+   * Admin-only. Rate-limited (shares the enrichment rate-limiter).
+   */
+  app.get("/api/admin/tool-definitions", (req, res) => {
+    if (!isAdminAuthenticated(req)) {
+      return res.status(401).json({ error: "Admin authentication required" });
+    }
+    res.json(ADMIN_TOOL_DEFINITIONS);
+  });
+
+  app.post("/api/admin/tool-call", async (req, res) => {
+    try {
+      // Rate limiting (reuses enrichment limits — same cost boundary)
+      const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+      const now = Date.now();
+      const rateInfo = enrichRateLimits.get(clientIp);
+      if (rateInfo) {
+        if (now > rateInfo.resetTime) {
+          enrichRateLimits.set(clientIp, { count: 1, resetTime: now + ENRICH_RATE_WINDOW });
+        } else if (rateInfo.count >= ENRICH_RATE_LIMIT) {
+          return res.status(429).json({ error: "Rate limit exceeded. Please try again later." });
+        } else {
+          rateInfo.count++;
+        }
+      } else {
+        enrichRateLimits.set(clientIp, { count: 1, resetTime: now + ENRICH_RATE_WINDOW });
+      }
+
+      if (!isAdminAuthenticated(req)) {
+        return res.status(401).json({ error: "Admin authentication required" });
+      }
+
+      const schema = z.object({
+        tool: z.string().min(1),
+        args: z.record(z.unknown()).optional().default({}),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const result = await handleAdminToolCall(parsed.data.tool, parsed.data.args, {
+        adminId: String(req.headers?.["x-admin-token"] ?? "session"),
+        ip: req.ip || req.socket.remoteAddress || "unknown",
+      });
+      res.json(result);
+    } catch (error: any) {
+      if (error?.message?.startsWith("Unknown admin tool:")) {
+        return res.status(404).json({ error: error.message });
+      }
+      console.error("[AdminToolCall] Error:", error);
+      res.status(500).json({ error: error?.message || "Tool call failed" });
+    }
+  });
+
   app.post("/api/demo/:id/update-name", async (req, res) => {
     try {
       const { id } = req.params;
@@ -832,6 +1078,12 @@ export async function registerRoutes(
       }
       const result = data.result || {};
       res.json({
+        name: result.name,
+        formatted_address: result.formatted_address,
+        geometry: result.geometry,
+        types: result.types,
+        opening_hours: result.opening_hours,
+        photos: result.photos || [],
         reviews: result.reviews || [],
         user_ratings_total: result.user_ratings_total || 0,
         rating: result.rating || 0,
@@ -841,6 +1093,8 @@ export async function registerRoutes(
         vicinity: result.vicinity,
         utc_offset: result.utc_offset,
         international_phone_number: result.international_phone_number,
+        formatted_phone_number: result.formatted_phone_number,
+        website: result.website,
         address_components: result.address_components,
         plus_code: result.plus_code,
         editorial_summary: result.editorial_summary?.overview || null,
@@ -861,6 +1115,35 @@ export async function registerRoutes(
     } catch (error: any) {
       console.error("[Places Details] Error:", error.message);
       res.status(500).json({ error: error.message, reviews: [] });
+    }
+  });
+
+  // Photo proxy: fetch a business hero image by placeId (keeps API key server-side)
+  app.get("/api/places/photo-proxy/:placeId", async (req, res) => {
+    const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+    if (!apiKey) return res.status(500).send("API key not configured");
+    const { placeId } = req.params;
+    const maxWidth = Math.min(Number(req.query.maxWidth) || 800, 1200);
+
+    try {
+      // Fetch photo_reference from legacy Places Details API
+      const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=photos&key=${apiKey}`;
+      const detailsRes = await fetch(detailsUrl);
+      const detailsData = await detailsRes.json() as any;
+      const photoRef = detailsData?.result?.photos?.[0]?.photo_reference;
+      if (!photoRef) return res.status(404).send("No photo available");
+
+      // Redirect through the Places Photo API (Google handles caching)
+      const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?photoreference=${encodeURIComponent(photoRef)}&maxwidth=${maxWidth}&key=${apiKey}`;
+      const photoRes = await fetch(photoUrl);
+      if (!photoRes.ok) return res.status(502).send("Photo fetch failed");
+
+      res.setHeader("Content-Type", photoRes.headers.get("content-type") || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400"); // 24h cache
+      const buffer = await photoRes.arrayBuffer();
+      res.end(Buffer.from(buffer));
+    } catch (err: any) {
+      res.status(500).send(err.message);
     }
   });
 
@@ -1052,32 +1335,76 @@ export async function registerRoutes(
     res.json({ success: true, message: 'Cache cleared successfully' });
   });
 
-  // ============ Google Workspace Integration ============
-  
-  // In-memory storage for Google Workspace credentials (per business)
-  const googleWorkspaceCredentials = new Map<string, GoogleWorkspaceCredentials>();
-  
-  // Check if Google Workspace is configured
+  // ============ Google Workspace Integration (DB-backed by siteConfigId) ============
+
+  async function getWorkspaceCredentialsBySiteConfigId(siteConfigId: string): Promise<GoogleWorkspaceCredentials | null> {
+    const row = await db.query.workspaceConfigurations.findFirst({
+      where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+      columns: { accessToken: true, refreshToken: true, tokenExpiry: true },
+    });
+    if (!row?.accessToken) return null;
+    return {
+      accessToken: row.accessToken,
+      refreshToken: row.refreshToken ?? undefined,
+      expiryDate: row.tokenExpiry ? new Date(row.tokenExpiry).getTime() : undefined,
+    };
+  }
+
+  // Check if Google Workspace is configured (env)
   app.get("/api/google/status", (req, res) => {
     const hasClientId = !!process.env.GOOGLE_CLIENT_ID;
     const hasClientSecret = !!process.env.GOOGLE_CLIENT_SECRET;
-    res.json({ 
+    res.json({
       configured: hasClientId && hasClientSecret,
       hasClientId,
-      hasClientSecret
+      hasClientSecret,
     });
   });
 
-  // Get Google Workspace OAuth URL
+  // Workspace status for a site (DB)
+  app.get("/api/workspace/status/:siteConfigId", async (req, res) => {
+    try {
+      const { siteConfigId } = req.params;
+      const row = await db.query.workspaceConfigurations.findFirst({
+        where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+      });
+      if (!row) {
+        return res.json({ status: "disconnected", googleEmail: null, enabledApps: {} });
+      }
+      const enabledApps = (row.enabledApps as Record<string, boolean>) ?? {};
+      res.json({
+        status: row.status ?? "disconnected",
+        googleEmail: row.googleEmail ?? null,
+        enabledApps,
+      });
+    } catch (error: any) {
+      console.error("Workspace status error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // OAuth URL for connecting workspace (state = siteConfigId)
+  app.get("/api/workspace/connect/:siteConfigId", (req, res) => {
+    try {
+      const { siteConfigId } = req.params;
+      const service = createGoogleWorkspaceService();
+      const authUrl = service.getAuthUrl(siteConfigId);
+      res.json({ authUrl });
+    } catch (error: any) {
+      console.error("Workspace connect URL error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Legacy: Get Google Workspace OAuth URL (query siteConfigId)
   app.get("/api/google/auth-url", (req, res) => {
     try {
-      const { businessId } = req.query;
-      if (!businessId || typeof businessId !== 'string') {
-        return res.status(400).json({ error: "businessId is required" });
+      const siteConfigId = (req.query.businessId ?? req.query.siteConfigId) as string | undefined;
+      if (!siteConfigId || typeof siteConfigId !== "string") {
+        return res.status(400).json({ error: "siteConfigId or businessId is required" });
       }
-
       const service = createGoogleWorkspaceService();
-      const authUrl = service.getAuthUrl(businessId);
+      const authUrl = service.getAuthUrl(siteConfigId);
       res.json({ authUrl });
     } catch (error: any) {
       console.error("Google auth URL error:", error);
@@ -1085,63 +1412,112 @@ export async function registerRoutes(
     }
   });
 
-  // Google OAuth callback
+  // Google OAuth callback (state = siteConfigId); persist tokens to DB
   app.get("/api/google/callback", async (req, res) => {
     try {
-      const { code, state: businessId } = req.query;
-      
-      if (!code || typeof code !== 'string') {
+      const { code, state: siteConfigId } = req.query;
+      if (!code || typeof code !== "string") {
         return res.status(400).send("Authorization code not provided");
       }
-      if (!businessId || typeof businessId !== 'string') {
-        return res.status(400).send("Business ID not provided");
+      if (!siteConfigId || typeof siteConfigId !== "string") {
+        return res.status(400).send("State (siteConfigId) not provided");
       }
-
       const service = createGoogleWorkspaceService();
       const credentials = await service.exchangeCode(code);
-      
-      // Store credentials for this business
-      googleWorkspaceCredentials.set(businessId, credentials);
-      
-      // Redirect back to the admin panel with success
-      res.redirect(`/website-builder?google_connected=true&businessId=${businessId}`);
+      const tokenExpiry = credentials.expiryDate ? new Date(credentials.expiryDate) : null;
+      const existing = await db.query.workspaceConfigurations.findFirst({
+        where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+      });
+      if (existing) {
+        await db.update(workspaceConfigurations)
+          .set({
+            accessToken: credentials.accessToken,
+            refreshToken: credentials.refreshToken ?? null,
+            tokenExpiry,
+            status: "connected",
+            statusMessage: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(workspaceConfigurations.siteConfigId, siteConfigId));
+      } else {
+        await db.insert(workspaceConfigurations).values({
+          siteConfigId,
+          accessToken: credentials.accessToken,
+          refreshToken: credentials.refreshToken ?? null,
+          tokenExpiry,
+          status: "connected",
+          updatedAt: new Date(),
+        });
+      }
+      res.redirect(`/website-builder?google_connected=true&siteConfigId=${siteConfigId}`);
     } catch (error: any) {
       console.error("Google OAuth callback error:", error);
       res.redirect(`/website-builder?google_error=${encodeURIComponent(error.message)}`);
     }
   });
 
-  // Check if business has Google Workspace connected
-  app.get("/api/google/connection/:businessId", (req, res) => {
-    const { businessId } = req.params;
-    const hasCredentials = googleWorkspaceCredentials.has(businessId);
-    res.json({ connected: hasCredentials });
+  // Save workspace preferences (enabledApps, etc.)
+  app.patch("/api/workspace/save/:siteConfigId", async (req, res) => {
+    try {
+      const { siteConfigId } = req.params;
+      const { enabledApps, status } = req.body as { enabledApps?: Record<string, boolean>; status?: string };
+      const existing = await db.query.workspaceConfigurations.findFirst({
+        where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+      });
+      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      if (enabledApps !== undefined) updates.enabledApps = enabledApps;
+      if (status !== undefined) updates.status = status;
+      if (existing) {
+        await db.update(workspaceConfigurations).set(updates as any).where(eq(workspaceConfigurations.siteConfigId, siteConfigId));
+      } else {
+        await db.insert(workspaceConfigurations).values({
+          siteConfigId,
+          ...(enabledApps && { enabledApps }),
+          ...(status && { status }),
+          updatedAt: new Date(),
+        });
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Workspace save error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Check if site has Google Workspace connected
+  app.get("/api/workspace/connection/:siteConfigId", async (req, res) => {
+    const { siteConfigId } = req.params;
+    const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
+    res.json({ connected: !!credentials });
+  });
+
+  app.get("/api/google/connection/:siteConfigId", async (req, res) => {
+    const { siteConfigId } = req.params;
+    const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
+    res.json({ connected: !!credentials });
   });
 
   // Execute a Google Workspace tool
   app.post("/api/google/execute-tool", async (req, res) => {
     try {
-      const { businessId, toolName, args } = req.body;
-      
-      if (!businessId) {
-        return res.status(400).json({ success: false, error: "businessId is required" });
+      const { siteConfigId, toolName, args } = req.body as { siteConfigId?: string; businessId?: string; toolName: string; args?: Record<string, unknown> };
+      const id = siteConfigId ?? (req.body as any).businessId;
+      if (!id) {
+        return res.status(400).json({ success: false, error: "siteConfigId is required" });
       }
       if (!toolName) {
         return res.status(400).json({ success: false, error: "toolName is required" });
       }
-
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(id);
       if (!credentials) {
-        return res.status(401).json({ 
-          success: false, 
-          error: "Google Workspace not connected for this business",
-          requiresAuth: true
+        return res.status(401).json({
+          success: false,
+          error: "Google Workspace not connected for this site",
+          requiresAuth: true,
         });
       }
-
       const service = createGoogleWorkspaceService(credentials);
       const result = await service.executeTool(toolName, args || {});
-      
       res.json(result);
     } catch (error: any) {
       console.error("Google tool execution error:", error);
@@ -1149,11 +1525,50 @@ export async function registerRoutes(
     }
   });
 
-  // Disconnect Google Workspace
-  app.delete("/api/google/connection/:businessId", (req, res) => {
-    const { businessId } = req.params;
-    const wasConnected = googleWorkspaceCredentials.delete(businessId);
-    res.json({ success: true, wasConnected });
+  // Disconnect Google Workspace (clear tokens, keep row)
+  app.delete("/api/workspace/connection/:siteConfigId", async (req, res) => {
+    try {
+      const { siteConfigId } = req.params;
+      const existing = await db.query.workspaceConfigurations.findFirst({
+        where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+      });
+      if (!existing) {
+        return res.json({ success: true, wasConnected: false });
+      }
+      await db.update(workspaceConfigurations)
+        .set({
+          accessToken: null,
+          refreshToken: null,
+          tokenExpiry: null,
+          status: "disconnected",
+          googleEmail: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(workspaceConfigurations.siteConfigId, siteConfigId));
+      res.json({ success: true, wasConnected: true });
+    } catch (error: any) {
+      console.error("Workspace disconnect error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/google/connection/:siteConfigId", async (req, res) => {
+    const { siteConfigId } = req.params;
+    const existing = await db.query.workspaceConfigurations.findFirst({
+      where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
+    });
+    if (!existing) return res.json({ success: true, wasConnected: false });
+    await db.update(workspaceConfigurations)
+      .set({
+        accessToken: null,
+        refreshToken: null,
+        tokenExpiry: null,
+        status: "disconnected",
+        googleEmail: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(workspaceConfigurations.siteConfigId, siteConfigId));
+    res.json({ success: true, wasConnected: true });
   });
 
   // ============ Google Drive API ============
@@ -1161,10 +1576,10 @@ export async function registerRoutes(
   const multer = (await import('multer')).default;
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
-  app.get("/api/google/drive/drives/:businessId", async (req, res) => {
+  app.get("/api/google/drive/drives/:siteConfigId", async (req, res) => {
     try {
-      const { businessId } = req.params;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const { siteConfigId } = req.params;
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1176,11 +1591,11 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/google/drive/files/:businessId", async (req, res) => {
+  app.get("/api/google/drive/files/:siteConfigId", async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const { siteConfigId } = req.params;
       const { folderId = 'root', pageToken, pageSize } = req.query;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1196,12 +1611,12 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/google/drive/folder/:businessId", async (req, res) => {
+  app.post("/api/google/drive/folder/:siteConfigId", async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const { siteConfigId } = req.params;
       const { name, parentId } = req.body;
       if (!name) return res.status(400).json({ success: false, error: "Folder name is required" });
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1213,13 +1628,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/google/drive/upload/:businessId", upload.single('file'), async (req, res) => {
+  app.post("/api/google/drive/upload/:siteConfigId", upload.single('file'), async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const { siteConfigId } = req.params;
       const { parentId } = req.body;
       const file = (req as any).file;
       if (!file) return res.status(400).json({ success: false, error: "No file provided" });
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1231,10 +1646,10 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/google/drive/files/:businessId/:fileId", async (req, res) => {
+  app.delete("/api/google/drive/files/:siteConfigId/:fileId", async (req, res) => {
     try {
-      const { businessId, fileId } = req.params;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const { siteConfigId, fileId } = req.params;
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1248,11 +1663,11 @@ export async function registerRoutes(
 
   // ============ Google Calendar API ============
 
-  app.get("/api/google/calendar/events/:businessId", async (req, res) => {
+  app.get("/api/google/calendar/events/:siteConfigId", async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const { siteConfigId } = req.params;
       const { maxResults, timeMin } = req.query;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1267,14 +1682,14 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/google/calendar/events/:businessId", async (req, res) => {
+  app.post("/api/google/calendar/events/:siteConfigId", async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const { siteConfigId } = req.params;
       const { summary, description, startTime, endTime, attendees } = req.body;
       if (!summary || !startTime || !endTime) {
         return res.status(400).json({ success: false, error: "summary, startTime, and endTime are required" });
       }
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1286,10 +1701,10 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/google/calendar/events/:businessId/:eventId", async (req, res) => {
+  app.patch("/api/google/calendar/events/:siteConfigId/:eventId", async (req, res) => {
     try {
-      const { businessId, eventId } = req.params;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const { siteConfigId, eventId } = req.params;
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1301,10 +1716,10 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/google/calendar/events/:businessId/:eventId", async (req, res) => {
+  app.delete("/api/google/calendar/events/:siteConfigId/:eventId", async (req, res) => {
     try {
-      const { businessId, eventId } = req.params;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const { siteConfigId, eventId } = req.params;
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -1501,10 +1916,12 @@ export async function registerRoutes(
         context += `\n\nCurrent usage data:\n${JSON.stringify(costs, null, 2)}`;
       }
 
-      const analysis = await analyzeWithKimi({
-        type: 'general',
-        context,
-        conversationHistory: conversationHistory || []
+      // Sovereign: Use gatewayChat instead of analyzeWithKimi (Kimi decommissioned)
+      const { response: analysis } = await gatewayChat({
+        messages: [
+          { role: 'system', content: 'You are a Google API cost optimization expert. Provide detailed analysis.' },
+          { role: 'user', content: context }
+        ],
       });
 
       res.json({ success: true, analysis });
@@ -1557,1775 +1974,7 @@ export async function registerRoutes(
   });
 
   // Get telephony config
-  app.get("/api/telephony/config", async (req, res) => {
-    try {
-      let config = await storage.getTelephonyConfig();
-      if (!config) {
-        config = await storage.createTelephonyConfig({
-          phoneNumber: null,
-          firewallEnabled: true,
-          allowedNumbers: [],
-          maxCallDuration: 60,
-          timeout: 30,
-          friendlyName: "AI Agent Trunk",
-        });
-      }
-      // Never return authToken to client - add hasAuthToken indicator instead
-      const { authToken, ...safeConfig } = config as any;
-      res.json({
-        ...safeConfig,
-        hasAuthToken: !!authToken,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update telephony config by ID
-  app.patch("/api/telephony/config/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const parsed = updateConfigSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-      const config = await storage.updateTelephonyConfig(id, parsed.data);
-      if (!config) {
-        return res.status(404).json({ error: "Config not found" });
-      }
-      res.json(config);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update telephony config (singleton - auto-get or create config first)
-  app.patch("/api/telephony/config", async (req, res) => {
-    try {
-      const parsed = updateConfigSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-      
-      // Get or create the singleton config
-      let existingConfig = await storage.getTelephonyConfig();
-      if (!existingConfig) {
-        existingConfig = await storage.createTelephonyConfig({
-          phoneNumber: null,
-          firewallEnabled: true,
-          allowedNumbers: [],
-          maxCallDuration: 60,
-          timeout: 30,
-          friendlyName: "AI Agent Trunk",
-        });
-      }
-      
-      const config = await storage.updateTelephonyConfig(existingConfig.id, parsed.data);
-      if (!config) {
-        return res.status(404).json({ error: "Config not found" });
-      }
-      res.json(config);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  async function requireActiveSubscription(): Promise<{ allowed: boolean; error?: string }> {
-    try {
-      const { getUncachableStripeClient } = await import('./stripeClient');
-      const stripe = await getUncachableStripeClient();
-
-      const subscriptions = await stripe.subscriptions.list({
-        status: 'active',
-        limit: 1,
-      });
-
-      if (subscriptions.data.length > 0) {
-        return { allowed: true };
-      }
-
-      return {
-        allowed: false,
-        error: "A paid subscription is required to search for or provision phone numbers. Please subscribe to a plan first at the Billing page.",
-      };
-    } catch (err: any) {
-      return {
-        allowed: false,
-        error: "Unable to verify subscription status. Please ensure you have an active paid plan before requesting phone numbers.",
-      };
-    }
-  }
-
-  // Search available phone numbers
-  app.get("/api/telephony/numbers/search", async (req, res) => {
-    try {
-      const subCheck = await requireActiveSubscription();
-      if (!subCheck.allowed) {
-        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
-      }
-
-      const { areaCode, country = 'US' } = req.query;
-      if (!areaCode || typeof areaCode !== 'string') {
-        return res.status(400).json({ error: "Area code is required" });
-      }
-      const numbers = await searchAvailableNumbers(areaCode, country as string);
-      res.json(numbers);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Provision a phone number
-  app.post("/api/telephony/numbers/provision", async (req, res) => {
-    try {
-      const subCheck = await requireActiveSubscription();
-      if (!subCheck.allowed) {
-        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
-      }
-
-      const { phoneNumber, voiceUrl, smsUrl } = req.body;
-      if (!phoneNumber) {
-        return res.status(400).json({ error: "Phone number is required" });
-      }
-      
-      const result = await provisionPhoneNumber(phoneNumber, voiceUrl, smsUrl);
-      
-      let config = await storage.getTelephonyConfig();
-      if (config) {
-        await storage.updateTelephonyConfig(config.id, {
-          phoneNumber: result.phoneNumber,
-          phoneSid: result.sid,
-        });
-      }
-      
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Add an existing phone number with credentials
-  app.post("/api/telephony/numbers/existing", async (req, res) => {
-    try {
-      const { accountSid, authToken, phoneNumber, phoneSid, friendlyName, isSubAccount, parentAccountSid } = req.body;
-      
-      // Validation
-      if (!phoneNumber) {
-        return res.status(400).json({ error: "Phone number is required" });
-      }
-      
-      // Phone number format validation
-      if (!phoneNumber.match(/^\+?[1-9]\d{1,14}$/)) {
-        return res.status(400).json({ error: "Invalid phone number format. Use E.164 format (e.g., +1234567890)" });
-      }
-      
-      // If credentials provided, validate them
-      let twilioClient = null;
-      if (accountSid && authToken) {
-        // Require both if either is provided
-        if (!accountSid || !authToken) {
-          return res.status(400).json({ error: "Both Account SID and Auth Token are required" });
-        }
-        
-        try {
-          twilioClient = twilio(accountSid, authToken);
-          await twilioClient.api.accounts(accountSid).fetch();
-        } catch (credError: any) {
-          return res.status(400).json({ error: `Invalid Twilio credentials: ${credError.message}` });
-        }
-        
-        // If phoneSid provided, verify it belongs to this account
-        if (phoneSid) {
-          try {
-            const phoneInfo = await twilioClient.incomingPhoneNumbers(phoneSid).fetch();
-            if (phoneInfo.phoneNumber !== phoneNumber) {
-              return res.status(400).json({ error: "Phone SID does not match the provided phone number" });
-            }
-          } catch (sidError: any) {
-            return res.status(400).json({ error: `Phone SID verification failed: ${sidError.message}` });
-          }
-        }
-      }
-      
-      const baseUrl = process.env.WEBHOOK_BASE_URL ||
-        (req.get('host') ? `https://${req.get('host')}` : 'https://twilio.gatewayglobal.ai');
-      const voiceUrl = `${baseUrl}/webhook/voice`;
-      const smsUrl = `${baseUrl}/webhook/sms`;
-      const statusCallback = `${baseUrl}/webhook/voice/status`;
-
-      // If we have credentials and phoneSid, configure webhooks on Twilio
-      if (twilioClient && phoneSid) {
-        try {
-          await twilioClient.incomingPhoneNumbers(phoneSid).update({
-            voiceUrl: voiceUrl,
-            voiceMethod: 'POST',
-            smsUrl: smsUrl,
-            smsMethod: 'POST',
-            statusCallback: statusCallback,
-            statusCallbackMethod: 'POST',
-          });
-          console.log(`Configured webhooks for ${phoneNumber} on Twilio`);
-        } catch (webhookError: any) {
-          console.error('Failed to configure webhooks:', webhookError);
-          // Continue anyway - user can manually configure webhooks
-        }
-      }
-      
-      let config = await storage.getTelephonyConfig();
-      
-      const updateData = {
-        accountSid: accountSid || null,
-        authToken: authToken || null,
-        phoneNumber,
-        phoneSid: phoneSid || null,
-        friendlyName: friendlyName || 'AI Agent Trunk',
-        isSubAccount: isSubAccount || false,
-        parentAccountSid: parentAccountSid || null,
-        voiceUrl,
-        smsUrl,
-        statusCallbackUrl: statusCallback,
-      };
-      
-      if (config) {
-        await storage.updateTelephonyConfig(config.id, updateData);
-      } else {
-        await storage.createTelephonyConfig(updateData);
-      }
-      
-      res.json({ 
-        success: true, 
-        message: phoneSid && twilioClient 
-          ? "Number added and webhooks configured on Twilio" 
-          : "Number added - configure webhooks manually if needed"
-      });
-    } catch (error: any) {
-      console.error('Error adding existing number:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Release a phone number
-  app.post("/api/telephony/numbers/release", async (req, res) => {
-    try {
-      const { phoneSid } = req.body;
-      if (!phoneSid) {
-        return res.status(400).json({ error: "Phone SID is required" });
-      }
-      
-      await releasePhoneNumber(phoneSid);
-      
-      let config = await storage.getTelephonyConfig();
-      if (config) {
-        await storage.updateTelephonyConfig(config.id, {
-          phoneNumber: null,
-          phoneSid: null,
-        });
-      }
-      
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Link an existing Twilio phone number to an agent
-  app.post("/api/telephony/numbers/link", async (req, res) => {
-    try {
-      // E.164 format: starts with +, followed by 1-15 digits
-      const e164Regex = /^\+[1-9]\d{1,14}$/;
-      
-      const linkSchema = z.object({
-        phoneNumber: z.string().min(1, "Phone number is required").transform(val => {
-          // Normalize to E.164: remove everything except + and digits
-          let normalized = val.replace(/[^\d+]/g, '');
-          // Add + if missing and starts with a country code
-          if (!normalized.startsWith('+') && normalized.length >= 10) {
-            normalized = '+' + (normalized.startsWith('1') ? normalized : '1' + normalized);
-          }
-          return normalized;
-        }).refine(val => e164Regex.test(val), {
-          message: "Phone number must be in E.164 format (e.g., +17025551234)"
-        }),
-        phoneSid: z.string().min(1, "Phone SID is required").regex(/^PN[a-zA-Z0-9]{32}$/, "Phone SID must be in format PN followed by 32 characters"),
-        agentId: z.string().min(1, "Agent ID is required"),
-      });
-
-      const parsed = linkSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.errors[0].message });
-      }
-
-      const { phoneNumber, phoneSid, agentId } = parsed.data;
-
-      // Verify the agent exists
-      const agent = await storage.getAgent(agentId);
-      if (!agent) {
-        return res.status(404).json({ error: "Agent not found" });
-      }
-
-      // Configure webhooks for this number in Twilio
-      const twilioClient = await getTwilioClient();
-      
-      // Use the production base URL from environment or derive from Replit
-      const baseUrl = process.env.WEBHOOK_BASE_URL || 
-                      process.env.REPLIT_DEPLOYMENT_URL || 
-                      `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
-      
-      try {
-        // Verify the number exists and belongs to this account first
-        const existingNumber = await twilioClient.incomingPhoneNumbers(phoneSid).fetch();
-        if (!existingNumber) {
-          return res.status(404).json({ 
-            error: "Phone number not found in your Twilio account. Please verify the SID is correct." 
-          });
-        }
-
-        // Update webhooks for voice and SMS
-        await twilioClient.incomingPhoneNumbers(phoneSid).update({
-          voiceUrl: `${baseUrl}/webhook/voice/kimi`,
-          voiceMethod: 'POST',
-          smsUrl: `${baseUrl}/webhook/sms`,
-          smsMethod: 'POST',
-          statusCallback: `${baseUrl}/webhook/status`,
-          statusCallbackMethod: 'POST',
-        });
-      } catch (twilioError: any) {
-        // Provide helpful error messages for common issues
-        if (twilioError.code === 20404) {
-          return res.status(404).json({ 
-            error: "Phone number not found. Make sure the SID is correct and the number belongs to your Twilio account (not a sub-account)." 
-          });
-        }
-        return res.status(400).json({ 
-          error: `Failed to configure Twilio number: ${twilioError.message}` 
-        });
-      }
-
-      // Update the agent with the phone number
-      await storage.updateAgent(agentId, {
-        phoneNumber,
-        phoneSid,
-      });
-
-      res.json({ 
-        success: true, 
-        phoneNumber, 
-        phoneSid,
-        message: "Phone number linked and webhooks configured" 
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update webhooks
-  app.patch("/api/telephony/webhooks", async (req, res) => {
-    try {
-      const parsed = webhooksUpdateSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-      
-      const { phoneSid, voiceUrl, voiceFallbackUrl, statusCallback, smsUrl, smsFallbackUrl } = parsed.data;
-      
-      await updatePhoneNumberWebhooks(phoneSid, {
-        voiceUrl: voiceUrl || undefined,
-        voiceFallbackUrl: voiceFallbackUrl || undefined,
-        statusCallback: statusCallback || undefined,
-        smsUrl: smsUrl || undefined,
-        smsFallbackUrl: smsFallbackUrl || undefined,
-      });
-      
-      let config = await storage.getTelephonyConfig();
-      if (config) {
-        await storage.updateTelephonyConfig(config.id, {
-          voiceUrl: voiceUrl || null,
-          voiceFallbackUrl: voiceFallbackUrl || null,
-          statusCallbackUrl: statusCallback || null,
-          smsUrl: smsUrl || null,
-          smsFallbackUrl: smsFallbackUrl || null,
-        });
-      }
-      
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get incoming phone numbers from Twilio
-  app.get("/api/telephony/numbers", async (req, res) => {
-    try {
-      const numbers = await getIncomingPhoneNumbers();
-      res.json(numbers);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Auto-configure all phone numbers with Gateway Global AI webhooks
-  app.post("/api/telephony/configure-webhooks", async (req, res) => {
-    try {
-      const baseUrl = req.body.baseUrl || 'https://twilio.gatewayglobal.ai';
-      const numbers = await getIncomingPhoneNumbers();
-      
-      const results = [];
-      for (const num of numbers) {
-        try {
-          await updatePhoneNumberWebhooks(num.sid, {
-            voiceUrl: `${baseUrl}/webhook/voice`,
-            smsUrl: `${baseUrl}/webhook/sms`,
-            statusCallback: `${baseUrl}/webhook/voice/status`,
-          });
-          results.push({ 
-            phoneNumber: num.phoneNumber, 
-            success: true,
-            voiceUrl: `${baseUrl}/webhook/voice`,
-            smsUrl: `${baseUrl}/webhook/sms`
-          });
-        } catch (err: any) {
-          results.push({ 
-            phoneNumber: num.phoneNumber, 
-            success: false, 
-            error: err.message 
-          });
-        }
-      }
-      
-      res.json({ 
-        message: `Configured ${results.filter(r => r.success).length}/${numbers.length} phone numbers`,
-        baseUrl,
-        results 
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get default phone number
-  app.get("/api/telephony/default-number", async (req, res) => {
-    try {
-      const phoneNumber = await getTwilioFromPhoneNumber();
-      res.json({ phoneNumber });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // ===========================================
-  // Gateway Global AI Twilio Provisioning API
-  // ===========================================
-
-  // Search available US numbers by area code
-  app.get("/api/twilio/numbers/available", async (req, res) => {
-    try {
-      const subCheck = await requireActiveSubscription();
-      if (!subCheck.allowed) {
-        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
-      }
-
-      const areaCode = (req.query.areaCode as string || '').replace(/\D/g, '').slice(0, 3);
-      const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
-      
-      if (!areaCode || areaCode.length !== 3) {
-        return res.status(400).json({ error: "Valid 3-digit area code required" });
-      }
-      
-      const numbers = await searchAvailableNumbers(areaCode, 'US');
-      res.json({ 
-        numbers: numbers.slice(0, limit).map(n => ({
-          phoneNumber: n.phoneNumber,
-          friendlyName: n.friendlyName,
-          locality: n.locality,
-          region: n.region
-        }))
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // List numbers already owned by the account
-  app.get("/api/twilio/numbers", async (req, res) => {
-    try {
-      const numbers = await getIncomingPhoneNumbers();
-      res.json({ 
-        numbers: numbers.map(n => ({
-          sid: n.sid,
-          phoneNumber: n.phoneNumber,
-          friendlyName: n.friendlyName,
-          voiceUrl: n.voiceUrl || null,
-          voiceFallbackUrl: n.voiceFallbackUrl || null,
-          smsUrl: n.smsUrl || null,
-          smsFallbackUrl: n.smsFallbackUrl || null,
-          statusCallback: n.statusCallback || null,
-          capabilities: {
-            voice: n.capabilities?.voice ?? true,
-            sms: n.capabilities?.sms ?? true,
-            mms: n.capabilities?.mms ?? false,
-          },
-          dateCreated: n.dateCreated || new Date().toISOString(),
-        }))
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Buy a number (E.164 or 10-digit US)
-  app.post("/api/twilio/numbers", async (req, res) => {
-    try {
-      const subCheck = await requireActiveSubscription();
-      if (!subCheck.allowed) {
-        return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
-      }
-
-      const { phoneNumber, friendlyName, messagingServiceSid } = req.body;
-      
-      if (!phoneNumber) {
-        return res.status(400).json({ error: "phoneNumber is required" });
-      }
-      
-      // Normalize to E.164 if needed
-      let normalizedNumber = phoneNumber;
-      if (!phoneNumber.startsWith('+')) {
-        normalizedNumber = '+1' + phoneNumber.replace(/\D/g, '');
-      }
-      
-      // Use current domain for webhook URLs (auto-detected)
-      const currentDomain = process.env.REPLIT_DEV_DOMAIN || req.get('host');
-      const baseUrl = `https://${currentDomain}`;
-      
-      const result = await provisionPhoneNumber(
-        normalizedNumber,
-        `${baseUrl}/webhook/voice/kimi`,
-        `${baseUrl}/webhook/sms`
-      );
-      
-      // Auto-configure ALL webhook URLs including status callbacks
-      const client = await getTwilioClient();
-      await client.incomingPhoneNumbers(result.sid).update({
-        voiceUrl: `${baseUrl}/webhook/voice/kimi`,
-        voiceMethod: 'POST',
-        voiceFallbackUrl: `${baseUrl}/webhook/voice`,
-        voiceFallbackMethod: 'POST',
-        smsUrl: `${baseUrl}/webhook/sms`,
-        smsMethod: 'POST',
-        smsFallbackUrl: `${baseUrl}/webhook/sms`,
-        smsFallbackMethod: 'POST',
-        statusCallback: `${baseUrl}/webhook/voice/status`,
-        statusCallbackMethod: 'POST',
-        smsStatusCallback: `${baseUrl}/webhook/sms/status`
-      });
-      
-      // Update with friendlyName if provided
-      if (friendlyName) {
-        await updateCallerIdName(result.sid, friendlyName);
-      }
-      
-      // Add to Customer Care Messaging Service if specified or use default
-      const targetMsgService = messagingServiceSid || 'MGd16163508f2fcc1236a989f83664d9fb';
-      try {
-        await client.messaging.v1.services(targetMsgService)
-          .phoneNumbers
-          .create({ phoneNumberSid: result.sid });
-        console.log(`[Phone Setup] Added ${normalizedNumber} to Messaging Service ${targetMsgService}`);
-      } catch (msErr: any) {
-        console.warn(`[Phone Setup] Could not add to Messaging Service: ${msErr.message}`);
-      }
-      
-      res.json({
-        sid: result.sid,
-        phoneNumber: result.phoneNumber,
-        friendlyName: friendlyName || 'AI Agent Trunk',
-        webhooksConfigured: true,
-        baseUrl,
-        messagingServiceSid: targetMsgService
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update webhooks for an owned number
-  app.patch("/api/twilio/numbers/:phoneSid", async (req, res) => {
-    try {
-      const { phoneSid } = req.params;
-      const { voiceUrl, voiceFallbackUrl, smsUrl, smsFallbackUrl, statusCallback, friendlyName } = req.body;
-      
-      // Update webhooks
-      await updatePhoneNumberWebhooks(phoneSid, {
-        voiceUrl: voiceUrl || undefined,
-        voiceFallbackUrl: voiceFallbackUrl || undefined,
-        smsUrl: smsUrl || undefined,
-        smsFallbackUrl: smsFallbackUrl || undefined,
-        statusCallback: statusCallback || undefined
-      });
-      
-      // Update friendly name if provided
-      if (friendlyName) {
-        await updateCallerIdName(phoneSid, friendlyName);
-      }
-      
-      // Fetch updated number details
-      const numbers = await getIncomingPhoneNumbers();
-      const updated = numbers.find(n => n.sid === phoneSid);
-      
-      if (!updated) {
-        return res.status(404).json({ error: "Phone number not found" });
-      }
-      
-      res.json({
-        sid: updated.sid,
-        phoneNumber: updated.phoneNumber,
-        friendlyName: updated.friendlyName,
-        voiceUrl: updated.voiceUrl || null,
-        voiceFallbackUrl: updated.voiceFallbackUrl || null,
-        smsUrl: updated.smsUrl || null,
-        smsFallbackUrl: updated.smsFallbackUrl || null,
-        statusCallback: updated.statusCallback || null
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Release (delete) an owned number
-  app.delete("/api/twilio/numbers/:phoneSid", async (req, res) => {
-    try {
-      const { phoneSid } = req.params;
-      await releasePhoneNumber(phoneSid);
-      res.json({ ok: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // ===========================================
-  // Twilio Account Management API
-  // ===========================================
-
-  // Get account info
-  app.get("/api/twilio/account", async (req, res) => {
-    try {
-      const client = await getTwilioClient();
-      const account = await client.api.accounts(process.env.TWILIO_ACCOUNT_SID).fetch();
-      res.json({
-        sid: account.sid,
-        friendlyName: account.friendlyName,
-        status: account.status,
-        type: account.type,
-        dateCreated: account.dateCreated,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get sub-accounts
-  app.get("/api/twilio/subaccounts", async (req, res) => {
-    try {
-      const client = await getTwilioClient();
-      const accounts = await client.api.accounts.list({ limit: 50 });
-      // Filter out the main account
-      const subAccounts = accounts.filter((acc: any) => acc.sid !== process.env.TWILIO_ACCOUNT_SID);
-      res.json(subAccounts.map((acc: any) => ({
-        sid: acc.sid,
-        friendlyName: acc.friendlyName,
-        status: acc.status,
-        dateCreated: acc.dateCreated,
-      })));
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Create sub-account
-  app.post("/api/twilio/subaccounts", async (req, res) => {
-    try {
-      const { friendlyName } = req.body;
-      if (!friendlyName) {
-        return res.status(400).json({ error: "friendlyName is required" });
-      }
-      const client = await getTwilioClient();
-      const account = await client.api.accounts.create({ friendlyName });
-      res.json({
-        sid: account.sid,
-        friendlyName: account.friendlyName,
-        status: account.status,
-        dateCreated: account.dateCreated,
-        authToken: account.authToken, // Only returned on creation
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update sub-account (suspend/close)
-  app.patch("/api/twilio/subaccounts/:sid", async (req, res) => {
-    try {
-      const { sid } = req.params;
-      const { status } = req.body;
-      if (!status || !['active', 'suspended', 'closed'].includes(status)) {
-        return res.status(400).json({ error: "Valid status required: active, suspended, or closed" });
-      }
-      const client = await getTwilioClient();
-      const account = await client.api.accounts(sid).update({ status });
-      res.json({
-        sid: account.sid,
-        friendlyName: account.friendlyName,
-        status: account.status,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get billing/balance info
-  app.get("/api/twilio/billing", async (req, res) => {
-    try {
-      const client = await getTwilioClient();
-      const balance = await client.balance.fetch();
-      
-      // Get usage records for this month
-      const today = new Date();
-      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      
-      let callCount = 0;
-      let smsCount = 0;
-      let totalCost = 0;
-      
-      try {
-        const usageRecords = await client.usage.records.thisMonth.list({ limit: 100 });
-        for (const record of usageRecords) {
-          if (record.category === 'calls') {
-            callCount = parseInt(record.count) || 0;
-            totalCost += parseFloat(record.price) || 0;
-          } else if (record.category === 'sms') {
-            smsCount = parseInt(record.count) || 0;
-            totalCost += parseFloat(record.price) || 0;
-          }
-        }
-      } catch (usageError) {
-        console.log('Usage records not available:', usageError);
-      }
-
-      res.json({
-        balance: balance.balance,
-        currency: balance.currency,
-        usageThisMonth: {
-          calls: callCount,
-          sms: smsCount,
-          totalCost: totalCost.toFixed(2),
-        }
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // TwiML Apps - List all
-  app.get("/api/twilio/twiml-apps", async (req, res) => {
-    try {
-      const client = await getTwilioClient();
-      const apps = await client.applications.list({ limit: 20 });
-      res.json({
-        apps: apps.map((app: any) => ({
-          sid: app.sid,
-          friendlyName: app.friendlyName,
-          voiceUrl: app.voiceUrl,
-          voiceMethod: app.voiceMethod,
-          voiceFallbackUrl: app.voiceFallbackUrl,
-          smsUrl: app.smsUrl,
-          smsMethod: app.smsMethod,
-          smsFallbackUrl: app.smsFallbackUrl,
-          statusCallback: app.statusCallback,
-          dateCreated: app.dateCreated,
-          dateUpdated: app.dateUpdated
-        }))
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // TwiML Apps - Update webhook URLs
-  app.patch("/api/twilio/twiml-apps/:sid", async (req, res) => {
-    try {
-      const { sid } = req.params;
-      const { voiceUrl, smsUrl, voiceFallbackUrl, smsFallbackUrl, statusCallback } = req.body;
-      const client = await getTwilioClient();
-      
-      const updateData: any = {};
-      if (voiceUrl !== undefined) updateData.voiceUrl = voiceUrl;
-      if (smsUrl !== undefined) updateData.smsUrl = smsUrl;
-      if (voiceFallbackUrl !== undefined) updateData.voiceFallbackUrl = voiceFallbackUrl;
-      if (smsFallbackUrl !== undefined) updateData.smsFallbackUrl = smsFallbackUrl;
-      if (statusCallback !== undefined) updateData.statusCallback = statusCallback;
-      
-      const app = await client.applications(sid).update(updateData);
-      
-      res.json({
-        success: true,
-        app: {
-          sid: app.sid,
-          friendlyName: app.friendlyName,
-          voiceUrl: app.voiceUrl,
-          smsUrl: app.smsUrl,
-          voiceFallbackUrl: app.voiceFallbackUrl,
-          smsFallbackUrl: app.smsFallbackUrl,
-          statusCallback: app.statusCallback
-        }
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // TwiML Apps - Auto-fix all apps to use current domain
-  app.post("/api/twilio/twiml-apps/auto-fix", async (req, res) => {
-    try {
-      const client = await getTwilioClient();
-      const apps = await client.applications.list({ limit: 20 });
-      
-      const currentDomain = process.env.REPLIT_DEV_DOMAIN || req.get('host');
-      const baseUrl = `https://${currentDomain}`;
-      
-      const results: any[] = [];
-      
-      for (const app of apps) {
-        const updates: any = {};
-        let needsUpdate = false;
-        
-        // Check if URLs are outdated (not pointing to current domain)
-        if (app.voiceUrl && !app.voiceUrl.includes(currentDomain)) {
-          // Preserve the path, just update the domain
-          const voicePath = new URL(app.voiceUrl).pathname;
-          updates.voiceUrl = `${baseUrl}${voicePath}`;
-          needsUpdate = true;
-        }
-        
-        if (app.smsUrl && !app.smsUrl.includes(currentDomain)) {
-          const smsPath = new URL(app.smsUrl).pathname;
-          updates.smsUrl = `${baseUrl}${smsPath}`;
-          needsUpdate = true;
-        }
-        
-        if (needsUpdate) {
-          await client.applications(app.sid).update(updates);
-          results.push({
-            sid: app.sid,
-            friendlyName: app.friendlyName,
-            fixed: true,
-            updates
-          });
-        } else {
-          results.push({
-            sid: app.sid,
-            friendlyName: app.friendlyName,
-            fixed: false,
-            reason: 'Already up to date'
-          });
-        }
-      }
-      
-      res.json({
-        success: true,
-        currentDomain,
-        baseUrl,
-        fixedCount: results.filter(r => r.fixed).length,
-        results
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Messaging Services Health Check
-  app.get("/api/twilio/messaging-services/health", async (req, res) => {
-    try {
-      const client = await getTwilioClient();
-      const services = await client.messaging.v1.services.list({ limit: 20 });
-      
-      const results = await Promise.all(services.map(async (svc: any) => {
-        const issues: string[] = [];
-        const warnings: string[] = [];
-        
-        // Check inbound webhook
-        if (!svc.inboundRequestUrl && !svc.useInboundWebhookOnNumber) {
-          issues.push('No inbound webhook URL and useInboundWebhookOnNumber is false');
-        } else if (!svc.inboundRequestUrl && svc.useInboundWebhookOnNumber) {
-          warnings.push('No service-level inbound URL, using phone number webhooks');
-        }
-        
-        // Check fallback
-        if (!svc.fallbackUrl) {
-          warnings.push('No fallback URL configured');
-        }
-        
-        // Check status callback
-        if (!svc.statusCallback) {
-          warnings.push('No status callback configured');
-        }
-        
-        // Test webhook reachability if URL exists
-        let webhookStatus = null;
-        if (svc.inboundRequestUrl) {
-          try {
-            const response = await fetch(svc.inboundRequestUrl, {
-              method: svc.inboundMethod || 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: 'From=%2B15551234567&To=%2B15559876543&Body=HealthCheck&MessageSid=SMtest123'
-            });
-            webhookStatus = { reachable: true, status: response.status };
-            if (response.status === 404) {
-              issues.push('Webhook returns 404 Not Found');
-            } else if (response.status >= 400) {
-              issues.push(`Webhook returns error status ${response.status}`);
-            }
-          } catch (err: any) {
-            webhookStatus = { reachable: false, error: err.message };
-            issues.push(`Webhook unreachable: ${err.message}`);
-          }
-        }
-        
-        // Get phone numbers in service
-        let phoneNumbers: string[] = [];
-        try {
-          const pns = await client.messaging.v1.services(svc.sid).phoneNumbers.list({ limit: 10 });
-          phoneNumbers = pns.map((pn: any) => pn.phoneNumber);
-        } catch (e) {}
-        
-        return {
-          sid: svc.sid,
-          friendlyName: svc.friendlyName,
-          inboundRequestUrl: svc.inboundRequestUrl,
-          inboundMethod: svc.inboundMethod,
-          fallbackUrl: svc.fallbackUrl,
-          fallbackMethod: svc.fallbackMethod,
-          statusCallback: svc.statusCallback,
-          useInboundWebhookOnNumber: svc.useInboundWebhookOnNumber,
-          phoneNumbers,
-          webhookStatus,
-          issues,
-          warnings,
-          healthy: issues.length === 0
-        };
-      }));
-      
-      const totalIssues = results.reduce((sum, r) => sum + r.issues.length, 0);
-      const totalWarnings = results.reduce((sum, r) => sum + r.warnings.length, 0);
-      
-      res.json({
-        timestamp: new Date().toISOString(),
-        servicesCount: services.length,
-        totalIssues,
-        totalWarnings,
-        allHealthy: totalIssues === 0,
-        services: results
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update Messaging Service webhooks (auto-fix)
-  app.patch("/api/twilio/messaging-services/:sid", async (req, res) => {
-    try {
-      const { sid } = req.params;
-      const { inboundRequestUrl, inboundMethod, fallbackUrl, fallbackMethod, statusCallback, useInboundWebhookOnNumber } = req.body;
-      
-      const client = await getTwilioClient();
-      
-      const updateData: any = {};
-      if (inboundRequestUrl !== undefined) updateData.inboundRequestUrl = inboundRequestUrl;
-      if (inboundMethod !== undefined) updateData.inboundMethod = inboundMethod;
-      if (fallbackUrl !== undefined) updateData.fallbackUrl = fallbackUrl;
-      if (fallbackMethod !== undefined) updateData.fallbackMethod = fallbackMethod;
-      if (statusCallback !== undefined) updateData.statusCallback = statusCallback;
-      if (useInboundWebhookOnNumber !== undefined) updateData.useInboundWebhookOnNumber = useInboundWebhookOnNumber;
-      
-      const updated = await client.messaging.v1.services(sid).update(updateData);
-      
-      res.json({
-        success: true,
-        sid: updated.sid,
-        friendlyName: updated.friendlyName,
-        inboundRequestUrl: updated.inboundRequestUrl,
-        fallbackUrl: updated.fallbackUrl,
-        statusCallback: updated.statusCallback
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // UNIFIED FIX: Update ALL Twilio webhooks to current domain
-  app.post("/api/twilio/fix-all-webhooks", async (req, res) => {
-    try {
-      const client = await getTwilioClient();
-      const currentDomain = process.env.REPLIT_DEV_DOMAIN || req.get('host');
-      const baseUrl = `https://${currentDomain}`;
-      
-      const smsWebhookUrl = `${baseUrl}/webhook/sms`;
-      const smsStatusCallbackUrl = `${baseUrl}/webhook/sms/status`;
-      const voiceWebhookUrl = `${baseUrl}/webhook/voice/kimi`;
-      const voiceFallbackUrl = `${baseUrl}/webhook/voice`;
-      const voiceStatusCallbackUrl = `${baseUrl}/webhook/voice/status`;
-      
-      const results: any = {
-        domain: currentDomain,
-        baseUrl,
-        messagingServices: [],
-        twimlApps: [],
-        phoneNumbers: []
-      };
-      
-      // 1. Fix ALL Messaging Services using SDK properly
-      console.log('[Webhook Fix] Updating Messaging Services...');
-      const services = await client.messaging.v1.services.list({ limit: 20 });
-      for (const svc of services) {
-        try {
-          // Update using the Twilio SDK as documented
-          const updated = await client.messaging.v1.services(svc.sid).update({
-            inboundRequestUrl: smsWebhookUrl,
-            inboundMethod: 'POST',
-            fallbackUrl: smsWebhookUrl,
-            fallbackMethod: 'POST',
-            statusCallback: smsStatusCallbackUrl
-          });
-          results.messagingServices.push({
-            sid: svc.sid,
-            friendlyName: svc.friendlyName,
-            fixed: true,
-            inboundRequestUrl: updated.inboundRequestUrl
-          });
-        } catch (err: any) {
-          results.messagingServices.push({
-            sid: svc.sid,
-            friendlyName: svc.friendlyName,
-            fixed: false,
-            error: err.message
-          });
-        }
-      }
-      
-      // 2. Fix ALL TwiML Apps
-      console.log('[Webhook Fix] Updating TwiML Apps...');
-      const apps = await client.applications.list({ limit: 20 });
-      for (const app of apps) {
-        try {
-          const updated = await client.applications(app.sid).update({
-            voiceUrl: voiceWebhookUrl,
-            voiceMethod: 'POST',
-            voiceFallbackUrl: voiceFallbackUrl,
-            voiceFallbackMethod: 'POST',
-            smsUrl: smsWebhookUrl,
-            smsMethod: 'POST',
-            smsFallbackUrl: smsWebhookUrl,
-            smsFallbackMethod: 'POST'
-          });
-          results.twimlApps.push({
-            sid: app.sid,
-            friendlyName: app.friendlyName,
-            fixed: true,
-            voiceUrl: updated.voiceUrl,
-            smsUrl: updated.smsUrl
-          });
-        } catch (err: any) {
-          results.twimlApps.push({
-            sid: app.sid,
-            friendlyName: app.friendlyName,
-            fixed: false,
-            error: err.message
-          });
-        }
-      }
-      
-      // 3. Fix ALL Phone Numbers
-      console.log('[Webhook Fix] Updating Phone Numbers...');
-      const numbers = await client.incomingPhoneNumbers.list({ limit: 50 });
-      for (const num of numbers) {
-        try {
-          const updated = await client.incomingPhoneNumbers(num.sid).update({
-            voiceUrl: voiceWebhookUrl,
-            voiceMethod: 'POST',
-            voiceFallbackUrl: voiceFallbackUrl,
-            voiceFallbackMethod: 'POST',
-            statusCallback: voiceStatusCallbackUrl,
-            statusCallbackMethod: 'POST',
-            smsUrl: smsWebhookUrl,
-            smsMethod: 'POST',
-            smsFallbackUrl: smsWebhookUrl,
-            smsFallbackMethod: 'POST'
-          });
-          results.phoneNumbers.push({
-            sid: num.sid,
-            phoneNumber: num.phoneNumber,
-            fixed: true,
-            voiceUrl: updated.voiceUrl,
-            smsUrl: updated.smsUrl
-          });
-        } catch (err: any) {
-          results.phoneNumbers.push({
-            sid: num.sid,
-            phoneNumber: num.phoneNumber,
-            fixed: false,
-            error: err.message
-          });
-        }
-      }
-      
-      const totalFixed = 
-        results.messagingServices.filter((r: any) => r.fixed).length +
-        results.twimlApps.filter((r: any) => r.fixed).length +
-        results.phoneNumbers.filter((r: any) => r.fixed).length;
-      
-      console.log(`[Webhook Fix] Complete! Fixed ${totalFixed} configurations.`);
-      
-      res.json({
-        success: true,
-        summary: {
-          messagingServicesFixed: results.messagingServices.filter((r: any) => r.fixed).length,
-          twimlAppsFixed: results.twimlApps.filter((r: any) => r.fixed).length,
-          phoneNumbersFixed: results.phoneNumbers.filter((r: any) => r.fixed).length,
-          totalFixed
-        },
-        webhookUrls: {
-          sms: smsWebhookUrl,
-          voice: voiceWebhookUrl,
-          voiceFallback: voiceFallbackUrl
-        },
-        details: results
-      });
-    } catch (error: any) {
-      console.error('[Webhook Fix] Error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Auto-fix all messaging services with current domain (legacy)
-  app.post("/api/twilio/messaging-services/auto-fix", async (req, res) => {
-    try {
-      const client = await getTwilioClient();
-      const services = await client.messaging.v1.services.list({ limit: 20 });
-      
-      // Get current domain from request
-      const protocol = req.headers['x-forwarded-proto'] || 'https';
-      const host = req.headers['host'];
-      const baseUrl = `${protocol}://${host}`;
-      
-      const results = [];
-      
-      for (const svc of services) {
-        // Fix ALL services, not just empty ones
-        try {
-          const updated = await client.messaging.v1.services(svc.sid).update({
-            inboundRequestUrl: `${baseUrl}/webhook/sms`,
-            inboundMethod: 'POST',
-            fallbackUrl: `${baseUrl}/webhook/sms`,
-            fallbackMethod: 'POST'
-          });
-          results.push({
-            sid: svc.sid,
-            friendlyName: svc.friendlyName,
-            fixed: true,
-            newInboundUrl: updated.inboundRequestUrl
-          });
-        } catch (err: any) {
-          results.push({
-            sid: svc.sid,
-            friendlyName: svc.friendlyName,
-            fixed: false,
-            error: err.message
-          });
-        }
-      }
-      
-      res.json({
-        success: true,
-        baseUrl,
-        fixedCount: results.filter(r => r.fixed).length,
-        results
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Legacy endpoint kept for backward compatibility
-  app.post("/api/twilio/messaging-services/auto-fix-legacy", async (req, res) => {
-    try {
-      const client = await getTwilioClient();
-      const services = await client.messaging.v1.services.list({ limit: 20 });
-      
-      // Get current domain from request
-      const protocol = req.headers['x-forwarded-proto'] || 'https';
-      const host = req.headers['host'];
-      const baseUrl = `${protocol}://${host}`;
-      
-      const results = [];
-      
-      for (const svc of services) {
-        // Only fix services that have no inbound URL and useInboundWebhookOnNumber is false
-        if (!svc.inboundRequestUrl && !svc.useInboundWebhookOnNumber) {
-          try {
-            const updated = await client.messaging.v1.services(svc.sid).update({
-              inboundRequestUrl: `${baseUrl}/webhook/sms`,
-              inboundMethod: 'POST',
-              fallbackUrl: `${baseUrl}/webhook/sms`,
-              fallbackMethod: 'POST'
-            });
-            results.push({
-              sid: svc.sid,
-              friendlyName: svc.friendlyName,
-              fixed: true,
-              newInboundUrl: updated.inboundRequestUrl
-            });
-          } catch (err: any) {
-            results.push({
-              sid: svc.sid,
-              friendlyName: svc.friendlyName,
-              fixed: false,
-              error: err.message
-            });
-          }
-        } else {
-          results.push({
-            sid: svc.sid,
-            friendlyName: svc.friendlyName,
-            fixed: false,
-            reason: 'Already configured or using phone number webhooks'
-          });
-        }
-      }
-      
-      res.json({
-        baseUrl,
-        results,
-        fixedCount: results.filter(r => r.fixed).length
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Send SMS
-  app.post("/api/telephony/sms/send", async (req, res) => {
-    try {
-      const { to, body, from } = req.body;
-      if (!to || !body) {
-        return res.status(400).json({ error: "To and body are required" });
-      }
-      
-      const result = await sendSms(to, body, from);
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Make a call
-  app.post("/api/telephony/calls/make", async (req, res) => {
-    try {
-      const { to, twimlUrl, from } = req.body;
-      if (!to || !twimlUrl) {
-        return res.status(400).json({ error: "To and twimlUrl are required" });
-      }
-      
-      const result = await makeCall(to, twimlUrl, from);
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Test outbound call - makes a real call with a simple greeting
-  app.post("/api/telephony/test/outbound", async (req, res) => {
-    try {
-      const { to, message } = req.body;
-      if (!to) {
-        return res.status(400).json({ error: "To phone number is required" });
-      }
-      
-      const config = await storage.getTelephonyConfig();
-      if (!config?.phoneNumber) {
-        return res.status(400).json({ error: "No phone number provisioned. Please provision a number first." });
-      }
-
-      // Create a simple TwiML URL that speaks a message
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-        : 'https://twilio.gatewayglobal.ai';
-      
-      const greeting = encodeURIComponent(message || "Hello! This is a test call from Gateway Global AI. Your phone system is working correctly. Goodbye!");
-      const twimlUrl = `${baseUrl}/api/twiml/test?message=${greeting}`;
-      
-      const result = await makeCall(to, twimlUrl, config.phoneNumber);
-      
-      // Log the test call
-      await storage.createCallLog({
-        callSid: result.sid,
-        phoneNumber: to,
-        direction: 'outbound',
-        status: 'initiated',
-        duration: 0,
-      });
-      
-      res.json({ success: true, callSid: result.sid, message: "Test call initiated" });
-    } catch (error: any) {
-      console.error('Test outbound call error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // TwiML endpoint for test calls
-  app.all("/api/twiml/test", (req, res) => {
-    const message = req.query.message as string || "This is a test call from Gateway Global AI.";
-    const twiml = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="Polly.Joanna">${message}</Say>
-  <Pause length="1"/>
-  <Hangup/>
-</Response>`;
-    res.type('text/xml').send(twiml);
-  });
-
-  // Test inbound call simulation - triggers webhook locally
-  app.post("/api/telephony/test/inbound", async (req, res) => {
-    try {
-      const { from } = req.body;
-      const testFrom = from || "+15550001234";
-      
-      const config = await storage.getTelephonyConfig();
-      if (!config?.phoneNumber) {
-        return res.status(400).json({ error: "No phone number provisioned. Please provision a number first." });
-      }
-
-      // Check firewall
-      if (config.firewallEnabled) {
-        const isAllowed = config.allowedNumbers?.some(n => n === testFrom);
-        if (!isAllowed) {
-          return res.json({ 
-            success: false, 
-            blocked: true, 
-            message: `Call from ${testFrom} blocked by firewall - not in allowed list` 
-          });
-        }
-      }
-
-      // Simulate an inbound call log
-      const testSid = `TEST${Date.now()}`;
-      await storage.createCallLog({
-        callSid: testSid,
-        phoneNumber: testFrom,
-        direction: 'inbound',
-        status: 'completed',
-        duration: Math.floor(Math.random() * 60) + 5,
-      });
-
-      res.json({ 
-        success: true, 
-        callSid: testSid, 
-        message: `Simulated inbound call from ${testFrom} processed successfully` 
-      });
-    } catch (error: any) {
-      console.error('Test inbound call error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Webhook simulation - generates proper X-Twilio-Signature and calls webhook server
-  app.post("/api/telephony/simulate-webhook", async (req, res) => {
-    try {
-      const { type, from, body, callStatus } = req.body;
-      const webhookType = type || 'sms';
-      const testFrom = from || '+15550001234';
-      
-      const config = await storage.getTelephonyConfig();
-      if (!config?.phoneNumber) {
-        return res.status(400).json({ error: "No phone number provisioned. Please provision a number first." });
-      }
-      
-      // Get auth token - use config's authToken if available, otherwise use env
-      const authToken = (config as any).authToken || process.env.TWILIO_AUTH_TOKEN;
-      const accountSid = (config as any).accountSid || process.env.TWILIO_ACCOUNT_SID;
-      
-      if (!authToken) {
-        return res.status(400).json({ error: "No auth token available for signature generation" });
-      }
-      
-      // Build webhook URL and params based on type
-      // Use the published app URL or dev domain, NOT the old hardcoded domain
-      const webhookBaseUrl = process.env.REPLIT_DOMAINS 
-        ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-        : process.env.REPLIT_DEV_DOMAIN 
-          ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-          : 'http://localhost:5000';
-      
-      console.log(`[Webhook Simulation] Using base URL: ${webhookBaseUrl}`);
-      let webhookUrl: string;
-      let params: Record<string, string>;
-      
-      if (webhookType === 'sms') {
-        webhookUrl = `${webhookBaseUrl}/webhook/sms`;
-        params = {
-          MessageSid: `SM${Date.now()}`,
-          AccountSid: accountSid || 'ACtest',
-          From: testFrom,
-          To: config.phoneNumber,
-          Body: body || 'Test message from webhook simulator',
-          NumMedia: '0',
-        };
-      } else if (webhookType === 'voice') {
-        webhookUrl = `${webhookBaseUrl}/webhook/voice`;
-        params = {
-          CallSid: `CA${Date.now()}`,
-          AccountSid: accountSid || 'ACtest',
-          From: testFrom,
-          To: config.phoneNumber,
-          CallStatus: 'ringing',
-          Direction: 'inbound',
-          CallerName: 'Test Caller',
-        };
-      } else if (webhookType === 'status') {
-        webhookUrl = `${webhookBaseUrl}/webhook/voice/status`;
-        params = {
-          CallSid: `CA${Date.now()}`,
-          AccountSid: accountSid || 'ACtest',
-          From: testFrom,
-          To: config.phoneNumber,
-          CallStatus: callStatus || 'completed',
-          CallDuration: '30',
-        };
-      } else {
-        return res.status(400).json({ error: "Invalid webhook type. Use 'sms', 'voice', or 'status'" });
-      }
-      
-      // Generate X-Twilio-Signature using Twilio's method
-      const signature = twilio.getExpectedTwilioSignature(
-        authToken,
-        webhookUrl,
-        params
-      );
-      
-      // Make the webhook request with proper signature
-      const formBody = Object.entries(params)
-        .map(([key, val]) => `${encodeURIComponent(key)}=${encodeURIComponent(val)}`)
-        .join('&');
-      
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'X-Twilio-Signature': signature,
-        },
-        body: formBody,
-      });
-      
-      const responseText = await response.text();
-      
-      res.json({
-        success: response.ok,
-        webhookUrl,
-        type: webhookType,
-        status: response.status,
-        signature: signature.substring(0, 20) + '...',
-        response: responseText.substring(0, 500),
-        params,
-      });
-    } catch (error: any) {
-      console.error('Webhook simulation error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get call logs from Twilio
-  app.get("/api/telephony/calls", async (req, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 50;
-      const calls = await getTwilioCallLogs(limit);
-      res.json(calls);
-    } catch (error: any) {
-      console.error('Error fetching call logs:', error.message);
-      // Return empty array instead of error when Twilio isn't fully configured
-      if (error.message.includes('not connected') || error.message.includes('accountSid')) {
-        return res.json([]);
-      }
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get message logs from Twilio
-  app.get("/api/telephony/messages", async (req, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 50;
-      const messages = await getMessageLogs(limit);
-      res.json(messages);
-    } catch (error: any) {
-      console.error('Error fetching message logs:', error.message);
-      if (error.message.includes('not connected') || error.message.includes('accountSid')) {
-        return res.json([]);
-      }
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get local call logs
-  app.get("/api/telephony/logs", async (req, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 50;
-      const logs = await storage.getCallLogs(undefined, limit);
-      res.json(logs);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Create local call log
-  app.post("/api/telephony/logs", async (req, res) => {
-    try {
-      const parsed = insertCallLogSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-      const log = await storage.createCallLog(parsed.data);
-      res.json(log);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update call log with notes and customer info
-  app.patch("/api/telephony/calls/:id", async (req, res) => {
-    try {
-      const updateSchema = z.object({
-        notes: z.string().optional(),
-        customerName: z.string().optional(),
-        customerEmail: z.string().email().optional(),
-      });
-
-      const parsed = updateSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-
-      const updated = await storage.updateCallLog(req.params.id, parsed.data);
-      if (!updated) {
-        return res.status(404).json({ error: "Call log not found" });
-      }
-
-      res.json(updated);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Unified call tracking endpoint - combines database logs
-  app.get("/api/call-tracking", async (req, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 100;
-      const logs = await storage.getCallLogs(undefined, limit);
-      res.json(logs);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update caller ID
-  app.patch("/api/telephony/caller-id", async (req, res) => {
-    try {
-      const { phoneSid, callerIdName } = req.body;
-      if (!phoneSid || !callerIdName) {
-        return res.status(400).json({ error: "Phone SID and caller ID name are required" });
-      }
-      
-      await updateCallerIdName(phoneSid, callerIdName);
-      
-      let config = await storage.getTelephonyConfig();
-      if (config) {
-        await storage.updateTelephonyConfig(config.id, {
-          callerIdName,
-          friendlyName: callerIdName,
-        });
-      }
-      
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update firewall settings
-  app.patch("/api/telephony/firewall", async (req, res) => {
-    try {
-      const parsed = firewallUpdateSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-      
-      let config = await storage.getTelephonyConfig();
-      if (!config) {
-        return res.status(404).json({ error: "Config not found" });
-      }
-      
-      const updates: any = {};
-      if (typeof parsed.data.firewallEnabled === 'boolean') {
-        updates.firewallEnabled = parsed.data.firewallEnabled;
-      }
-      if (Array.isArray(parsed.data.allowedNumbers)) {
-        updates.allowedNumbers = parsed.data.allowedNumbers;
-      }
-      if (typeof parsed.data.ownerPhone !== 'undefined') {
-        updates.ownerPhone = parsed.data.ownerPhone || null;
-      }
-      if (typeof parsed.data.ownerEmail !== 'undefined') {
-        updates.ownerEmail = parsed.data.ownerEmail || null;
-      }
-      
-      const updated = await storage.updateTelephonyConfig(config.id, updates);
-      res.json(updated);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Twilio Sub-Accounts API
-  // Helper to strip sensitive fields from sub-account responses
-  const sanitizeSubAccount = (account: any) => {
-    const { authToken, ...safe } = account;
-    return { ...safe, hasAuthToken: !!authToken };
-  };
-
-  app.get("/api/twilio/sub-accounts", async (req, res) => {
-    try {
-      const accounts = await storage.getTwilioSubAccounts();
-      // Strip authToken from responses - never expose credentials to client
-      res.json(accounts.map(sanitizeSubAccount));
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/twilio/sub-accounts", async (req, res) => {
-    try {
-      const { friendlyName, ownerEmail } = req.body;
-      
-      if (!friendlyName || typeof friendlyName !== 'string') {
-        return res.status(400).json({ error: 'friendlyName is required' });
-      }
-      
-      // Create sub-account via Twilio API
-      const client = await getTwilioClient();
-      const subAccount = await client.api.accounts.create({
-        friendlyName: friendlyName || 'Gateway Sub-Account'
-      });
-
-      // Save to database
-      const saved = await storage.createTwilioSubAccount({
-        accountSid: subAccount.sid,
-        authToken: subAccount.authToken,
-        friendlyName: subAccount.friendlyName,
-        status: subAccount.status,
-        ownerEmail: ownerEmail || null,
-      });
-
-      // Return sanitized response without authToken
-      res.json(sanitizeSubAccount(saved));
-    } catch (error: any) {
-      console.error('Error creating sub-account:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.patch("/api/twilio/sub-accounts/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { friendlyName, ownerEmail, status } = req.body;
-      
-      // Only allow safe fields to be updated - never authToken/accountSid
-      const allowedUpdates: any = {};
-      if (friendlyName !== undefined) allowedUpdates.friendlyName = friendlyName;
-      if (ownerEmail !== undefined) allowedUpdates.ownerEmail = ownerEmail;
-      if (status !== undefined && ['active', 'suspended'].includes(status)) {
-        allowedUpdates.status = status;
-      }
-      
-      const updated = await storage.updateTwilioSubAccount(id, allowedUpdates);
-      if (!updated) {
-        return res.status(404).json({ error: "Sub-account not found" });
-      }
-      res.json(sanitizeSubAccount(updated));
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.delete("/api/twilio/sub-accounts/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const account = await storage.getTwilioSubAccount(id);
-      if (!account) {
-        return res.status(404).json({ error: "Sub-account not found" });
-      }
-
-      // Close sub-account in Twilio (sets to 'closed' status)
-      try {
-        const client = await getTwilioClient();
-        await client.api.accounts(account.accountSid).update({ status: 'closed' });
-      } catch (e) {
-        console.log('Twilio sub-account close warning:', e);
-      }
-
-      await storage.deleteTwilioSubAccount(id);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Legacy webhook handlers - redirect to new secure endpoints
-  // These are kept for backwards compatibility but should be updated in Twilio config
-  app.post("/api/webhooks/voice", (req, res) => {
-    console.log('[Legacy Webhook] /api/webhooks/voice - Please update Twilio config to use /webhook/voice');
-    res.redirect(307, '/webhook/voice');
-  });
-
-  app.post("/api/webhooks/voice/recording", (req, res) => {
-    console.log('[Legacy Webhook] /api/webhooks/voice/recording - deprecated');
-    res.type('text/xml');
-    res.send(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`);
-  });
-
-  app.post("/api/webhooks/sms", (req, res) => {
-    console.log('[Legacy Webhook] /api/webhooks/sms - Please update Twilio config to use /webhook/sms');
-    res.redirect(307, '/webhook/sms');
-  });
-
-  // Status callback handler
-  app.post("/api/webhooks/status", async (req, res) => {
-    const { CallSid, CallStatus, CallDuration, From, To, Direction } = req.body;
-    
-    try {
-      let config = await storage.getTelephonyConfig();
-      if (config && CallSid) {
-        await storage.createCallLog({
-          configId: config.id,
-          direction: Direction === 'inbound' ? 'inbound' : 'outbound',
-          phoneNumber: Direction === 'inbound' ? From : To,
-          duration: parseInt(CallDuration) || 0,
-          status: CallStatus === 'completed' ? 'completed' : 
-                  CallStatus === 'no-answer' ? 'missed' : 
-                  CallStatus === 'busy' ? 'missed' : 'failed',
-          callSid: CallSid,
-        });
-      }
-    } catch (error) {
-      console.error('Error logging call status:', error);
-    }
-    
-    res.sendStatus(200);
-  });
+  // ← extracted to server/routes/telephonyRoutes.ts
 
   // ============================================
   // DISC ASSESSMENT API
@@ -3539,7 +2188,7 @@ export async function registerRoutes(
       // Parse task using Kimi (with partial mode)
       let parsedTask = null;
       try {
-        const { parseTask } = await import("./kimi");
+        // parseTask removed — replaced by Gemini-based task parsing
         parsedTask = await parseTask(task);
         console.log('[Task Submit] Parsed task:', parsedTask);
       } catch (parseError) {
@@ -3570,35 +2219,39 @@ export async function registerRoutes(
       
       console.log('[Task Submit] Created task:', newTask.id);
       
-      // Send immediate SMS confirmation
+      // Send Navigator first-login "Call Coordinates" SMS
+      let callCoordinates: string | null = null;
       try {
-        const { generateTaskUpdate } = await import("./kimi");
+        // generateNavigatorIntroduction removed — replaced by Gemini
         
-        const smsMessage = await generateTaskUpdate({
+        // Fetch telephony config once; reuse the phone number as Call Coordinates
+        const config = await storage.getTelephonyConfig();
+        callCoordinates = config?.phoneNumber ?? null;
+
+        const smsMessage = await generateNavigatorIntroduction({
+          userName: name,
           agentName,
           taskDescription: task,
-          hoursElapsed: 0,
-          totalHours: 24,
-          updateType: 'start',
+          callCoordinates: callCoordinates ?? 'Gateway Global AI',
         });
         
         // Send SMS via Twilio
-        const config = await storage.getTelephonyConfig();
-        if (config?.phoneNumber && config?.accountSid && config?.authToken) {
+        if (callCoordinates && config?.accountSid && config?.authToken) {
           const { sendSms } = await import("./twilio");
-          await sendSms(e164Phone, smsMessage, config.phoneNumber);
-          console.log(`[Task Submit] Sent initial SMS to ${e164Phone}`);
+          await sendSms(e164Phone, smsMessage, callCoordinates);
+          console.log(`[Task Submit] Sent Navigator intro SMS to ${e164Phone}`);
         } else {
-          console.warn('[Task Submit] No Twilio config, skipping SMS');
+          console.warn('[Task Submit] No Twilio config, skipping Navigator intro SMS');
         }
       } catch (smsError) {
-        console.error('[Task Submit] SMS send error:', smsError);
+        console.error('[Task Submit] Navigator intro SMS error:', smsError);
       }
       
       res.json({ 
         success: true, 
         taskId: newTask.id,
-        message: `Task created! ${agentName} will text you shortly.`
+        message: `Task created! ${agentName} will text you shortly.`,
+        callCoordinates,
       });
       
     } catch (error: any) {
@@ -3792,12 +2445,9 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
   // Cost estimation: approximate USD per 1K tokens by model
   const MODEL_COST_PER_1K_TOKENS: Record<string, { input: number; output: number }> = {
-    'kimi-k2.5': { input: 0.002, output: 0.006 },
-    'kimi-k2-turbo-preview': { input: 0.001, output: 0.003 },
-    'moonshot-v1-128k': { input: 0.0016, output: 0.0048 },
-    'moonshot-v1-32k': { input: 0.0008, output: 0.0024 },
-    'moonshot-v1-8k': { input: 0.0004, output: 0.0012 },
-    'Qwen/Kimi-K2-Instruct': { input: 0.002, output: 0.006 },
+    'gemini-2.0-flash': { input: 0.0001, output: 0.0004 },
+    'gemini-2.5-flash': { input: 0.00015, output: 0.0006 },
+    
     'default': { input: 0.002, output: 0.006 },
   };
 
@@ -3923,7 +2573,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       // Mark as running
       await storage.updateAgent(agent.id, { startupStatus: 'running' });
 
-      const modelId = agent.aiModelId || 'moonshot-v1-128k';
+      const modelId = agent.aiModelId || process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash';
       const temperature = (agent.aiTemperature || 60) / 100;
       const maxTokens = agent.aiMaxTokens || 4096;
 
@@ -4395,6 +3045,298 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     res.send(script);
   });
 
+  // ============================================
+  // SITE CONFIG (AI BIZ BOT ADMIN) API
+  // ============================================
+
+  app.get("/api/site-configs", async (_req, res) => {
+    try {
+      const configs = await storage.getSiteConfigs();
+      res.json(configs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/site-configs", async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(200),
+        domain: z.string().optional(),
+        placeId: z.string().optional(),
+        placeData: z.any().optional(),
+        assignedAgentId: z.string().nullable().optional(),
+        systemPromptOverride: z.string().optional(),
+        chatbotEnabled: z.boolean().optional(),
+        voiceConciergeEnabled: z.boolean().optional(),
+        widgetPosition: z.string().optional(),
+        widgetColor: z.string().optional(),
+        greetingMessage: z.string().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const config = await storage.createSiteConfig(parsed.data);
+      res.status(201).json(config);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/site-configs/:id", async (req, res) => {
+    try {
+      const schema = z.object({
+        name: z.string().min(1).max(200).optional(),
+        domain: z.string().nullable().optional(),
+        placeId: z.string().nullable().optional(),
+        placeData: z.any().optional(),
+        assignedAgentId: z.string().nullable().optional(),
+        systemPromptOverride: z.string().nullable().optional(),
+        chatbotEnabled: z.boolean().optional(),
+        voiceConciergeEnabled: z.boolean().optional(),
+        widgetPosition: z.string().optional(),
+        widgetColor: z.string().optional(),
+        greetingMessage: z.string().nullable().optional(),
+        knowledgeLibrary: z.array(z.object({ id: z.string(), title: z.string(), content: z.string(), addedAt: z.string() })).nullable().optional(),
+        heroImageUrl: z.string().nullable().optional(),
+        heroImagePrompt: z.string().nullable().optional(),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const updated = await storage.updateSiteConfig(req.params.id, parsed.data as any);
+      if (!updated) return res.status(404).json({ error: "Site config not found" });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/site-configs/:id", async (req, res) => {
+    try {
+      await storage.deleteSiteConfig(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Sub-Account CID Provisioning Engine
+  // Automatically creates a Twilio sub-account for a new AI Partner, purchases a
+  // local phone number in that sub-account, and wires the Voice URL webhook so the
+  // number is live in a single API call (< 10 s target).
+  app.post("/api/site-configs/:id/provision-number", async (req, res) => {
+    try {
+      const siteConfig = await storage.getSiteConfig(req.params.id);
+      if (!siteConfig) return res.status(404).json({ error: "AI Partner not found" });
+
+      if (siteConfig.provisionedPhoneNumber) {
+        return res.status(409).json({
+          error: "A phone number is already provisioned for this AI Partner",
+          phoneNumber: siteConfig.provisionedPhoneNumber,
+        });
+      }
+
+      const schema = z.object({
+        areaCode: z.string().regex(/^\d{3}$/, "Area code must be exactly 3 digits"),
+        country: z.string().length(2).optional().default("US"),
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+      const { areaCode, country } = parsed.data;
+
+      // Build the Voice webhook URL pointing to the AI voice concierge endpoint.
+      // /webhook/voice/kimi is the primary voice AI handler registered in routes.ts.
+      const host = process.env.REPLIT_DEV_DOMAIN || req.get("host");
+      const voiceWebhookUrl = `https://${host}/webhook/voice/stream`;
+
+      const result = await createSubAccountAndProvisionNumber(
+        siteConfig.name,
+        areaCode,
+        voiceWebhookUrl,
+        country,
+      );
+
+      // Persist the sub-account and provisioned number on the site config
+      // Note: authToken is saved in the twilioSubAccounts table for security
+      const savedSubAccount = await storage.createTwilioSubAccount({
+        accountSid: result.subAccountSid,
+        authToken: result.subAccountAuthToken,
+        friendlyName: result.subAccountFriendlyName,
+        status: "active",
+        ownerEmail: null,
+      });
+
+      await storage.updateSiteConfig(req.params.id, {
+        twilioSubAccountSid: result.subAccountSid,
+        provisionedPhoneNumber: result.phoneNumber,
+        provisionedPhoneSid: result.phoneSid,
+      });
+
+      console.log(`[Provision] AI Partner "${siteConfig.name}" (${req.params.id}) provisioned number ${result.phoneNumber} via sub-account ${result.subAccountSid}`);
+
+      res.status(201).json({
+        subAccountSid: result.subAccountSid,
+        subAccountId: savedSubAccount.id,
+        phoneNumber: result.phoneNumber,
+        phoneSid: result.phoneSid,
+        voiceWebhookUrl,
+      });
+    } catch (error: any) {
+      console.error("[Provision] Error provisioning number:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // AI Hero Image Generation — uses Flux via Replicate (same pattern as classroom)
+  app.post("/api/site-configs/:id/generate-hero-image", async (req, res) => {
+    try {
+      const siteConfig = await storage.getSiteConfig(req.params.id);
+      if (!siteConfig) return res.status(404).json({ error: "Site not found" });
+
+      const replicateToken = process.env.REPLICATE_API_TOKEN;
+      if (!replicateToken) return res.status(503).json({ error: "Image generation not configured. Please add REPLICATE_API_TOKEN to Doppler." });
+
+      // Build a rich, business-specific prompt
+      const { customPrompt } = req.body || {};
+      const businessName = siteConfig.name || "a local business";
+      const placeData = siteConfig.placeData as any;
+      const types = (placeData?.types || []).filter((t: string) => !['point_of_interest','establishment'].includes(t)).slice(0, 3).join(', ');
+      const address = placeData?.formatted_address?.split(',').slice(-2).join(',').trim() || '';
+
+      const prompt = customPrompt || [
+        `Professional hero image for ${businessName}`,
+        types ? `a ${types} business` : null,
+        address ? `located in ${address}` : null,
+        `— cinematic wide angle shot, golden hour lighting, photorealistic, ultra high resolution,`,
+        `modern architectural photography style, inviting atmosphere, no text overlays`,
+      ].filter(Boolean).join(', ');
+
+      const Replicate = (await import("replicate")).default;
+      const replicate = new Replicate({ auth: replicateToken });
+
+      const output = await replicate.run("black-forest-labs/flux-schnell", {
+        input: {
+          prompt,
+          aspect_ratio: "16:9",
+          output_format: "webp",
+          output_quality: 92,
+        },
+      });
+
+      const imageUrl = (Array.isArray(output) ? output[0] : output) as string;
+      if (!imageUrl) throw new Error("No image URL returned from generator");
+
+      // Persist the URL back to site_configs
+      await storage.updateSiteConfig(req.params.id, { heroImageUrl: imageUrl, heroImagePrompt: prompt } as any);
+
+      res.json({ imageUrl, prompt });
+    } catch (err: any) {
+      console.error("[HeroImage] Generation error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/site-configs/:id/chat-logs", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const logs = await storage.getChatLogs(req.params.id, limit);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/site-configs/:id/knowledge", async (req, res) => {
+    try {
+      const site = await storage.getSiteConfigById(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const lib = (site as any).knowledgeLibrary;
+      res.json(Array.isArray(lib) ? lib : []);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/site-configs/:id/knowledge", async (req, res) => {
+    try {
+      const schema = z.object({ title: z.string().min(1).max(200), content: z.string().max(500000) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const site = await storage.getSiteConfigById(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const existing = Array.isArray((site as any).knowledgeLibrary) ? (site as any).knowledgeLibrary : [];
+      const doc = {
+        id: crypto.randomUUID(),
+        title: parsed.data.title,
+        content: parsed.data.content,
+        addedAt: new Date().toISOString(),
+      };
+      const updated = await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: [...existing, doc] } as any);
+      res.json(updated?.knowledgeLibrary ?? [...existing, doc]);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/site-configs/:id/knowledge/:docId", async (req, res) => {
+    try {
+      const site = await storage.getSiteConfigById(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const existing = Array.isArray((site as any).knowledgeLibrary) ? (site as any).knowledgeLibrary : [];
+      const next = existing.filter((d: any) => d.id !== req.params.docId);
+      await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: next } as any);
+      res.json({ success: true, knowledgeLibrary: next });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ── Energy / Usage Ledger endpoints ─────────────────────────────────────────
+
+  /** GET /api/site-configs/:id/energy – current balance + lifetime totals */
+  app.get("/api/site-configs/:id/energy", async (req, res) => {
+    try {
+      const site = await storage.getSiteConfigById(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const balance = await getEnergyBalance(req.params.id);
+      res.json(balance);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /** GET /api/site-configs/:id/energy/logs – paginated usage log */
+  app.get("/api/site-configs/:id/energy/logs", async (req, res) => {
+    try {
+      const site = await storage.getSiteConfigById(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const limit = Math.min(parseInt(String(req.query.limit ?? '50'), 10) || 50, 200);
+      const logs = await getVoiceUsageLogs(req.params.id, limit);
+      res.json(logs);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  /** POST /api/site-configs/:id/energy/top-up – add prepaid minutes */
+  app.post("/api/site-configs/:id/energy/top-up", async (req, res) => {
+    try {
+      const site = await storage.getSiteConfigById(req.params.id);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+
+      const schema = z.object({ minutes: z.number().int().positive() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "minutes must be a positive integer" });
+
+      const current = site.minuteBalance ?? 0;
+      const newBalance = current + parsed.data.minutes;
+      await storage.updateSiteConfig(req.params.id, { minuteBalance: newBalance } as any);
+      res.json({ success: true, minuteBalance: newBalance, added: parsed.data.minutes });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // List demo leads for chat admin (new customers + demo URLs)
   app.get("/api/admin/demo-leads", async (req, res) => {
     try {
@@ -4714,37 +3656,17 @@ ${businessContext}`;
         { role: 'user' as const, content: message },
       ];
 
-      const agentModel = agent.aiModelId || 'kimi-k2-turbo-preview';
       const agentTemp = agent.aiTemperature ? agent.aiTemperature / 100 : 0.7;
       const agentMaxTokens = agent.aiMaxTokens || 4096;
-
-      let modelToUse: string;
-      if (agentModel === 'kimi-k2.5' || agentModel === 'kimi-k2-5') {
-        modelToUse = KIMI_MODELS.K2_5;
-      } else if (agentModel === 'kimi-k2-thinking') {
-        modelToUse = KIMI_MODELS.K2_THINKING;
-      } else if (agentModel.startsWith('kimi-') || agentModel.startsWith('moonshot-')) {
-        modelToUse = agentModel;
-      } else {
-        modelToUse = KIMI_MODELS.K2_TURBO;
-      }
+      // Sovereign: Gemini is the sole AI provider. Model from Doppler.
+      const modelToUse = process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash';
 
       let response: string;
       try {
-        response = await chat({
-          model: modelToUse,
-          messages,
-          temperature: agentTemp,
-          max_tokens: agentMaxTokens,
-        });
+        ({ response } = await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens }));
       } catch (firstError: any) {
         console.warn('Admin command chat first attempt failed, retrying:', firstError.message);
-        response = await chat({
-          model: modelToUse,
-          messages,
-          temperature: agentTemp,
-          max_tokens: agentMaxTokens,
-        });
+        ({ response } = await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens }));
       }
 
       res.json({ response });
@@ -4782,7 +3704,7 @@ ${businessContext}`;
       const { message, businessName, businessAddress, businessPhone, siteConfigId, visitorId, history } = parsed.data;
 
       let siteConfig: any = null;
-      let resolvedProvider: any = 'kimi';
+      let resolvedProvider: any = 'gemini';
       let resolvedModel: string | undefined;
       let customSystemPrompt: string | undefined;
 
@@ -4791,7 +3713,7 @@ ${businessContext}`;
       if (siteConfigId && !isPlatformChat) {
         siteConfig = await storage.getSiteConfig(siteConfigId);
         if (siteConfig) {
-          resolvedProvider = siteConfig.modelProvider || 'kimi';
+          resolvedProvider = siteConfig.modelProvider || 'gemini';
           resolvedModel = siteConfig.modelName || undefined;
           customSystemPrompt = siteConfig.systemPromptOverride || undefined;
         }
@@ -4817,7 +3739,7 @@ Key information about the platform:
 - Plans: Free (1 business, static site, shared SMS, 500 voice minutes), Business ($49/mo, 5 businesses, edit content, review management, SMS admin), Business Voice ($99/mo, dedicated phone, unlimited voice, custom voice persona), Enterprise (custom pricing, API access, white-label)
 - Websites are built using real Google Maps data: reviews, photos, hours, location
 - Business owners can manage their sites from the My Account dashboard
-- The platform uses Kimi 2.5 AI for intelligent responses
+- The platform uses Google Gemini AI for intelligent responses
 
 Be friendly, concise, and helpful. Encourage visitors to try it out by searching for their business. Keep responses brief since this is a chat widget. If asked about technical details you don't know, suggest they contact us.`;
       } else {
@@ -4839,7 +3761,7 @@ You are helpful, concise, and conversational. Answer questions about the busines
       ];
 
       const { gatewayChat } = await import('./ai-gateway');
-      const result = await gatewayChat({
+      const { response, provider, model } = await gatewayChat({
         messages: gatewayMessages,
         provider: resolvedProvider,
         model: resolvedModel,
@@ -4850,13 +3772,13 @@ You are helpful, concise, and conversational. Answer questions about the busines
       if (siteConfigId && !isPlatformChat) {
         try {
           await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'user', content: message });
-          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'assistant', content: result.response });
+          await storage.createChatLog({ siteConfigId, visitorId: visitorId || 'anonymous', role: 'assistant', content: response });
         } catch (logErr) {
           console.error("[Website Chat] Failed to log chat:", logErr);
         }
       }
 
-      res.json({ response: result.response, provider: result.provider, model: result.model });
+      res.json({ response, provider, model });
     } catch (error: any) {
       console.error("[Website Chat] Error:", error.message);
       res.status(500).json({ error: "Failed to get response" });
@@ -4961,39 +3883,18 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       ];
 
       // Use agent's configured model, falling back to K2_TURBO
-      const agentModel = agent.aiModelId || 'kimi-k2-turbo-preview';
       const agentTemp = agent.aiTemperature ? agent.aiTemperature / 100 : 0.7;
       const agentMaxTokens = agent.aiMaxTokens || 4096;
-
-      // Map model IDs to Kimi model constants
-      let modelToUse: string;
-      if (agentModel === 'kimi-k2.5' || agentModel === 'kimi-k2-5') {
-        modelToUse = KIMI_MODELS.K2_5;
-      } else if (agentModel === 'kimi-k2-thinking') {
-        modelToUse = KIMI_MODELS.K2_THINKING;
-      } else if (agentModel.startsWith('kimi-') || agentModel.startsWith('moonshot-')) {
-        modelToUse = agentModel;
-      } else {
-        modelToUse = KIMI_MODELS.K2_TURBO;
-      }
+      // Sovereign: Gemini is the sole AI provider. Model from Doppler.
+      const modelToUse = process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash';
 
       // Retry once on transient failures
       let response: string;
       try {
-        response = await chat({
-          model: modelToUse,
-          messages,
-          temperature: agentTemp,
-          max_tokens: agentMaxTokens,
-        });
+        ({ response } = await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens }));
       } catch (firstError: any) {
         console.warn('Chat first attempt failed, retrying:', firstError.message);
-        response = await chat({
-          model: modelToUse,
-          messages,
-          temperature: agentTemp,
-          max_tokens: agentMaxTokens,
-        });
+        ({ response } = await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens }));
       }
 
       res.json({ response });
@@ -5083,1137 +3984,7 @@ Keep responses concise and engaging. If asked personal questions, you can share 
     }
   });
 
-  // ============ Google Cloud Text-to-Speech API ============
-
-  // Gemini TTS - Available voices (Chirp 3 HD)
-  const GEMINI_TTS_VOICES = [
-    { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
-    { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
-    { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
-    { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
-    { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
-    { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
-    { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
-    { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
-  ];
-
-  // List available Gemini TTS voices
-  app.get("/api/tts/voices", async (req, res) => {
-    res.json({ voices: GEMINI_TTS_VOICES });
-  });
-
-  // Synthesize speech using Gemini TTS
-  app.post("/api/tts/synthesize", async (req, res) => {
-    try {
-      const { text, voiceName } = req.body;
-      
-      if (!text || !voiceName) {
-        return res.status(400).json({ error: "text and voiceName are required" });
-      }
-
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        return res.status(500).json({ error: "Gemini API key not configured" });
-      }
-
-      // Use Gemini 2.5 Flash TTS model
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{ text }]
-            }],
-            generationConfig: {
-              responseModalities: ["AUDIO"],
-              speechConfig: {
-                voiceConfig: {
-                  prebuiltVoiceConfig: {
-                    voiceName: voiceName
-                  }
-                }
-              }
-            }
-          })
-        }
-      );
-
-      if (!response.ok) {
-        const error = await response.text();
-        console.error("Gemini TTS error:", error);
-        return res.status(500).json({ error: "Failed to generate speech" });
-      }
-
-      const data = await response.json();
-      
-      // Extract audio data from response
-      const audioData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      const mimeType = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.mimeType || 'audio/wav';
-      
-      if (!audioData) {
-        return res.status(500).json({ error: "No audio data in response" });
-      }
-
-      res.json({ 
-        audio: audioData,
-        contentType: mimeType
-      });
-    } catch (error: any) {
-      console.error("TTS synthesize error:", error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // ============ Twilio Webhooks for Inbound Communications ============
-
-  // Helper to escape XML entities for TwiML safety
-  const escapeXml = (text: string): string => {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
-  };
-
-  // Twilio signature validation middleware
-  const validateTwilioSignature = (req: any, res: any, next: any) => {
-    // Skip validation in development or if explicitly disabled
-    const skipValidation = process.env.SKIP_TWILIO_VALIDATION === 'true' || 
-      process.env.NODE_ENV === 'development';
-    
-    if (skipValidation) {
-      console.log('[Twilio Webhook] Skipping validation (development mode)');
-      return next();
-    }
-    
-    const twilioSignature = req.headers['x-twilio-signature'];
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
-    
-    if (!twilioSignature || !authToken) {
-      console.warn('[Twilio Webhook] Missing signature or auth token');
-      return res.status(403).send('Forbidden');
-    }
-    
-    // Validate using Twilio's validateRequest
-    try {
-      // Handle proxy scenarios - use x-forwarded-proto if available
-      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-      const host = req.get('host');
-      const url = `${protocol}://${host}${req.originalUrl}`;
-      
-      console.log(`[Twilio Webhook] Validating URL: ${url}`);
-      
-      let isValid = twilio.validateRequest(authToken, twilioSignature, url, req.body);
-      
-      // Try with https if http failed (common proxy issue)
-      if (!isValid && protocol === 'http') {
-        const httpsUrl = `https://${host}${req.originalUrl}`;
-        console.log(`[Twilio Webhook] Retrying with HTTPS: ${httpsUrl}`);
-        isValid = twilio.validateRequest(authToken, twilioSignature, httpsUrl, req.body);
-      }
-      
-      if (!isValid) {
-        console.warn('[Twilio Webhook] Invalid signature for all URL variants');
-        return res.status(403).send('Forbidden');
-      }
-      
-      next();
-    } catch (error) {
-      console.error('[Twilio Webhook] Validation error:', error);
-      return res.status(403).send('Forbidden');
-    }
-  };
-
-  // Inbound SMS webhook - receives SMS from Twilio with Caller ID lookup
-  app.post("/webhook/sms", validateTwilioSignature, async (req, res) => {
-    try {
-      const { From, To, Body, MessageSid } = req.body;
-      
-      console.log(`[SMS Webhook] From: ${From}, To: ${To}, Body: ${Body?.substring(0, 50)}...`);
-      
-      // ========== AI BIZ BOT - Business Owner SMS Commands ==========
-      const bodyLower = (Body || '').toLowerCase().trim();
-      
-      // Business owner commands for website/business management
-      const bizBotKeywords = ['visitors', 'how many visitors', 'traffic', 'reviews', 'bad reviews', 'update hours', 
-        'change hours', 'my website', 'website stats', 'check website', 'new reviews', 'schedule', 'calendar',
-        'add task', 'create task', 'my tasks', 'create event', 'schedule meeting',
-        'report', 'area report', 'business report', 'competitors', 'competition', 'nearby businesses',
-        'search ', 'market '];
-      const isBizBotCommand = bizBotKeywords.some(kw => bodyLower.includes(kw));
-      
-      if (isBizBotCommand) {
-        console.log(`[SMS Biz Bot] Detected business command from: ${From}`);
-        
-        try {
-          // Check if this phone is registered as a business owner
-          const customer = await storage.getCustomerByPhone(From);
-          
-          let responseText = '';
-          
-          // Handle specific commands - MVP demo mode with sample data
-          // TODO: Integrate with real analytics, Google Workspace tools, and business data
-          if (bodyLower.includes('visitors') || bodyLower.includes('traffic') || bodyLower.includes('website stats')) {
-            responseText = '📊 Website Stats (Last 24h) [Demo]\n\n' +
-              '👥 Visitors: 142\n' +
-              '💬 Chat conversations: 12\n' +
-              '📞 Calls handled: 3\n' +
-              '⭐ New reviews: 2\n\n' +
-              'Reply "reviews" to see new reviews.';
-          } else if (bodyLower.includes('bad reviews') || bodyLower.includes('negative')) {
-            responseText = '⚠️ Recent Low Reviews\n\n' +
-              '⭐⭐ "Service was slow" - John D. (2 days ago)\n\n' +
-              'Reply "respond [your message]" to reply to this review.';
-          } else if (bodyLower.includes('reviews') || bodyLower.includes('new reviews')) {
-            responseText = '⭐ Recent Reviews\n\n' +
-              '⭐⭐⭐⭐⭐ "Great service!" - Sarah M.\n' +
-              '⭐⭐⭐⭐ "Good food, nice atmosphere" - Mike T.\n' +
-              '⭐⭐ "Service was slow" - John D.\n\n' +
-              'Reply "bad" to filter low ratings.';
-          } else if (bodyLower.includes('update hours') || bodyLower.includes('change hours')) {
-            // Parse hours from message if provided
-            const hoursMatch = Body.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:to|-)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
-            if (hoursMatch) {
-              responseText = `✅ Hours Updated!\n\nNew hours: ${hoursMatch[1]} - ${hoursMatch[2]}\n\nYour website now shows the updated hours.`;
-            } else {
-              responseText = '⏰ Update Hours\n\nTo update, reply with the new hours like:\n"Update hours 9am to 9pm"';
-            }
-          } else if (bodyLower.includes('schedule') || bodyLower.includes('calendar') || bodyLower.includes('create event')) {
-            // Check if Google Workspace is connected for this business
-            const businessId = customer?.id || 'default';
-            const credentials = googleWorkspaceCredentials.get(businessId);
-            
-            if (credentials) {
-              // Parse event details from message
-              responseText = '📅 To schedule an event, reply with:\n"Schedule [title] on [date] at [time]"\n\nExample: "Schedule Team Meeting on Monday at 3pm"';
-            } else {
-              responseText = '📅 Google Calendar not connected.\n\nVisit your admin panel to connect Google Workspace for calendar, tasks, and docs integration.';
-            }
-          } else if (bodyLower.includes('add task') || bodyLower.includes('create task') || bodyLower.includes('my tasks')) {
-            if (bodyLower.includes('my tasks')) {
-              responseText = '📋 Your Tasks\n\n' +
-                '☐ Follow up with vendor\n' +
-                '☐ Review monthly reports\n' +
-                '☐ Update menu prices\n\n' +
-                'Reply "add task [description]" to add new.';
-            } else {
-              // Parse task from message
-              const taskMatch = Body.match(/(?:add task|create task)\s+(.+)/i);
-              if (taskMatch) {
-                responseText = `✅ Task Added: "${taskMatch[1]}"\n\nYou can view all tasks by replying "my tasks".`;
-              } else {
-                responseText = '📋 Add Task\n\nReply with "add task [description]"\n\nExample: "add task Call supplier about delivery"';
-              }
-            }
-          } else if (bodyLower.includes('report') || bodyLower.includes('competitors') || bodyLower.includes('competition') || bodyLower.includes('nearby businesses') || bodyLower.startsWith('search ') || bodyLower.startsWith('market ')) {
-            if (!process.env.GOOGLE_CLOUD_API_KEY) {
-              responseText = 'Area Reports are not available yet. API key needs to be configured by an administrator.';
-            } else {
-              const customerPlace = process.env.CUSTOMER_PLACE;
-              const isMarketingSearch = bodyLower.startsWith('search ') || bodyLower.startsWith('market ');
-
-              if (isMarketingSearch) {
-                const searchBody = Body.replace(/^(search|market)\s*/i, '').trim();
-                const categoryMatch = searchBody.match(/^(\w[\w\s]*?)\s+(?:near|in|at|around)\s+(.+?)(?:\s+(\d+(?:\.\d+)?)\s*(?:mi(?:les?)?|km))?(?:\s+(\d(?:\.\d)?)-(\d(?:\.\d)?)\s*stars?)?$/i);
-                const simpleMatch = searchBody.match(/^(\w[\w\s]*?)\s+(\d+(?:\.\d+)?)\s*(?:mi(?:les?)?)?$/i);
-
-                if (categoryMatch) {
-                  const [, cat, location, radiusStr, minR, maxR] = categoryMatch;
-                  const category = cat.trim().replace(/\s+/g, '_').toLowerCase();
-                  try {
-                    const report = await generateMarketingSearch({
-                      mode: 'marketing',
-                      address: location.trim(),
-                      category,
-                      radiusMiles: radiusStr ? parseFloat(radiusStr) : undefined,
-                      minRating: minR ? parseFloat(minR) : undefined,
-                      maxRating: maxR ? parseFloat(maxR) : undefined
-                    });
-                    responseText = formatMarketingReportForSms(report);
-                  } catch (searchErr: any) {
-                    console.error('[SMS Biz Bot] Marketing search error:', searchErr.message);
-                    responseText = `Search failed: ${searchErr.message}`;
-                  }
-                } else if (simpleMatch) {
-                  const [, cat, radiusStr] = simpleMatch;
-                  const category = cat.trim().replace(/\s+/g, '_').toLowerCase();
-                  if (!customerPlace) {
-                    responseText = 'No default business set. Use:\n"search [category] near [location]"\n\nExample: "search restaurant near Lafayette LA"';
-                  } else {
-                    try {
-                      const report = await generateMarketingSearch({
-                        mode: 'marketing',
-                        address: customerPlace,
-                        category,
-                        radiusMiles: parseFloat(radiusStr)
-                      });
-                      responseText = formatMarketingReportForSms(report);
-                    } catch (searchErr: any) {
-                      responseText = `Search failed: ${searchErr.message}`;
-                    }
-                  }
-                } else {
-                  responseText = 'Marketing Search\n\nFormats:\n' +
-                    '"search [category] near [location]"\n' +
-                    '"search [category] near [location] [miles]mi"\n' +
-                    '"search [category] near [location] [miles]mi [min]-[max] stars"\n\n' +
-                    'Examples:\n' +
-                    '"search restaurant near Lafayette LA"\n' +
-                    '"search cafe near 123 Main St 5mi"\n' +
-                    '"search lodging near Lafayette LA 2mi 4-5 stars"';
-                }
-              } else {
-                const bodyAfterReport = Body.replace(/^(report|competitors|competition|nearby businesses)\s*/i, '').trim();
-                const radiusMatch = bodyAfterReport.match(/(.+?)\s+(\d+(?:\.\d+)?)\s*(?:mi(?:les?)?|km)?$/i);
-                let searchName: string | undefined;
-                let radiusMiles: number | undefined;
-
-                if (radiusMatch) {
-                  searchName = radiusMatch[1].trim();
-                  radiusMiles = parseFloat(radiusMatch[2]);
-                } else {
-                  searchName = bodyAfterReport || customerPlace;
-                }
-
-                if (!searchName) {
-                  responseText = 'Area Report\n\nFormats:\n' +
-                    '"report [business name]"\n' +
-                    '"report [business name] [miles]"\n\n' +
-                    'Examples:\n' +
-                    '"report Boardwalk Suites Lafayette"\n' +
-                    '"report Boardwalk Suites Lafayette 5"';
-                } else {
-                  try {
-                    const report = await generateOwnerReport({
-                      mode: 'owner',
-                      businessName: searchName,
-                      radiusMiles
-                    });
-                    responseText = formatOwnerReportForSms(report);
-                  } catch (reportError: any) {
-                    console.error('[SMS Biz Bot] Report generation error:', reportError.message);
-                    responseText = `Could not generate report: ${reportError.message}`;
-                  }
-                }
-              }
-            }
-          } else {
-            responseText = 'AI Biz Bot\n\nI can help with:\n' +
-              '- "visitors" - Website traffic stats\n' +
-              '- "reviews" - Recent customer reviews\n' +
-              '- "update hours" - Change business hours\n' +
-              '- "schedule" - Calendar & events\n' +
-              '- "add task" - Create reminders\n' +
-              '- "report [name]" - Owner area report (3mi default)\n' +
-              '- "report [name] [miles]" - Custom radius\n' +
-              '- "search [category] near [location]" - Market search\n' +
-              '- "competitors" - Your business competition\n\n' +
-              'What would you like to do?';
-          }
-          
-          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${responseText}</Message></Response>`;
-          res.type('text/xml').send(twiml);
-          return;
-        } catch (error: any) {
-          console.error('[SMS Biz Bot] Error:', error.message);
-          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>🤖 AI Biz Bot encountered an error. Please try again or visit your admin panel.</Message></Response>`;
-          res.type('text/xml').send(twiml);
-          return;
-        }
-      }
-      
-      // ========== ADMIN COMMANDS (Health Check & Repair Agent) ==========
-      
-      // ========== CODING AGENT (Kimi K2) ==========
-      const codingKeywords = ['error:', 'exception', 'traceback', 'syntaxerror', 'typeerror', 'referenceerror', 
-        'undefined is not', 'cannot read property', 'is not defined', 'unexpected token',
-        'fix this code', 'debug this', 'why is this error', 'code help', 'coding help',
-        'fix my code', 'analyze this code', 'explain this code', 'review my code',
-        '```', 'function(', 'const ', 'let ', 'var ', 'import ', 'def ', 'class '];
-      const isCodingRequest = codingKeywords.some(kw => bodyLower.includes(kw)) || 
-        (Body && Body.includes('```'));
-      
-      if (isCodingRequest) {
-        console.log(`[SMS Coding Agent] Detected coding request from: ${From}`);
-        
-        try {
-          // Determine if it's an error, code to fix, or code to explain
-          const hasError = bodyLower.includes('error') || bodyLower.includes('exception') || 
-            bodyLower.includes('traceback') || bodyLower.includes('undefined');
-          const wantsFix = bodyLower.includes('fix') || bodyLower.includes('debug') || 
-            bodyLower.includes('help') || bodyLower.includes('wrong');
-          const wantsExplanation = bodyLower.includes('explain') || bodyLower.includes('what does');
-          
-          let toolName: string;
-          let args: Record<string, any>;
-          
-          // Extract code block if present
-          const codeMatch = Body.match(/```[\w]*\n?([\s\S]*?)```/);
-          const code = codeMatch ? codeMatch[1].trim() : Body;
-          
-          // Detect language
-          const langMatch = Body.match(/```(\w+)/);
-          const language = langMatch ? langMatch[1] : 'javascript';
-          
-          if (hasError) {
-            toolName = 'diagnose_error';
-            args = { error: code, language };
-          } else if (wantsFix) {
-            toolName = 'fix_code';
-            args = { code, language, issue: 'Fix the issues in this code' };
-          } else if (wantsExplanation) {
-            toolName = 'explain_code';
-            args = { code, language, audience: 'beginner' };
-          } else {
-            toolName = 'analyze_code';
-            args = { code, language };
-          }
-          
-          // Get agent settings for AI model configuration
-          // First try to get assigned agent from customer, otherwise get any agent
-          let codingAgent = null;
-          const codingCustomer = await storage.getCustomerByPhone(From);
-          if (codingCustomer?.agentId) {
-            codingAgent = await storage.getAgent(codingCustomer.agentId);
-          }
-          // Fallback to first available agent if no assignment
-          if (!codingAgent) {
-            const allAgents = await storage.getAgents();
-            codingAgent = allAgents[0] || null;
-          }
-          
-          let modelOptions: ModelOptions = {};
-          if (codingAgent) {
-            modelOptions = {
-              hfToken: codingAgent.hfToken || undefined,
-              temperature: codingAgent.aiTemperature || 60,
-              maxTokens: codingAgent.aiMaxTokens || 4096,
-              modelId: codingAgent.aiModelId || undefined,
-            };
-            console.log(`[SMS Coding Agent] Using agent settings: provider=${codingAgent.aiModelProvider}, temp=${modelOptions.temperature}`);
-          }
-          
-          console.log(`[SMS Coding Agent] Using tool: ${toolName}`);
-          const result = await handleMCPToolCall(toolName, args, modelOptions);
-          
-          // Truncate for SMS (keep it readable)
-          let smsResponse = result;
-          if (smsResponse.length > 1400) {
-            smsResponse = smsResponse.substring(0, 1397) + '...';
-          }
-          
-          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>🤖 Coding Agent (Kimi K2)\n\n${smsResponse}</Message></Response>`;
-          res.type('text/xml').send(twiml);
-          return;
-        } catch (error: any) {
-          console.error('[SMS Coding Agent] Error:', error.message);
-          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>🤖 Coding Agent couldn't process that. Try sending your code in a code block:\n\n\`\`\`javascript\nyour code here\n\`\`\`</Message></Response>`;
-          res.type('text/xml').send(twiml);
-          return;
-        }
-      }
-      
-      // ========== ADMIN COMMANDS (Health Check & Repair) ==========
-      const adminCommands = ['health check', 'run health', 'check health', 'sms health', 'fix sms', 'repair sms', 'auto fix', 'autofix', 'repair webhooks', 'fix webhooks'];
-      const isAdminCommand = adminCommands.some(cmd => bodyLower.includes(cmd));
-      
-      if (isAdminCommand) {
-        const twilioClient = await getTwilioClient();
-        const protocol = req.headers['x-forwarded-proto'] || 'https';
-        const host = req.headers['host'];
-        const baseUrl = `${protocol}://${host}`;
-        
-        // Check if this is a fix/repair command
-        const isRepairCommand = ['fix', 'repair', 'autofix'].some(cmd => bodyLower.includes(cmd));
-        
-        if (isRepairCommand) {
-          // Run auto-fix
-          console.log(`[SMS Health Agent] Running auto-fix for: ${From}`);
-          const services = await twilioClient.messaging.v1.services.list({ limit: 20 });
-          let fixedCount = 0;
-          const fixResults: string[] = [];
-          
-          for (const svc of services) {
-            if (!svc.inboundRequestUrl && !svc.useInboundWebhookOnNumber) {
-              try {
-                await twilioClient.messaging.v1.services(svc.sid).update({
-                  inboundRequestUrl: `${baseUrl}/webhook/sms`,
-                  inboundMethod: 'POST',
-                  fallbackUrl: `${baseUrl}/webhook/sms`,
-                  fallbackMethod: 'POST'
-                });
-                fixedCount++;
-                fixResults.push(`✅ Fixed: ${svc.friendlyName}`);
-              } catch (err: any) {
-                fixResults.push(`❌ Failed: ${svc.friendlyName}`);
-              }
-            }
-          }
-          
-          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>🔧 Repair Agent Complete!\n\nFixed ${fixedCount} messaging service(s).\n\n${fixResults.slice(0, 3).join('\n')}${fixResults.length > 3 ? `\n...and ${fixResults.length - 3} more` : ''}\n\nReply "health check" to verify.</Message></Response>`;
-          res.type('text/xml').send(twiml);
-          return;
-        } else {
-          // Run health check
-          console.log(`[SMS Health Agent] Running health check for: ${From}`);
-          const services = await twilioClient.messaging.v1.services.list({ limit: 20 });
-          
-          let criticalCount = 0;
-          let warningCount = 0;
-          let healthyCount = 0;
-          const issues: string[] = [];
-          
-          for (const svc of services) {
-            const hasCritical = !svc.inboundRequestUrl && !svc.useInboundWebhookOnNumber;
-            const hasWarning = !svc.fallbackUrl || !svc.statusCallback;
-            
-            if (hasCritical) {
-              criticalCount++;
-              issues.push(`❌ ${svc.friendlyName}: No webhook!`);
-            } else if (hasWarning) {
-              warningCount++;
-            } else {
-              healthyCount++;
-            }
-          }
-          
-          let statusEmoji = criticalCount > 0 ? '🚨' : warningCount > 0 ? '⚠️' : '✅';
-          let statusText = criticalCount > 0 ? 'ISSUES FOUND' : warningCount > 0 ? 'WARNINGS' : 'ALL HEALTHY';
-          
-          let response = `${statusEmoji} SMS Health Check\n\n` +
-            `Services: ${services.length}\n` +
-            `✅ Healthy: ${healthyCount}\n` +
-            `⚠️ Warnings: ${warningCount}\n` +
-            `❌ Critical: ${criticalCount}\n\n`;
-          
-          if (criticalCount > 0) {
-            response += issues.slice(0, 2).join('\n') + '\n\nReply "fix sms" to repair automatically.';
-          } else {
-            response += 'All messaging services are operational!';
-          }
-          
-          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${response}</Message></Response>`;
-          res.type('text/xml').send(twiml);
-          return;
-        }
-      }
-      
-      // ========== CALLER ID LOOKUP ==========
-      // Look up caller in customer database to personalize the response
-      const customer = await storage.getCustomerByPhone(From);
-      let assignedAgent = null;
-      let customerTasks: any[] = [];
-      
-      if (customer) {
-        console.log(`[SMS Webhook] Caller ID matched: ${customer.name} (${customer.id})`);
-        
-        // Get their assigned agent
-        if (customer.agentId) {
-          assignedAgent = await storage.getAgent(customer.agentId);
-          console.log(`[SMS Webhook] Assigned agent: ${assignedAgent?.name || 'Unknown'}`);
-        }
-        
-        // Get their active tasks/projects
-        customerTasks = await storage.getTasksByPhone(From);
-        console.log(`[SMS Webhook] Customer has ${customerTasks.length} tasks`);
-      } else {
-        console.log(`[SMS Webhook] No customer match for: ${From}`);
-      }
-      
-      // Find or create conversation for this phone number
-      let conversation = await storage.getConversationByPhone(From);
-      
-      if (!conversation) {
-        conversation = await storage.createConversation({
-          phoneNumber: From,
-          customerId: customer?.id || null,
-          agentId: customer?.agentId || null,
-          lastMessageAt: new Date(),
-        });
-        
-        console.log(`[SMS Webhook] Created new conversation: ${conversation.id}`);
-      } else {
-        // Update last message time and link to customer/agent if found
-        await storage.updateConversation(conversation.id, {
-          lastMessageAt: new Date(),
-          customerId: customer?.id || conversation.customerId,
-          agentId: customer?.agentId || conversation.agentId,
-        });
-      }
-      
-      // Store the message
-      await storage.createMessage({
-        conversationId: conversation.id,
-        direction: 'inbound',
-        body: Body || '',
-        fromNumber: From,
-        toNumber: To,
-        messageSid: MessageSid,
-        status: 'received',
-      });
-      
-      // ========== BUILD CONTEXT FOR AI ==========
-      // Build personalized context based on caller ID lookup
-      const callerName = customer?.name || 'there';
-      const agentName = assignedAgent?.name || 'Gateway';
-      const agentPersonality = assignedAgent?.systemPrompt || 
-        'You are a helpful AI assistant for Gateway Global. You help people complete tasks and stay updated on their progress.';
-      
-      // Detect if this is a first message (new customer onboarding)
-      const existingMessages = await storage.getMessagesByConversation(conversation.id, 5);
-      const isFirstMessage = existingMessages.length <= 1; // Only the message we just stored
-      
-      // Build task context
-      let taskContext = '';
-      const activeTasks = customerTasks.filter(t => t.status !== 'completed' && t.status !== 'failed');
-      if (activeTasks.length > 0) {
-        taskContext = '\n\nActive projects/tasks for this customer:\n' + 
-          activeTasks.map(t => `- ${t.task} (Status: ${t.status})`).join('\n');
-      }
-      
-      // Build customer context
-      let customerContext = '';
-      if (customer) {
-        customerContext = `\n\nYou are speaking with ${customer.name}`;
-        if (customer.company) customerContext += ` from ${customer.company}`;
-        if (customer.notes) customerContext += `\nNotes about this customer: ${customer.notes}`;
-      }
-      
-      // Special onboarding context for first-time messages
-      let onboardingContext = '';
-      if (isFirstMessage) {
-        onboardingContext = `
-
-THIS IS YOUR FIRST MESSAGE WITH THIS USER! Follow the 24-hour demo onboarding flow:
-1. Warmly introduce yourself and confirm their number is working
-2. Ask what task they'd like help with
-3. Ask if they have any specific requirements or preferences to share
-4. Let them know you'll complete their task within 24 hours
-
-Be friendly and make them feel welcome! This is their first experience with Gateway.`;
-      }
-      
-      const fullPersonality = `${agentPersonality}${customerContext}${taskContext}${onboardingContext}\n\nAddress the customer by name when appropriate. Be warm, helpful, and reference their projects if relevant to the conversation.`;
-      
-      // Generate AI response using Kimi (primary) or Gemini (fallback)
-      let responseText = `Hi ${callerName}! Thank you for your message. An agent will respond shortly.`;
-      
-      // Get conversation history for context
-      const messages = await storage.getMessagesByConversation(conversation.id, 10);
-      const history = messages.reverse().map(m => ({
-        role: m.direction === 'inbound' ? 'user' as const : 'assistant' as const,
-        content: m.body || '',
-      }));
-      
-      // Try Kimi first (preferred), fallback to Gemini
-      if (process.env.MOONSHOT_API_KEY) {
-        try {
-          responseText = await generateSmsResponse({
-            agentName: agentName,
-            personality: fullPersonality,
-            conversationHistory: history,
-            userMessage: Body || '',
-          });
-          
-          // Trim to SMS length
-          if (responseText.length > 320) {
-            responseText = responseText.substring(0, 317) + '...';
-          }
-          console.log('[SMS Webhook] Kimi response generated successfully');
-        } catch (kimiError) {
-          console.error('[SMS Webhook] Kimi error, trying Gemini fallback:', kimiError);
-          
-          // Fallback to Gemini
-          if (process.env.GEMINI_API_KEY) {
-            try {
-              const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-              const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-              const historyText = history.map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`).join('\n');
-              const prompt = `${fullPersonality}\n\nRespond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.\n\nConversation history:\n${historyText}\n\nCustomer's latest message: ${Body}\n\nRespond as ${agentName}:`;
-              const result = await model.generateContent(prompt);
-              responseText = result.response.text() || responseText;
-              if (responseText.length > 160) {
-                responseText = responseText.substring(0, 157) + '...';
-              }
-            } catch (geminiError) {
-              console.error('[SMS Webhook] Gemini fallback error:', geminiError);
-            }
-          }
-        }
-      } else if (process.env.GEMINI_API_KEY) {
-        // No Kimi key, use Gemini directly
-        try {
-          const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-          const historyText = history.map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`).join('\n');
-          const prompt = `${fullPersonality}\n\nRespond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.\n\nConversation history:\n${historyText}\n\nCustomer's latest message: ${Body}\n\nRespond as ${agentName}:`;
-          const result = await model.generateContent(prompt);
-          responseText = result.response.text() || responseText;
-          if (responseText.length > 160) {
-            responseText = responseText.substring(0, 157) + '...';
-          }
-        } catch (geminiError) {
-          console.error('[SMS Webhook] Gemini error:', geminiError);
-        }
-      }
-      
-      // Store outbound message
-      await storage.createMessage({
-        conversationId: conversation.id,
-        direction: 'outbound',
-        body: responseText,
-        fromNumber: To,
-        toNumber: From,
-        status: 'sent',
-      });
-      
-      // Return TwiML response
-      res.set('Content-Type', 'text/xml');
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>${escapeXml(responseText)}</Message>
-</Response>`);
-      
-    } catch (error: any) {
-      console.error('[SMS Webhook] Error:', error);
-      res.set('Content-Type', 'text/xml');
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>Sorry, we encountered an error. Please try again later.</Message>
-</Response>`);
-    }
-  });
-
-  // Gemini voice webhook - uses Media Streams for real-time AI voice (KIMI not used for voice)
-  app.post("/webhook/voice/kimi", validateTwilioSignature, async (req, res) => {
-    try {
-      const { From, To, CallSid, CallStatus } = req.body;
-      
-      console.log(`[Voice] From: ${From}, To: ${To}, Status: ${CallStatus}`);
-      
-      // Log the call
-      const config = await storage.getTelephonyConfig();
-      await storage.createCallLog({
-        configId: config?.id || null,
-        direction: 'inbound',
-        phoneNumber: From,
-        status: CallStatus || 'ringing',
-        callSid: CallSid,
-        duration: 0,
-      });
-      
-      // Check firewall
-      const allowedNumbers = config?.allowedNumbers || [];
-      if (config?.firewallEnabled && allowedNumbers.length > 0) {
-        const isAllowed = allowedNumbers.some(num => 
-          From.includes(num) || num.includes(From.slice(-10))
-        );
-        
-        if (!isAllowed) {
-          console.log(`[Voice] Blocked caller: ${From}`);
-          res.set('Content-Type', 'text/xml');
-          return res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="Google.en-US-Neural2-F">Sorry, this number is not authorized.</Say>
-  <Hangup/>
-</Response>`);
-        }
-      }
-      
-      // Build WebSocket URL for Media Streams
-      const host = process.env.REPLIT_DEV_DOMAIN || 
-        (process.env.REPL_SLUG ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'localhost:5000');
-      const wsProtocol = host.includes('localhost') ? 'ws' : 'wss';
-      const streamUrl = `${wsProtocol}://${host}/ws/voice-stream`;
-      
-      console.log(`[Voice] Stream URL: ${streamUrl}`);
-      
-      // Return TwiML with Media Streams (voice pipeline uses Gemini)
-      res.set('Content-Type', 'text/xml');
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="Google.en-US-Neural2-F">Welcome to Gateway Global AI. Connecting you to our AI assistant now.</Say>
-  <Connect>
-    <Stream url="${streamUrl}">
-      <Parameter name="agentName" value="AI Assistant"/>
-      <Parameter name="personality" value="helpful"/>
-    </Stream>
-  </Connect>
-  <Say voice="Google.en-US-Neural2-F">The conversation has ended. Goodbye!</Say>
-</Response>`);
-      
-    } catch (error: any) {
-      console.error('[Voice] Error:', error);
-      res.set('Content-Type', 'text/xml');
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="Google.en-US-Neural2-F">Sorry, we encountered an error. Please try again later.</Say>
-  <Hangup/>
-</Response>`);
-    }
-  });
-
-  // Inbound Voice webhook - receives calls from Twilio
-  app.post("/webhook/voice", validateTwilioSignature, async (req, res) => {
-    try {
-      const { From, To, CallSid, CallStatus } = req.body;
-      
-      console.log(`[Voice Webhook] From: ${From}, To: ${To}, Status: ${CallStatus}`);
-      
-      // Log the call
-      const config = await storage.getTelephonyConfig();
-      await storage.createCallLog({
-        configId: config?.id || null,
-        direction: 'inbound',
-        phoneNumber: From,
-        status: CallStatus || 'ringing',
-        callSid: CallSid,
-        duration: 0,
-      });
-      
-      // Check firewall - is this caller allowed?
-      const allowedNumbers = config?.allowedNumbers || [];
-      if (config?.firewallEnabled && allowedNumbers.length > 0) {
-        const isAllowed = allowedNumbers.some(num => 
-          From.includes(num) || num.includes(From.slice(-10))
-        );
-        
-        if (!isAllowed) {
-          console.log(`[Voice Webhook] Blocked caller: ${From}`);
-          res.set('Content-Type', 'text/xml');
-          return res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">Sorry, this number is not authorized to call this line.</Say>
-  <Hangup/>
-</Response>`);
-        }
-      }
-      
-      // Generate greeting with AI if available
-      let greeting = "Hello, thank you for calling Gateway Global AI. How can I help you today?";
-      
-      // Return TwiML for voice response
-      res.set('Content-Type', 'text/xml');
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">${escapeXml(greeting)}</Say>
-  <Gather input="speech" timeout="5" speechTimeout="auto" action="/webhook/voice/gather">
-    <Say voice="alice">Please tell me how I can assist you.</Say>
-  </Gather>
-  <Say voice="alice">I didn't hear anything. Goodbye.</Say>
-</Response>`);
-      
-    } catch (error: any) {
-      console.error('[Voice Webhook] Error:', error);
-      res.set('Content-Type', 'text/xml');
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">Sorry, we encountered an error. Please try again later.</Say>
-  <Hangup/>
-</Response>`);
-    }
-  });
-
-  // Voice gather webhook - handles speech input
-  app.post("/webhook/voice/gather", validateTwilioSignature, async (req, res) => {
-    try {
-      const { SpeechResult, From, CallSid } = req.body;
-      
-      console.log(`[Voice Gather] From: ${From}, Speech: ${SpeechResult}`);
-      
-      let responseText = "I understand. Let me help you with that.";
-      
-      // Generate AI response using Kimi (primary) or Gemini (fallback)
-      if (SpeechResult) {
-        if (process.env.MOONSHOT_API_KEY) {
-          try {
-            responseText = await chat({
-              model: KIMI_MODELS.K2_TURBO,
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are a helpful AI phone assistant for Gateway Global. Respond naturally and conversationally. Keep your response under 100 words for phone readability. No markdown, no bullet points.',
-                },
-                {
-                  role: 'user',
-                  content: SpeechResult,
-                },
-              ],
-              temperature: 0.7,
-              max_tokens: 300,
-            });
-            console.log('[Voice Gather] Kimi response generated successfully');
-          } catch (kimiError) {
-            console.error('[Voice Gather] Kimi error, trying Gemini fallback:', kimiError);
-            
-            // Fallback to Gemini
-            if (process.env.GEMINI_API_KEY) {
-              try {
-                const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-                const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-                const prompt = `You are a helpful AI phone assistant for Gateway Global. Respond naturally to this caller's request. Keep your response under 200 words for phone readability.\n\nCaller said: "${SpeechResult}"\n\nRespond helpfully:`;
-                const result = await model.generateContent(prompt);
-                responseText = result.response.text() || responseText;
-              } catch (geminiError) {
-                console.error('[Voice Gather] Gemini fallback error:', geminiError);
-              }
-            }
-          }
-        } else if (process.env.GEMINI_API_KEY) {
-          try {
-            const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-            const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-            const prompt = `You are a helpful AI phone assistant for Gateway Global. Respond naturally to this caller's request. Keep your response under 200 words for phone readability.\n\nCaller said: "${SpeechResult}"\n\nRespond helpfully:`;
-            const result = await model.generateContent(prompt);
-            responseText = result.response.text() || responseText;
-          } catch (geminiError) {
-            console.error('[Voice Gather] Gemini error:', geminiError);
-          }
-        }
-      }
-      
-      res.set('Content-Type', 'text/xml');
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">${escapeXml(responseText)}</Say>
-  <Gather input="speech" timeout="5" speechTimeout="auto" action="/webhook/voice/gather">
-    <Say voice="alice">Is there anything else I can help you with?</Say>
-  </Gather>
-  <Say voice="alice">Thank you for calling. Goodbye.</Say>
-</Response>`);
-      
-    } catch (error: any) {
-      console.error('[Voice Gather] Error:', error);
-      res.set('Content-Type', 'text/xml');
-      res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="alice">Sorry, I had trouble understanding. Let me transfer you to an agent.</Say>
-  <Hangup/>
-</Response>`);
-    }
-  });
-
-  // Voice status callback - tracks call completion
-  app.post("/webhook/voice/status", validateTwilioSignature, async (req, res) => {
-    try {
-      const { CallSid, CallStatus, CallDuration } = req.body;
-      
-      console.log(`[Voice Status] CallSid: ${CallSid}, Status: ${CallStatus}, Duration: ${CallDuration}`);
-      
-      // Update call log with final status
-      // Note: Would need to add a method to update by callSid
-      
-      res.sendStatus(200);
-    } catch (error: any) {
-      console.error('[Voice Status] Error:', error);
-      res.sendStatus(500);
-    }
-  });
-
-  // SMS Status Callback - for delivery status and error debugging
-  app.post("/webhook/sms/status", validateTwilioSignature, async (req, res) => {
-    try {
-      const { 
-        MessageSid, 
-        MessageStatus, 
-        To, 
-        From,
-        ErrorCode, 
-        ErrorMessage 
-      } = req.body;
-      
-      // Log all status updates
-      console.log(`[SMS Status] MessageSid: ${MessageSid}, Status: ${MessageStatus}, From: ${From}, To: ${To}`);
-      
-      // Store delivery status in database
-      try {
-        const existing = await storage.getSmsDeliveryStatus(MessageSid);
-        if (existing) {
-          await storage.updateSmsDeliveryStatus(MessageSid, {
-            status: MessageStatus,
-            errorCode: ErrorCode || null,
-            errorMessage: ErrorMessage || null,
-          });
-        } else {
-          await storage.createSmsDeliveryStatus({
-            messageSid: MessageSid,
-            status: MessageStatus,
-            errorCode: ErrorCode || null,
-            errorMessage: ErrorMessage || null,
-            fromNumber: From || null,
-            toNumber: To || null,
-          });
-        }
-      } catch (dbError: any) {
-        console.error('[SMS Status] DB Error:', dbError.message);
-      }
-      
-      // Log errors for debugging
-      if (ErrorCode || ErrorMessage) {
-        console.error(`[SMS Error] Code: ${ErrorCode}, Message: ${ErrorMessage}`);
-        console.error(`[SMS Error] Details: MessageSid=${MessageSid}, From=${From}, To=${To}`);
-        
-        // Common error codes reference:
-        // 30001 - Queue overflow
-        // 30002 - Account suspended
-        // 30003 - Unreachable destination
-        // 30004 - Message blocked
-        // 30005 - Unknown destination
-        // 30006 - Landline or unreachable carrier
-        // 30007 - Carrier violation
-        // 30008 - Unknown error
-      }
-      
-      // Track delivery status
-      if (MessageStatus === 'delivered') {
-        console.log(`[SMS Delivered] Message ${MessageSid} delivered to ${To}`);
-      } else if (MessageStatus === 'failed' || MessageStatus === 'undelivered') {
-        console.error(`[SMS Failed] Message ${MessageSid} to ${To} - ${ErrorCode}: ${ErrorMessage}`);
-      }
-      
-      res.sendStatus(200);
-    } catch (error: any) {
-      console.error('[SMS Status] Error:', error);
-      res.sendStatus(500);
-    }
-  });
-
-  // SMS Health Check endpoint
-  app.get("/api/sms/health", async (req, res) => {
-    try {
-      const health: any = {
-        status: 'healthy',
-        checks: {},
-        timestamp: new Date().toISOString(),
-      };
-      
-      // 1. Check Twilio credentials
-      try {
-        const client = await getTwilioClient();
-        const account = await client.api.accounts(process.env.TWILIO_ACCOUNT_SID || '').fetch();
-        health.checks.twilioCredentials = {
-          status: 'ok',
-          accountStatus: account.status,
-          friendlyName: account.friendlyName,
-        };
-      } catch (twilioErr: any) {
-        health.checks.twilioCredentials = {
-          status: 'error',
-          error: twilioErr.message,
-        };
-        health.status = 'unhealthy';
-      }
-      
-      // 2. Check if at least one number is configured
-      try {
-        const client = await getTwilioClient();
-        const numbers = await client.incomingPhoneNumbers.list({ limit: 1 });
-        health.checks.phoneNumbers = {
-          status: numbers.length > 0 ? 'ok' : 'warning',
-          count: numbers.length,
-          message: numbers.length > 0 ? 'Phone numbers available' : 'No phone numbers configured',
-        };
-        if (numbers.length === 0) {
-          health.status = 'degraded';
-        }
-      } catch (numErr: any) {
-        health.checks.phoneNumbers = {
-          status: 'error',
-          error: numErr.message,
-        };
-      }
-      
-      // 3. Check recent status callbacks (last 5 minutes)
-      try {
-        const recentDeliveries = await storage.getRecentSmsDeliveries(10);
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-        const recentCount = recentDeliveries.filter(d => 
-          d.createdAt && new Date(d.createdAt) > fiveMinutesAgo
-        ).length;
-        
-        health.checks.statusCallbacks = {
-          status: recentCount > 0 ? 'ok' : 'unknown',
-          recentCallbacks: recentCount,
-          message: recentCount > 0 
-            ? `${recentCount} status callbacks in last 5 minutes` 
-            : 'No recent status callbacks (normal if no SMS sent recently)',
-        };
-      } catch (cbErr: any) {
-        health.checks.statusCallbacks = {
-          status: 'error',
-          error: cbErr.message,
-        };
-      }
-      
-      // 4. Check failed deliveries in last 24 hours
-      try {
-        const failedDeliveries = await storage.getFailedSmsDeliveries(100);
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        const recentFailures = failedDeliveries.filter(d => 
-          d.createdAt && new Date(d.createdAt) > oneDayAgo
-        );
-        
-        health.checks.deliveryFailures = {
-          status: recentFailures.length === 0 ? 'ok' : 'warning',
-          failedCount24h: recentFailures.length,
-          message: recentFailures.length === 0 
-            ? 'No delivery failures in last 24 hours' 
-            : `${recentFailures.length} failed deliveries in last 24 hours`,
-        };
-        
-        if (recentFailures.length > 10) {
-          health.status = 'degraded';
-        }
-      } catch (failErr: any) {
-        health.checks.deliveryFailures = {
-          status: 'error',
-          error: failErr.message,
-        };
-      }
-      
-      const httpStatus = health.status === 'healthy' ? 200 : 
-                        health.status === 'degraded' ? 200 : 503;
-      
-      res.status(httpStatus).json(health);
-    } catch (error: any) {
-      res.status(500).json({
-        status: 'error',
-        error: error.message,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  });
-
-  // Get failed SMS deliveries
-  app.get("/api/sms/failures", async (req, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 50;
-      const failures = await storage.getFailedSmsDeliveries(limit);
-      res.json({
-        count: failures.length,
-        failures,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get recent SMS delivery status
-  app.get("/api/sms/deliveries", async (req, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 50;
-      const deliveries = await storage.getRecentSmsDeliveries(limit);
-      res.json({
-        count: deliveries.length,
-        deliveries,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+  // ← extracted to server/routes/telephonyRoutes.ts
 
   // ========== A2P 10-DLC Compliance API ==========
   
@@ -6494,8 +4265,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   // Stripe webhook for A2P payment completion
   app.post("/api/stripe/webhook/a2p", async (req, res) => {
     try {
-      const { getUncachableStripeClient, getStripeSecretKey } = await import('./stripeClient');
-      const Stripe = await import('stripe');
+      const { getUncachableStripeClient } = await import('./stripeClient');
       const stripe = await getUncachableStripeClient();
       
       const sig = req.headers['stripe-signature'];
@@ -6767,52 +4537,16 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
-  // ========== MCP (Model Context Protocol) - Kimi K2 Coding Agent ==========
-  
-  // List available MCP tools
-  app.get("/api/mcp/tools", async (req, res) => {
-    try {
-      const tools = getMCPTools();
-      const useHuggingFace = !!process.env.HF_TOKEN;
-      res.json({
-        model: useHuggingFace ? HUGGINGFACE_KIMI_K2_MODEL : MOONSHOT_MODEL,
-        provider: useHuggingFace ? "huggingface" : "moonshot",
-        description: "Kimi K2 Coding Agent - 1T parameter MoE model for agentic coding tasks",
-        tools,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
+  // ========== MCP (Model Context Protocol) — DECOMMISSIONED ==========
+  // Kimi K2 MCP server removed. These routes return 410 Gone.
+  // Future: Gemini-native tool calling replaces this pattern.
+
+  app.get("/api/mcp/tools", (_req, res) => {
+    res.status(410).json({ error: "Kimi K2 MCP server decommissioned. Use Gemini tool declarations." });
   });
 
-  // Execute an MCP tool
-  app.post("/api/mcp/tools/:toolName", async (req, res) => {
-    try {
-      const { toolName } = req.params;
-      const { _hfToken, _temperature, _maxTokens, _modelId, ...args } = req.body;
-      
-      const options: ModelOptions = {
-        hfToken: _hfToken,
-        temperature: _temperature,
-        maxTokens: _maxTokens,
-        modelId: _modelId,
-      };
-      
-      console.log(`[MCP] Executing tool: ${toolName}`, JSON.stringify(args).substring(0, 200));
-      
-      const result = await handleMCPToolCall(toolName, args, options);
-      const useHuggingFace = !!(_hfToken || process.env.HF_TOKEN);
-      
-      res.json({
-        tool: toolName,
-        result,
-        model: useHuggingFace ? HUGGINGFACE_KIMI_K2_MODEL : MOONSHOT_MODEL,
-        provider: useHuggingFace ? "huggingface" : "moonshot",
-      });
-    } catch (error: any) {
-      console.error(`[MCP] Tool error: ${error.message}`);
-      res.status(500).json({ error: error.message });
-    }
+  app.post("/api/mcp/tools/:toolName", (_req, res) => {
+    res.status(410).json({ error: "Kimi K2 MCP server decommissioned. Use Gemini tool declarations." });
   });
 
   // Quick coding task - auto-selects best tool
@@ -6849,15 +4583,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       
       console.log(`[MCP] Auto-selected tool: ${toolName}`);
       
-      const result = await handleMCPToolCall(toolName, args, options);
-      const useHuggingFace = !!(_hfToken || process.env.HF_TOKEN);
-      
-      res.json({
-        tool: toolName,
-        result,
-        model: useHuggingFace ? HUGGINGFACE_KIMI_K2_MODEL : MOONSHOT_MODEL,
-        provider: useHuggingFace ? "huggingface" : "moonshot",
-      });
+      // Kimi K2 MCP decommissioned — return 410
+      res.status(410).json({ error: "Kimi K2 MCP code tasks decommissioned.", tool: toolName });
+      return;
     } catch (error: any) {
       console.error(`[MCP] Code task error: ${error.message}`);
       res.status(500).json({ error: error.message });
@@ -6982,25 +4710,11 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         return res.status(400).json({ error: "Text is required" });
       }
       
-      const Replicate = (await import("replicate")).default;
-      const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
-      
-      // Use Kimi-Audio for TTS
-      const output = await replicate.run(
-        "zsxkib/kimi-audio-7b-instruct:40ab49e15bb65fc63a67f8207c821e592ed4a545e0e1452c34ba7268c64f7a0a",
-        {
-          input: {
-            messages: JSON.stringify([
-              { role: "user", message_type: "text", content: `Please read aloud: ${text}` }
-            ]),
-            output_type: "audio",
-            audio_temperature: 0.7,
-            text_temperature: 0.0,
-          }
-        }
-      );
-      
-      // Parse Kimi-Audio response
+      // Kimi-Audio (Replicate) decommissioned — classroom TTS returns 410
+      res.status(410).json({ error: "Classroom TTS via Kimi-Audio is decommissioned. Use /api/tts/synthesize for Gemini Native Audio." });
+      return;
+      const output: any = null;
+      // Parse former response
       let audioUrl = "";
       if (Array.isArray(output)) {
         for (const item of output) {
@@ -7018,6 +4732,158 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
+  // ==================== SUBSCRIPTION CHECKOUT ====================
+
+  // Create a Stripe Checkout Session for a plan upgrade (per-business)
+  app.post("/api/subscriptions/create-checkout-session", async (req, res) => {
+    try {
+      const { getStripeClient, getStripePublishableKey, STRIPE_PRICE_IDS } = await import('./stripeClient');
+      const stripe = getStripeClient();
+
+      // Support Bearer token auth (primary) or legacy session (fallback)
+      const bearerToken = (req.headers.authorization || '').replace('Bearer ', '').trim();
+      let customerSession: { id: string; email?: string } | null = null;
+      if (bearerToken) {
+        const dbSession = await storage.getValidCustomerSession(bearerToken);
+        if (dbSession) {
+          const account = await storage.getCustomerAccountById(dbSession.customerAccountId);
+          if (account?.isActive) customerSession = { id: account.id, email: account.email ?? undefined };
+        }
+      }
+      if (!customerSession) customerSession = (req as any).session?.customerAccount ?? null;
+      if (!customerSession?.id) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const { plan, siteConfigId } = req.body as { plan: string; siteConfigId: string };
+      if (!plan || !siteConfigId) {
+        return res.status(400).json({ error: 'plan and siteConfigId are required' });
+      }
+
+      const priceId = STRIPE_PRICE_IDS[plan];
+      if (!priceId) {
+        return res.status(400).json({ error: `Unknown plan: ${plan}` });
+      }
+
+      const host = req.headers.host || 'localhost:3004';
+      const protocol = (req.headers['x-forwarded-proto'] as string) || 'https';
+      const baseUrl = `${protocol}://${host}`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${baseUrl}/my-account/site/${siteConfigId}?upgrade=success&plan=${plan}`,
+        cancel_url: `${baseUrl}/my-account?upgrade=cancelled`,
+        metadata: { siteConfigId, plan, customerId: customerSession.id },
+        client_reference_id: siteConfigId,
+      });
+
+      res.json({ url: session.url, publishableKey: getStripePublishableKey() });
+    } catch (error: any) {
+      console.error('[Stripe] create-checkout-session error:', error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Stripe webhook — subscription plan upgrades
+  app.post("/api/stripe/webhook/subscriptions", async (req, res) => {
+    try {
+      const { getStripeClient, getStripeWebhookSecret } = await import('./stripeClient');
+      const stripe = getStripeClient();
+      const sig = req.headers['stripe-signature'] as string;
+      const webhookSecret = getStripeWebhookSecret();
+
+      let event: any;
+      const rawBody = (req as any).rawBody ?? req.body;
+
+      if (webhookSecret && sig) {
+        try {
+          event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+        } catch (err: any) {
+          console.error('[Stripe] Webhook signature verification failed:', err.message);
+          return res.status(400).json({ error: `Webhook signature invalid: ${err.message}` });
+        }
+      } else {
+        console.warn('[Stripe] STRIPE_WEBHOOK_SECRET not set — skipping signature verification (dev mode)');
+        event = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
+      }
+
+      if (event.type === 'checkout.session.completed') {
+        const session = event.data.object;
+        const meta = session.metadata ?? {};
+        const { siteConfigId, plan } = meta;
+        const siteId = meta.siteId ?? siteConfigId;
+
+        // ── Site Claim Activation ─────────────────────────────────────────────
+        if (meta.claimToken && meta.siteId) {
+          await handleClaimCheckoutCompleted(session);
+          // Claim activation is fully handled in claimRoutes — skip other branches
+        } else if (meta.type === 'ENERGY_REFILL' && siteId) {
+          const site = await storage.getSiteConfigById(siteId);
+          if (site) {
+            const minutes = meta.packageType === 'pro' ? 1200 : 500;
+            const current = site.minuteBalance ?? 0;
+            await storage.updateSiteConfig(siteId, { minuteBalance: current + minutes, lastNudgeSentAt: null } as any);
+            try {
+              const { processCommission } = await import('./services/commission');
+              await processCommission(session, siteId);
+            } catch (e: any) {
+              console.error('[Stripe] ENERGY_REFILL processCommission failed (non-fatal):', e?.message);
+            }
+            try {
+              const { broadcastLiveEvent } = await import('./services/eventBridge');
+              broadcastLiveEvent(siteId, { type: 'ENERGY_REFILL_SUCCESS', data: { minutes } });
+            } catch (e: any) {
+              console.error('[Stripe] ENERGY_REFILL broadcast failed (non-fatal):', e?.message);
+            }
+            console.log(`[Stripe] Energy refill → site ${siteId} +${minutes} min`);
+          }
+        } else if (siteConfigId && plan) {
+          await storage.updateSiteConfig(siteConfigId, { plan } as any);
+          console.log(`[Stripe] Plan upgraded → site ${siteConfigId} is now on "${plan}"`);
+
+          // Post-payment onboarding email (non-fatal — never blocks the webhook response)
+          try {
+            const { sendPlatformEmail } = await import('./services/emailService');
+            const siteConfig = await storage.getSiteConfig(siteConfigId);
+            const platformId = await storage.getOrCreatePlatformId(siteConfigId);
+
+            let ownerEmail: string | null = null;
+            let ownerName = 'Valued Customer';
+            if (siteConfig?.ownerId) {
+              const owner = await storage.getCustomerAccountById(siteConfig.ownerId);
+              ownerEmail = owner?.email ?? null;
+              ownerName = owner?.name || ownerName;
+            }
+            // Fallback: use customer_email from Stripe session if owner email not in DB
+            const recipientEmail = ownerEmail || (session as any).customer_email || null;
+
+            if (recipientEmail && siteConfig) {
+              await sendPlatformEmail({
+                to: recipientEmail,
+                customerName: ownerName,
+                businessName: siteConfig.name || 'Your Business',
+                planName: plan,
+                platformId,
+                siteUrl: (siteConfig as any).domain ? `https://${(siteConfig as any).domain}` : '',
+              });
+              console.log(`[Stripe] Onboarding email sent → ${recipientEmail} (platform: ${platformId})`);
+            } else {
+              console.warn(`[Stripe] Onboarding email skipped — no recipient email for site ${siteConfigId}`);
+            }
+          } catch (emailErr: any) {
+            console.error('[Stripe] Onboarding email failed (non-fatal):', emailErr.message);
+          }
+        }
+      }
+
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error('[Stripe] Subscription webhook error:', error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ==================== BILLING / PAYMENT METHODS ====================
 
   app.get("/api/billing/publishable-key", async (_req, res) => {
@@ -7027,6 +4893,67 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       res.json({ publishableKey: key });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/billing/history", async (req, res) => {
+    try {
+      const bearerToken = (req.headers.authorization || "").replace("Bearer ", "").trim();
+      let customerAccount: { id: string; stripeCustomerId: string | null } | null = null;
+      if (bearerToken) {
+        const dbSession = await storage.getValidCustomerSession(bearerToken);
+        if (dbSession) {
+          const account = await storage.getCustomerAccountById(dbSession.customerAccountId);
+          if (account?.isActive) customerAccount = { id: account.id, stripeCustomerId: account.stripeCustomerId ?? null };
+        }
+      }
+      if (!customerAccount) return res.status(401).json({ error: "Authentication required" });
+      if (!customerAccount.stripeCustomerId) return res.json({ invoices: [] });
+      const { getStripeClient } = await import("./stripeClient");
+      const stripe = getStripeClient();
+      const list = await stripe.invoices.list({
+        customer: customerAccount.stripeCustomerId,
+        limit: 12,
+        status: "paid",
+      });
+      const invoices = (list.data ?? []).map((inv: any) => ({
+        id: inv.id,
+        created: inv.created,
+        amount_paid: inv.amount_paid,
+        invoice_pdf: inv.invoice_pdf,
+        description: inv.lines?.data?.[0]?.description ?? inv.description ?? "Invoice",
+        category: inv.metadata?.category ?? "platform",
+      }));
+      res.json({ invoices });
+    } catch (error: any) {
+      console.error("[Billing] history error:", error?.message);
+      res.status(500).json({ error: error?.message ?? "Failed to load history" });
+    }
+  });
+
+  app.post("/api/billing/create-refill-session", async (req, res) => {
+    try {
+      const schema = z.object({ siteId: z.string().min(1), packageType: z.enum(["basic", "pro"]) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "siteId and packageType (basic|pro) required" });
+      const { siteId, packageType } = parsed.data;
+      const site = await storage.getSiteConfigById(siteId);
+      if (!site) return res.status(404).json({ error: "Site not found" });
+      const { getStripeClient, STRIPE_ENERGY_PRICE_IDS } = await import("./stripeClient");
+      const priceId = STRIPE_ENERGY_PRICE_IDS[packageType];
+      if (!priceId) return res.status(400).json({ error: "Energy refill price not configured for this package" });
+      const stripe = getStripeClient();
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        line_items: [{ price: priceId, quantity: 1 }],
+        metadata: { siteId, type: "ENERGY_REFILL", packageType, category: "usage" },
+        success_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/billing?refill=success`,
+        cancel_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/billing?refill=cancelled`,
+      });
+      res.json({ url: session.url });
+    } catch (error: any) {
+      console.error("[Billing] create-refill-session error:", error?.message);
+      res.status(500).json({ error: error?.message ?? "Failed to create checkout session" });
     }
   });
 
@@ -7137,245 +5064,10 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
-  // ============================================
-  // VOICE ADMIN API
-  // ============================================
-  
-  // Get voice configuration for an agent
-  app.get("/api/voice/config/:agentId", async (req, res) => {
-    try {
-      const { agentId } = req.params;
-      
-      const agent = await storage.getAgent(agentId);
-      if (!agent) {
-        return res.status(404).json({ error: "Agent not found" });
-      }
-      
-      res.json({
-        model: agent.voiceModel || 'gemini-2.5-flash-native-audio-preview',
-        voice: agent.voiceName || 'Puck',
-        role: agent.voiceRole || 'AI Business Assistant',
-        companyName: agent.voiceCompanyName || 'AI Biz Bot',
-        systemPrompt: agent.systemPrompt || 'You are a helpful AI assistant for small businesses.',
-        voicePersona: agent.voicePersona || 'friendly',
-      });
-    } catch (error: any) {
-      console.error("[Voice Admin] Get config error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-  
-  // Update voice configuration for an agent
-  app.post("/api/voice/config/:agentId", async (req, res) => {
-    try {
-      const { agentId } = req.params;
-      const { model, voice, role, companyName, systemPrompt, voicePersona } = req.body;
-      
-      // Validate inputs
-      const validModels = [
-        'gemini-2.5-flash-native-audio-preview-12-2025',
-        'gemini-2.5-flash-native-audio-preview',
-        'gemini-2.5-flash-latest',
-        'gemini-2.0-flash-native-audio',
-      ];
-      
-      if (model && !validModels.includes(model)) {
-        return res.status(400).json({ error: "Invalid model specified" });
-      }
-      
-      const agent = await storage.getAgent(agentId);
-      if (!agent) {
-        return res.status(404).json({ error: "Agent not found" });
-      }
-      
-      // Update voice configuration
-      const updates: any = {};
-      if (model !== undefined) updates.voiceModel = model;
-      if (voice !== undefined) updates.voiceName = voice;
-      if (role !== undefined) updates.voiceRole = role;
-      if (companyName !== undefined) updates.voiceCompanyName = companyName;
-      if (systemPrompt !== undefined) updates.systemPrompt = systemPrompt;
-      if (voicePersona !== undefined) updates.voicePersona = voicePersona;
-      
-      const updatedAgent = await storage.updateAgent(agentId, updates);
-      
-      res.json({
-        success: true,
-        config: {
-          model: updatedAgent.voiceModel,
-          voice: updatedAgent.voiceName,
-          role: updatedAgent.voiceRole,
-          companyName: updatedAgent.voiceCompanyName,
-          systemPrompt: updatedAgent.systemPrompt,
-          voicePersona: updatedAgent.voicePersona,
-        }
-      });
-    } catch (error: any) {
-      console.error("[Voice Admin] Update config error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-  
-  // Get available voices for a model
-  app.get("/api/voice/models/:modelId/voices", (req, res) => {
-    const { modelId } = req.params;
-    
-    const modelVoices: Record<string, Array<{ id: string; name: string; gender: string; description: string }>> = {
-      'gemini-2.5-flash-native-audio-preview-12-2025': [
-        { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
-        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
-        { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
-        { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
-        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
-        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
-        { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
-        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
-      ],
-      'gemini-2.5-flash-native-audio-preview': [
-        { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
-        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
-        { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
-        { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
-        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
-        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
-        { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
-        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
-      ],
-      'gemini-2.5-flash-latest': [
-        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
-        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
-        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
-        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
-      ],
-      'gemini-2.0-flash-native-audio': [
-        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
-        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
-        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
-        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
-      ],
-    };
-    
-    const voices = modelVoices[modelId] || modelVoices['gemini-2.5-flash-native-audio-preview-12-2025'];
-    res.json({ voices });
-  });
-  
-  // ============================================
-  // PUSH-TO-TALK API
-  // ============================================
-  
-  // Process PTT audio recording
-  app.post("/api/ptt/process", async (req, res) => {
-    try {
-      const { audioBase64, agentId, conversationHistory } = req.body;
-      
-      if (!audioBase64) {
-        return res.status(400).json({ error: "Audio data required" });
-      }
-      
-      // Get agent configuration
-      let config: any = {
-        agentId: agentId || 'default',
-        model: 'gemini-2.5-flash-native-audio-preview',
-        voice: 'Puck',
-        systemPrompt: 'You are a helpful AI assistant for small businesses.'
-      };
-      
-      if (agentId) {
-        const agent = await storage.getAgent(agentId);
-        if (agent) {
-          config = {
-            agentId,
-            model: agent.voiceModel || config.model,
-            voice: agent.voiceName || config.voice,
-            systemPrompt: agent.systemPrompt || config.systemPrompt
-          };
-        }
-      }
-      
-      // Convert base64 to buffer
-      const audioBuffer = Buffer.from(audioBase64, 'base64');
-      
-      // Process with PTT service
-      const { getPTTService } = await import('./pttService');
-      const pttService = getPTTService();
-      const result = await pttService.processPTTAudio(
-        audioBuffer,
-        config,
-        conversationHistory || []
-      );
-      
-      if (!result.success) {
-        return res.status(500).json({ error: result.error });
-      }
-      
-      res.json({
-        success: true,
-        transcript: result.transcript,
-        responseText: result.responseText,
-        responseAudio: result.responseAudio?.toString('base64')
-      });
-    } catch (error: any) {
-      console.error("[PTT] Process error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-  
-  // Transcribe audio only (STT)
-  app.post("/api/ptt/transcribe", async (req, res) => {
-    try {
-      const { audioBase64 } = req.body;
-      
-      if (!audioBase64) {
-        return res.status(400).json({ error: "Audio data required" });
-      }
-      
-      const audioBuffer = Buffer.from(audioBase64, 'base64');
-      
-      const { getPTTService } = await import('./pttService');
-      const pttService = getPTTService();
-      const result = await pttService.transcribeAudio(audioBuffer);
-      
-      if (!result.success) {
-        return res.status(500).json({ error: result.error });
-      }
-      
-      res.json({
-        success: true,
-        transcript: result.transcript
-      });
-    } catch (error: any) {
-      console.error("[PTT] Transcribe error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-  
-  // Generate speech from text (TTS)
-  app.post("/api/ptt/synthesize", async (req, res) => {
-    try {
-      const { text, voice } = req.body;
-      
-      if (!text) {
-        return res.status(400).json({ error: "Text required" });
-      }
-      
-      const { getPTTService } = await import('./pttService');
-      const pttService = getPTTService();
-      const result = await pttService.generateSpeech(text, voice || 'Puck');
-      
-      if (!result.success) {
-        return res.status(500).json({ error: result.error });
-      }
-      
-      res.json({
-        success: true,
-        audio: result.audio?.toString('base64')
-      });
-    } catch (error: any) {
-      console.error("[PTT] Synthesize error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
+  // ← extracted to server/routes/telephonyRoutes.ts
 
+
+  // VoiceLead Machine routes
   registerVlmRoutes(app);
 
   // Register Agent System routes
@@ -7390,6 +5082,21 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   app.use("/api/site-configs", siteConfigRoutes);
   app.use("/api/onboarding", onboardingRoutes);
 
+  // Register Site Claim / Assignment routes (assign + preview + OTP + Stripe checkout)
+  app.use(claimRoutes);
+
+  // Intelligence Ingestion: POST /api/ingest-plan
+  app.use(ingestPlanRoutes);
+
+  // Bail Rescue public API: GET /api/bail-rescue/:token, POST /api/bail-rescue/:token/checkout
+  app.use(bailRescueRoutes);
+
+  // Agent Deep Research: POST /api/generate-agent-persona
+  app.use(agentResearchRoutes);
+
+  // NOVA Sovereign Billing: POST /api/nova/billing/push, POST /api/nova/billing/receive
+  app.use("/api/nova", novaSovereignRouter);
+
   // Register Menu and Cart routes
   registerMenuRoutes(app);
 
@@ -7398,6 +5105,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
   // B2B Travel OS: itineraries, GRN/SerpAPI leads, markups, curation events
   registerB2bRoutes(app);
+
+  // SPA catch-all is registered in server/index.ts AFTER serveStatic() so that
+  // express.static handles /assets/* before the wildcard can intercept them.
 
   return httpServer;
 }

@@ -59,6 +59,24 @@ async function testExecuteHotelTool() {
     console.log("  enrich_hotels_with_rates: ERROR", e.message);
   }
 
+  // enrich_hotels_with_rates with platformId - verifies new platformId parameter is accepted
+  try {
+    const r = await executeHotelTool("enrich_hotels_with_rates", {
+      location: "Miami Beach",
+      checkin: "2025-03-15",
+      checkout: "2025-03-17",
+      platformId: "00000000-0000-0000-0000-000000000001",
+    });
+    const data = JSON.parse(r);
+    if (data.success !== undefined) {
+      console.log("  enrich_hotels_with_rates (with platformId): OK (platformId accepted)");
+    } else {
+      console.log("  enrich_hotels_with_rates (with platformId): UNEXPECTED", JSON.stringify(data).slice(0, 80));
+    }
+  } catch (e: any) {
+    console.log("  enrich_hotels_with_rates (with platformId): ERROR", e.message);
+  }
+
   // Unknown tool
   const unknown = await executeHotelTool("unknown_tool", {});
   const u = JSON.parse(unknown);

@@ -182,7 +182,7 @@ export class GoogleWorkspaceService {
     }
   }
 
-  async listCalendarEvents(maxResults: number = 10, timeMin?: string): Promise<ToolResult> {
+  async listCalendarEvents(maxResults: number = 10, timeMin?: string, timeMax?: string): Promise<ToolResult> {
     if (!this.calendar) {
       return { success: false, error: 'Google Calendar not connected' };
     }
@@ -191,6 +191,7 @@ export class GoogleWorkspaceService {
       const response = await this.calendar.events.list({
         calendarId: 'primary',
         timeMin: timeMin || new Date().toISOString(),
+        timeMax: timeMax || undefined,
         maxResults,
         singleEvents: true,
         orderBy: 'startTime'
@@ -207,6 +208,52 @@ export class GoogleWorkspaceService {
       return { success: true, data: { events } };
     } catch (error: any) {
       console.error('Calendar list error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /** Drive full-text search; returns context summary for agent (read-only). */
+  async searchDriveFiles(query: string, mimeType?: string): Promise<ToolResult> {
+    if (!this.drive) {
+      return { success: false, error: 'Google Drive not connected' };
+    }
+
+    try {
+      const escapeQ = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      let q = `fullText contains '${escapeQ(query)}' and trashed = false`;
+      if (mimeType) {
+        q += ` and mimeType = '${escapeQ(mimeType)}'`;
+      }
+      const response = await this.drive.files.list({
+        q,
+        pageSize: 15,
+        fields: 'files(id, name, mimeType, modifiedTime, webViewLink)',
+        orderBy: 'modifiedTime desc',
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true,
+      });
+
+      const files = (response.data.files || []).map((f: any) => ({
+        name: f.name,
+        mimeType: f.mimeType,
+        modifiedTime: f.modifiedTime,
+        webViewLink: f.webViewLink,
+      }));
+
+      const summary = files.length === 0
+        ? `No Drive items found matching "${query}".`
+        : `Found ${files.length} item(s) matching "${query}": ${files.map((f: any) => f.name).join(', ')}.`;
+
+      return {
+        success: true,
+        data: {
+          summary,
+          count: files.length,
+          files,
+        },
+      };
+    } catch (error: any) {
+      console.error('Drive search error:', error);
       return { success: false, error: error.message };
     }
   }
@@ -959,7 +1006,7 @@ Gateway Global AI Team`,
       case 'createCalendarEvent':
         return this.createCalendarEvent(args);
       case 'listCalendarEvents':
-        return this.listCalendarEvents(args.maxResults, args.timeMin);
+        return this.listCalendarEvents(args.maxResults, args.timeMin, args.timeMax);
       case 'updateCalendarEvent':
         return this.updateCalendarEvent(args.eventId, args);
       case 'deleteCalendarEvent':
@@ -980,6 +1027,8 @@ Gateway Global AI Team`,
         return this.listDrives();
       case 'listDriveFiles':
         return this.listDriveFiles(args.folderId, args.pageToken, args.pageSize);
+      case 'searchDriveFiles':
+        return this.searchDriveFiles(args.query, args.mimeType);
       case 'createDriveFolder':
         return this.createDriveFolder(args.name, args.parentId);
       case 'deleteDriveFile':

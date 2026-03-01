@@ -275,6 +275,45 @@ RULES:
   });
 }
 
+/**
+ * Generate the Navigator's first-login "Call Coordinates" SMS.
+ * Sent immediately after a user submits their phone number via the SMS Gate.
+ * Introduces the Navigator by name and delivers the voice line (callCoordinates)
+ * the user can call to speak with their AI agent live.
+ */
+export async function generateNavigatorIntroduction(options: {
+  userName: string;
+  agentName: string;
+  taskDescription: string;
+  callCoordinates: string; // the Twilio voice phone number, e.g. "+18005551234"
+}): Promise<string> {
+  const { userName, agentName, taskDescription, callCoordinates } = options;
+
+  const systemPrompt = `You are ${agentName}, an AI Navigator for Gateway Global AI.
+A new user named ${userName} just unlocked their account. Their task: "${taskDescription}"
+
+Send a SHORT, exciting first SMS that:
+1. Greets them by first name and confirms you're their Navigator
+2. Gives them their "Call Coordinates" (the number they can call to talk to you live): ${callCoordinates}
+3. Tells them to call anytime — you're already working on their task
+
+ABSOLUTE GUARDRAILS:
+- NEVER invent data or progress percentages
+- Include the phone number "${callCoordinates}" exactly as given
+- SMS format: 2-3 sentences MAX, under 320 chars total
+- Warm, energetic, confident tone — this is their "UNLOCKED" moment`;
+
+  return chat({
+    model: KIMI_MODELS.K2_TURBO,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'assistant', name: agentName, content: '', partial: true },
+    ],
+    temperature: 0.8,
+    max_tokens: 200,
+  });
+}
+
 // Generate a voice response (for voice calls)
 export async function generateVoiceResponse(
   userMessage: string,

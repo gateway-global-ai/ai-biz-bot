@@ -9,8 +9,20 @@ export default {
         lg: ".5625rem", /* 9px */
         md: ".375rem", /* 6px */
         sm: ".1875rem", /* 3px */
+        sui: "24px", /* Sovereign UI Constant — Jason Standard */
+      },
+      backgroundImage: {
+        "glass-gradient": "linear-gradient(to bottom right, rgba(255,255,255,0.05), rgba(255,255,255,0))",
+        "sovereign-hero": "linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(15,23,42,0) 60%)",
       },
       colors: {
+        // ── Jason Standard: Sovereign OS Palette ───────────────────────────
+        sovereign: {
+          deep:    "#0F172A", /* Primary background depth */
+          electric: "#6366F1", /* Indigo-Electric — primary action / accent */
+          vivid:   "#10B981", /* Emerald-Vivid — success / verified */
+          muted:   "#94A3B8", /* Slate-Muted — secondary text */
+        },
         // Flat / base colors (regular buttons)
         background: "hsl(var(--background) / <alpha-value>)",
         foreground: "hsl(var(--foreground) / <alpha-value>)",
@@ -111,6 +123,19 @@ export default {
           "0%": { transform: "scale(0.8)", opacity: "0" },
           "100%": { transform: "scale(1)", opacity: "1" },
         },
+        // ── Jason Standard keyframes ────────────────────────────────────────
+        "sovereign-pulse": {
+          "0%, 100%": { boxShadow: "0 0 0 0 rgba(99,102,241,0)" },
+          "50%":       { boxShadow: "0 0 18px 4px rgba(99,102,241,0.35)" },
+        },
+        "sovereign-lift": {
+          "0%":   { transform: "translateY(0) scale(1)" },
+          "100%": { transform: "translateY(-3px) scale(1.015)" },
+        },
+        "glass-in": {
+          "0%":   { opacity: "0", transform: "translateY(8px) scale(0.98)", backdropFilter: "blur(0px)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)",       backdropFilter: "blur(16px)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -119,6 +144,9 @@ export default {
         "fade-in": "fade-in 0.5s ease-out",
         "slide-in": "slide-in-from-bottom 0.3s ease-out",
         "scale-in": "scale-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        // Sovereign
+        "sovereign-pulse": "sovereign-pulse 2.4s ease-in-out infinite",
+        "glass-in":        "glass-in 0.3s ease-out forwards",
       },
     },
   },

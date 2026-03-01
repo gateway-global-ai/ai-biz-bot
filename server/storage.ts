@@ -62,8 +62,9 @@ import {
   type Inquiry,
   type InsertInquiry,
   type PlatformBusinessMap,
-  type InsertPlatformBusinessMap,
-  platformBusinessMap,
+  type VoiceUsageLog,
+  type InsertVoiceUsageLog,
+  voiceUsageLogs,
   botTemplates,
   telephonyConfigs,
   callLogs,
@@ -95,49 +96,14 @@ import {
   vlmCampaigns,
   vlmCallAttempts,
   ogSettings,
-  inquiries
+  inquiries,
+  platformBusinessMap,
+  resellers,
+  commissions,
 } from "@shared/schema";
+import type { Reseller } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
-
-// Placeholder for a future validation service (UPA).
-const UPAValidator = {
-  validate: async (prompt: string) => ({ isValid: true as const, reason: "" }),
-};
-
-/** Explicit site_configs column map (includes granular resource ledger so dashboard 4-card and plan work). */
-const siteConfigsColumns = {
-  id: siteConfigs.id,
-  ownerId: siteConfigs.ownerId,
-  name: siteConfigs.name,
-  domain: siteConfigs.domain,
-  placeId: siteConfigs.placeId,
-  placeData: siteConfigs.placeData,
-  assignedAgentId: siteConfigs.assignedAgentId,
-  botTemplateId: siteConfigs.botTemplateId,
-  systemPromptOverride: siteConfigs.systemPromptOverride,
-  modelProvider: siteConfigs.modelProvider,
-  modelName: siteConfigs.modelName,
-  chatbotEnabled: siteConfigs.chatbotEnabled,
-  voiceConciergeEnabled: siteConfigs.voiceConciergeEnabled,
-  widgetPosition: siteConfigs.widgetPosition,
-  widgetColor: siteConfigs.widgetColor,
-  greetingMessage: siteConfigs.greetingMessage,
-  placeholderText: siteConfigs.placeholderText,
-  knowledgeLibrary: siteConfigs.knowledgeLibrary,
-  plan: siteConfigs.plan,
-  heroImageUrl: siteConfigs.heroImageUrl,
-  heroImagePrompt: siteConfigs.heroImagePrompt,
-  agentConfig: siteConfigs.agentConfig,
-  voiceConfig: siteConfigs.voiceConfig,
-  themeConfig: siteConfigs.themeConfig,
-  voicePhoneAiMinutes: siteConfigs.voicePhoneAiMinutes,
-  voiceWebAiMinutes: siteConfigs.voiceWebAiMinutes,
-  smsMessages: siteConfigs.smsMessages,
-  chatBotMessages: siteConfigs.chatBotMessages,
-  createdAt: siteConfigs.createdAt,
-  updatedAt: siteConfigs.updatedAt,
-};
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -231,6 +197,7 @@ export interface IStorage {
   deleteProjectTask(id: string): Promise<boolean>;
   
   createDemoLead(lead: InsertDemoLead): Promise<DemoLead>;
+  getDemoLead(id: string): Promise<DemoLead | undefined>;
   getDemoLeadByToken(token: string): Promise<DemoLead | undefined>;
   getDemoLeadByPhone(phone: string): Promise<DemoLead | undefined>;
   getAllDemoLeads(): Promise<DemoLead[]>;
@@ -299,6 +266,15 @@ export interface IStorage {
   getAllOgSettings(): Promise<any[]>;
   upsertOgSettings(settings: any): Promise<any>;
   deleteOgSettings(id: string): Promise<boolean>;
+
+  // Platform Identity
+  getOrCreatePlatformId(siteConfigId: string): Promise<string>;
+  resolvePlatformId(input: { siteConfigId?: string; googlePlaceId?: string }): Promise<PlatformBusinessMap | null>;
+  getSiteConfigIdByPlatformId(platformId: string): Promise<string | null>;
+
+  // Voice Usage Log operations
+  createVoiceUsageLog(log: InsertVoiceUsageLog): Promise<VoiceUsageLog>;
+  getVoiceUsageLogs(siteConfigId: string, limit?: number): Promise<VoiceUsageLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -395,7 +371,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAgent(id: string): Promise<boolean> {
-    const result = await db.delete(agents).where(eq(agents.id, id));
+    await db.delete(agents).where(eq(agents.id, id));
     return true;
   }
 
@@ -435,7 +411,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCustomer(id: string): Promise<boolean> {
-    const result = await db.delete(customers).where(eq(customers.id, id));
+    await db.delete(customers).where(eq(customers.id, id));
     return true;
   }
 
@@ -548,6 +524,26 @@ export class DatabaseStorage implements IStorage {
     await db.update(adminUsers).set({ lastLoginAt: new Date() }).where(eq(adminUsers.id, id));
   }
 
+  async updateAdminUser(id: string, updates: Partial<{ resellerId: string | null; name: string | null; role: string }>): Promise<AdminUser | undefined> {
+    const [updated] = await db.update(adminUsers).set(updates).where(eq(adminUsers.id, id)).returning();
+    return updated;
+  }
+
+  async createReseller(data: { name?: string; email?: string; phone?: string }): Promise<Reseller> {
+    const [created] = await db.insert(resellers).values(data).returning();
+    return created;
+  }
+
+  async getResellerById(id: string): Promise<Reseller | undefined> {
+    const [r] = await db.select().from(resellers).where(eq(resellers.id, id));
+    return r;
+  }
+
+  async updateReseller(id: string, updates: Partial<{ stripeConnectId: string | null; name: string | null; email: string | null; phone: string | null }>): Promise<Reseller | undefined> {
+    const [updated] = await db.update(resellers).set({ ...updates, updatedAt: new Date() }).where(eq(resellers.id, id)).returning();
+    return updated;
+  }
+
   // OTP Code operations
   async createOtpCode(otp: InsertOtpCode): Promise<OtpCode> {
     const [created] = await db.insert(otpCodes).values(otp).returning();
@@ -618,7 +614,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTwilioSubAccount(id: string): Promise<boolean> {
-    const result = await db.delete(twilioSubAccounts).where(eq(twilioSubAccounts.id, id));
+    await db.delete(twilioSubAccounts).where(eq(twilioSubAccounts.id, id));
     return true;
   }
 
@@ -833,7 +829,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOrganization(id: string): Promise<boolean> {
-    const result = await db.delete(organizations).where(eq(organizations.id, id));
+    await db.delete(organizations).where(eq(organizations.id, id));
     return true;
   }
 
@@ -906,6 +902,11 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async getDemoLead(id: string): Promise<DemoLead | undefined> {
+    const [lead] = await db.select().from(demoLeads).where(eq(demoLeads.id, id));
+    return lead;
+  }
+
   async getDemoLeadByToken(token: string): Promise<DemoLead | undefined> {
     const [lead] = await db.select().from(demoLeads).where(eq(demoLeads.magicToken, token));
     return lead;
@@ -956,41 +957,40 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSiteConfigs(): Promise<SiteConfig[]> {
-    return db.select(siteConfigsColumns).from(siteConfigs).orderBy(desc(siteConfigs.createdAt));
+    return db.select().from(siteConfigs).orderBy(desc(siteConfigs.createdAt));
   }
 
   async getSiteConfig(id: string): Promise<SiteConfig | undefined> {
-    const [config] = await db.select(siteConfigsColumns).from(siteConfigs).where(eq(siteConfigs.id, id));
+    const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.id, id));
     return config;
   }
 
   async getSiteConfigById(id: string): Promise<SiteConfig | null> {
-    if (!id || id === "undefined") {
-      console.warn("[Storage] Attempted to fetch site config with null, undefined, or \"undefined\" string ID");
+    if (!id || id === 'undefined') {
+      console.warn('[Storage] Attempted to fetch site config with null, undefined, or "undefined" string ID');
       return null;
     }
-    const config = await this.getSiteConfig(id);
-    return config ?? null;
+    try {
+      const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.id, id));
+      return config ?? null;
+    } catch (error) {
+      console.error(`[Storage] Error fetching site config for ID ${id}:`, error);
+      throw new Error('Database query for site configuration failed.');
+    }
   }
 
   async getSiteConfigByDomain(domain: string): Promise<SiteConfig | undefined> {
-    const [config] = await db.select(siteConfigsColumns).from(siteConfigs).where(eq(siteConfigs.domain, domain));
+    const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.domain, domain));
     return config;
   }
 
   async getSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined> {
-    const [config] = await db.select(siteConfigsColumns).from(siteConfigs).where(eq(siteConfigs.placeId, placeId));
+    const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.placeId, placeId));
     return config;
   }
 
   async createSiteConfig(config: InsertSiteConfig): Promise<SiteConfig> {
-    if (config.systemPromptOverride) {
-      const validation = await UPAValidator.validate(config.systemPromptOverride);
-      if (!validation.isValid) {
-        throw new Error(`System prompt validation failed: ${validation.reason}`);
-      }
-    }
-    const [created] = await db.insert(siteConfigs).values(config).returning(siteConfigsColumns);
+    const [created] = await db.insert(siteConfigs).values(config).returning();
     return created;
   }
 
@@ -998,7 +998,7 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db.update(siteConfigs)
       .set({ ...updates, updatedAt: new Date() })
       .where(eq(siteConfigs.id, id))
-      .returning(siteConfigsColumns);
+      .returning();
     return updated;
   }
 
@@ -1069,7 +1069,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSiteConfigsByOwner(ownerId: string): Promise<SiteConfig[]> {
-    return db.select(siteConfigsColumns).from(siteConfigs)
+    return db.select().from(siteConfigs)
       .where(eq(siteConfigs.ownerId, ownerId))
       .orderBy(desc(siteConfigs.createdAt));
   }
@@ -1081,7 +1081,7 @@ export class DatabaseStorage implements IStorage {
       if (lead.placeId) {
         const site = await this.getSiteConfigByPlaceId(lead.placeId);
         if (site && !site.ownerId) {
-          await this.updateSiteConfig(site.id, { ownerId: customerAccountId } as any);
+          await this.updateSiteConfig(site.id, { ownerId: customerAccountId });
           claimed++;
         }
       }
@@ -1205,7 +1205,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOgSettings(id: string): Promise<boolean> {
-    const result = await db.delete(ogSettings).where(eq(ogSettings.id, id));
+    await db.delete(ogSettings).where(eq(ogSettings.id, id));
     return true;
   }
 
@@ -1234,12 +1234,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getInquiry(id: string): Promise<Inquiry | undefined> {
-    const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, id));
-    return inquiry;
+    const [inq] = await db.select().from(inquiries).where(eq(inquiries.id, id));
+    return inq;
   }
 
-  async createInquiry(inquiry: InsertInquiry): Promise<Inquiry> {
-    const [created] = await db.insert(inquiries).values(inquiry).returning();
+  async createInquiry(inq: InsertInquiry): Promise<Inquiry> {
+    const [created] = await db.insert(inquiries).values(inq).returning();
     return created;
   }
 
@@ -1255,77 +1255,115 @@ export class DatabaseStorage implements IStorage {
     await db.delete(inquiries).where(eq(inquiries.id, id));
     return true;
   }
+
+  // ──────────────────────────────────────────────────────────────────────────────
+  // Platform Identity – System of Record for stable internal platform_id
+  // ──────────────────────────────────────────────────────────────────────────────
+
+  async getOrCreatePlatformId(siteConfigId: string): Promise<string> {
+    const [existing] = await db
+      .select({ platformId: platformBusinessMap.platformId })
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.siteConfigId, siteConfigId))
+      .limit(1);
+
+    if (existing) {
+      return existing.platformId;
+    }
+
+    const [siteConfig] = await db
+      .select({ placeId: siteConfigs.placeId })
+      .from(siteConfigs)
+      .where(eq(siteConfigs.id, siteConfigId))
+      .limit(1);
+
+    const inserted = await db
+      .insert(platformBusinessMap)
+      .values({
+        siteConfigId,
+        googlePlaceId: siteConfig?.placeId ?? null,
+      })
+      .onConflictDoNothing()
+      .returning({ platformId: platformBusinessMap.platformId });
+
+    if (inserted.length > 0) {
+      return inserted[0].platformId;
+    }
+
+    const [raceRow] = await db
+      .select({ platformId: platformBusinessMap.platformId })
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.siteConfigId, siteConfigId))
+      .limit(1);
+
+    if (!raceRow) {
+      throw new Error(`[Storage] Failed to resolve platform_id for siteConfigId=${siteConfigId}`);
+    }
+
+    return raceRow.platformId;
+  }
+
+  async resolvePlatformId(
+    input: { siteConfigId?: string; googlePlaceId?: string },
+  ): Promise<PlatformBusinessMap | null> {
+    if (input.siteConfigId) {
+      const [existing] = await db
+        .select()
+        .from(platformBusinessMap)
+        .where(eq(platformBusinessMap.siteConfigId, input.siteConfigId))
+        .limit(1);
+
+      if (existing) {
+        return existing;
+      }
+
+      await this.getOrCreatePlatformId(input.siteConfigId);
+
+      const [row] = await db
+        .select()
+        .from(platformBusinessMap)
+        .where(eq(platformBusinessMap.siteConfigId, input.siteConfigId))
+        .limit(1);
+      return row ?? null;
+    }
+
+    if (input.googlePlaceId) {
+      const [row] = await db
+        .select()
+        .from(platformBusinessMap)
+        .where(eq(platformBusinessMap.googlePlaceId, input.googlePlaceId))
+        .limit(1);
+      return row ?? null;
+    }
+
+    return null;
+  }
+
+  async getSiteConfigIdByPlatformId(platformId: string): Promise<string | null> {
+    const [row] = await db
+      .select({ siteConfigId: platformBusinessMap.siteConfigId })
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.platformId, platformId as any))
+      .limit(1);
+    return row?.siteConfigId ?? null;
+  }
+
+  async createVoiceUsageLog(log: InsertVoiceUsageLog): Promise<VoiceUsageLog> {
+    const [created] = await db.insert(voiceUsageLogs).values(log).returning();
+    return created;
+  }
+
+  async getVoiceUsageLogs(siteConfigId: string, limit = 50): Promise<VoiceUsageLog[]> {
+    return db
+      .select()
+      .from(voiceUsageLogs)
+      .where(eq(voiceUsageLogs.siteConfigId, siteConfigId))
+      .orderBy(desc(voiceUsageLogs.createdAt))
+      .limit(limit);
+
+  }
+
+
 }
 
 export const storage = new DatabaseStorage();
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Platform Identity — System of Record for stable internal platform_id
-// ──────────────────────────────────────────────────────────────────────────────
-
-export async function getOrCreatePlatformId(siteConfigId: string): Promise<string> {
-  const [existing] = await db
-    .select({ platformId: platformBusinessMap.platformId })
-    .from(platformBusinessMap)
-    .where(eq(platformBusinessMap.siteConfigId, siteConfigId))
-    .limit(1);
-
-  if (existing) return existing.platformId;
-
-  const [siteConfig] = await db
-    .select({ placeId: siteConfigs.placeId })
-    .from(siteConfigs)
-    .where(eq(siteConfigs.id, siteConfigId))
-    .limit(1);
-
-  const inserted = await db
-    .insert(platformBusinessMap)
-    .values({ siteConfigId, googlePlaceId: siteConfig?.placeId ?? null })
-    .onConflictDoNothing()
-    .returning({ platformId: platformBusinessMap.platformId });
-
-  if (inserted.length > 0) return inserted[0].platformId;
-
-  const [raceRow] = await db
-    .select({ platformId: platformBusinessMap.platformId })
-    .from(platformBusinessMap)
-    .where(eq(platformBusinessMap.siteConfigId, siteConfigId))
-    .limit(1);
-
-  if (!raceRow) throw new Error(`[Storage] Failed to resolve platform_id for siteConfigId=${siteConfigId}`);
-  return raceRow.platformId;
-}
-
-export async function resolvePlatformId(
-  input: { siteConfigId?: string; googlePlaceId?: string },
-): Promise<PlatformBusinessMap | null> {
-  if (input.siteConfigId) {
-    const [existing] = await db
-      .select()
-      .from(platformBusinessMap)
-      .where(eq(platformBusinessMap.siteConfigId, input.siteConfigId))
-      .limit(1);
-
-    if (existing) return existing;
-
-    await getOrCreatePlatformId(input.siteConfigId);
-
-    const [row] = await db
-      .select()
-      .from(platformBusinessMap)
-      .where(eq(platformBusinessMap.siteConfigId, input.siteConfigId))
-      .limit(1);
-    return row ?? null;
-  }
-
-  if (input.googlePlaceId) {
-    const [row] = await db
-      .select()
-      .from(platformBusinessMap)
-      .where(eq(platformBusinessMap.googlePlaceId, input.googlePlaceId))
-      .limit(1);
-    return row ?? null;
-  }
-
-  return null;
-}
