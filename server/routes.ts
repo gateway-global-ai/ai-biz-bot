@@ -3666,9 +3666,7 @@ ${businessContext}`;
         response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens })).response;
       } catch (firstError: any) {
         console.warn('Admin command chat first attempt failed, retrying:', firstError.message);
-        response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp,
-          max_tokens: agentMaxTokens,
-        });
+        response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens })).response;
       }
 
       res.json({ response });
@@ -3896,10 +3894,7 @@ Keep responses concise and engaging. If asked personal questions, you can share 
         response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens })).response;
       } catch (firstError: any) {
         console.warn('Chat first attempt failed, retrying:', firstError.message);
-        response = (await gatewayChat({ messages, model: modelToUse,
-          temperature: agentTemp,
-          max_tokens: agentMaxTokens,
-        });
+        response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens })).response;
       }
 
       res.json({ response });
