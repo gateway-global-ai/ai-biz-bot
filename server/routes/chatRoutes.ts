@@ -6,6 +6,7 @@ import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { gatewayChat } from "../ai-gateway";
 import { buildRichSystemInstruction } from "../services/systemInstructionBuilder";
+import { buildBehavioralPrompt } from "../services/promptCompiler";
 import { analyticsLogs, smsConversations, smsMessages } from "@shared/schema";
 
 const router = Router();
@@ -163,11 +164,8 @@ You are helpful, concise, and conversational. Answer questions about the busines
         return res.status(404).json({ error: "Agent not found" });
       }
 
-      // Build system prompt based on agent personality
-      const discProfile = `D:${agent.dominance} I:${agent.influence} S:${agent.steadiness} C:${agent.conscientiousness}`;
-      let systemPrompt = agent.systemPrompt || `You are ${agent.name}, a helpful AI assistant with the following DISC personality profile: ${discProfile}. 
-Be conversational, helpful, and maintain a consistent personality. Your voice style is ${agent.voiceName}.
-Keep responses concise and engaging. If asked personal questions, you can share that you're an AI assistant named ${agent.name}.`;
+      // Build character-first system prompt using DISC + ARCH + Memory layers
+      let systemPrompt = buildBehavioralPrompt(agent);
 
       // Inject project context if a projectId is provided
       if (projectId) {

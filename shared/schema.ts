@@ -358,6 +358,12 @@ export const agents = pgTable("agents", {
   budgetPeriod: text("budget_period").default("monthly"), // daily, weekly, monthly
   budgetSpentUsd: numeric("budget_spent_usd", { precision: 10, scale: 2 }).default("0"),
   budgetResetAt: timestamp("budget_reset_at"),
+  // Character Engine — Three-Layer Behavioral System
+  // Layer 1: Character (who the agent IS)
+  shortTermMemory: jsonb("short_term_memory"), // { specialty, focus, method, differentiator, discAnalysis, archBehavior }
+  longTermMemory: jsonb("long_term_memory"),   // { dominantTrait, years, originStory, unbreakableRule, ruleReason, primaryIntent, happySeeing, sadSeeing, priorityOverMoney, philosophyPeople, philosophyLife, philosophyToday }
+  // Layer 3: Conversation Mechanics (how the agent structures dialogue)
+  archProfile: jsonb("arch_profile"),          // { acknowledge, reflect, context, handoff } — 0-100 each
   // Startup Script
   startupScript: text("startup_script"),
   startupBudgetUsd: numeric("startup_budget_usd", { precision: 10, scale: 2 }).default("0"),

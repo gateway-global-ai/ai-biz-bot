@@ -39,6 +39,7 @@ import {
   getVoiceUsageLogs,
 } from "../services/energy-monitor";
 import { buildRichSystemInstruction } from "../services/systemInstructionBuilder";
+import { buildBehavioralPrompt } from "../services/promptCompiler";
 
 const router = Router();
 
@@ -2584,15 +2585,33 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       
       console.log(`[Voice] Stream URL: ${streamUrl}, siteConfigId: ${siteConfigId ?? 'none'}`);
       
+      // Build character-first system prompt for this call
+      let voiceSystemPrompt = 'You are a helpful AI assistant for Gateway Global AI.';
+      let agentName = 'AI Assistant';
+      try {
+        if (siteConfigId) {
+          const siteConfig = await storage.getSiteConfigById(siteConfigId);
+          if (siteConfig?.agentId) {
+            const agent = await storage.getAgent(siteConfig.agentId);
+            if (agent) {
+              agentName = agent.name;
+              voiceSystemPrompt = buildBehavioralPrompt(agent);
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn('[Voice] Character prompt build failed, using default:', e.message);
+      }
+
       // Return TwiML with Media Streams (voice pipeline uses Gemini Clear Voice)
       res.set('Content-Type', 'text/xml');
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-F">Welcome to Gateway Global AI. Connecting you to our AI assistant now.</Say>
+  <Say voice="Google.en-US-Neural2-F">Connecting you now.</Say>
   <Connect>
     <Stream url="${streamUrl}">
-      <Parameter name="agentName" value="AI Assistant"/>
-      <Parameter name="personality" value="helpful"/>
+      <Parameter name="agentName" value="${escapeXml(agentName)}"/>
+      <Parameter name="systemPrompt" value="${escapeXml(voiceSystemPrompt)}"/>
       ${siteConfigId ? `<Parameter name="siteConfigId" value="${escapeXml(siteConfigId)}"/>` : ''}
     </Stream>
   </Connect>
