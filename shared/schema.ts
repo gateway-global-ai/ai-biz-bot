@@ -2243,3 +2243,121 @@ export const smsLogs = pgTable("sms_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ==========================================
+// Industry Agent Template Engine
+// 8 Business Groups × 6 Archetypes = 48 pre-tuned psychological profiles
+// ==========================================
+
+export const INDUSTRY_GROUPS = [
+  'food_beverage',
+  'health_wellness',
+  'home_services',
+  'professional_services',
+  'hospitality_travel',
+  'retail',
+  'real_estate',
+  'automotive',
+] as const;
+
+export type IndustryGroup = typeof INDUSTRY_GROUPS[number];
+
+export const AGENT_ARCHETYPES = [
+  'concierge',            // High I/S — warm welcome, FAQ, routing
+  'booking_coordinator',  // High C/D — calendar ops, commits
+  'lead_qualifier',       // High D/I — capture, qualify, prep for human closer
+  'retention_empath',     // Max S / High ARCH-A — de-escalation, make it right
+  'billing_analyst',      // Max C — invoices, payments, Stripe links
+  'gatekeeper',           // High S/C mid-D — triage, protect, route main line
+] as const;
+
+export type AgentArchetype = typeof AGENT_ARCHETYPES[number];
+
+/**
+ * Pre-tuned agent personality templates — one per (industryGroup × archetype).
+ * On business signup, all 6 archetypes for the detected industry are cloned into the
+ * site's agent roster. The owner sees a fully configured team on day one.
+ */
+export const industryAgentTemplates = pgTable("industry_agent_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Categorization
+  industryGroup: text("industry_group").notNull(),   // IndustryGroup
+  roleType: text("role_type").notNull(),             // AgentArchetype
+
+  // Identity
+  defaultName: text("default_name").notNull(),        // e.g. "Sarah (Intake Specialist)"
+  voiceId: text("voice_id").default("Kore"),          // Gemini voice character
+  voiceName: text("voice_name").default("Kore - Calm & Professional"),
+  avatarId: text("avatar_id").default("avatar1"),
+
+  // Character Architecture — Layer 1
+  shortTermMemoryTemplate: text("short_term_memory_template"),
+  longTermCoreTemplate: text("long_term_core_template"),
+  primaryIntent: text("primary_intent"),
+  worldView: text("world_view"),
+  unbreakableRule: text("unbreakable_rule"),
+
+  // Layer 2: Pre-tuned DISC Psychology (0-100)
+  dominance: integer("dominance").notNull().default(50),
+  influence: integer("influence").notNull().default(50),
+  steadiness: integer("steadiness").notNull().default(50),
+  conscientiousness: integer("conscientiousness").notNull().default(50),
+
+  // Layer 3: ARCH Conversation Mechanics (0-100)
+  archAcknowledge: integer("arch_acknowledge").notNull().default(60),
+  archReflect: integer("arch_reflect").notNull().default(50),
+  archContext: integer("arch_context").notNull().default(60),
+  archHandoff: integer("arch_handoff").notNull().default(50),
+
+  // Default Tools & Config
+  defaultTools: jsonb("default_tools").default([]),
+  defaultSystemPrompt: text("default_system_prompt"),
+
+  // Meta
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertIndustryAgentTemplateSchema = createInsertSchema(industryAgentTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertIndustryAgentTemplate = z.infer<typeof insertIndustryAgentTemplateSchema>;
+export type IndustryAgentTemplate = typeof industryAgentTemplates.$inferSelect;
+
+// Google Places types → Industry Group mapping
+export const PLACES_TYPE_TO_INDUSTRY: Record<string, IndustryGroup> = {
+  // Food & Beverage
+  restaurant: 'food_beverage', cafe: 'food_beverage', bar: 'food_beverage',
+  bakery: 'food_beverage', meal_takeaway: 'food_beverage', meal_delivery: 'food_beverage',
+  food: 'food_beverage', night_club: 'food_beverage',
+  // Health & Wellness
+  beauty_salon: 'health_wellness', hair_care: 'health_wellness', spa: 'health_wellness',
+  gym: 'health_wellness', physiotherapist: 'health_wellness', dentist: 'health_wellness',
+  doctor: 'health_wellness', health: 'health_wellness',
+  // Home Services
+  plumber: 'home_services', electrician: 'home_services', painter: 'home_services',
+  roofing_contractor: 'home_services', general_contractor: 'home_services',
+  home_goods_store: 'home_services', locksmith: 'home_services',
+  // Professional Services
+  lawyer: 'professional_services', accounting: 'professional_services',
+  insurance_agency: 'professional_services', finance: 'professional_services',
+  real_estate_agency: 'real_estate',
+  // Hospitality & Travel
+  lodging: 'hospitality_travel', hotel: 'hospitality_travel', motel: 'hospitality_travel',
+  travel_agency: 'hospitality_travel', tourist_attraction: 'hospitality_travel',
+  // Retail
+  store: 'retail', clothing_store: 'retail', shoe_store: 'retail',
+  jewelry_store: 'retail', book_store: 'retail', electronics_store: 'retail',
+  furniture_store: 'retail', shopping_mall: 'retail',
+  // Real Estate
+  real_estate: 'real_estate', moving_company: 'real_estate',
+  // Automotive
+  car_dealer: 'automotive', car_repair: 'automotive', car_wash: 'automotive',
+  gas_station: 'automotive', parking: 'automotive',
+};
