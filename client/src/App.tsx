@@ -399,7 +399,7 @@ function App() {
               <Route path="/login" component={Login} />
               <Route path="/contact" component={ContactForm} />
               <Route path="/v2" component={LandingV2} />
-              {/* /kimi-audio route removed — Gemini Live handles all voice demos */}
+              {/* voice-demo route — handled by Gemini Live on homepage */}
               <Route path="/sdk" component={SdkShowcase} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
               <Route path="/chat/customer" component={CustomerChatInterface} />

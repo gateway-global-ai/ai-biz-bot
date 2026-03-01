@@ -116,7 +116,7 @@ export default function MvpLanding() {
         <div className="container mx-auto px-4 py-2 flex items-center justify-between gap-3">
           <img src={headerLogo} alt="Gateway Global AI Biz Bot" className="h-16 object-contain" data-testid="img-header-logo" />
           <div className="flex items-center gap-3">
-            <Link href="/kimi-audio">
+            <Link href="/">
               <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-voice-ai">
                 <Mic className="w-4 h-4 mr-2" />
                 Voice AI
@@ -391,7 +391,7 @@ export default function MvpLanding() {
                     transition={{ delay: 1.2 }}
                     className="flex justify-center"
                   >
-                    <Link href="/kimi-audio">
+                    <Link href="/">
                       <Button
                         data-testid="button-try-voice"
                         className="bg-purple-600 hover:bg-purple-500 text-white"

@@ -39,7 +39,7 @@ export default function ResellerRecruitment() {
             </span>
           </Link>
           <div className="flex items-center gap-3">
-            <Link href="/kimi-audio">
+            <Link href="/">
               <Button variant="ghost" size="sm" className="text-slate-300 hover:text-white">
                 <Mic className="w-4 h-4 mr-2" />
                 Voice AI
@@ -214,7 +214,7 @@ export default function ResellerRecruitment() {
               much commission I can generate for you today?
             </p>
             <div className="flex gap-2">
-              <Link href="/kimi-audio">
+              <Link href="/">
                 <Button size="sm" className="bg-cyan-500 hover:bg-cyan-400 text-slate-950">
                   Try Voice Demo
                 </Button>
