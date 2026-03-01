@@ -955,7 +955,7 @@ export default function BusinessPage() {
               <VoiceVisualizer />
             </div>
             <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white text-center" data-testid="text-hero-heading">
-              Free Custom Websites<br />
+              AI Business Router<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-3xl md:text-[48px]">
                 AI Voice and Chat Enabled
               </span>
