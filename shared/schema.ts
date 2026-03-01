@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, pgEnum, uuid, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, pgEnum, uuid, index, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -329,6 +329,8 @@ export interface AIModelSettings {
 // AI Agents table
 export const agents = pgTable("agents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
+  roleType: text("role_type"), // concierge, booking_coordinator, lead_qualifier, retention_empath, billing_analyst, gatekeeper
   name: text("name").notNull(),
   voiceId: text("voice_id").notNull(),
   voiceName: text("voice_name").notNull(),
@@ -1018,6 +1020,11 @@ export const siteConfigs = pgTable("site_configs", {
   domain: text("domain"),
   placeId: text("place_id"),
   placeData: jsonb("place_data"),
+  /** Workspace lifecycle (MVP-safe, multi-tenant friendly): demo | provisioned | claimed | active | archived */
+  workspaceState: text("workspace_state").default("demo").notNull(),
+  claimedAt: timestamp("claimed_at"),
+  /** e.g. sdr_demo | agency | owner | system */
+  createdByType: text("created_by_type"),
   assignedAgentId: varchar("assigned_agent_id"),
   botTemplateId: varchar("bot_template_id"),
   systemPromptOverride: text("system_prompt_override"),
@@ -2240,4 +2247,76 @@ export const smsLogs = pgTable("sms_logs", {
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// ============================================================
+// Industry Agent Templates (8 business groups × 6 archetypes)
+// ============================================================
+export const INDUSTRY_GROUPS = [
+  "food_beverage",
+  "health_wellness",
+  "home_services",
+  "professional_services",
+  "hospitality_travel",
+  "retail",
+  "real_estate",
+  "automotive",
+] as const;
+
+export const AGENT_ARCHETYPES = [
+  "concierge",
+  "booking_coordinator",
+  "lead_qualifier",
+  "retention_empath",
+  "billing_analyst",
+  "gatekeeper",
+] as const;
+
+/** Maps Google Places types (or slugs) to industry group for provisioning. */
+export const PLACES_TYPE_TO_INDUSTRY: Record<string, (typeof INDUSTRY_GROUPS)[number]> = {
+  restaurant: "food_beverage",
+  food: "food_beverage",
+  cafe: "food_beverage",
+  bar: "food_beverage",
+  spa: "health_wellness",
+  gym: "health_wellness",
+  salon: "health_wellness",
+  health: "health_wellness",
+  plumber: "home_services",
+  hvac: "home_services",
+  landscaping: "home_services",
+  roofer: "home_services",
+  home_services: "home_services",
+  lawyer: "professional_services",
+  accountant: "professional_services",
+  professional_services: "professional_services",
+  hotel: "hospitality_travel",
+  travel: "hospitality_travel",
+  lodging: "hospitality_travel",
+  hospitality_travel: "hospitality_travel",
+  store: "retail",
+  retail: "retail",
+  shop: "retail",
+  real_estate: "real_estate",
+  realtor: "real_estate",
+  automotive: "automotive",
+  car_dealer: "automotive",
+  mechanic: "automotive",
+};
+
+export const industryAgentTemplates = pgTable("industry_agent_templates", {
+  id: serial("id").primaryKey(),
+  industryGroup: text("industry_group").notNull(),
+  roleType: text("role_type").notNull(),
+  defaultName: text("default_name").notNull(),
+  shortTermMemoryTemplate: text("short_term_memory_template"),
+  longTermCoreTemplate: text("long_term_core_template"),
+  primaryIntent: text("primary_intent"),
+  worldView: text("world_view"),
+  dominance: integer("dominance").notNull().default(50),
+  influence: integer("influence").notNull().default(50),
+  steadiness: integer("steadiness").notNull().default(50),
+  conscientiousness: integer("conscientiousness").notNull().default(50),
+  defaultTools: jsonb("default_tools").default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });

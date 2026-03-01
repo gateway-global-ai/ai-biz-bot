@@ -124,10 +124,14 @@ sudo certbot --nginx -d aibizbot-stage.gatewayglobal.ai
 
 ### 1.6 Later: deploy updates to stage
 
+**Use the deploy script.** It stops the app, runs migrations, installs, builds, and starts the app.
+
 ```bash
 cd /opt/gatewayglobal/aibizbot-stage.gatewayglobal.ai
 ./script/deploy-staging.sh aibizbot-stage.gatewayglobal.ai
 ```
+
+Ensure Doppler is configured so `npm run db:migrate` gets `DATABASE_URL`. If "port in use", run `npm run kill-port` then re-run the deploy script.
 
 ---
 
@@ -205,17 +209,14 @@ sudo certbot --nginx -d aibizbot-dev.gatewayglobal.ai
 
 ### 2.6 Later: deploy updates to dev
 
-Pull the branch you want (e.g. `main`), then build and restart:
+**Use the deploy script.** It stops the app (frees port), runs migrations, installs, builds, and starts the app. No manual migration or port steps.
 
 ```bash
 cd /opt/gatewayglobal/aibizbot-dev.gatewayglobal.ai
-git fetch origin
-git checkout main
-git pull origin main
-npm ci --omit=dev
-npm run build
-pm2 restart aibizbot-dev.gatewayglobal.ai
+./script/deploy-dev.sh aibizbot-dev.gatewayglobal.ai
 ```
+
+Ensure Doppler is configured in this directory (`doppler setup` with project/config dev) so `npm run db:migrate` gets `DATABASE_URL`. If you see "port in use", run `npm run kill-port` once, then run the deploy script again.
 
 ---
 
@@ -225,6 +226,6 @@ pm2 restart aibizbot-dev.gatewayglobal.ai
 |-------------|-----|------|----------|-------------------------|
 | Prod | https://aibizbot.gatewayglobal.ai | 3002 | /opt/gatewayglobal/aibizbot.gatewayglobal.ai | `./script/deploy-server.sh aibizbot.gatewayglobal.ai` |
 | Stage | https://aibizbot-stage.gatewayglobal.ai | 3003 | /opt/gatewayglobal/aibizbot-stage.gatewayglobal.ai | `./script/deploy-staging.sh aibizbot-stage.gatewayglobal.ai` |
-| Dev | https://aibizbot-dev.gatewayglobal.ai | 3004 | /opt/gatewayglobal/aibizbot-dev.gatewayglobal.ai | Manual pull + build + `pm2 restart aibizbot-dev.gatewayglobal.ai` |
+| Dev | https://aibizbot-dev.gatewayglobal.ai | 3004 | /opt/gatewayglobal/aibizbot-dev.gatewayglobal.ai | `./script/deploy-dev.sh aibizbot-dev.gatewayglobal.ai` |
 
 See [ENVIRONMENTS_DEV_STAGE_PROD.md](ENVIRONMENTS_DEV_STAGE_PROD.md) for branch strategy and when to deploy each.

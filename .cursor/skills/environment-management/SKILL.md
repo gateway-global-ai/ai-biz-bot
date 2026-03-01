@@ -14,12 +14,22 @@ When performing tasks in this codebase, always distinguish between Dev, Stage, a
 - **Execution**: Always use `doppler run --` (or `doppler run --config <dev|stg|prd> --`) before any node/npm command that needs secrets.
 - **Secrets in Doppler**: Never commit secrets. Store them in Doppler; use a local `.env` only for `DOPPLER_SERVICE_TOKEN` or `DOPPLER_TOKEN_*` so the CLI can authenticate (and keep that file gitignored).
 
+## Deployment (mandatory)
+
+- **Do not** leave deployment as "manual steps" (migrate SQL, then restart, then fix port). **Always** wire through the deploy scripts.
+- **Dev:** `./script/deploy-dev.sh aibizbot-dev.gatewayglobal.ai` (from `/opt/gatewayglobal/aibizbot-dev.gatewayglobal.ai`). Runs: pull → stop app (free port) → **migrations** → install → build → start.
+- **Stage:** `./script/deploy-staging.sh aibizbot-stage.gatewayglobal.ai`. Same flow.
+- **Prod:** `./script/deploy-server.sh aibizbot.gatewayglobal.ai`. Same flow.
+- Migrations run via `npm run db:migrate` (Doppler must be configured so `DATABASE_URL` is set). New `.sql` files in `migrations/` are run in order when deploy runs.
+- If "port in use" appears: run `npm run kill-port` once (uses PORT from Doppler), then run the deploy script again. Do not instruct the user to "manually kill the process" or "restart and hope."
+
 ## Commands
 
 - List processes: `pm2 list`
 - Logs: `pm2 logs aibizbot-dev.gatewayglobal.ai` or `pm2 logs aibizbot-stage.gatewayglobal.ai`
 - Restart with env refresh: `pm2 restart <name> --update-env`
 - Run app with secrets: `doppler run -- npm run dev` (dev) or `doppler run --config stg -- npm start` (stage)
+- Free port then redeploy: `npm run kill-port` then re-run the appropriate deploy script
 
 ## Pushing dev secrets to Stage and Prod (Doppler)
 
@@ -39,5 +49,6 @@ When **stg** or **prd** are missing variables that exist in **dev** (e.g. Stripe
 
 ## Reference
 
+- **Deploy scripts (single path):** `docs/deployment/DEPLOY_SCRIPTS.md`
 - Decoupled strategy: `docs/deployment/DECOUPLED_ENVIRONMENT_STRATEGY.md`
 - Doppler copy/sync: `npm run doppler:copy-config`, `npm run doppler:sync-ports`

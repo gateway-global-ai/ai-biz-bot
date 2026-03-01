@@ -14,6 +14,7 @@ import healthRoutes from "./routes/healthRoutes";
 import a2pPreflightRoutes from "./routes/a2pPreflightRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import { registerB2bRoutes } from "./routes/b2b-routes";
+import intelligenceRoutes from "./routes/intelligenceRoutes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -6125,7 +6126,10 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
-  // Gemini voice webhook - uses Media Streams for real-time AI voice (KIMI not used for voice)
+  // Gemini voice webhook - uses Media Streams for real-time AI voice (KIMI not used for voice).
+  // Lifecycle: Twilio → /webhook/voice/kimi → TwiML Connect → /ws/voice-stream → Gemini Live.
+  // Latency target: time-to-first-audio (or first response) sub-800ms where infrastructure allows.
+  // Voice is routed by siteConfigId; Concierge agent (assignedAgentId) provides name and systemPrompt.
   app.post("/webhook/voice/kimi", validateTwilioSignature, async (req, res) => {
     try {
       const { From, To, CallSid, CallStatus } = req.body;
@@ -6164,13 +6168,28 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         }
       }
       
+      // Resolve Concierge agent for this site (Phase 4: voice uses assignedAgentId)
+      let agentName = 'AI Assistant';
+      let personality = 'helpful';
+      if (siteConfigId) {
+        const site = await storage.getSiteConfigById(siteConfigId);
+        const assignedId = (site as any)?.assignedAgentId;
+        if (assignedId) {
+          const agent = await storage.getAgent(assignedId);
+          if (agent) {
+            agentName = agent.name;
+            personality = (agent.systemPrompt || 'helpful').slice(0, 1000);
+          }
+        }
+      }
+
       // Build WebSocket URL for Media Streams
       const host = process.env.REPLIT_DEV_DOMAIN || 
         (process.env.REPL_SLUG ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'localhost:5000');
       const wsProtocol = host.includes('localhost') ? 'ws' : 'wss';
       const streamUrl = `${wsProtocol}://${host}/ws/voice-stream`;
       
-      console.log(`[Voice] Stream URL: ${streamUrl}, siteConfigId: ${siteConfigId ?? 'none'}`);
+      console.log(`[Voice] Stream URL: ${streamUrl}, siteConfigId: ${siteConfigId ?? 'none'}, agent: ${agentName}`);
       
       // Return TwiML with Media Streams (voice pipeline uses Gemini Clear Voice)
       res.set('Content-Type', 'text/xml');
@@ -6179,8 +6198,8 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   <Say voice="Google.en-US-Neural2-F">Welcome to Gateway Global AI. Connecting you to our AI assistant now.</Say>
   <Connect>
     <Stream url="${streamUrl}">
-      <Parameter name="agentName" value="AI Assistant"/>
-      <Parameter name="personality" value="helpful"/>
+      <Parameter name="agentName" value="${escapeXml(agentName)}"/>
+      <Parameter name="personality" value="${escapeXml(personality)}"/>
       ${siteConfigId ? `<Parameter name="siteConfigId" value="${escapeXml(siteConfigId)}"/>` : ''}
     </Stream>
   </Connect>
@@ -7935,6 +7954,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   app.use("/api/site-configs", siteConfigRoutes);
   app.use("/api/onboarding", onboardingRoutes);
   app.use("/api/a2p/preflight", a2pPreflightRoutes);
+  app.use(intelligenceRoutes);
 
   // Register Menu and Cart routes
   registerMenuRoutes(app);

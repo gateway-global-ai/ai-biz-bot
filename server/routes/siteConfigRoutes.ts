@@ -55,6 +55,9 @@ const createSchema = z.object({
   domain: z.string().optional(),
   placeId: z.string().optional(),
   placeData: z.any().optional(),
+  workspaceState: z.string().optional(),
+  createdByType: z.string().optional(),
+  claimedAt: z.coerce.date().optional(),
   assignedAgentId: z.string().nullable().optional(),
   botTemplateId: z.string().nullable().optional(),
   systemPromptOverride: z.string().nullable().optional(),
@@ -110,15 +113,25 @@ router.post('/', async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.message });
     }
-    const config = await storage.createSiteConfig(parsed.data as any);
-    res.status(201).json(config);
+    const body = parsed.data as any;
+
+    // Create-or-return safety: return existing only if unclaimed and in demo/provisioned state.
+    if (body.placeId) {
+      const existing = await storage.getUnclaimedSiteConfigByPlaceId(body.placeId);
+      if (existing) {
+        return res.status(200).json(existing);
+      }
+    }
+
+    const config = await storage.createSiteConfig(body);
+    return res.status(201).json(config);
   } catch (error: any) {
     // Surface UPAValidator rejections with a 422 so the client can distinguish
     // validation failures from generic 500s.
     if (error.message?.startsWith('System prompt validation failed')) {
       return res.status(422).json({ error: error.message });
     }
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -241,6 +254,28 @@ router.delete('/:id/knowledge/:docId', async (req, res) => {
 });
 
 /**
+ * GET /api/site-configs/:id/agents
+ * Phase 1: Neural Team handshake — agents provisioned for this site, stable ordering, optional coreFocusPreview.
+ */
+router.get('/:id/agents', async (req, res) => {
+  try {
+    const siteConfigId = req.params.id;
+    if (!siteConfigId) return res.status(400).json({ error: 'siteConfigId is required' });
+    const site = await storage.getSiteConfigById(siteConfigId);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+    const agents = await storage.getAgentsBySiteConfigId(siteConfigId);
+    const agentsWithPreview = agents.map((a) => ({
+      ...a,
+      coreFocusPreview: (a.systemPrompt ?? '').split('\n')[0].slice(0, 140),
+    }));
+    res.json({ agents: agentsWithPreview });
+  } catch (error: any) {
+    console.error('GET /api/site-configs/:id/agents failed', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/site-configs/:id
  * The "Handover Service" endpoint — fetches the pre-validated site config
  * (including systemPromptOverride) for the ConciergePanel.
@@ -253,7 +288,7 @@ router.delete('/:id/knowledge/:docId', async (req, res) => {
  * here if you gate by API key in a future hardening pass).
  *
  * Must be declared LAST so more-specific subroutes above (/chat-logs,
- * /knowledge, /knowledge/:docId) are matched first.
+ * /knowledge, /knowledge/:docId, /agents) are matched first.
  */
 router.get('/:id', async (req, res) => {
   const { id } = req.params;

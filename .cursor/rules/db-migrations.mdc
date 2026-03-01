@@ -1,0 +1,11 @@
+---
+description: Run database migrations when adding or depending on new migrations
+globs: "migrations/*.sql,shared/schema.ts,scripts/run-migration.ts,scripts/run-all-migrations.sh"
+alwaysApply: true
+---
+
+# Database migrations
+
+- **When you add or change a migration** (new `migrations/NNNN_*.sql` or schema that requires a migration): run `npm run db:migrate` so the current environment's database is up to date. Do not leave "run migrations" as a manual step for the user.
+- **How to run:** `npm run db:migrate` (uses Doppler for `DATABASE_URL`). If running locally without Doppler, set `DATABASE_URL` and run the same command, or use the Doppler-or-fallback pattern if present in package.json.
+- **Idempotency:** Migrations should be safe to re-run (e.g. `ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`). New migrations are applied in numeric order by the run-all-migrations script.

@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/lib/auth';
 import { useCustomerAuth } from '@/lib/customerAuth';
@@ -247,6 +248,8 @@ export default function BusinessPage() {
   const [otpError, setOtpError] = useState('');
   const [generatingProgress, setGeneratingProgress] = useState(0);
   const [tokenError, setTokenError] = useState<string | null>(null);
+  const [showCreateTeamConfirm, setShowCreateTeamConfirm] = useState(false);
+  const [provisioningTeam, setProvisioningTeam] = useState(false);
 
   const { user, isAuthenticated, login: authLogin, logout: authLogout } = useAuth();
   const { user: customerUser, isAuthenticated: isCustomerAuth, login: customerLogin, logout: customerLogout } = useCustomerAuth();
@@ -286,6 +289,21 @@ export default function BusinessPage() {
     ...platformIdentity,
     id: 'platform_landing'
   };
+
+  // Bypass hook: if URL has ?siteConfigId= and site is provisioned, redirect to agents
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const siteConfigId = params.get('siteConfigId');
+    if (!siteConfigId) return;
+    fetch(`/api/site-configs/${encodeURIComponent(siteConfigId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((config: { workspaceState?: string } | null) => {
+        if (config?.workspaceState === 'provisioned') {
+          setLocation(`/agents?siteConfigId=${encodeURIComponent(siteConfigId)}`);
+        }
+      })
+      .catch(() => {});
+  }, [setLocation]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -481,6 +499,73 @@ export default function BusinessPage() {
       });
     }, 200);
   }, [selectedPlace]);
+
+  const handleCreateAiTeamConfirm = async () => {
+    if (!selectedPlace || provisioningTeam) return;
+    const placeId = selectedPlace.place_id || (selectedPlace as any).placeId;
+    const businessName = selectedPlace.name;
+    const placeTypes = Array.isArray(selectedPlace.types) ? selectedPlace.types : [];
+    if (!businessName) {
+      toast({ title: 'Missing business name', variant: 'destructive' });
+      return;
+    }
+    setProvisioningTeam(true);
+    try {
+      let resolvedPlaceTypes = placeTypes;
+      if (placeId) {
+        try {
+          const resolveRes = await fetch('/api/intelligence/resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ placeId }),
+          });
+          if (resolveRes.ok) {
+            const resolveData = await resolveRes.json();
+            if (Array.isArray(resolveData.placeTypes) && resolveData.placeTypes.length) {
+              resolvedPlaceTypes = resolveData.placeTypes;
+            }
+          }
+        } catch {
+          // best-effort only: never block provisioning
+        }
+      }
+      const createRes = await fetch('/api/site-configs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: businessName,
+          placeId: placeId || undefined,
+          placeData: selectedPlace,
+        }),
+      });
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to create site');
+      }
+      const siteConfig = await createRes.json();
+      const siteConfigId = siteConfig.id;
+      const provisionRes = await fetch('/api/intelligence/provision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          siteConfigId,
+          placeTypes: resolvedPlaceTypes.length ? resolvedPlaceTypes : ['establishment'],
+          businessName,
+        }),
+      });
+      if (!provisionRes.ok) {
+        const err = await provisionRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to provision agents');
+      }
+      setShowCreateTeamConfirm(false);
+      toast({ title: 'AI team created', description: 'Your 6 agents are ready.' });
+      setLocation(`/agents?siteConfigId=${encodeURIComponent(siteConfigId)}`);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message || 'Could not create AI team', variant: 'destructive' });
+    } finally {
+      setProvisioningTeam(false);
+    }
+  };
 
   const prevStageRef = useRef<OnboardingStage>(stage);
   useEffect(() => {
@@ -1059,6 +1144,15 @@ export default function BusinessPage() {
                       </Button>
                       <Button 
                         variant="outline" 
+                        className="w-full border-violet-500/50 text-violet-300 hover:bg-violet-500/10" 
+                        onClick={() => setShowCreateTeamConfirm(true)} 
+                        data-testid="button-create-ai-team"
+                      >
+                        <Bot className="w-4 h-4 mr-2" />
+                        Create my AI team (6 agents)
+                      </Button>
+                      <Button 
+                        variant="outline" 
                         className="w-full border-slate-700 text-slate-300" 
                         onClick={() => setSelectedPlace(null)} 
                         data-testid="button-clear-selection"
@@ -1073,6 +1167,33 @@ export default function BusinessPage() {
             </div>
           </div>
         )}
+
+        {/* Confirmation: Create AI team for this business */}
+        <Dialog open={showCreateTeamConfirm} onOpenChange={setShowCreateTeamConfirm}>
+          <DialogContent className="bg-slate-900 border-slate-700 text-white">
+            <DialogHeader>
+              <DialogTitle>Create your AI team</DialogTitle>
+            </DialogHeader>
+            <p className="text-slate-300">
+              Create your AI team for <span className="font-semibold text-white">{selectedPlace?.name}</span>? We&apos;ll set up 6 agents: Concierge, Booking, Lead Qualifier, Retention, Billing, and Gatekeeper.
+            </p>
+            <div className="flex gap-3 justify-end pt-4">
+              <Button variant="outline" className="border-slate-600 text-slate-300" onClick={() => setShowCreateTeamConfirm(false)} disabled={provisioningTeam}>
+                No
+              </Button>
+              <Button className="bg-indigo-600 hover:bg-indigo-500" onClick={handleCreateAiTeamConfirm} disabled={provisioningTeam} data-testid="button-confirm-create-team">
+                {provisioningTeam ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Yes'
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Website Preview — renders the full website-builder template */}
         {(stage === 'preview' || stage === 'full-access') && selectedPlace && (
