@@ -37,7 +37,7 @@ import {
 import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, PLAN_LIMITS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { chat, generateSmsResponse, KIMI_MODELS } from "./kimi";
+import { gatewayChat } from "./ai-gateway"; // Sovereign: Gemini sole provider
 import { sendOtp, verifyOtp, verifySession, logout, requireAuth } from "./auth";
 import { customerSendOtp, customerVerifyOtp, customerVerifySession, customerLogout, customerUpdateProfile, customerGetBusinesses, customerClaimBusiness } from "./customerAuth";
 import { runDemoEnrichment } from "./services/demo-enrichment";
@@ -47,10 +47,10 @@ import { buildRichSystemInstruction } from "./services/systemInstructionBuilder"
 import { getFreshPlaceId, getFreshPlaceIdWithSource } from "./services/placeDiscoveryService";
 import { enrichBusinessProfile } from "./services/enrichBusinessProfile";
 import { handleAdminToolCall, ADMIN_TOOL_DEFINITIONS } from "./tools/adminToolHandlers";
-import { getMCPTools, handleMCPToolCall, MOONSHOT_MODEL, HUGGINGFACE_KIMI_K2_MODEL, type ModelOptions } from "./mcp/kimiK2Server";
+// kimiK2Server removed — Kimi MCP routes decommissioned (see /api/mcp/* stubs below)
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
-import { getAvailableApis, calculateCosts, analyzeWithKimi, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
+import { getAvailableApis, calculateCosts, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
 import { placesCache, CACHE_TTL } from "./placesCache";
 import crypto from "crypto";
 import { db } from "./db";
@@ -1944,10 +1944,12 @@ export async function registerRoutes(
         context += `\n\nCurrent usage data:\n${JSON.stringify(costs, null, 2)}`;
       }
 
-      const analysis = await analyzeWithKimi({
-        type: 'general',
-        context,
-        conversationHistory: conversationHistory || []
+      // Sovereign: Use gatewayChat instead of analyzeWithKimi (Kimi decommissioned)
+      const { response: analysis } = await gatewayChat({
+        messages: [
+          { role: 'system', content: 'You are a Google API cost optimization expert. Provide detailed analysis.' },
+          { role: 'user', content: context }
+        ],
       });
 
       res.json({ success: true, analysis });
@@ -2325,7 +2327,7 @@ export async function registerRoutes(
 
         // Update webhooks for voice and SMS
         await twilioClient.incomingPhoneNumbers(phoneSid).update({
-          voiceUrl: `${baseUrl}/webhook/voice/kimi`,
+          voiceUrl: `${baseUrl}/webhook/voice/stream`,
           voiceMethod: 'POST',
           smsUrl: `${baseUrl}/webhook/sms`,
           smsMethod: 'POST',
@@ -2541,14 +2543,14 @@ export async function registerRoutes(
       
       const result = await provisionPhoneNumber(
         normalizedNumber,
-        `${baseUrl}/webhook/voice/kimi`,
+        `${baseUrl}/webhook/voice/stream`,
         `${baseUrl}/webhook/sms`
       );
       
       // Auto-configure ALL webhook URLs including status callbacks
       const client = await getTwilioClient();
       await client.incomingPhoneNumbers(result.sid).update({
-        voiceUrl: `${baseUrl}/webhook/voice/kimi`,
+        voiceUrl: `${baseUrl}/webhook/voice/stream`,
         voiceMethod: 'POST',
         voiceFallbackUrl: `${baseUrl}/webhook/voice`,
         voiceFallbackMethod: 'POST',
@@ -3012,7 +3014,7 @@ export async function registerRoutes(
       
       const smsWebhookUrl = `${baseUrl}/webhook/sms`;
       const smsStatusCallbackUrl = `${baseUrl}/webhook/sms/status`;
-      const voiceWebhookUrl = `${baseUrl}/webhook/voice/kimi`;
+      const voiceWebhookUrl = `${baseUrl}/webhook/voice/stream`;
       const voiceFallbackUrl = `${baseUrl}/webhook/voice`;
       const voiceStatusCallbackUrl = `${baseUrl}/webhook/voice/status`;
       
@@ -3997,7 +3999,7 @@ export async function registerRoutes(
       // Parse task using Kimi (with partial mode)
       let parsedTask = null;
       try {
-        const { parseTask } = await import("./kimi");
+        // parseTask removed — replaced by Gemini-based task parsing
         parsedTask = await parseTask(task);
         console.log('[Task Submit] Parsed task:', parsedTask);
       } catch (parseError) {
@@ -4031,7 +4033,7 @@ export async function registerRoutes(
       // Send Navigator first-login "Call Coordinates" SMS
       let callCoordinates: string | null = null;
       try {
-        const { generateNavigatorIntroduction } = await import("./kimi");
+        // generateNavigatorIntroduction removed — replaced by Gemini
         
         // Fetch telephony config once; reuse the phone number as Call Coordinates
         const config = await storage.getTelephonyConfig();
@@ -4254,12 +4256,9 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
 
   // Cost estimation: approximate USD per 1K tokens by model
   const MODEL_COST_PER_1K_TOKENS: Record<string, { input: number; output: number }> = {
-    'kimi-k2.5': { input: 0.002, output: 0.006 },
-    'kimi-k2-turbo-preview': { input: 0.001, output: 0.003 },
-    'moonshot-v1-128k': { input: 0.0016, output: 0.0048 },
-    'moonshot-v1-32k': { input: 0.0008, output: 0.0024 },
-    'moonshot-v1-8k': { input: 0.0004, output: 0.0012 },
-    'Qwen/Kimi-K2-Instruct': { input: 0.002, output: 0.006 },
+    'gemini-2.0-flash': { input: 0.0001, output: 0.0004 },
+    'gemini-2.5-flash': { input: 0.00015, output: 0.0006 },
+    
     'default': { input: 0.002, output: 0.006 },
   };
 
@@ -4385,7 +4384,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       // Mark as running
       await storage.updateAgent(agent.id, { startupStatus: 'running' });
 
-      const modelId = agent.aiModelId || 'moonshot-v1-128k';
+      const modelId = agent.aiModelId || process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash';
       const temperature = (agent.aiTemperature || 60) / 100;
       const maxTokens = agent.aiMaxTokens || 4096;
 
@@ -4959,7 +4958,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       // Build the Voice webhook URL pointing to the AI voice concierge endpoint.
       // /webhook/voice/kimi is the primary voice AI handler registered in routes.ts.
       const host = process.env.REPLIT_DEV_DOMAIN || req.get("host");
-      const voiceWebhookUrl = `https://${host}/webhook/voice/kimi`;
+      const voiceWebhookUrl = `https://${host}/webhook/voice/stream`;
 
       const result = await createSubAccountAndProvisionNumber(
         siteConfig.name,
@@ -5468,35 +5467,17 @@ ${businessContext}`;
         { role: 'user' as const, content: message },
       ];
 
-      const agentModel = agent.aiModelId || 'kimi-k2-turbo-preview';
       const agentTemp = agent.aiTemperature ? agent.aiTemperature / 100 : 0.7;
       const agentMaxTokens = agent.aiMaxTokens || 4096;
-
-      let modelToUse: string;
-      if (agentModel === 'kimi-k2.5' || agentModel === 'kimi-k2-5') {
-        modelToUse = KIMI_MODELS.K2_5;
-      } else if (agentModel === 'kimi-k2-thinking') {
-        modelToUse = KIMI_MODELS.K2_THINKING;
-      } else if (agentModel.startsWith('kimi-') || agentModel.startsWith('moonshot-')) {
-        modelToUse = agentModel;
-      } else {
-        modelToUse = KIMI_MODELS.K2_TURBO;
-      }
+      // Sovereign: Gemini is the sole AI provider. Model from Doppler.
+      const modelToUse = process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash';
 
       let response: string;
       try {
-        response = await chat({
-          model: modelToUse,
-          messages,
-          temperature: agentTemp,
-          max_tokens: agentMaxTokens,
-        });
+        response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens })).response;
       } catch (firstError: any) {
         console.warn('Admin command chat first attempt failed, retrying:', firstError.message);
-        response = await chat({
-          model: modelToUse,
-          messages,
-          temperature: agentTemp,
+        response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp,
           max_tokens: agentMaxTokens,
         });
       }
@@ -5536,7 +5517,7 @@ ${businessContext}`;
       const { message, businessName, businessAddress, businessPhone, siteConfigId, visitorId, history } = parsed.data;
 
       let siteConfig: any = null;
-      let resolvedProvider: any = 'kimi';
+      let resolvedProvider: any = 'gemini';
       let resolvedModel: string | undefined;
       let customSystemPrompt: string | undefined;
 
@@ -5545,7 +5526,7 @@ ${businessContext}`;
       if (siteConfigId && !isPlatformChat) {
         siteConfig = await storage.getSiteConfig(siteConfigId);
         if (siteConfig) {
-          resolvedProvider = siteConfig.modelProvider || 'kimi';
+          resolvedProvider = siteConfig.modelProvider || 'gemini';
           resolvedModel = siteConfig.modelName || undefined;
           customSystemPrompt = siteConfig.systemPromptOverride || undefined;
         }
@@ -5571,7 +5552,7 @@ Key information about the platform:
 - Plans: Free (1 business, static site, shared SMS, 500 voice minutes), Business ($49/mo, 5 businesses, edit content, review management, SMS admin), Business Voice ($99/mo, dedicated phone, unlimited voice, custom voice persona), Enterprise (custom pricing, API access, white-label)
 - Websites are built using real Google Maps data: reviews, photos, hours, location
 - Business owners can manage their sites from the My Account dashboard
-- The platform uses Kimi 2.5 AI for intelligent responses
+- The platform uses Google Gemini AI for intelligent responses
 
 Be friendly, concise, and helpful. Encourage visitors to try it out by searching for their business. Keep responses brief since this is a chat widget. If asked about technical details you don't know, suggest they contact us.`;
       } else {
@@ -5715,36 +5696,18 @@ Keep responses concise and engaging. If asked personal questions, you can share 
       ];
 
       // Use agent's configured model, falling back to K2_TURBO
-      const agentModel = agent.aiModelId || 'kimi-k2-turbo-preview';
       const agentTemp = agent.aiTemperature ? agent.aiTemperature / 100 : 0.7;
       const agentMaxTokens = agent.aiMaxTokens || 4096;
-
-      // Map model IDs to Kimi model constants
-      let modelToUse: string;
-      if (agentModel === 'kimi-k2.5' || agentModel === 'kimi-k2-5') {
-        modelToUse = KIMI_MODELS.K2_5;
-      } else if (agentModel === 'kimi-k2-thinking') {
-        modelToUse = KIMI_MODELS.K2_THINKING;
-      } else if (agentModel.startsWith('kimi-') || agentModel.startsWith('moonshot-')) {
-        modelToUse = agentModel;
-      } else {
-        modelToUse = KIMI_MODELS.K2_TURBO;
-      }
+      // Sovereign: Gemini is the sole AI provider. Model from Doppler.
+      const modelToUse = process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash';
 
       // Retry once on transient failures
       let response: string;
       try {
-        response = await chat({
-          model: modelToUse,
-          messages,
-          temperature: agentTemp,
-          max_tokens: agentMaxTokens,
-        });
+        response = (await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens })).response;
       } catch (firstError: any) {
         console.warn('Chat first attempt failed, retrying:', firstError.message);
-        response = await chat({
-          model: modelToUse,
-          messages,
+        response = (await gatewayChat({ messages, model: modelToUse,
           temperature: agentTemp,
           max_tokens: agentMaxTokens,
         });
@@ -6259,7 +6222,7 @@ Keep responses concise and engaging. If asked personal questions, you can share 
             smsResponse = smsResponse.substring(0, 1397) + '...';
           }
           
-          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>🤖 Coding Agent (Kimi K2)\n\n${smsResponse}</Message></Response>`;
+          const twiml = `<?xml version="1.0" encoding="UTF-8"?><Response><Message>🤖 Coding Agent (Gemini)\n\n${smsResponse}</Message></Response>`;
           res.type('text/xml').send(twiml);
           return;
         } catch (error: any) {
@@ -6462,43 +6425,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         content: m.body || '',
       }));
       
-      // Try Kimi first (preferred), fallback to Gemini
-      if (process.env.MOONSHOT_API_KEY) {
-        try {
-          responseText = await generateSmsResponse({
-            agentName: agentName,
-            personality: fullPersonality,
-            conversationHistory: history,
-            userMessage: Body || '',
-          });
-          
-          // Trim to SMS length
-          if (responseText.length > 320) {
-            responseText = responseText.substring(0, 317) + '...';
-          }
-          console.log('[SMS Webhook] Kimi response generated successfully');
-        } catch (kimiError) {
-          console.error('[SMS Webhook] Kimi error, trying Gemini fallback:', kimiError);
-          
-          // Fallback to Gemini
-          if (process.env.GEMINI_API_KEY) {
-            try {
-              const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-              const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-              const historyText = history.map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`).join('\n');
-              const prompt = `${fullPersonality}\n\nRespond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.\n\nConversation history:\n${historyText}\n\nCustomer's latest message: ${Body}\n\nRespond as ${agentName}:`;
-              const result = await model.generateContent(prompt);
-              responseText = result.response.text() || responseText;
-              if (responseText.length > 160) {
-                responseText = responseText.substring(0, 157) + '...';
-              }
-            } catch (geminiError) {
-              console.error('[SMS Webhook] Gemini fallback error:', geminiError);
-            }
-          }
-        }
-      } else if (process.env.GEMINI_API_KEY) {
-        // No Kimi key, use Gemini directly
+      // Sovereign: Gemini is the sole AI provider for SMS responses
+      if (process.env.GEMINI_API_KEY) {
+        // Gemini SMS response
         try {
           const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
           const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
@@ -6541,8 +6470,8 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
-  // Gemini voice webhook - uses Media Streams for real-time AI voice (KIMI not used for voice)
-  app.post("/webhook/voice/kimi", validateTwilioSignature, async (req, res) => {
+  // Sovereign Voice webhook — Gemini Native Audio via Twilio Media Streams
+  app.post("/webhook/voice/stream", validateTwilioSignature, async (req, res) => {
     try {
       const { From, To, CallSid, CallStatus } = req.body;
       
@@ -6703,31 +6632,10 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       
       let responseText = "I understand. Let me help you with that.";
       
-      // Generate AI response using Kimi (primary) or Gemini (fallback)
+      // Generate AI response using Gemini (sole provider)
       if (SpeechResult) {
-        if (process.env.MOONSHOT_API_KEY) {
-          try {
-            responseText = await chat({
-              model: KIMI_MODELS.K2_TURBO,
-              messages: [
-                {
-                  role: 'system',
-                  content: 'You are a helpful AI phone assistant for Gateway Global. Respond naturally and conversationally. Keep your response under 100 words for phone readability. No markdown, no bullet points.',
-                },
-                {
-                  role: 'user',
-                  content: SpeechResult,
-                },
-              ],
-              temperature: 0.7,
-              max_tokens: 300,
-            });
-            console.log('[Voice Gather] Kimi response generated successfully');
-          } catch (kimiError) {
-            console.error('[Voice Gather] Kimi error, trying Gemini fallback:', kimiError);
-            
-            // Fallback to Gemini
-            if (process.env.GEMINI_API_KEY) {
+        if (process.env.GEMINI_API_KEY) {
+          // Sovereign: Gemini is the sole AI provider for voice gather responses
               try {
                 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
                 const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
@@ -7673,52 +7581,16 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
-  // ========== MCP (Model Context Protocol) - Kimi K2 Coding Agent ==========
-  
-  // List available MCP tools
-  app.get("/api/mcp/tools", async (req, res) => {
-    try {
-      const tools = getMCPTools();
-      const useHuggingFace = !!process.env.HF_TOKEN;
-      res.json({
-        model: useHuggingFace ? HUGGINGFACE_KIMI_K2_MODEL : MOONSHOT_MODEL,
-        provider: useHuggingFace ? "huggingface" : "moonshot",
-        description: "Kimi K2 Coding Agent - 1T parameter MoE model for agentic coding tasks",
-        tools,
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
+  // ========== MCP (Model Context Protocol) — DECOMMISSIONED ==========
+  // Kimi K2 MCP server removed. These routes return 410 Gone.
+  // Future: Gemini-native tool calling replaces this pattern.
+
+  app.get("/api/mcp/tools", (_req, res) => {
+    res.status(410).json({ error: "Kimi K2 MCP server decommissioned. Use Gemini tool declarations." });
   });
 
-  // Execute an MCP tool
-  app.post("/api/mcp/tools/:toolName", async (req, res) => {
-    try {
-      const { toolName } = req.params;
-      const { _hfToken, _temperature, _maxTokens, _modelId, ...args } = req.body;
-      
-      const options: ModelOptions = {
-        hfToken: _hfToken,
-        temperature: _temperature,
-        maxTokens: _maxTokens,
-        modelId: _modelId,
-      };
-      
-      console.log(`[MCP] Executing tool: ${toolName}`, JSON.stringify(args).substring(0, 200));
-      
-      const result = await handleMCPToolCall(toolName, args, options);
-      const useHuggingFace = !!(_hfToken || process.env.HF_TOKEN);
-      
-      res.json({
-        tool: toolName,
-        result,
-        model: useHuggingFace ? HUGGINGFACE_KIMI_K2_MODEL : MOONSHOT_MODEL,
-        provider: useHuggingFace ? "huggingface" : "moonshot",
-      });
-    } catch (error: any) {
-      console.error(`[MCP] Tool error: ${error.message}`);
-      res.status(500).json({ error: error.message });
-    }
+  app.post("/api/mcp/tools/:toolName", (_req, res) => {
+    res.status(410).json({ error: "Kimi K2 MCP server decommissioned. Use Gemini tool declarations." });
   });
 
   // Quick coding task - auto-selects best tool
@@ -7755,15 +7627,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       
       console.log(`[MCP] Auto-selected tool: ${toolName}`);
       
-      const result = await handleMCPToolCall(toolName, args, options);
-      const useHuggingFace = !!(_hfToken || process.env.HF_TOKEN);
-      
-      res.json({
-        tool: toolName,
-        result,
-        model: useHuggingFace ? HUGGINGFACE_KIMI_K2_MODEL : MOONSHOT_MODEL,
-        provider: useHuggingFace ? "huggingface" : "moonshot",
-      });
+      // Kimi K2 MCP decommissioned — return 410
+      res.status(410).json({ error: "Kimi K2 MCP code tasks decommissioned.", tool: toolName });
+      return;
     } catch (error: any) {
       console.error(`[MCP] Code task error: ${error.message}`);
       res.status(500).json({ error: error.message });
@@ -7888,25 +7754,11 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         return res.status(400).json({ error: "Text is required" });
       }
       
-      const Replicate = (await import("replicate")).default;
-      const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
-      
-      // Use Kimi-Audio for TTS
-      const output = await replicate.run(
-        "zsxkib/kimi-audio-7b-instruct:40ab49e15bb65fc63a67f8207c821e592ed4a545e0e1452c34ba7268c64f7a0a",
-        {
-          input: {
-            messages: JSON.stringify([
-              { role: "user", message_type: "text", content: `Please read aloud: ${text}` }
-            ]),
-            output_type: "audio",
-            audio_temperature: 0.7,
-            text_temperature: 0.0,
-          }
-        }
-      );
-      
-      // Parse Kimi-Audio response
+      // Kimi-Audio (Replicate) decommissioned — classroom TTS returns 410
+      res.status(410).json({ error: "Classroom TTS via Kimi-Audio is decommissioned. Use /api/tts/synthesize for Gemini Native Audio." });
+      return;
+      const output: any = null;
+      // Parse former response
       let audioUrl = "";
       if (Array.isArray(output)) {
         for (const item of output) {

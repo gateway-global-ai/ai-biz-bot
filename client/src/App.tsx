@@ -29,7 +29,7 @@ import CustomerManager from "@/pages/biz-dashboard/CustomerManager";
 import TwilioAccountManager from "@/pages/developer/TwilioAccountManager";
 import MvpLanding from "@/pages/showcase/MvpLanding";
 import LandingV2 from "@/pages/showcase/LandingV2";
-import KimiAudioDemo from "@/pages/showcase/KimiAudioDemo";
+// KimiAudioDemo removed — Gemini Live handles all voice demos
 import TwilioHealthCheck from "@/pages/developer/TwilioHealthCheck";
 import SystemHealthCheck from "@/pages/developer/SystemHealthCheck";
 import TelephonyManager from "@/pages/developer/TelephonyManager";
@@ -133,7 +133,7 @@ function GlobalConfig() {
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">AI Provider</p>
-            <p className="text-white font-medium">Moonshot AI (Kimi K2.5)</p>
+            <p className="text-white font-medium">Google Gemini</p>
           </div>
           <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Telephony Provider</p>
@@ -141,7 +141,7 @@ function GlobalConfig() {
           </div>
           <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Voice AI</p>
-            <p className="text-white font-medium">Kimi-Audio (Replicate)</p>
+            <p className="text-white font-medium">Gemini Native Audio</p>
           </div>
           <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Task Scheduler</p>
@@ -399,7 +399,7 @@ function App() {
               <Route path="/login" component={Login} />
               <Route path="/contact" component={ContactForm} />
               <Route path="/v2" component={LandingV2} />
-              <Route path="/kimi-audio" component={KimiAudioDemo} />
+              {/* /kimi-audio route removed — Gemini Live handles all voice demos */}
               <Route path="/sdk" component={SdkShowcase} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
               <Route path="/chat/customer" component={CustomerChatInterface} />
