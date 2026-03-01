@@ -43,3 +43,6 @@ sdk/website-builder/dist/
 # Optional: zip assets used during build (e.g. Voice Lead Machine source)
 *.zip
 reference/attached_assets/*.zip
+
+# Generated Nova RSA keys (dev only; add to Doppler, do not commit)
+.nova-keys-generated/

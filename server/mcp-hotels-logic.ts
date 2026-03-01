@@ -5,6 +5,7 @@
 import pg from "pg";
 import axios from "axios";
 import Fuse from "fuse.js";
+import { getServerMapsApiKey } from "./config/mapsApiKey";
 
 const config = {
   grn: {
@@ -27,8 +28,8 @@ const config = {
     endpoint: "https://serpapi.com/search",
   },
   googleMaps: {
-    apiKey: process.env.GOOGLE_MAPS_API_KEY || process.env.google_map_api_key || "",
-    placesApiKey: process.env.GOOGLE_PLACES_KEY || "",
+    apiKey: getServerMapsApiKey() || process.env.google_map_api_key || "",
+    placesApiKey: process.env.GOOGLE_PLACES_KEY || process.env.GOOGLE_PLACES_API_KEY || "",
     mcpEndpoint: "https://mapstools.googleapis.com/mcp",
   },
 };
