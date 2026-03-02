@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import { generateTaskUpdate } from "./kimi";
+import { generateTaskUpdate } from "./ai-gateway";
 import { sendSms } from "./twilio";
 
 // 24-Hour Task Update Schedule:
@@ -56,7 +56,7 @@ async function processTaskUpdates(): Promise<void> {
         
         console.log(`[Task Scheduler] Task ${task.id}: ${hoursElapsed.toFixed(1)}h elapsed, update #${currentUpdatesCount + 1} (${updateType})`);
         
-        // Generate update message using Kimi
+        // Generate update message via AI gateway
         const smsMessage = await generateTaskUpdate({
           agentName: task.agentName,
           taskDescription: task.task,

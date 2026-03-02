@@ -117,7 +117,7 @@ export default function DeveloperChatInterface() {
                   </div>
                   <div className="p-4 bg-slate-800 rounded-lg border border-slate-700">
                     <h3 className="font-semibold mb-2">MCP Server</h3>
-                    <p className="text-sm text-slate-400">Connect to Kimi K2 for agentic coding capabilities</p>
+                    <p className="text-sm text-slate-400">Connect to Gemini for agentic coding capabilities</p>
                   </div>
                 </div>
               </CardContent>

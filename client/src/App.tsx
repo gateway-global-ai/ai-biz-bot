@@ -29,7 +29,7 @@ import CustomerManager from "@/pages/biz-dashboard/CustomerManager";
 import TwilioAccountManager from "@/pages/developer/TwilioAccountManager";
 import MvpLanding from "@/pages/showcase/MvpLanding";
 import LandingV2 from "@/pages/showcase/LandingV2";
-// KimiAudioDemo removed — Gemini Live handles all voice demos
+// Gemini Live handles all voice demos
 import TwilioHealthCheck from "@/pages/developer/TwilioHealthCheck";
 import SystemHealthCheck from "@/pages/developer/SystemHealthCheck";
 import TelephonyManager from "@/pages/developer/TelephonyManager";

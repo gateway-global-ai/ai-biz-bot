@@ -40,6 +40,9 @@ Thumbs.db
 *.tmp
 *.har
 
+# User uploads (may contain Doppler/secret exports — do not commit)
+user_uploads/
+
 # Website Builder SDK build artifacts and dependencies
 sdk/website-builder/node_modules/
 sdk/website-builder/dist/

@@ -1,4 +1,5 @@
-import { ConversationMessage } from "./kimiAudioReplicate";
+export interface ConversationMessage { role: 'user' | 'assistant'; type: 'audio' | 'text'; content: string; }
+
 
 export interface VoiceSession {
   callSid: string;

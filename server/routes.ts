@@ -55,7 +55,7 @@ import { buildRichSystemInstruction } from "./services/systemInstructionBuilder"
 import { getFreshPlaceId, getFreshPlaceIdWithSource } from "./services/placeDiscoveryService";
 import { enrichBusinessProfile } from "./services/enrichBusinessProfile";
 import { handleAdminToolCall, ADMIN_TOOL_DEFINITIONS } from "./tools/adminToolHandlers";
-// kimiK2Server removed — Kimi MCP routes decommissioned (see /api/mcp/* stubs below)
+// MCP K2 routes decommissioned; use Gemini.
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
 import { computeInsights, generateOwnerReport, generateMarketingSearch, formatOwnerReportForSms, formatOwnerReportForChat, formatMarketingReportForSms, formatMarketingReportForChat, lookupPlaceByName, milesToMeters, type ComputeInsightsRequest, type OwnerReportRequest, type MarketingSearchRequest } from "./mcp/placesAggregate";
 import { getAvailableApis, calculateCosts, generateRateLimits, generatePricingStrategy, compareApis, type ApiUsageScenario } from "./mcp/googleApiAnalyst";
@@ -1450,7 +1450,7 @@ export async function registerRoutes(
       const { areaCode, country } = parsed.data;
 
       // Build the Voice webhook URL pointing to the AI voice concierge endpoint.
-      // /webhook/voice/kimi is the primary voice AI handler registered in routes.ts.
+      // Voice webhook is /webhook/voice/stream registered in routes.ts.
       const host = process.env.REPLIT_DEV_DOMAIN || req.get("host");
       const voiceWebhookUrl = `https://${host}/webhook/voice/stream`;
 
@@ -1492,53 +1492,11 @@ export async function registerRoutes(
     }
   });
 
-  // AI Hero Image Generation — uses Flux via Replicate (same pattern as classroom)
+  // AI Hero Image — not configured (image generation decommissioned)
   app.post("/api/site-configs/:id/generate-hero-image", async (req, res) => {
-    try {
-      const siteConfig = await storage.getSiteConfig(req.params.id);
-      if (!siteConfig) return res.status(404).json({ error: "Site not found" });
-
-      const replicateToken = process.env.REPLICATE_API_TOKEN;
-      if (!replicateToken) return res.status(503).json({ error: "Image generation not configured. Please add REPLICATE_API_TOKEN to Doppler." });
-
-      // Build a rich, business-specific prompt
-      const { customPrompt } = req.body || {};
-      const businessName = siteConfig.name || "a local business";
-      const placeData = siteConfig.placeData as any;
-      const types = (placeData?.types || []).filter((t: string) => !['point_of_interest','establishment'].includes(t)).slice(0, 3).join(', ');
-      const address = placeData?.formatted_address?.split(',').slice(-2).join(',').trim() || '';
-
-      const prompt = customPrompt || [
-        `Professional hero image for ${businessName}`,
-        types ? `a ${types} business` : null,
-        address ? `located in ${address}` : null,
-        `— cinematic wide angle shot, golden hour lighting, photorealistic, ultra high resolution,`,
-        `modern architectural photography style, inviting atmosphere, no text overlays`,
-      ].filter(Boolean).join(', ');
-
-      const Replicate = (await import("replicate")).default;
-      const replicate = new Replicate({ auth: replicateToken });
-
-      const output = await replicate.run("black-forest-labs/flux-schnell", {
-        input: {
-          prompt,
-          aspect_ratio: "16:9",
-          output_format: "webp",
-          output_quality: 92,
-        },
-      });
-
-      const imageUrl = (Array.isArray(output) ? output[0] : output) as string;
-      if (!imageUrl) throw new Error("No image URL returned from generator");
-
-      // Persist the URL back to site_configs
-      await storage.updateSiteConfig(req.params.id, { heroImageUrl: imageUrl, heroImagePrompt: prompt } as any);
-
-      res.json({ imageUrl, prompt });
-    } catch (err: any) {
-      console.error("[HeroImage] Generation error:", err.message);
-      res.status(500).json({ error: err.message });
-    }
+    const siteConfig = await storage.getSiteConfig(req.params.id);
+    if (!siteConfig) return res.status(404).json({ error: "Site not found" });
+    res.status(503).json({ error: "Image generation not configured" });
   });
 
   app.get("/api/site-configs/:id/chat-logs", async (req, res) => {
@@ -1989,15 +1947,15 @@ ${businessContext}`;
   // ← extracted to server/routes/{workspaceRoutes,agentSystemRoutes,chatRoutes}.ts
 
   // ========== MCP (Model Context Protocol) — DECOMMISSIONED ==========
-  // Kimi K2 MCP server removed. These routes return 410 Gone.
+  // Legacy MCP server removed. These routes return 410 Gone.
   // Future: Gemini-native tool calling replaces this pattern.
 
   app.get("/api/mcp/tools", (_req, res) => {
-    res.status(410).json({ error: "Kimi K2 MCP server decommissioned. Use Gemini tool declarations." });
+    res.status(410).json({ error: "Legacy MCP server decommissioned. Use Gemini tool declarations." });
   });
 
   app.post("/api/mcp/tools/:toolName", (_req, res) => {
-    res.status(410).json({ error: "Kimi K2 MCP server decommissioned. Use Gemini tool declarations." });
+    res.status(410).json({ error: "Legacy MCP server decommissioned. Use Gemini tool declarations." });
   });
 
   // Quick coding task - auto-selects best tool
@@ -2034,8 +1992,8 @@ ${businessContext}`;
       
       console.log(`[MCP] Auto-selected tool: ${toolName}`);
       
-      // Kimi K2 MCP decommissioned — return 410
-      res.status(410).json({ error: "Kimi K2 MCP code tasks decommissioned.", tool: toolName });
+      // Legacy MCP decommissioned — return 410
+      res.status(410).json({ error: "Legacy MCP code tasks decommissioned.", tool: toolName });
       return;
     } catch (error: any) {
       console.error(`[MCP] Code task error: ${error.message}`);
@@ -2120,40 +2078,13 @@ ${businessContext}`;
     }
   });
 
-  // Classroom image generation using Replicate (Flux model)
+  // Classroom image generation not configured
   app.post("/api/classroom/generate-image", async (req, res) => {
-    try {
-      const { prompt, aspectRatio = "16:9" } = req.body;
-      if (!prompt) {
-        return res.status(400).json({ error: "Prompt is required" });
-      }
-      
-      const Replicate = (await import("replicate")).default;
-      const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
-      
-      // Use Flux for high-quality educational images
-      const output = await replicate.run(
-        "black-forest-labs/flux-schnell",
-        {
-          input: {
-            prompt: `Educational illustration: ${prompt}. High quality, clear, professional, suitable for teaching.`,
-            aspect_ratio: aspectRatio,
-            output_format: "webp",
-            output_quality: 90
-          }
-        }
-      );
-      
-      // Flux returns an array of URLs
-      const imageUrl = Array.isArray(output) ? output[0] : output;
-      res.json({ imageUrl });
-    } catch (error: any) {
-      console.error("[Classroom] Image generation error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
+    res.status(503).json({ error: "Image generation not configured" });
   });
 
-  // Classroom TTS using Kimi-Audio via Replicate
+  // Classroom TTS decommissioned — use /api/tts/synthesize for Gemini
+  // Classroom TTS decommissioned — use /api/tts/synthesize for Gemini
   app.post("/api/classroom/tts", async (req, res) => {
     try {
       const { text } = req.body;
@@ -2161,8 +2092,8 @@ ${businessContext}`;
         return res.status(400).json({ error: "Text is required" });
       }
       
-      // Kimi-Audio (Replicate) decommissioned — classroom TTS returns 410
-      res.status(410).json({ error: "Classroom TTS via Kimi-Audio is decommissioned. Use /api/tts/synthesize for Gemini Native Audio." });
+      // Decommissioned — use Gemini TTS
+      res.status(410).json({ error: "Classroom TTS via legacy audio is decommissioned. Use /api/tts/synthesize for Gemini Native Audio." });
       return;
       const output: any = null;
       // Parse former response

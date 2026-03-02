@@ -1,4 +1,4 @@
-import { getKimiClient, KIMI_MODELS } from "./kimi";
+import { getGeminiClientOrThrow, GEMINI_MODELS } from "./ai-gateway";
 import { storage } from "./storage";
 import type { InsertLessonPlan, InsertKnowledgeTopic, InsertLessonSession } from "@shared/schema";
 
@@ -46,7 +46,7 @@ function normalizeTopic(topic: string): string {
 }
 
 export async function generateLessonPlan(userRequest: string): Promise<GeneratedLessonPlan> {
-  const client = getKimiClient();
+  const client = getGeminiClientOrThrow();
 
   const prompt = `Create a structured micro-learning lesson plan for: "${userRequest}". 
     
@@ -91,7 +91,7 @@ export async function generateLessonPlan(userRequest: string): Promise<Generated
     Return ONLY the JSON object, no markdown or extra text.`;
 
   const response = await client.chat.completions.create({
-    model: KIMI_MODELS.K2_5,
+    model: GEMINI_MODELS.K2_5,
     messages: [
       { role: 'system', content: 'You are an expert educator creating structured micro-lessons. Always respond with valid JSON only.' },
       { role: 'user', content: prompt }
@@ -110,7 +110,7 @@ export async function generateLessonPlan(userRequest: string): Promise<Generated
 }
 
 export async function generateSlideContent(topic: string, slideTitle: string, slideDescription: string): Promise<BoardContent> {
-  const client = getKimiClient();
+  const client = getGeminiClientOrThrow();
 
   const prompt = `Generate detailed content for a lesson slide.
 
@@ -130,7 +130,7 @@ Return a JSON object with this structure:
 Make content engaging, clear, and practical. Return ONLY the JSON.`;
 
   const response = await client.chat.completions.create({
-    model: KIMI_MODELS.K2_TURBO,
+    model: GEMINI_MODELS.K2_TURBO,
     messages: [
       { role: 'system', content: 'You are an expert educator. Respond with valid JSON only.' },
       { role: 'user', content: prompt }
@@ -270,7 +270,7 @@ export async function improveLessonPlan(topicId: string): Promise<any> {
     ? sessions.reduce((sum: number, s: any) => sum + (s.quizScore || 0), 0) / sessions.length
     : null;
 
-  const client = getKimiClient();
+  const client = getGeminiClientOrThrow();
 
   const improvementPrompt = `You are improving an existing lesson plan based on user feedback and performance data.
 
@@ -293,7 +293,7 @@ Create an IMPROVED version of this lesson that:
 Return the same JSON structure as the original lesson plan with improved content.`;
 
   const response = await client.chat.completions.create({
-    model: KIMI_MODELS.K2_5,
+    model: GEMINI_MODELS.K2_5,
     messages: [
       { role: 'system', content: 'You are an expert educator improving lessons based on data. Respond with valid JSON only.' },
       { role: 'user', content: improvementPrompt }

@@ -14,6 +14,7 @@
     "start:doppler": "doppler run -- npm start",
     "check": "tsc",
     "db:push": "drizzle-kit push",
+    "db:migrate": "doppler run -- sh -c 'for f in migrations/*.sql; do npx tsx scripts/run-migration.ts \"$f\"; done'",
     "test:bi": "doppler run -- tsx tests/test-bi-pipeline.ts",
     "test:guardrails": "doppler run -- tsx tests/test-guardrails.ts",
     "e2e:company-team": "tsx scripts/e2e-company-team.ts",

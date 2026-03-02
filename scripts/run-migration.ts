@@ -5,6 +5,7 @@
  */
 
 import { readFileSync } from 'fs';
+import path from 'path';
 import { db } from '../server/db';
 import { sql } from 'drizzle-orm';
 

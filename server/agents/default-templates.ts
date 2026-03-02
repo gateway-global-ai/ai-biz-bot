@@ -46,7 +46,7 @@ Business hours and policies:
   
   configuration: {
     voiceSettings: {
-      provider: 'kimi',
+      provider: 'gemini',
       voice: 'professional-female',
       speed: 1.0,
       language: 'en-US',
@@ -143,7 +143,7 @@ Always:
   
   configuration: {
     voiceSettings: {
-      provider: 'kimi',
+      provider: 'gemini',
       voice: 'professional-male',
       speed: 1.0,
       language: 'en-US',

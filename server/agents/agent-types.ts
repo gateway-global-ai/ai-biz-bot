@@ -19,7 +19,7 @@ export const agentTemplateSchema = z.object({
   configuration: z.object({
     // Voice-specific settings
     voiceSettings: z.object({
-      provider: z.enum(['kimi', 'gemini', 'replicate']).optional(),
+      provider: z.enum(['gemini']).optional(),
       voice: z.string().optional(),
       speed: z.number().min(0.5).max(2.0).optional(),
       language: z.string().optional(),

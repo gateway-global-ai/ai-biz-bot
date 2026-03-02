@@ -1027,7 +1027,7 @@ function AdminPanel({
                       </div>
                       <div>
                         <p className="text-white font-medium text-sm">{agent.name}</p>
-                        <p className="text-xs text-slate-400">{agent.aiModelProvider || 'moonshot'} / {agent.aiModelId || 'default'}</p>
+                        <p className="text-xs text-slate-400">{agent.aiModelProvider || 'gemini'} / {agent.aiModelId || 'default'}</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2">

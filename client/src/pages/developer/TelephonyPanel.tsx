@@ -170,7 +170,7 @@ export default function TelephonyPanel() {
       const baseUrl = window.location.origin;
       return apiRequest('POST', '/api/telephony/numbers/provision', {
         phoneNumber,
-        voiceUrl: `${baseUrl}/webhook/voice/kimi`,
+        voiceUrl: `${baseUrl}/webhook/voice/stream`,
         smsUrl: `${baseUrl}/webhook/sms`,
       });
     },

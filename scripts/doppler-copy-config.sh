@@ -42,13 +42,13 @@ if [[ -n "$COPY_KEYS" ]]; then
 fi
 echo ""
 
-# Build jq filter: drop Doppler metadata, optionally filter to COPY_KEYS, then to upload shape
+# Build payload: from FROM_CONFIG, optionally filter to COPY_KEYS, exclude token vars
 if [[ -n "$COPY_KEYS" ]]; then
-  # Filter to keys in COPY_KEYS (space-separated)
+  # Filter to keys in COPY_KEYS (space-separated); token vars are not in COPY_KEYS so safe
   JQ_FILTER='del(.DOPPLER_PROJECT, .DOPPLER_ENVIRONMENT, .DOPPLER_CONFIG) | to_entries | map(select(.key as $k | (($COPY_KEYS | split(" ")) | index($k)) != null)) | map({(.key): (.value | .raw)}) | add'
   EXPORT_JQ=$(doppler secrets --project "$PROJECT" --config "$FROM_CONFIG" --json --raw | jq --arg COPY_KEYS "$COPY_KEYS" "$JQ_FILTER")
 else
-  JQ_FILTER='del(.DOPPLER_PROJECT, .DOPPLER_ENVIRONMENT, .DOPPLER_CONFIG) | to_entries | map({(.key): (.value | .raw)}) | add'
+  JQ_FILTER='del(.DOPPLER_PROJECT, .DOPPLER_ENVIRONMENT, .DOPPLER_CONFIG, .DOPPLER_TOKEN, .DOPPLER_TOKEN_DEV, .DOPPLER_TOKEN_STG, .DOPPLER_TOKEN_PRD) | to_entries | map({(.key): (.value | .raw)}) | add'
   EXPORT_JQ=$(doppler secrets --project "$PROJECT" --config "$FROM_CONFIG" --json --raw | jq "$JQ_FILTER")
 fi
 
@@ -58,10 +58,11 @@ for TO_CONFIG in $TO_CONFIGS; do
     continue
   fi
   echo "Copying $FROM_CONFIG → $TO_CONFIG ..."
-  # Exclude Doppler CLI token vars so we never copy dev token to stg/prd. Those live only in each server's .env.
-  doppler secrets upload --project "$PROJECT" --config "$TO_CONFIG" --raw \
-    <(doppler secrets --project "$PROJECT" --config "$FROM_CONFIG" --json --raw | \
-      jq 'del(.DOPPLER_PROJECT, .DOPPLER_ENVIRONMENT, .DOPPLER_CONFIG, .DOPPLER_TOKEN, .DOPPLER_TOKEN_DEV, .DOPPLER_TOKEN_STG, .DOPPLER_TOKEN_PRD) | to_entries | map({(.key): (.value | .raw)}) | add')
+  if [[ -n "$COPY_KEYS" ]]; then
+    echo "$EXPORT_JQ" | doppler secrets upload --project "$PROJECT" --config "$TO_CONFIG" --raw /dev/stdin
+  else
+    echo "$EXPORT_JQ" | doppler secrets upload --project "$PROJECT" --config "$TO_CONFIG" --raw /dev/stdin
+  fi
   echo "  Done: $TO_CONFIG"
 done
 

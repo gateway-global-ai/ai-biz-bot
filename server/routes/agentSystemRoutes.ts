@@ -4,7 +4,7 @@ import { db } from "../db";
 import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { gatewayChat } from "../ai-gateway";
+import { gatewayChat, parseTask, generateNavigatorIntroduction } from "../ai-gateway";
 import { requireAuth } from "../auth";
 import {
   DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, PLAN_LIMITS,
@@ -222,10 +222,10 @@ const router = Router();
         ? `+${normalizedPhone}` 
         : `+1${normalizedPhone}`;
       
-      // Parse task using Kimi (with partial mode)
+      // Parse task via AI gateway
       let parsedTask = null;
       try {
-        // parseTask removed — replaced by Gemini-based task parsing
+        // 
         parsedTask = await parseTask(task);
         console.log('[Task Submit] Parsed task:', parsedTask);
       } catch (parseError) {
@@ -259,7 +259,7 @@ const router = Router();
       // Send Navigator first-login "Call Coordinates" SMS
       let callCoordinates: string | null = null;
       try {
-        // generateNavigatorIntroduction removed — replaced by Gemini
+        // 
         
         // Fetch telephony config once; reuse the phone number as Call Coordinates
         const config = await storage.getTelephonyConfig();

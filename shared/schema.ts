@@ -317,7 +317,7 @@ export const DISC_STYLE_DESCRIPTIONS = {
 };
 
 // AI Model Provider types
-export type AIModelProvider = "moonshot" | "huggingface" | "openai" | "anthropic";
+export type AIModelProvider = "gemini";
 
 export interface AIModelSettings {
   provider: AIModelProvider;
@@ -1127,21 +1127,8 @@ export const siteConfigs = pgTable("site_configs", {
   assignedToPhone:          text("assigned_to_phone"),
   /** Claim lifecycle: 'unclaimed' | 'invite_sent' | 'payment_pending' | 'claimed' */
   claimStatus:              text("claim_status").notNull().default("unclaimed"),
-  /** Timestamp when the site was successfully claimed and payment confirmed. */
-  claimedAt:                timestamp("claimed_at"),
   /** Stripe Checkout session ID used for the $49.99 activation payment. */
   claimCheckoutSessionId:   text("claim_checkout_session_id"),
-  /** Agent Persona config: { name, role, discProfile, basePrompt } */
-  agentConfig: jsonb("agent_config"),
-  /** Audio / voice settings: { voiceName, language, isPushToTalk } */
-  voiceConfig: jsonb("voice_config"),
-  /** Showroom UI theme tokens: { primaryColor, fontFamily, borderRadius } */
-  themeConfig: jsonb("theme_config"),
-  /** Granular resource ledger: prepaid quotas per cost center (all default 0). */
-  voicePhoneAiMinutes: integer("voice_phone_ai_minutes").default(0).notNull(),
-  voiceWebAiMinutes: integer("voice_web_ai_minutes").default(0).notNull(),
-  smsMessages: integer("sms_messages").default(0).notNull(),
-  chatBotMessages: integer("chat_bot_messages").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
