@@ -46,6 +46,6 @@ export function setupWebSocketRouter(server: Server): void {
       socket.destroy();
     }
   });
-  
-  console.log(`[WebSocketRouter] Initialized with ${routes.length} routes`);
+
+  console.log(`[WebSocketRouter] Initialized with ${routes.length} routes (unified Gemini 2.5 Flash Native Audio)`);
 }

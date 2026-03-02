@@ -16,12 +16,12 @@ html::-webkit-scrollbar {
   --opaque-button-border-intensity: -8;
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
-  --background: 220 14% 96%;
-  --foreground: 220 13% 13%;
-  --border: 220 13% 88%;
-  --card: 220 14% 94%;
-  --card-foreground: 220 13% 13%;
-  --card-border: 220 13% 90%;
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --border: 214.3 31.8% 91.4%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --card-border: 214.3 31.8% 91.4%;
   --sidebar: 220 13% 92%;
   --sidebar-foreground: 220 13% 13%;
   --sidebar-border: 220 13% 86%;
@@ -33,13 +33,13 @@ html::-webkit-scrollbar {
   --popover: 220 13% 90%;
   --popover-foreground: 220 13% 13%;
   --popover-border: 220 13% 84%;
-  --primary: 217 91% 60%;
+  --primary: 221.2 83.2% 53.3%;
   --primary-foreground: 210 40% 98%;
-  --secondary: 220 13% 86%;
-  --secondary-foreground: 220 13% 13%;
-  --muted: 220 13% 88%;
-  --muted-foreground: 220 10% 40%;
-  --accent: 220 13% 90%;
+  --secondary: 210 40% 96.1%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
   --accent-foreground: 220 13% 13%;
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
@@ -178,7 +178,9 @@ html::-webkit-scrollbar {
   }
 
   body {
-    @apply font-sans antialiased bg-background text-foreground;
+    @apply font-sans antialiased text-foreground;
+    background: radial-gradient(at top left, #f1f5f9 0%, #ffffff 100%);
+    min-height: 100vh;
   }
 }
 
@@ -292,6 +294,99 @@ html::-webkit-scrollbar {
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Jason Standard — Sovereign OS Design System
+   These utilities are the canonical glass layer for all 9 site templates.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --sovereign-deep:    #0F172A;
+  --sovereign-electric: #6366F1;
+  --sovereign-vivid:   #10B981;
+  --sovereign-muted:   #94A3B8;
+  --sovereign-glass:   rgba(255, 255, 255, 0.04);
+  --sovereign-border:  rgba(99, 102, 241, 0.18);
+  --sovereign-glow:    0 0 20px 4px rgba(99, 102, 241, 0.28);
+  --sovereign-radius:  24px;
+}
+
+@layer utilities {
+  /* Primary glass container — the foundation of every Sovereign card */
+  .sovereign-glass {
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(99, 102, 241, 0.18);
+    border-radius: var(--sovereign-radius);
+  }
+
+  /* Lighter glass for nested panels inside the 40% window */
+  .sovereign-panel {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--sovereign-radius);
+  }
+
+  /* Docked control bar (bottom-anchored) */
+  .sovereign-bar {
+    background: rgba(15, 23, 42, 0.82);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(99, 102, 241, 0.15);
+  }
+
+  /* Indigo-Electric glow — apply to any "Sovereign Detail" element */
+  .sovereign-glow {
+    box-shadow: var(--sovereign-glow);
+  }
+
+  /* Pulse keyframe bound to the Sovereign Electric color */
+  .animate-sovereign-pulse {
+    animation: sovereign-pulse 2.4s ease-in-out infinite;
+  }
+
+  /* Emerald "1% Insight" badge */
+  .badge-insight {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10B981;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    border-radius: 9999px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    text-transform: uppercase;
+  }
+
+  /* Monospace data chip for IDs / metrics */
+  .data-chip {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--sovereign-muted);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 2px 7px;
+    letter-spacing: 0.04em;
+  }
+}
+
+@keyframes sovereign-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+  50%       { box-shadow: 0 0 18px 4px rgba(99, 102, 241, 0.35); }
+}
+
+@keyframes glass-in {
+  0%   { opacity: 0; transform: translateY(8px) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-glass-in {
+  animation: glass-in 0.3s ease-out forwards;
 }
 
 /* Carousel slide animations */

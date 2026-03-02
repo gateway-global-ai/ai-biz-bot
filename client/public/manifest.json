@@ -1,0 +1,25 @@
+{
+  "name": "Gateway Global AI — Sovereign AI OS",
+  "short_name": "Gateway Global AI",
+  "description": "Infinite Operational Leverage. Autonomous AI Voice and SMS agents for the modern enterprise.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#1346A0",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "64x64",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

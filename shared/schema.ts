@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index, pgEnum, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -47,6 +47,8 @@ export const telephonyConfigs = pgTable("telephony_configs", {
   ownerEmail: text("owner_email"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  /** Links this telephony config to the site/business it serves (for billing attribution). */
+  siteConfigId: varchar("site_config_id"),
 });
 
 export const insertTelephonyConfigSchema = createInsertSchema(telephonyConfigs).omit({
@@ -72,6 +74,14 @@ export const callLogs = pgTable("call_logs", {
   customerEmail: text("customer_email"),
   notes: text("notes"),
   timestamp: timestamp("timestamp").defaultNow(),
+  /** Millisecond-precision call start time recorded when the Media Stream begins. */
+  callStart: timestamp("call_start"),
+  /** Millisecond-precision call end time recorded when the Media Stream stops. */
+  callEnd: timestamp("call_end"),
+  /** Actual call duration in seconds derived from callEnd - callStart (stopwatch). */
+  actualSeconds: integer("actual_seconds"),
+  /** The site/business this call belongs to – used for billing attribution. */
+  siteConfigId: varchar("site_config_id"),
 });
 
 export const insertCallLogSchema = createInsertSchema(callLogs).omit({
@@ -319,6 +329,8 @@ export interface AIModelSettings {
 // AI Agents table
 export const agents = pgTable("agents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
+  roleType: text("role_type"), // concierge, booking_coordinator, lead_qualifier, retention_empath, billing_analyst, gatekeeper
   name: text("name").notNull(),
   voiceId: text("voice_id").notNull(),
   voiceName: text("voice_name").notNull(),
@@ -348,6 +360,12 @@ export const agents = pgTable("agents", {
   budgetPeriod: text("budget_period").default("monthly"), // daily, weekly, monthly
   budgetSpentUsd: numeric("budget_spent_usd", { precision: 10, scale: 2 }).default("0"),
   budgetResetAt: timestamp("budget_reset_at"),
+  // Character Engine — Three-Layer Behavioral System
+  // Layer 1: Character (who the agent IS)
+  shortTermMemory: jsonb("short_term_memory"), // { specialty, focus, method, differentiator, discAnalysis, archBehavior }
+  longTermMemory: jsonb("long_term_memory"),   // { dominantTrait, years, originStory, unbreakableRule, ruleReason, primaryIntent, happySeeing, sadSeeing, priorityOverMoney, philosophyPeople, philosophyLife, philosophyToday }
+  // Layer 3: Conversation Mechanics (how the agent structures dialogue)
+  archProfile: jsonb("arch_profile"),          // { acknowledge, reflect, context, handoff } — 0-100 each
   // Startup Script
   startupScript: text("startup_script"),
   startupBudgetUsd: numeric("startup_budget_usd", { precision: 10, scale: 2 }).default("0"),
@@ -367,28 +385,52 @@ export const insertAgentSchema = createInsertSchema(agents).omit({
 export type InsertAgent = z.infer<typeof insertAgentSchema>;
 export type Agent = typeof agents.$inferSelect;
 
-// Customers/Leads table
-export const customers = pgTable("customers", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+// Association Master UUID (e.g. LVR/GLVAR) — groups customers/brands under one parent
+export const associations = pgTable("associations", {
+  id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  email: text("email"),
-  phone: text("phone"),
-  company: text("company"),
-  city: text("city"),
-  state: text("state"),
-  country: text("country"),
-  source: text("source"), // where the lead came from
-  status: text("status").notNull().default("new"), // new, contacted, qualified, converted, lost
-  notes: text("notes"),
-  stripeCustomerId: text("stripe_customer_id"),
-  subscriptionId: text("subscription_id"),
-  subscriptionStatus: text("subscription_status").default("none"),
-  agentId: varchar("agent_id").references(() => agents.id),
-  lastContactAt: timestamp("last_contact_at"),
-  followUpAt: timestamp("follow_up_at"),
+  shortCode: text("short_code").notNull().unique(),
+  mlsCode: text("mls_code"),
+  sponsorBilling: boolean("sponsor_billing").default(false),
+  sponsorLimit: integer("sponsor_limit"),
+  defaultPersona: text("default_persona").default("real_estate_sovereign"),
+  defaultIndustry: text("default_industry").default("real_estate"),
+  contactEmail: text("contact_email"),
+  website: text("website"),
+  masterBrandSid: text("master_brand_sid"),
+  masterEin: text("master_ein"),
+  allowedIpRanges: text("allowed_ip_ranges").array(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Customers/Leads table
+export const customers = pgTable(
+  "customers",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    email: text("email"),
+    phone: text("phone"),
+    company: text("company"),
+    city: text("city"),
+    state: text("state"),
+    country: text("country"),
+    source: text("source"), // where the lead came from
+    status: text("status").notNull().default("new"), // new, contacted, qualified, converted, lost
+    notes: text("notes"),
+    stripeCustomerId: text("stripe_customer_id"),
+    subscriptionId: text("subscription_id"),
+    subscriptionStatus: text("subscription_status").default("none"),
+    agentId: varchar("agent_id").references(() => agents.id),
+    associationId: uuid("association_id").references(() => associations.id),
+    lastContactAt: timestamp("last_contact_at"),
+    followUpAt: timestamp("follow_up_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [index("idx_customers_association_id").on(table.associationId)]
+);
 
 export const insertCustomerSchema = createInsertSchema(customers).omit({
   id: true,
@@ -430,12 +472,37 @@ export const insertTaskSchema = createInsertSchema(tasks).omit({
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
 
+// ── Resellers (Digital Franchise) ─────────────────────────────────────────────
+// Self-referential hierarchy: a reseller can have a parent (sub-reseller model).
+// commission_rate stored as decimal 0–1, e.g. 0.10 = 10%.
+// stripe_account_id = Stripe Connect Express account for automated payouts.
+export const resellers = pgTable("resellers", {
+  id:               varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  parentResellerId: varchar("parent_reseller_id").references((): any => resellers.id, { onDelete: "set null" }),
+  stripeAccountId:  text("stripe_account_id"),
+  commissionRate:   numeric("commission_rate", { precision: 5, scale: 4 }).notNull().default("0.10"),
+  name:             text("name"),
+  email:            text("email"),
+  phone:            text("phone"),
+  createdAt:        timestamp("created_at").defaultNow().notNull(),
+  updatedAt:        timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertResellerSchema = createInsertSchema(resellers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertReseller = z.infer<typeof insertResellerSchema>;
+export type Reseller = typeof resellers.$inferSelect;
+
 // Admin users for OTP authentication
 export const adminUsers = pgTable("admin_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   phone: text("phone").notNull().unique(),
   name: text("name"),
   role: text("role").default("admin"), // admin, superadmin
+  resellerId: varchar("reseller_id").references(() => resellers.id),
   isActive: boolean("is_active").default(true),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -484,6 +551,26 @@ export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({
 
 export type InsertAuthSession = z.infer<typeof insertAuthSessionSchema>;
 export type AuthSession = typeof authSessions.$inferSelect;
+
+// NOVA Sovereign IDV sessions — constitution: .system_design/nova_sovereign_ruleset_v1.yaml
+export const novaIdvSessions = pgTable("nova_idv_sessions", {
+  sessionId: uuid("session_id").primaryKey(),
+  businessId: uuid("business_id").notNull(),
+  clientPhone: text("client_phone"),
+  clientEmail: text("client_email"),
+  protocolLevel: integer("protocol_level").notNull(),
+  otpVerified: boolean("otp_verified").default(false),
+  magicLinkVerified: boolean("magic_link_verified").default(false),
+  biometricVerified: boolean("biometric_verified").default(false),
+  idVerified: boolean("id_verified").default(false),
+  signatureUrl: text("signature_url"),
+  invoiceId: uuid("invoice_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export type NovaIdvSession = typeof novaIdvSessions.$inferSelect;
+export type InsertNovaIdvSession = typeof novaIdvSessions.$inferInsert;
 
 // Demo leads for business website onboarding flow
 export const demoLeads = pgTable("demo_leads", {
@@ -536,6 +623,7 @@ export type TwilioSubAccount = typeof twilioSubAccounts.$inferSelect;
 export const a2pBrands = pgTable("a2p_brands", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   customerId: varchar("customer_id").references(() => customers.id),
+  associationId: uuid("association_id").references(() => associations.id),
   // Twilio Brand Registration SID
   brandSid: text("brand_sid"),
   brandStatus: text("brand_status").default("pending"), // pending, approved, rejected, failed
@@ -552,6 +640,9 @@ export const a2pBrands = pgTable("a2p_brands", {
   lastName: text("last_name").notNull(),
   email: text("email").notNull(),
   phone: text("phone").notNull(),
+  // EIN Exact-Match Data Guard (A6)
+  legalNameConfirmed: boolean("legal_name_confirmed").notNull().default(false),
+  legalNameConfirmedAt: timestamp("legal_name_confirmed_at"),
   // Vetting
   vettingStatus: text("vetting_status"), // null, pending, passed, failed
   vettingProvider: text("vetting_provider"), // campaign-verify, aegis
@@ -777,6 +868,28 @@ export const insertBotTemplateSchema = createInsertSchema(botTemplates).omit({
 export type InsertBotTemplate = z.infer<typeof insertBotTemplateSchema>;
 export type BotTemplate = typeof botTemplates.$inferSelect;
 
+// Enum for the Reseller Franchise Hierarchy (MSA v1.1.0 Addendum §1)
+export const accountTypeEnum = pgEnum("account_type", [
+  "DIRECT",       // Standard self-serve signup (default)
+  "RESELLER",     // Master UUID with sub-account provisioning authority
+  "SUB_ACCOUNT",  // End-customer provisioned under a RESELLER Master UUID
+]);
+
+// Enums for the Onboarding & Compliance Gateway (MSA v1.0.0)
+export const onboardingStatusEnum = pgEnum("onboarding_status", [
+  "PENDING_MSA",
+  "PENDING_COMPLIANCE",
+  "ACTIVE",
+  "SUSPENDED",
+]);
+
+export const complianceStatusEnum = pgEnum("compliance_status", [
+  "NOT_SUBMITTED",
+  "PENDING",
+  "APPROVED",
+  "REJECTED",
+]);
+
 // Customer Accounts - separate from admin users, for business owners
 export const customerAccounts = pgTable("customer_accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -790,6 +903,36 @@ export const customerAccounts = pgTable("customer_accounts", {
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  // ── Onboarding & Compliance Gateway (MSA v1.0.0) ──────────────────────────
+  onboardingStatus: onboardingStatusEnum("onboarding_status").default("PENDING_MSA").notNull(),
+  activationDate: timestamp("activation_date"),
+  trialEndDate: timestamp("trial_end_date"),       // activationDate + 30 days (pricing_v1.yaml)
+  msaAcceptedAt: timestamp("msa_accepted_at"),
+  msaVersion: text("msa_version"),                 // SHA-256 hash of the accepted MSA version string
+  complianceStatus: complianceStatusEnum("compliance_status").default("NOT_SUBMITTED").notNull(),
+  businessName: text("business_name"),
+  ein: text("ein"),                                // Format: XX-XXXXXXX
+  physicalAddress: jsonb("physical_address"),      // { street, city, state, zip, country }
+  smsUseCase: text("sms_use_case"),
+  complianceRejectionReason: text("compliance_rejection_reason"),
+  // ── Reseller Franchise Hierarchy (MSA v1.1.0 Addendum) ────────────────────
+  accountType: accountTypeEnum("account_type").default("DIRECT").notNull(),
+  // Self-referencing FK: links SUB_ACCOUNT back to its RESELLER Master UUID.
+  // Declared as varchar (not uuid type) to match the id column type on this table.
+  parentAccountId: varchar("parent_account_id").references((): any => customerAccounts.id),
+  wholesaleRate: numeric("wholesale_rate", { precision: 10, scale: 2 }).default("49.00"),
+  // markupRate: custom retail pricing the reseller charges end-customers.
+  // Shape: { phoneVoiceAi: number, webVoiceAi: number, a2pSms: number }
+  markupRate: jsonb("markup_rate"),
+  // Running Net Margin ledger for reseller payouts (precision: 12 for million-dollar brokerages).
+  resellerCommissionBalance: numeric("reseller_commission_balance", { precision: 12, scale: 2 }).default("0.00"),
+  // Stripe Connect account ID for automated margin disbursement. Nullable until onboarded.
+  stripeConnectedAccountId: text("stripe_connected_account_id"),
+  // Reseller pre-signature timestamp (§1.3): must be set before end-user can sign MSA.
+  resellerMsaConfirmedAt: timestamp("reseller_msa_confirmed_at"),
+  // A2P Content Provider designation (§1.5 / carrier audit requirement).
+  // Shape: { name: string, role: "Content Provider", acknowledgedAt: ISO8601 }
+  a2pContentProvider: jsonb("a2p_content_provider"),
 });
 
 export const insertCustomerAccountSchema = createInsertSchema(customerAccounts).omit({
@@ -928,10 +1071,15 @@ export const siteConfigs = pgTable("site_configs", {
   domain: text("domain"),
   placeId: text("place_id"),
   placeData: jsonb("place_data"),
+  /** Workspace lifecycle (MVP-safe, multi-tenant friendly): demo | provisioned | claimed | active | archived */
+  workspaceState: text("workspace_state").default("demo").notNull(),
+  claimedAt: timestamp("claimed_at"),
+  /** e.g. sdr_demo | agency | owner | system */
+  createdByType: text("created_by_type"),
   assignedAgentId: varchar("assigned_agent_id"),
   botTemplateId: varchar("bot_template_id"),
   systemPromptOverride: text("system_prompt_override"),
-  modelProvider: text("model_provider").default("kimi"),
+  modelProvider: text("model_provider").default("gemini"),
   modelName: text("model_name"),
   chatbotEnabled: boolean("chatbot_enabled").default(true),
   voiceConciergeEnabled: boolean("voice_concierge_enabled").default(true),
@@ -941,6 +1089,59 @@ export const siteConfigs = pgTable("site_configs", {
   placeholderText: text("placeholder_text").default("Type a message..."),
   /** Knowledge library: array of { id, title, content, addedAt } for agent training. */
   knowledgeLibrary: jsonb("knowledge_library"),
+  /** Total reviews harvested via SerpAPI pipeline — used for billing ($0.10/review above 10). */
+  reviewsHarvested: integer("reviews_harvested").default(0),
+  /** Per-business subscription plan: 'free' | 'pro' | 'voice' | 'enterprise' */
+  plan: text("plan").default("free"),
+  /** AI-generated or custom hero image URL stored on the platform */
+  heroImageUrl: text("hero_image_url"),
+  /** Prompt used to generate the hero image (stored for regeneration) */
+  heroImagePrompt: text("hero_image_prompt"),
+  /** Agent Persona config: { name, role, discProfile, basePrompt } */
+  agentConfig: jsonb("agent_config"),
+  /** Audio / voice settings: { voiceName, language, isPushToTalk } */
+  voiceConfig: jsonb("voice_config"),
+  /** Showroom UI theme tokens: { primaryColor, fontFamily, borderRadius } */
+  themeConfig: jsonb("theme_config"),
+  /** Granular resource ledger: prepaid quotas per cost center (all default 0). */
+  voicePhoneAiMinutes: integer("voice_phone_ai_minutes").default(0).notNull(),
+  voiceWebAiMinutes: integer("voice_web_ai_minutes").default(0).notNull(),
+  smsMessages: integer("sms_messages").default(0).notNull(),
+  chatBotMessages: integer("chat_bot_messages").default(0).notNull(),
+  /** Twilio sub-account SID provisioned for this AI Partner deployment (A2P Enterprise). */
+  twilioSubAccountSid: text("twilio_sub_account_sid"),
+  /** Phone number (E.164) provisioned for this AI Partner via CID provisioning. */
+  provisionedPhoneNumber: text("provisioned_phone_number"),
+  /** Twilio IncomingPhoneNumber SID for the provisioned number. */
+  provisionedPhoneSid: text("provisioned_phone_sid"),
+  /** Reseller (Digital Franchise) who owns this site – for commission attribution. */
+  resellerId: varchar("reseller_id").references(() => resellers.id),
+  /** When the low-energy SMS nudge was last sent; reset on refill so nudge can fire again. */
+  lastNudgeSentAt: timestamp("last_nudge_sent_at"),
+  // ── Site Claim / Assignment lifecycle ──────────────────────────────────────
+  /** Secure random hex token embedded in the SMS claim link. */
+  claimToken:               varchar("claim_token", { length: 64 }),
+  /** Token expiry — defaults to 7 days from when the invite is sent. */
+  claimTokenExpiresAt:      timestamp("claim_token_expires_at"),
+  /** The E.164 phone number the invite SMS was dispatched to. */
+  assignedToPhone:          text("assigned_to_phone"),
+  /** Claim lifecycle: 'unclaimed' | 'invite_sent' | 'payment_pending' | 'claimed' */
+  claimStatus:              text("claim_status").notNull().default("unclaimed"),
+  /** Timestamp when the site was successfully claimed and payment confirmed. */
+  claimedAt:                timestamp("claimed_at"),
+  /** Stripe Checkout session ID used for the $49.99 activation payment. */
+  claimCheckoutSessionId:   text("claim_checkout_session_id"),
+  /** Agent Persona config: { name, role, discProfile, basePrompt } */
+  agentConfig: jsonb("agent_config"),
+  /** Audio / voice settings: { voiceName, language, isPushToTalk } */
+  voiceConfig: jsonb("voice_config"),
+  /** Showroom UI theme tokens: { primaryColor, fontFamily, borderRadius } */
+  themeConfig: jsonb("theme_config"),
+  /** Granular resource ledger: prepaid quotas per cost center (all default 0). */
+  voicePhoneAiMinutes: integer("voice_phone_ai_minutes").default(0).notNull(),
+  voiceWebAiMinutes: integer("voice_web_ai_minutes").default(0).notNull(),
+  smsMessages: integer("sms_messages").default(0).notNull(),
+  chatBotMessages: integer("chat_bot_messages").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -953,6 +1154,105 @@ export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
 
 export type InsertSiteConfig = z.infer<typeof insertSiteConfigSchema>;
 export type SiteConfig = typeof siteConfigs.$inferSelect;
+
+// ── Voice Usage Logs – Energy Pool Billing ($0.10/min) ────────────────────────
+// One row per completed call. billedMinutes = ceil(rawDurationSeconds / 60).
+// amountCents = billedMinutes * ratePerMinuteCents (default 10 cents).
+export const voiceUsageLogs = pgTable("voice_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  /** The site/business that was charged for this call */
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  /** Twilio or internal session identifier */
+  callSid: text("call_sid"),
+  /** 'phone' = PSTN/Twilio, 'web' = Gemini Live website voice */
+  callType: text("call_type").notNull().default("phone"), // 'phone' | 'web'
+  /** Raw call duration as reported by Twilio / session timer */
+  rawDurationSeconds: integer("raw_duration_seconds").notNull().default(0),
+  /** Billed minutes after ceiling rounding: ceil(rawDurationSeconds / 60) */
+  billedMinutes: integer("billed_minutes").notNull().default(0),
+  /** Rate in cents per minute (default 10 = $0.10/min) */
+  ratePerMinuteCents: integer("rate_per_minute_cents").notNull().default(10),
+  /** Total charge in cents: billedMinutes * ratePerMinuteCents */
+  billedAmountCents: integer("billed_amount_cents").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertVoiceUsageLogSchema = createInsertSchema(voiceUsageLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertVoiceUsageLog = z.infer<typeof insertVoiceUsageLogSchema>;
+export type VoiceUsageLog = typeof voiceUsageLogs.$inferSelect;
+
+// ── Reseller Commissions ledger ────────────────────────────────────────────────
+// One row per commission event.  Amounts in cents to avoid floating-point drift.
+// Status lifecycle: pending → paid | cancelled
+// Event types: subscription | top_up | manual
+export const resellerCommissions = pgTable("reseller_commissions", {
+  id:                 varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resellerId:         varchar("reseller_id")
+                        .references(() => resellers.id, { onDelete: "cascade" })
+                        .notNull(),
+  siteConfigId:       varchar("site_config_id")
+                        .references(() => siteConfigs.id, { onDelete: "set null" }),
+  eventType:          text("event_type").notNull(),   // 'subscription' | 'top_up' | 'manual'
+  grossAmountCents:   integer("gross_amount_cents").notNull(),  // revenue that triggered commission
+  commissionCents:    integer("commission_cents").notNull(),    // reseller's cut in cents
+  status:             text("status").notNull().default("pending"), // 'pending' | 'paid' | 'cancelled'
+  stripeTransferId:   text("stripe_transfer_id"),     // set once Stripe transfer fires
+  note:               text("note"),                   // optional operator note for manual events
+  createdAt:          timestamp("created_at").defaultNow().notNull(),
+  paidAt:             timestamp("paid_at"),            // set when status → paid
+});
+
+export const insertResellerCommissionSchema = createInsertSchema(resellerCommissions).omit({
+  id: true,
+  createdAt: true,
+  paidAt: true,
+  stripeTransferId: true,
+});
+export type InsertResellerCommission = z.infer<typeof insertResellerCommissionSchema>;
+export type ResellerCommission = typeof resellerCommissions.$inferSelect;
+
+// ── Google Workspace Integration ──────────────────────────────────────────────
+// Per-site workspace configuration (tied to siteConfigs, not customerAccounts,
+// because each site can independently have the $99 Voice plan).
+export const workspaceConfigurations = pgTable("workspace_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull().unique(),
+
+  // Connection method
+  setupType: text("setup_type").default("oauth"), // 'oauth' | 'hosted'
+
+  // Customer's OAuth credentials (encrypted at rest recommendation)
+  googleEmail: text("google_email"),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiry: timestamp("token_expiry"),
+
+  // Per-app enable state stored as JSONB: { gmail: true, calendar: false, ... }
+  enabledApps: jsonb("enabled_apps").default({}),
+
+  // Drive folder IDs created by platform
+  driveFolderId: text("drive_folder_id"),
+  leadTrackingSheetId: text("lead_tracking_sheet_id"),
+  calendarId: text("calendar_id"),
+  taskListId: text("task_list_id"),
+
+  // Status
+  status: text("status").default("disconnected"), // 'disconnected' | 'connected' | 'error'
+  statusMessage: text("status_message"),
+
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWorkspaceConfigurationSchema = createInsertSchema(workspaceConfigurations).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type InsertWorkspaceConfiguration = z.infer<typeof insertWorkspaceConfigurationSchema>;
+export type WorkspaceConfiguration = typeof workspaceConfigurations.$inferSelect;
 
 // Chat logs for web-based AI Biz Bot conversations
 export const chatLogs = pgTable("chat_logs", {
@@ -971,6 +1271,103 @@ export const insertChatLogSchema = createInsertSchema(chatLogs).omit({
 
 export type InsertChatLog = z.infer<typeof insertChatLogSchema>;
 export type ChatLog = typeof chatLogs.$inferSelect;
+
+// ── Error Navigator & Recovery Analytics ─────────────────────────────────────
+/** Logs ERROR_LANDING, RECOVERY_SUCCESS, VOICE_TIER_INTEREST for bounce/recovery tracking. */
+export const analyticsLogs = pgTable("analytics_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id),
+  eventType: text("event_type").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AnalyticsLog = typeof analyticsLogs.$inferSelect;
+
+// =========================================
+// Business Data & Tour Guide (Clear Voice)
+// =========================================
+
+/** Cached enriched business data from Google Places + optional intelligence. TTL per row. */
+export const businessDataCache = pgTable("business_data_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placeId: text("place_id").notNull().unique(),
+  generalData: jsonb("general_data").notNull(),
+  intelligenceData: jsonb("intelligence_data"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type BusinessDataCacheRow = typeof businessDataCache.$inferSelect;
+
+/** Owner-provided business data (custom description, story, offers). */
+export const ownerBusinessData = pgTable("owner_business_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placeId: text("place_id").notNull().unique(),
+  ownerId: varchar("owner_id").references(() => customerAccounts.id),
+  customDescription: text("custom_description"),
+  specialOffers: jsonb("special_offers").$type<string[]>(),
+  ownerStory: text("owner_story"),
+  customHours: text("custom_hours"),
+  contactPreferences: jsonb("contact_preferences"),
+  publicAmenities: jsonb("public_amenities").$type<string[]>(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOwnerBusinessDataSchema = createInsertSchema(ownerBusinessData).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type OwnerBusinessDataRow = typeof ownerBusinessData.$inferSelect;
+
+/** Cached business intelligence reports (SWOT, narrative). */
+export const businessIntelligenceCache = pgTable("business_intelligence_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placeId: text("place_id").notNull(),
+  businessName: text("business_name").notNull(),
+  report: jsonb("report").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type BusinessIntelligenceCacheRow = typeof businessIntelligenceCache.$inferSelect;
+
+/** Tour specifications (YAML-derived or manual) for featured partners. */
+export const tourSpecifications = pgTable("tour_specifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  placeId: text("place_id"),
+  partnerId: text("partner_id"),
+  tourId: text("tour_id").notNull().unique(),
+  spec: jsonb("spec").notNull(), // { segments: TourSegment[] }
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type TourSpecificationRow = typeof tourSpecifications.$inferSelect;
+
+/** Featured Partners - Preferential placement for Clear Voice partners (e.g. Boardwalk Suites). */
+export const featuredPartners = pgTable("featured_partners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  grnHotelId: varchar("grn_hotel_id"),
+  googlePlaceId: text("google_place_id"),
+  businessName: text("business_name").notNull(),
+  cityCode: text("city_code").notNull(),
+  category: text("category"),
+  aiHook: text("ai_hook"),
+  aiTags: jsonb("ai_tags").$type<string[]>(),
+  aiStory: text("ai_story"),
+  aiTriggerConditions: jsonb("ai_trigger_conditions"),
+  uiThemeGlow: text("ui_theme_glow"),
+  badgeLabel: text("badge_label").default("Certified Local"),
+  storyVideoUrl: text("story_video_url"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type FeaturedPartnerRow = typeof featuredPartners.$inferSelect;
 
 // =========================================
 // VoiceLeadMachine - Outbound Lead Generator
@@ -1162,64 +1559,7 @@ export const insertOgSettingsSchema = createInsertSchema(ogSettings).omit({
 export type InsertOgSettings = z.infer<typeof insertOgSettingsSchema>;
 export type OgSettings = typeof ogSettings.$inferSelect;
 
-// =========================================
-// Google Workspace Integration
-// =========================================
-
-export const workspaceConfigurations = pgTable("workspace_configurations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
-  
-  // Setup Type
-  setupType: text("setup_type").notNull(), // 'hosted' | 'integrated'
-  
-  // Hosted Email Configuration (gatewayglobal.ai)
-  hostedEmail: text("hosted_email"), // user@gatewayglobal.ai
-  hostedUserId: text("hosted_user_id"), // Google Workspace user ID
-  workspacePlan: text("workspace_plan"), // 'starter' | 'standard'
-  
-  // Integrated Email Configuration (existing email)
-  integratedEmail: text("integrated_email"),
-  
-  // OAuth Credentials (encrypted)
-  accessToken: text("access_token"),
-  refreshToken: text("refresh_token"),
-  tokenExpiry: timestamp("token_expiry"),
-  
-  // Workspace Structure IDs
-  driveFolderId: text("drive_folder_id"), // Root business folder
-  clientsFolderId: text("clients_folder_id"),
-  operationsFolderId: text("operations_folder_id"),
-  marketingFolderId: text("marketing_folder_id"),
-  
-  // Template IDs
-  leadTrackingSheetId: text("lead_tracking_sheet_id"),
-  taskListId: text("task_list_id"),
-  calendarId: text("calendar_id"),
-  
-  // Setup Status
-  setupStatus: text("setup_status").default("pending"), // 'pending' | 'in_progress' | 'completed' | 'failed'
-  setupStep: text("setup_step"), // Current step in setup process
-  setupError: text("setup_error"),
-  
-  // SWOT Analysis Link
-  swotAnalysisId: text("swot_analysis_id"),
-  swotCompletedAt: timestamp("swot_completed_at"),
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertWorkspaceConfigurationSchema = createInsertSchema(workspaceConfigurations).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertWorkspaceConfiguration = z.infer<typeof insertWorkspaceConfigurationSchema>;
-export type WorkspaceConfiguration = typeof workspaceConfigurations.$inferSelect;
-
-// SWOT Analysis Results
+// SWOT Analysis Results (legacy; workspace config is defined above with siteConfigId)
 export const swotAnalyses = pgTable("swot_analyses", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
@@ -1732,86 +2072,336 @@ export const insertInquirySchema = createInsertSchema(inquiries, {
 export type InsertInquiry = z.infer<typeof insertInquirySchema>;
 export type Inquiry = typeof inquiries.$inferSelect;
 
-// =========================================
-// Unified B2B Schema: GRN Connect & SerpAPI
-// =========================================
+// ==========================================
+// B2B Travel OS – GRN Connect Hotels & SerpAPI Flights (System of Record)
+// ==========================================
 
-// 1. HOTELS TABLE: Linking GRN to Google Maps
-export const hotels = pgTable('hotels', {
-  id: serial('id').primaryKey(),
-  grnCode: varchar('grn_code', { length: 50 }).unique().notNull(), // GRN Hotel Code
-  googlePlaceId: varchar('google_place_id', { length: 255 }), // Captured via Spatial Join
-  name: text('name').notNull(),
-  address: text('address'),
-  rating: doublePrecision('rating'),
-  geolocation: jsonb('geolocation').notNull(), // Store Lat/Lng for grounding
-  lastFetchedRates: jsonb('last_fetched_rates'), // Cache for the 20-min window
-  createdAt: timestamp('created_at').defaultNow(),
+/** GRN Connect hotels: hotel_code + google_place_id from Spatial Join for re-fetching live rates */
+export const b2bHotels = pgTable("b2b_hotels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hotelCode: text("hotel_code").notNull(), // GRN identifier (H! prefix stripped for API calls)
+  googlePlaceId: text("google_place_id"), // Google Places ID linked via Spatial Join / matching
+  /** FK to platform_business_map(platform_id). Links GRN hotel to our internal platform identity. */
+  platformId: uuid("platform_id"),
+  name: text("name"),
+  rawResponse: jsonb("raw_response"), // full GRN response for replay/audit
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+},
+(table) => [
+  index("idx_b2b_hotels_platform_id").on(table.platformId),
+  index("idx_b2b_hotels_hotel_code").on(table.hotelCode),
+]);
+
+export const insertB2bHotelSchema = createInsertSchema(b2bHotels).omit({ id: true, createdAt: true });
+export type InsertB2bHotel = z.infer<typeof insertB2bHotelSchema>;
+export type B2bHotel = typeof b2bHotels.$inferSelect;
+
+/** SerpAPI flights: booking_token + IATA for Continental Handshake (arrival → hotel check-in) */
+export const b2bFlights = pgTable("b2b_flights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bookingToken: text("booking_token").notNull(), // SerpAPI
+  departureId: text("departure_id").notNull(), // IATA
+  arrivalId: text("arrival_id").notNull(), // IATA
+  rawResponse: jsonb("raw_response"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const insertHotelSchema = createInsertSchema(hotels).omit({
-  id: true,
+export const insertB2bFlightSchema = createInsertSchema(b2bFlights).omit({ id: true, createdAt: true });
+export type InsertB2bFlight = z.infer<typeof insertB2bFlightSchema>;
+export type B2bFlight = typeof b2bFlights.$inferSelect;
+
+/** Agent-specific markup rules for AgentMarkupComponent (percentage vs flat fee) */
+export const b2bAgentMarkups = pgTable("b2b_agent_markups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").references(() => agents.id),
+  agentRef: text("agent_ref"), // name or external id if no agents.id
+  type: text("type").notNull(), // 'percentage' | 'flat_fee'
+  value: numeric("value", { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertB2bAgentMarkupSchema = createInsertSchema(b2bAgentMarkups).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertB2bAgentMarkup = z.infer<typeof insertB2bAgentMarkupSchema>;
+export type B2bAgentMarkup = typeof b2bAgentMarkups.$inferSelect;
+
+/** In-progress / completed itineraries per client and Trip Anchor (orchestrator state) */
+export const b2bItineraries = pgTable("b2b_itineraries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientRef: text("client_ref").notNull(), // client or session identifier
+  tripAnchor: text("trip_anchor"), // e.g. place name or ID for "Continental Handshake"
+  status: text("status").notNull().default("in_progress"), // 'in_progress' | 'completed'
+  thoughtState: jsonb("thought_state"), // orchestrator thought_signature / selections
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertB2bItinerarySchema = createInsertSchema(b2bItineraries).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertB2bItinerary = z.infer<typeof insertB2bItinerarySchema>;
+export type B2bItinerary = typeof b2bItineraries.$inferSelect;
+
+/** Leads (hotel or flight) added to an itinerary; links to b2b_hotels or b2b_flights */
+export const b2bItineraryItems = pgTable("b2b_itinerary_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  itineraryId: varchar("itinerary_id").references(() => b2bItineraries.id).notNull(),
+  leadType: text("lead_type").notNull(), // 'hotel' | 'flight'
+  hotelId: varchar("hotel_id").references(() => b2bHotels.id),
+  flightId: varchar("flight_id").references(() => b2bFlights.id),
+  markupApplied: numeric("markup_applied", { precision: 10, scale: 2 }),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertB2bItineraryItemSchema = createInsertSchema(b2bItineraryItems).omit({ id: true, createdAt: true });
+export type InsertB2bItineraryItem = z.infer<typeof insertB2bItineraryItemSchema>;
+export type B2bItineraryItem = typeof b2bItineraryItems.$inferSelect;
+
+/** Curation audit: every drag/add/markup change in Agent Curation Panel (lead scoring for GRN) */
+export const b2bCurationEvents = pgTable("b2b_curation_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  itineraryId: varchar("itinerary_id").references(() => b2bItineraries.id),
+  leadType: text("lead_type").notNull(),
+  leadId: text("lead_id").notNull(), // hotel_id or flight_id
+  eventType: text("event_type").notNull(), // 'added' | 'removed' | 'markup_changed'
+  agentId: varchar("agent_id").references(() => agents.id),
+  payload: jsonb("payload"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertB2bCurationEventSchema = createInsertSchema(b2bCurationEvents).omit({ id: true, createdAt: true });
+export type InsertB2bCurationEvent = z.infer<typeof insertB2bCurationEventSchema>;
+export type B2bCurationEvent = typeof b2bCurationEvents.$inferSelect;
+
+// ============================================================
+// Platform Business Map – one row per onboarded platformId.
+// Maps a platform's site config to external provider IDs.
+// Created by the healing layer (PR #2); enrichment snapshots FK to this.
+// ============================================================
+
+/**
+ * Maps each site_config to a stable internal platform_id (UUID).
+ * External identifiers (Google place_id, CID, SerpApi ID) become attributes
+ * that can change over time without affecting internal references.
+ */
+export const platformBusinessMap = pgTable(
+  "platform_business_map",
+  {
+    /** Stable UUID assigned at onboarding; used as the public platformId. */
+    platformId: uuid("platform_id").primaryKey().defaultRandom(),
+    /** FK to the site_configs row that owns this platform. One-to-one. */
+    siteConfigId: varchar("site_config_id")
+      .notNull()
+      .unique()
+      .references(() => siteConfigs.id, { onDelete: "cascade" }),
+    /** Google CID (unique per business). */
+    googleCid: text("google_cid").unique(),
+    /** Google Place ID (if known). */
+    googlePlaceId: text("google_place_id"),
+    /** Cached SerpApi data_id for google_maps / google_maps_reviews engines. */
+    serpapiDataId: text("serpapi_data_id"),
+    /** Normalized business-category slug (e.g. 'restaurant', 'hotel'). */
+    categorySlug: text("category_slug"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("idx_platform_map_place_id").on(table.googlePlaceId),
+    index("idx_platform_map_serpapi_id").on(table.serpapiDataId),
+  ],
+);
+
+export const insertPlatformBusinessMapSchema = createInsertSchema(platformBusinessMap).omit({
+  platformId: true,
   createdAt: true,
+  updatedAt: true,
+});
+export type InsertPlatformBusinessMap = z.infer<typeof insertPlatformBusinessMapSchema>;
+export type PlatformBusinessMap = typeof platformBusinessMap.$inferSelect;
+
+// ============================================================
+// Platform Business Enrichment Snapshots
+// Raw provider payloads stored per platformId.
+// Written by the admin-only enrich_business_profile tool; never by voice path.
+// ============================================================
+export const platformBusinessEnrichmentSnapshots = pgTable(
+  "platform_business_enrichment_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** FK to platform_business_map(platform_id). */
+    platformId: uuid("platform_id")
+      .references(() => platformBusinessMap.platformId, { onDelete: "cascade" })
+      .notNull(),
+    /**
+     * Provider identifier, e.g.:
+     *   'serpapi_google_maps_place'
+     *   'serpapi_google_maps_reviews_merged'
+     */
+    provider: text("provider").notNull(),
+    /** Optional provider-specific reference key (e.g. SerpApi data_id). */
+    providerRef: text("provider_ref"),
+    /** Raw provider response or merged payload. */
+    payload: jsonb("payload").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_enrichment_snapshots_platform_id").on(table.platformId),
+    index("idx_enrichment_snapshots_provider").on(table.provider),
+    index("idx_enrichment_snapshots_platform_provider").on(table.platformId, table.provider),
+  ],
+);
+
+export const insertEnrichmentSnapshotSchema = createInsertSchema(
+  platformBusinessEnrichmentSnapshots,
+).omit({ id: true, createdAt: true });
+export type InsertEnrichmentSnapshot = z.infer<typeof insertEnrichmentSnapshotSchema>;
+export type EnrichmentSnapshot = typeof platformBusinessEnrichmentSnapshots.$inferSelect;
+
+// --- SOVEREIGN SMS ROUTER COMPLIANCE TABLES ---
+
+export const smsIntentEnum = pgEnum("sms_intent", [
+  "PLATFORM_OTP", "PLATFORM_CARE", "PLATFORM_MKTG",
+  "CUSTOMER_OTP", "CUSTOMER_CARE", "CUSTOMER_MKTG"
+]);
+
+export const smsOptOuts = pgTable("sms_opt_outs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  phoneNumber: text("phone_number").notNull(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id),
+  reason: text("reason").notNull().default("STOP keyword received"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export type InsertHotel = z.infer<typeof insertHotelSchema>;
-export type Hotel = typeof hotels.$inferSelect;
-
-// 2. FLIGHTS TABLE: Mapping SerpAPI Results
-export const flights = pgTable('flights', {
-  id: serial('id').primaryKey(),
-  bookingToken: text('booking_token').unique(), // SerpAPI deep-link token
-  airline: varchar('airline', { length: 100 }),
-  departureAirport: varchar('departure_airport', { length: 3 }), // IATA
-  arrivalAirport: varchar('arrival_airport', { length: 3 }), // IATA
-  netPrice: doublePrecision('net_price').notNull(),
-  currency: varchar('currency', { length: 3 }).default('USD'),
-  stops: integer('stops').default(0),
-  createdAt: timestamp('created_at').defaultNow(),
+export const smsLogs = pgTable("sms_logs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
+  twilioMessageSid: text("twilio_message_sid"),
+  messagingServiceSid: text("messaging_service_sid").notNull(),
+  intent: smsIntentEnum("intent").notNull(),
+  toPhoneNumber: text("to_phone_number").notNull(),
+  fromPhoneNumber: text("from_phone_number"),
+  body: text("body").notNull(),
+  status: text("status").notNull().default("queued"),
+  segments: integer("segments").default(1).notNull(),
+  cost: numeric("cost", { precision: 10, scale: 4 }),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const insertFlightSchema = createInsertSchema(flights).omit({
-  id: true,
-  createdAt: true,
+// ==========================================
+// Industry Agent Template Engine
+// 8 Business Groups × 6 Archetypes = 48 pre-tuned psychological profiles
+// ==========================================
+
+export const INDUSTRY_GROUPS = [
+  'food_beverage',
+  'health_wellness',
+  'home_services',
+  'professional_services',
+  'hospitality_travel',
+  'retail',
+  'real_estate',
+  'automotive',
+] as const;
+
+export type IndustryGroup = typeof INDUSTRY_GROUPS[number];
+
+export const AGENT_ARCHETYPES = [
+  'concierge',            // High I/S — warm welcome, FAQ, routing
+  'booking_coordinator',  // High C/D — calendar ops, commits
+  'lead_qualifier',       // High D/I — capture, qualify, prep for human closer
+  'retention_empath',     // Max S / High ARCH-A — de-escalation, make it right
+  'billing_analyst',      // Max C — invoices, payments, Stripe links
+  'gatekeeper',           // High S/C mid-D — triage, protect, route main line
+] as const;
+
+export type AgentArchetype = typeof AGENT_ARCHETYPES[number];
+
+/**
+ * Pre-tuned agent personality templates — one per (industryGroup × archetype).
+ * On business signup, all 6 archetypes for the detected industry are cloned into the
+ * site's agent roster. The owner sees a fully configured team on day one.
+ */
+export const industryAgentTemplates = pgTable("industry_agent_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Categorization
+  industryGroup: text("industry_group").notNull(),   // IndustryGroup
+  roleType: text("role_type").notNull(),             // AgentArchetype
+
+  // Identity
+  defaultName: text("default_name").notNull(),        // e.g. "Sarah (Intake Specialist)"
+  voiceId: text("voice_id").default("Kore"),          // Gemini voice character
+  voiceName: text("voice_name").default("Kore - Calm & Professional"),
+  avatarId: text("avatar_id").default("avatar1"),
+
+  // Character Architecture — Layer 1
+  shortTermMemoryTemplate: text("short_term_memory_template"),
+  longTermCoreTemplate: text("long_term_core_template"),
+  primaryIntent: text("primary_intent"),
+  worldView: text("world_view"),
+  unbreakableRule: text("unbreakable_rule"),
+
+  // Layer 2: Pre-tuned DISC Psychology (0-100)
+  dominance: integer("dominance").notNull().default(50),
+  influence: integer("influence").notNull().default(50),
+  steadiness: integer("steadiness").notNull().default(50),
+  conscientiousness: integer("conscientiousness").notNull().default(50),
+
+  // Layer 3: ARCH Conversation Mechanics (0-100)
+  archAcknowledge: integer("arch_acknowledge").notNull().default(60),
+  archReflect: integer("arch_reflect").notNull().default(50),
+  archContext: integer("arch_context").notNull().default(60),
+  archHandoff: integer("arch_handoff").notNull().default(50),
+
+  // Default Tools & Config
+  defaultTools: jsonb("default_tools").default([]),
+  defaultSystemPrompt: text("default_system_prompt"),
+
+  // Meta
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export type InsertFlight = z.infer<typeof insertFlightSchema>;
-export type Flight = typeof flights.$inferSelect;
-
-// 3. ITINERARIES TABLE: The "Stateful" Anchor
-export const itineraries = pgTable('itineraries', {
-  id: serial('id').primaryKey(),
-  agentId: integer('agent_id').notNull(),
-  clientName: text('client_name'),
-  tripAnchorName: text('trip_anchor_name'), // e.g., "The Venetian"
-  thoughtSignature: text('thought_signature'), // Gemini reasoning state
-  days: jsonb('days').notNull(), // Full structured DayItinerary array
-  isPublished: boolean('is_published').default(false),
-  updatedAt: timestamp('updated_at').defaultNow(),
-  createdAt: timestamp('created_at').defaultNow(),
-});
-
-export const insertItinerarySchema = createInsertSchema(itineraries).omit({
+export const insertIndustryAgentTemplateSchema = createInsertSchema(industryAgentTemplates).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
 });
 
-export type InsertItinerary = z.infer<typeof insertItinerarySchema>;
-export type Itinerary = typeof itineraries.$inferSelect;
+export type InsertIndustryAgentTemplate = z.infer<typeof insertIndustryAgentTemplateSchema>;
+export type IndustryAgentTemplate = typeof industryAgentTemplates.$inferSelect;
 
-// 4. AGENT MARKUPS: Commission Persistence
-export const agentMarkups = pgTable('agent_markups', {
-  agentId: serial('id').primaryKey(),
-  markupType: varchar('markup_type', { length: 20 }).default('percentage'), // percentage vs flat
-  markupValue: doublePrecision('markup_value').default(15.0),
-  preferredCurrency: varchar('preferred_currency', { length: 3 }).default('INR'), // Asia market focus
-  updatedAt: timestamp('updated_at').defaultNow(),
-});
-
-export const insertAgentMarkupSchema = createInsertSchema(agentMarkups).omit({
-  updatedAt: true,
-});
-
-export type InsertAgentMarkup = z.infer<typeof insertAgentMarkupSchema>;
-export type AgentMarkup = typeof agentMarkups.$inferSelect;
+// Google Places types → Industry Group mapping
+export const PLACES_TYPE_TO_INDUSTRY: Record<string, IndustryGroup> = {
+  // Food & Beverage
+  restaurant: 'food_beverage', cafe: 'food_beverage', bar: 'food_beverage',
+  bakery: 'food_beverage', meal_takeaway: 'food_beverage', meal_delivery: 'food_beverage',
+  food: 'food_beverage', night_club: 'food_beverage',
+  // Health & Wellness
+  beauty_salon: 'health_wellness', hair_care: 'health_wellness', spa: 'health_wellness',
+  gym: 'health_wellness', physiotherapist: 'health_wellness', dentist: 'health_wellness',
+  doctor: 'health_wellness', health: 'health_wellness',
+  // Home Services
+  plumber: 'home_services', electrician: 'home_services', painter: 'home_services',
+  roofing_contractor: 'home_services', general_contractor: 'home_services',
+  home_goods_store: 'home_services', locksmith: 'home_services',
+  // Professional Services
+  lawyer: 'professional_services', accounting: 'professional_services',
+  insurance_agency: 'professional_services', finance: 'professional_services',
+  real_estate_agency: 'real_estate',
+  // Hospitality & Travel
+  lodging: 'hospitality_travel', hotel: 'hospitality_travel', motel: 'hospitality_travel',
+  travel_agency: 'hospitality_travel', tourist_attraction: 'hospitality_travel',
+  // Retail
+  store: 'retail', clothing_store: 'retail', shoe_store: 'retail',
+  jewelry_store: 'retail', book_store: 'retail', electronics_store: 'retail',
+  furniture_store: 'retail', shopping_mall: 'retail',
+  // Real Estate
+  real_estate: 'real_estate', moving_company: 'real_estate',
+  // Automotive
+  car_dealer: 'automotive', car_repair: 'automotive', car_wash: 'automotive',
+  gas_station: 'automotive', parking: 'automotive',
+};

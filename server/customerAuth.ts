@@ -234,6 +234,24 @@ export async function customerUpdateProfile(req: Request, res: Response): Promis
   }
 }
 
+function toSerializable(obj: unknown): unknown {
+  if (obj === null || obj === undefined) return obj;
+  if (obj instanceof Date) return obj.toISOString();
+  if (Array.isArray(obj)) return obj.map(toSerializable);
+  if (typeof obj === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      try {
+        out[k] = toSerializable(v);
+      } catch {
+        out[k] = null;
+      }
+    }
+    return out;
+  }
+  return obj;
+}
+
 export async function customerGetBusinesses(req: Request, res: Response): Promise<void> {
   try {
     const authHeader = req.headers.authorization;
@@ -250,11 +268,14 @@ export async function customerGetBusinesses(req: Request, res: Response): Promis
       return;
     }
 
-    const businesses = await storage.getSiteConfigsByOwner(session.customerAccountId);
+    const rows = await storage.getSiteConfigsByOwner(session.customerAccountId);
+    const businesses = toSerializable(rows) as unknown[];
     res.json({ businesses });
   } catch (error: any) {
-    console.error("[CustomerAuth] Get businesses error:", error);
-    res.status(500).json({ error: error.message || "Failed to get businesses" });
+    console.error("[CustomerAuth] Get businesses error:", error?.message, error?.stack);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error?.message || "Failed to get businesses" });
+    }
   }
 }
 

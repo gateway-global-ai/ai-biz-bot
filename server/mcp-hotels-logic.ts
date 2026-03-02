@@ -5,6 +5,7 @@
 import pg from "pg";
 import axios from "axios";
 import Fuse from "fuse.js";
+import { getServerMapsApiKey } from "./config/mapsApiKey";
 
 const config = {
   grn: {
@@ -27,8 +28,8 @@ const config = {
     endpoint: "https://serpapi.com/search",
   },
   googleMaps: {
-    apiKey: process.env.GOOGLE_MAPS_API_KEY || process.env.google_map_api_key || "",
-    placesApiKey: process.env.GOOGLE_PLACES_KEY || "",
+    apiKey: getServerMapsApiKey() || process.env.google_map_api_key || "",
+    placesApiKey: process.env.GOOGLE_PLACES_KEY || process.env.GOOGLE_PLACES_API_KEY || "",
     mcpEndpoint: "https://mapstools.googleapis.com/mcp",
   },
 };
@@ -45,6 +46,13 @@ async function getDbPool(): Promise<pg.Pool> {
 function toGrnApiCode(grnHotelId: string | null | undefined): string | null {
   if (!grnHotelId) return null;
   return grnHotelId.replace(/^H!/i, "");
+}
+
+/** Convert a bare GRN API code back to the DB-stored "H!" prefix form. */
+function toGrnDbCode(apiCode: string | null | undefined): string | null {
+  if (!apiCode) return null;
+  if (/^H!/i.test(apiCode)) return apiCode;
+  return `H!${apiCode}`;
 }
 
 function toRad(deg: number) {
@@ -421,4 +429,4 @@ export async function getGooglePlaceDetails(
   };
 }
 
-export { toGrnApiCode };
+export { toGrnApiCode, toGrnDbCode };

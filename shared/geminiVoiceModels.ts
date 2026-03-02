@@ -93,13 +93,72 @@ export interface GeminiModelConfig {
 }
 
 export const GEMINI_VOICE_MODELS: Record<string, GeminiModelConfig> = {
+  'gemini-3.0-flash': {
+    id: 'gemini-3.0-flash',
+    name: 'gemini-3-flash-preview',
+    displayName: 'Gemini 3.0 Flash',
+    description: 'Gemini 3 Flash: frontier intelligence built for speed. Optimized for PTT and live voice with function calling support for hotel search and travel tools.',
+    releaseDate: '2025-02',
+    isLatest: true,
+    isBudgetFriendly: false,
+    apiEndpoint: 'https://generativelanguage.googleapis.com/v1beta',
+    usesLiveAPI: true,
+    usesBidiStreaming: true,
+    capabilities: {
+      audioInput: true,
+      audioOutput: true,
+      textInput: true,
+      textOutput: true,
+      streaming: true,
+      functionCalling: true,
+    },
+    systemPromptConfig: {
+      format: 'systemInstruction',
+      maxLength: 8000,
+      supportsRoles: true,
+    },
+    samplingConfig: {
+      temperature: { min: 0, max: 2.0, default: 1.0, recommended: 0.8 },
+      topP: { min: 0, max: 1.0, default: 0.95, recommended: 0.95 },
+      topK: { min: 1, max: 40, default: 40, recommended: 40 },
+      maxOutputTokens: { min: 1, max: 8192, default: 8192, recommended: 2048 },
+    },
+    availableVoices: [
+      { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive', quality: 'premium' },
+      { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate', quality: 'premium' },
+      { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative', quality: 'premium' },
+      { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable', quality: 'premium' },
+    ],
+    pricing: {
+      inputAudioPerMinute: 0.04,
+      outputAudioPerMinute: 0.12,
+      inputTextPer1MTokens: 0.075,
+      outputTextPer1MTokens: 0.30,
+      currency: 'USD',
+    },
+    performance: {
+      averageLatency: 600,
+      streamingLatency: 250,
+      audioQuality: 'Premium HD',
+    },
+    sdkTemplate: 'gemini-3-flash-live-api',
+    exampleCode: `// Gemini 3.0 Flash - Live API with hotel search tools
+const session = await client.live.connect({
+  model: 'gemini-3.0-flash',
+  config: {
+    systemInstruction: { parts: [{ text: 'You help users search hotels.' }] },
+    responseModalities: [Modality.AUDIO, Modality.TEXT],
+    tools: HOTEL_MCP_TOOLS,
+  }
+});`,
+  },
   'gemini-2.5-flash-native-audio-preview-12-2025': {
     id: 'gemini-2.5-flash-native-audio-preview-12-2025',
     name: 'gemini-2.5-flash-native-audio-preview-12-2025',
     displayName: 'Gemini 2.5 Flash Native Audio (December 2025)',
     description: 'Cutting-edge native audio model with enhanced quality, affective dialog, proactive audio, and improved barge-in. 30 HD voices in 24 languages.',
     releaseDate: '2025-12',
-    isLatest: true,
+    isLatest: false,
     isBudgetFriendly: false,
     
     apiEndpoint: 'https://generativelanguage.googleapis.com/v1beta',

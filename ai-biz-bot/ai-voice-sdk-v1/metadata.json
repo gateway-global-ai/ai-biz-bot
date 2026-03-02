@@ -1,7 +1,0 @@
-{
-  "name": "AI Biz Bot Voice",
-  "description": "A visual demonstration of the Google Gemini Live API native audio capabilities, featuring real-time voice interaction, code inspection, and audio visualization.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
-}

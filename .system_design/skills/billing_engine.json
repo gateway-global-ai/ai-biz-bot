@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "id": "billing_engine",
+  "version": "1.1.0",
+  "description": "Sovereign AI OS billing skill definitions. Covers MSA v1.0.0 (direct) and MSA v1.1.0 (reseller addendum) obligations.",
+  "msa_ref": ["contracts/MSA_v1.0.0.md", "contracts/MSA_v1.1.0_RESELLER.md"],
+  "pricing_ref": "pricing_v1.yaml",
+  "skills": [
+    {
+      "name": "calculateOverage",
+      "description": "Calculates the metered overage charge for a completed voice or SMS event.",
+      "msa_ref": "MSA §3.3",
+      "trigger": {
+        "event": "Twilio.Call.Completed",
+        "also_handles": ["WebRTC.Session.Ended", "Twilio.Message.Delivered"]
+      },
+      "inputs": {
+        "actual_units": {
+          "type": "number",
+          "description": "Actual minutes consumed or messages sent in the billing period."
+        },
+        "included_units": {
+          "type": "number",
+          "description": "Units covered by the Essentials Bundle; overage begins above this threshold."
+        },
+        "rate": {
+          "type": "number",
+          "description": "Per-unit overage rate from pricing_v1.yaml (e.g. 0.25 for Phone Voice AI)."
+        }
+      },
+      "formula": "(actual_units - included_units) * rate",
+      "output": {
+        "overage_charge": {
+          "type": "number",
+          "description": "Dollar amount owed for overage. Zero if actual_units <= included_units."
+        }
+      },
+      "side_effects": [
+        "increment_usage(customerId, eventType, quantity) must be called before this skill runs.",
+        "Result must be reported to Stripe Metered Billing within the same billing cycle."
+      ]
+    },
+    {
+      "name": "verifyCompliance",
+      "description": "Validates that a customer meets all regulatory requirements before SMS messaging is enabled.",
+      "msa_ref": "MSA §4",
+      "trigger": {
+        "event": "Customer.SMS.Enable.Requested",
+        "also_handles": ["Onboarding.Step.SMSActivation"]
+      },
+      "inputs": {
+        "ein": {
+          "type": "string",
+          "description": "Customer's Employer Identification Number. Must be a valid 9-digit EIN."
+        },
+        "business_address": {
+          "type": "object",
+          "description": "Verified physical address of the business (street, city, state, zip, country).",
+          "required": ["street", "city", "state", "zip", "country"]
+        },
+        "a2p_campaign_id": {
+          "type": "string",
+          "description": "Registered A2P 10DLC Campaign SID. Must be active and approved by carrier."
+        },
+        "consent_records_verified": {
+          "type": "boolean",
+          "description": "Attestation that Prior Express Written Consent records exist for all messaging recipients."
+        }
+      },
+      "logic": "Return PASS only if EIN is valid AND address is verified AND a2p_campaign_id is active AND consent_records_verified is true.",
+      "output": {
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "FAIL"],
+          "description": "PASS enables SMS. FAIL blocks SMS and surfaces a rejection reason."
+        },
+        "rejection_reason": {
+          "type": "string",
+          "description": "Human-readable reason for FAIL. Must be written to the operator log."
+        }
+      },
+      "side_effects": [
+        "On FAIL, SMS dispatch must be hard-blocked — not silently dropped.",
+        "Rejection reason must be written to the operator compliance log."
+      ]
+    },
+    {
+      "name": "handleEarlyTermination",
+      "description": "Calculates the early termination fee owed when a customer cancels after the 30-day grace period but before the end of the Primary Term.",
+      "msa_ref": "MSA §6.1",
+      "trigger": {
+        "event": "Customer.Subscription.CancelRequested",
+        "also_handles": ["Billing.Subscription.Terminate"]
+      },
+      "inputs": {
+        "current_day": {
+          "type": "integer",
+          "description": "Number of calendar days since the Activation Date (Day 1 = Activation Date)."
+        },
+        "remaining_flat_fees": {
+          "type": "number",
+          "description": "Sum of all Flat Fees ($49.00/mo) remaining in the Primary Term at the time of cancellation."
+        }
+      },
+      "rule_of_31": {
+        "condition": "current_day > 30",
+        "description": "The grace period covers Days 1–30 inclusive. Early termination fees are ONLY applicable if current_day is strictly greater than 30. This check must appear as the first guard clause in any implementation of this skill.",
+        "if_false": {
+          "termination_fee": 0,
+          "reason": "Cancellation within the 30-day Verizon Grace Period. No penalty applies."
+        }
+      },
+      "formula": "0.75 * remaining_flat_fees",
+      "output": {
+        "termination_fee": {
+          "type": "number",
+          "description": "Dollar amount owed. Zero if current_day <= 30."
+        },
+        "fee_basis": {
+          "type": "string",
+          "description": "Explanation string for the invoice line item (e.g. '75% of 9 remaining months at $49.00/mo')."
+        }
+      },
+      "side_effects": [
+        "Fee must be invoiced via Stripe immediately upon cancellation confirmation.",
+        "Suspension logic (MSA §6.2) applies if this invoice goes 15+ days unpaid."
+      ]
+    },
+    {
+      "name": "calculateResellerMargin",
+      "description": "Calculates the net payout owed to a Reseller after deducting the wholesale base rate and Stripe processing fees from the retail price collected. Credits the result to resellerCommissionBalance and schedules a Stripe Connect transfer.",
+      "msa_ref": "MSA v1.1.0 §2.2",
+      "pricing_ref": "pricing_v1.yaml#wholesale_v1.revenue_share",
+      "trigger": {
+        "event": "Stripe.Invoice.Paid",
+        "also_handles": ["Reseller.Commission.Calculate", "Billing.SubAccount.PaymentCollected"]
+      },
+      "inputs": {
+        "retail_price": {
+          "type": "number",
+          "description": "The full amount collected from the end-customer via Stripe (the Reseller's markup price)."
+        },
+        "wholesale_base": {
+          "type": "number",
+          "description": "The Vendor's base rate per Sub-Account per month. Source: pricing_v1.yaml → wholesale_v1.base_rate (default: 49.00)."
+        },
+        "stripe_processing_fee": {
+          "type": "number",
+          "description": "Stripe transaction fee for the collected payment (typically 2.9% + $0.30 for card transactions). Must be calculated at runtime, not hardcoded."
+        },
+        "reseller_account_id": {
+          "type": "string",
+          "description": "The Master UUID of the RESELLER account. Used to look up wholesaleRate (custom rate override) and credit resellerCommissionBalance."
+        }
+      },
+      "formula": "reseller_payout = retail_price - wholesale_base - stripe_processing_fee",
+      "wholesale_override_logic": "If customerAccounts.wholesaleRate != 49.00 for this reseller, use that value as wholesale_base instead of the default.",
+      "output": {
+        "reseller_payout": {
+          "type": "number",
+          "description": "Dollar amount credited to resellerCommissionBalance. Must be >= 0; if negative, log a pricing configuration error."
+        },
+        "payout_summary": {
+          "type": "string",
+          "description": "Human-readable breakdown for the Reseller Dashboard (e.g. '$149.00 collected − $49.00 wholesale − $4.62 processing = $95.38 margin')."
+        }
+      },
+      "side_effects": [
+        "Credit resellerCommissionBalance in customerAccounts by reseller_payout amount.",
+        "If stripeConnectedAccountId is set on the Reseller account, schedule a Stripe Connect transfer for the payout on the Vendor's standard disbursement schedule.",
+        "If stripeConnectedAccountId is null, hold balance in resellerCommissionBalance until Stripe Connect onboarding is completed.",
+        "Log a compliance audit event with reseller_account_id, sub_account_id, retail_price, wholesale_base, stripe_processing_fee, and reseller_payout for financial reconciliation."
+      ]
+    }
+  ]
+}

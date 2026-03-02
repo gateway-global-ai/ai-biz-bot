@@ -126,9 +126,23 @@ router.post('/:id/version', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/knowledge/popular/:limit - Get most accessed
+ * GET /api/knowledge/popular - Get most accessed (default limit=10)
+ * GET /api/knowledge/popular/:limit - Get most accessed (custom limit)
  */
-router.get('/popular/:limit?', async (req: Request, res: Response) => {
+router.get('/popular', async (_req: Request, res: Response) => {
+  try {
+    const popular = await knowledgeBaseService.getPopularKnowledge(10);
+    res.json(popular);
+  } catch (error: any) {
+    console.error('Get popular error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/knowledge/popular/:limit - Get most accessed (custom limit)
+ */
+router.get('/popular/:limit', async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.params.limit || '10');
     const popular = await knowledgeBaseService.getPopularKnowledge(limit);
@@ -140,9 +154,20 @@ router.get('/popular/:limit?', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/knowledge/recent/:limit - Get recently updated
+ * GET /api/knowledge/recent - Get recently updated (default limit=10)
+ * GET /api/knowledge/recent/:limit - Get recently updated (custom limit)
  */
-router.get('/recent/:limit?', async (req: Request, res: Response) => {
+router.get('/recent', async (_req: Request, res: Response) => {
+  try {
+    const recent = await knowledgeBaseService.getRecentKnowledge(10);
+    res.json(recent);
+  } catch (error: any) {
+    console.error('Get recent error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/recent/:limit', async (req: Request, res: Response) => {
   try {
     const limit = parseInt(req.params.limit || '10');
     const recent = await knowledgeBaseService.getRecentKnowledge(limit);

@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { storage } from "./storage";
-import { sendSms, getTwilioFromPhoneNumber } from "./twilio";
+import { dispatchSms, SmsIntent } from "./services/smsRouter";
 import crypto from "crypto";
 
 function generateOtp(): string {
@@ -53,19 +53,17 @@ export async function sendOtp(req: Request, res: Response): Promise<void> {
       expiresAt,
     });
 
-    const isMock = process.env.MOCK_TWILIO_SMS === 'true';
-    const fromNumber = await getTwilioFromPhoneNumber();
-    
-    if (!fromNumber && !isMock) {
-      res.status(500).json({ error: "SMS service not configured" });
+    const result = await dispatchSms({
+      to: normalizedPhone,
+      body: `Your Gateway Global AI verification code is: ${code}\n\nThis code expires in 5 minutes.`,
+      intent: SmsIntent.PLATFORM_OTP,
+      siteConfigId: "SYSTEM",
+    });
+
+    if (!result.ok) {
+      res.status(500).json({ error: result.message || "Failed to send verification code" });
       return;
     }
-
-    await sendSms(
-      normalizedPhone,
-      `Your Gateway Global AI login code is: ${code}\n\nThis code expires in 5 minutes.`,
-      fromNumber || undefined
-    );
 
     res.json({ 
       success: true, 
@@ -122,6 +120,7 @@ export async function verifyOtp(req: Request, res: Response): Promise<void> {
         phone: adminUser.phone,
         name: adminUser.name,
         role: adminUser.role,
+        resellerId: (adminUser as any).resellerId ?? null,
       },
     });
   } catch (error: any) {
@@ -159,6 +158,7 @@ export async function verifySession(req: Request, res: Response): Promise<void> 
         phone: adminUser.phone,
         name: adminUser.name,
         role: adminUser.role,
+        resellerId: (adminUser as any).resellerId ?? null,
       },
     });
   } catch (error: any) {

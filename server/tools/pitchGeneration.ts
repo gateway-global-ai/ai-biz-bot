@@ -33,9 +33,10 @@ export async function urlToPlaceId(mapUrl: string): Promise<string | null> {
     const query = nameMatch ? decodeURIComponent(nameMatch[1].replace(/\+/g, ' ')) : null;
 
     if (query) {
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+      const { getServerMapsApiKey } = await import("../config/mapsApiKey");
+      const apiKey = getServerMapsApiKey();
       if (!apiKey) {
-        throw new Error('GOOGLE_MAPS_API_KEY is not configured');
+        throw new Error('Google Maps/Places API key not configured (set GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_GROUNDING_LITE_API_KEY, or GOOGLE_PLACES_API_KEY)');
       }
 
       const searchResponse = await axios.post(

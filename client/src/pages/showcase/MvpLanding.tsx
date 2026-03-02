@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
 import { useMutation } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, CheckCircle2, Sparkles, MessageSquare, Clock, ArrowRight, Target, Users, Shield, Search, Mic, type LucideIcon } from 'lucide-react';
+import { Loader2, Sparkles, MessageSquare, Clock, ArrowRight, Target, Users, Shield, Search, Mic, Phone, Compass, type LucideIcon } from 'lucide-react';
 import headerLogo from '@assets/Pidea_logo_header_(7)_1770381083770.png';
 import { apiRequest } from '@/lib/queryClient';
 
@@ -64,13 +65,15 @@ export default function MvpLanding() {
   const [name, setName] = useState('');
   const [selectedPersonality, setSelectedPersonality] = useState<PersonalityOption | null>(null);
   const [agentName, setAgentName] = useState('');
+  const [callCoordinates, setCallCoordinates] = useState<string | null>(null);
 
   const submitTask = useMutation({
     mutationFn: async (data: { task: string; phone: string; name: string; personality: PersonalityOption; agentName: string }) => {
       const response = await apiRequest('POST', '/api/tasks/submit', data);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setCallCoordinates(data.callCoordinates ?? null);
       setStep('success');
     },
   });
@@ -113,7 +116,7 @@ export default function MvpLanding() {
         <div className="container mx-auto px-4 py-2 flex items-center justify-between gap-3">
           <img src={headerLogo} alt="Gateway Global AI Biz Bot" className="h-16 object-contain" data-testid="img-header-logo" />
           <div className="flex items-center gap-3">
-            <Link href="/kimi-audio">
+            <Link href="/">
               <Button variant="ghost" size="sm" className="text-white/80 hover:text-white hover:bg-white/10" data-testid="link-voice-ai">
                 <Mic className="w-4 h-4 mr-2" />
                 Voice AI
@@ -277,66 +280,131 @@ export default function MvpLanding() {
           </Card>
         )}
 
-        {/* Step 4: Success */}
+        {/* Step 4: UNLOCKED — Navigator Success */}
         {step === 'success' && (
-          <Card className="bg-white/10 backdrop-blur-lg border-white/20">
-            <CardContent className="p-8 text-center space-y-6">
-              <div className="relative">
-                <CheckCircle2 className="h-20 w-20 mx-auto text-green-400" />
-                <div className="absolute inset-0 h-20 w-20 mx-auto bg-green-400/30 rounded-full blur-xl" />
-              </div>
-
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-2">You're All Set!</h2>
-                <p className="text-purple-200/80 mb-4">
-                  {agentName} is starting on your task right now.
-                </p>
-              </div>
-
-              <div className="bg-black/30 rounded-xl p-6 text-left space-y-4">
-                <h3 className="font-semibold text-white flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-purple-400" />
-                  What happens next:
-                </h3>
-                <div className="space-y-3 text-sm">
-                  <div className="flex gap-3">
-                    <Clock className="h-4 w-4 text-green-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-purple-200/80">
-                      <span className="text-white font-medium">Within 60 seconds:</span> {agentName} will text you confirming they got your task
-                    </p>
+          <AnimatePresence>
+            <motion.div
+              key="unlocked"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5, type: 'spring', damping: 18 }}
+            >
+              <Card className="bg-white/10 backdrop-blur-lg border-white/20 overflow-hidden">
+                <CardContent className="p-8 text-center space-y-6">
+                  {/* Navigator visual — animated compass with glow rings */}
+                  <div className="relative flex items-center justify-center">
+                    {/* Outer glow ring */}
+                    <motion.div
+                      className="absolute w-40 h-40 rounded-full border-2 border-purple-400/30"
+                      animate={{ scale: [1, 1.25, 1], opacity: [0.6, 0, 0.6] }}
+                      transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                    {/* Mid glow ring */}
+                    <motion.div
+                      className="absolute w-28 h-28 rounded-full border-2 border-blue-400/40"
+                      animate={{ scale: [1, 1.2, 1], opacity: [0.8, 0.1, 0.8] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: 0.3 }}
+                    />
+                    {/* Compass icon */}
+                    <motion.div
+                      className="relative z-10 w-20 h-20 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/50"
+                      initial={{ rotate: -45, scale: 0 }}
+                      animate={{ rotate: 0, scale: 1 }}
+                      transition={{ delay: 0.2, duration: 0.6, type: 'spring', stiffness: 200 }}
+                    >
+                      <Compass className="h-10 w-10 text-white" />
+                    </motion.div>
                   </div>
-                  <div className="flex gap-3">
-                    <Clock className="h-4 w-4 text-yellow-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-purple-200/80">
-                      <span className="text-white font-medium">Every few hours:</span> Progress updates via SMS
-                    </p>
-                  </div>
-                  <div className="flex gap-3">
-                    <Clock className="h-4 w-4 text-blue-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-purple-200/80">
-                      <span className="text-white font-medium">Within 24 hours:</span> Task completed with full results
-                    </p>
-                  </div>
-                </div>
-              </div>
 
-              <p className="text-sm text-purple-200/60">
-                Check your phone at <span className="text-white font-medium">{phone}</span> for updates
-              </p>
-
-              <div className="flex justify-center">
-                <Link href="/kimi-audio">
-                  <Button
-                    data-testid="button-try-voice"
-                    className="bg-purple-600 hover:bg-purple-500 text-white"
+                  {/* UNLOCKED badge */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="space-y-1"
                   >
-                    <Mic className="w-4 h-4 mr-2" />
-                    Try Voice AI
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
+                    <p className="text-xs font-bold tracking-[0.3em] text-purple-400 uppercase">Navigator</p>
+                    <h2 className="text-3xl font-extrabold text-white tracking-tight">UNLOCKED</h2>
+                    <p className="text-purple-200/80 text-sm">
+                      {agentName} is online and already working on your task.
+                    </p>
+                  </motion.div>
+
+                  {/* Call Coordinates */}
+                  {callCoordinates && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.75 }}
+                      className="bg-black/40 rounded-xl p-5 text-left border border-purple-500/30"
+                      data-testid="call-coordinates-panel"
+                    >
+                      <p className="text-xs font-bold tracking-[0.2em] text-purple-400 uppercase mb-3 flex items-center gap-2">
+                        <Phone className="h-3 w-3" />
+                        Your Call Coordinates
+                      </p>
+                      <p className="text-2xl font-mono font-bold text-white tracking-widest mb-1">
+                        {callCoordinates}
+                      </p>
+                      <p className="text-xs text-purple-200/60">
+                        Call or text this number anytime to speak with {agentName} live.
+                      </p>
+                    </motion.div>
+                  )}
+
+                  {/* What happens next */}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 1 }}
+                    className="bg-black/30 rounded-xl p-5 text-left space-y-3"
+                  >
+                    <h3 className="font-semibold text-white flex items-center gap-2 text-sm">
+                      <MessageSquare className="h-4 w-4 text-purple-400" />
+                      What happens next:
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex gap-3">
+                        <Clock className="h-4 w-4 text-green-400 mt-0.5 flex-shrink-0" />
+                        <p className="text-purple-200/80">
+                          <span className="text-white font-medium">Right now:</span> {agentName} just texted you your Call Coordinates at <span className="text-white font-medium">{phone}</span>
+                        </p>
+                      </div>
+                      <div className="flex gap-3">
+                        <Clock className="h-4 w-4 text-yellow-400 mt-0.5 flex-shrink-0" />
+                        <p className="text-purple-200/80">
+                          <span className="text-white font-medium">Every few hours:</span> Progress updates via SMS
+                        </p>
+                      </div>
+                      <div className="flex gap-3">
+                        <Clock className="h-4 w-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                        <p className="text-purple-200/80">
+                          <span className="text-white font-medium">Within 24 hours:</span> Task completed with full results
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 1.2 }}
+                    className="flex justify-center"
+                  >
+                    <Link href="/">
+                      <Button
+                        data-testid="button-try-voice"
+                        className="bg-purple-600 hover:bg-purple-500 text-white"
+                      >
+                        <Mic className="w-4 h-4 mr-2" />
+                        Try Voice AI
+                      </Button>
+                    </Link>
+                  </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </AnimatePresence>
         )}
 
         {/* Features */}

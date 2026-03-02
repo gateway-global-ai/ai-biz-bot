@@ -4,7 +4,6 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { PLAN_LIMITS, type PlanType } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +13,6 @@ import {
   Phone,
   Mail,
   Building2,
-  Crown,
   LogOut,
   ArrowLeft,
   Globe,
@@ -22,14 +20,28 @@ import {
   Loader2,
   Check,
   ExternalLink,
-  Sparkles,
-  PhoneCall,
-  Mic,
-  Shield,
   Search,
   X,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Settings2,
+  Activity,
+  MessageSquare,
+  Mic2,
 } from "lucide-react";
+
+// ── Pricing constants sourced from .system_design/pricing_v1.yaml ─────────────
+const SOVEREIGN_PRICING = {
+  flatFeeMonthly: 49,
+  overagePhoneVoice: 0.25,
+  overageWebVoice: 0.18,
+  overageA2pSms: 0.125,
+  gracePeriodDays: 30,
+} as const;
 import gatewayLogo from "@assets/gatewaylogo_header_left_1770354860467.png";
+import { ensureApiLoader, loadPlacesLibrary } from "@/utils/googleMapsLoader";
 
 export default function MyAccount() {
   const { user, token, logout, updateUser, isAuthenticated, isLoading } = useCustomerAuth();
@@ -42,7 +54,6 @@ export default function MyAccount() {
   const [showAddBusiness, setShowAddBusiness] = useState(false);
   const [addingBusiness, setAddingBusiness] = useState(false);
   const [mapsKey, setMapsKey] = useState<string | null>(null);
-  const [mapsLibLoaded, setMapsLibLoaded] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,105 +65,117 @@ export default function MyAccount() {
   }, [showAddBusiness]);
 
   useEffect(() => {
-    if (!showAddBusiness || !mapsKey) return;
-    const existingLib = document.querySelector('script[data-gmpx-lib]');
-    if (existingLib) {
-      setMapsLibLoaded(true);
-      return;
-    }
-    const script = document.createElement("script");
-    script.type = "module";
-    script.src = "https://ajax.googleapis.com/ajax/libs/@googlemaps/extended-component-library/0.6.11/index.min.js";
-    script.setAttribute("data-gmpx-lib", "true");
-    script.async = true;
-    script.onload = () => setMapsLibLoaded(true);
-    document.head.appendChild(script);
-  }, [showAddBusiness, mapsKey]);
-
-  useEffect(() => {
-    if (!mapsLibLoaded || !mapsKey || !pickerRef.current || !showAddBusiness) return;
+    // The EEL is loaded via the npm package (googleMapsLoader utility).
+    // No CDN <script> tag needed — custom elements are registered on import.
+    if (!mapsKey || !pickerRef.current || !showAddBusiness) return;
     const container = pickerRef.current;
     container.innerHTML = "";
 
-    const existingLoader = document.querySelector("gmpx-api-loader");
-    if (!existingLoader) {
-      const apiLoader = document.createElement("gmpx-api-loader");
-      apiLoader.setAttribute("key", mapsKey);
-      apiLoader.setAttribute("solution-channel", "GMP_GE_mapsandplacesautocomplete_v2");
-      container.appendChild(apiLoader);
-    }
+    // Inject the <gmpx-api-loader> singleton (document-level guard in utility).
+    ensureApiLoader(mapsKey);
 
-    const placePicker = document.createElement("gmpx-place-picker") as any;
-    placePicker.setAttribute("placeholder", "Search for your business...");
-    placePicker.setAttribute("data-testid", "input-add-business-search");
-    placePicker.style.cssText = "width:100%;--gmpx-color-surface:rgb(15 23 42);--gmpx-color-on-surface:#e2e8f0;--gmpx-color-on-surface-variant:#64748b;--gmpx-color-primary:#818cf8;--gmpx-color-outline:#334155;--gmpx-font-family-base:inherit;--gmpx-font-size-base:0.95rem;border:1px solid #334155;border-radius:0.5rem;";
+    let autocomplete: any = null;
+    let cancelled = false;
 
     const phone = user?.phone || "";
-    const handlePlaceChange = async () => {
-      const place = placePicker.value;
-      if (!place || !(place.displayName || place.name)) return;
 
-      const placeId = place.id ?? place.place_id ?? undefined;
-      const businessName = place.displayName || place.name || "";
-      const businessAddress = place.formattedAddress || place.formatted_address || "";
+    const setup = async () => {
+      const { PlaceAutocompleteElement } = await loadPlacesLibrary();
+      if (cancelled) return;
 
-      let placeData: any = {
-        name: businessName,
-        formatted_address: businessAddress,
-        place_id: placeId,
-      };
-      if (place.types) placeData.types = place.types;
-      if (place.rating) placeData.rating = place.rating;
-      if (place.userRatingCount) placeData.user_ratings_total = place.userRatingCount;
-      if (place.location) {
-        placeData.geometry = { location: { lat: place.location.lat(), lng: place.location.lng() } };
-      }
+      autocomplete = new PlaceAutocompleteElement();
+      autocomplete.setAttribute("placeholder", "Search for your business...");
+      autocomplete.setAttribute("data-testid", "input-add-business-search");
+      autocomplete.style.cssText = "width:100%;display:block;border:1px solid #334155;border-radius:0.5rem;overflow:hidden;";
 
-      if (!phone) {
-        toast({ title: "Error", description: "Phone number is missing from your account", variant: "destructive" });
-        return;
-      }
-
-      setAddingBusiness(true);
-      try {
-        const res = await fetch("/api/demo/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            phone,
-            businessName,
-            businessAddress,
-            placeId: placeId || null,
-            placeData,
-          }),
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || "Failed to create business");
+      // Apply dark theme inside the shadow DOM
+      requestAnimationFrame(() => {
+        const shadow = autocomplete?.shadowRoot;
+        if (shadow) {
+          const style = document.createElement("style");
+          style.textContent = `
+            input { background:rgb(15 23 42)!important;color:#e2e8f0!important;font-size:0.95rem!important;
+                    font-family:inherit!important;border:none!important;outline:none!important;
+                    width:100%!important;padding:8px 12px!important; }
+            input::placeholder { color:#64748b!important; }
+          `;
+          shadow.appendChild(style);
         }
-        await queryClient.invalidateQueries({ queryKey: ["/api/customer/businesses"] });
-        setShowAddBusiness(false);
-        toast({ title: "Business Added", description: `${businessName} has been created.` });
-      } catch (err: any) {
-        toast({ title: "Error", description: err.message || "Failed to add business", variant: "destructive" });
-      } finally {
-        setAddingBusiness(false);
-      }
+      });
+
+      const handlePlaceSelect = async (event: any) => {
+        const { placePrediction } = event;
+        if (!placePrediction) return;
+
+        const place = placePrediction.toPlace();
+        await place.fetchFields({ fields: ["id", "displayName", "formattedAddress", "location", "types", "rating", "userRatingCount"] });
+
+        if (!place.displayName) return;
+
+        const placeId = place.id ?? undefined;
+        const businessName = place.displayName || "";
+        const businessAddress = place.formattedAddress || "";
+
+        let placeData: any = {
+          name: businessName,
+          formatted_address: businessAddress,
+          place_id: placeId,
+        };
+        if (place.types) placeData.types = place.types;
+        if (place.rating) placeData.rating = place.rating;
+        if (place.userRatingCount) placeData.user_ratings_total = place.userRatingCount;
+        if (place.location) {
+          placeData.geometry = { location: { lat: place.location.lat(), lng: place.location.lng() } };
+        }
+
+        if (!phone) {
+          toast({ title: "Error", description: "Phone number is missing from your account", variant: "destructive" });
+          return;
+        }
+
+        setAddingBusiness(true);
+        try {
+          const res = await fetch("/api/demo/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              phone,
+              businessName,
+              businessAddress,
+              placeId: placeId || null,
+              placeData,
+            }),
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || "Failed to create business");
+          }
+          await queryClient.invalidateQueries({ queryKey: ["/api/customer/businesses"] });
+          setShowAddBusiness(false);
+          toast({ title: "Business Added", description: `${businessName} has been created.` });
+        } catch (err: any) {
+          toast({ title: "Error", description: err.message || "Failed to add business", variant: "destructive" });
+        } finally {
+          setAddingBusiness(false);
+        }
+      };
+
+      autocomplete.addEventListener("gmp-placeselect", handlePlaceSelect);
+      container.appendChild(autocomplete);
+
+      setTimeout(() => {
+        const input = autocomplete?.shadowRoot?.querySelector("input");
+        if (input) (input as HTMLInputElement).focus();
+      }, 300);
     };
 
-    placePicker.addEventListener("gmpx-placechange", handlePlaceChange);
-    container.appendChild(placePicker);
-
-    setTimeout(() => {
-      const input = placePicker.shadowRoot?.querySelector("input");
-      if (input) input.focus();
-    }, 300);
+    setup().catch(err => console.error("[MyAccount] Failed to load Places library:", err));
 
     return () => {
-      placePicker.removeEventListener("gmpx-placechange", handlePlaceChange);
+      cancelled = true;
       container.innerHTML = "";
     };
-  }, [mapsLibLoaded, mapsKey, showAddBusiness, user?.phone]);
+  }, [mapsKey, showAddBusiness, user?.phone]);
 
   const businessesQuery = useQuery({
     queryKey: ["/api/customer/businesses"],
@@ -163,6 +186,15 @@ export default function MyAccount() {
       if (!res.ok) throw new Error("Failed to load businesses");
       const data = await res.json();
       return data.businesses;
+    },
+    enabled: isAuthenticated,
+  });
+
+  const onboardingQuery = useQuery({
+    queryKey: ["/api/onboarding/status"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/onboarding/status");
+      return res.json();
     },
     enabled: isAuthenticated,
   });
@@ -207,9 +239,13 @@ export default function MyAccount() {
     );
   }
 
-  const plan = (user.plan || "free") as PlanType;
-  const planInfo = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
   const businesses = businessesQuery.data || [];
+  const onboarding = onboardingQuery.data;
+  const graceDaysElapsed = onboarding?.trialDaysElapsed ?? 0;
+  const graceActive = onboarding?.activationDate && (onboarding?.trialDaysRemaining ?? 0) > 0;
+  const graceExpired = onboarding?.activationDate && (onboarding?.trialDaysRemaining ?? 1) <= 0;
+  const gracePct = Math.min(100, Math.round((graceDaysElapsed / SOVEREIGN_PRICING.gracePeriodDays) * 100));
+  const complianceStatus: string | null = onboarding?.complianceStatus ?? null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200">
@@ -245,17 +281,17 @@ export default function MyAccount() {
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
         <div>
           <h1 className="text-3xl font-bold text-white" data-testid="text-my-account-title">
-            My Account
+            Command Center
           </h1>
           <p className="text-slate-400 mt-1">
-            Manage your profile, plan, and business websites.
+            Sovereign AI OS · Account &amp; Governance
           </p>
         </div>
 
-        <Card className="bg-slate-900 border-slate-800 p-6">
+        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
-              <User className="w-6 h-6 text-blue-400" />
+            <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+              <User className="w-5 h-5 text-blue-400" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-white">Profile</h2>
@@ -349,138 +385,209 @@ export default function MyAccount() {
           </div>
         </Card>
 
-        <Card className="bg-slate-900 border-slate-800 p-6">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
-                <Crown className="w-6 h-6 text-amber-400" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-white">Plan</h2>
-                <p className="text-sm text-slate-400">Your current subscription</p>
-              </div>
+        {/* ── Governance Layer ──────────────────────────────────────────────── */}
+        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
+          data-testid="card-governance-layer">
+
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+              <Activity className="w-5 h-5 text-indigo-400" />
             </div>
-            <Badge
-              variant="secondary"
-              className={
-                plan === "enterprise"
-                  ? "bg-violet-500/20 text-violet-300"
-                  : plan === "voice"
-                  ? "bg-amber-500/20 text-amber-300"
-                  : plan === "pro"
-                  ? "bg-blue-500/20 text-blue-300"
-                  : "bg-slate-700 text-slate-300"
-              }
-            >
-              {planInfo.label}
-            </Badge>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Governance Layer</h2>
+              <p className="text-sm text-slate-400">MSA v1.0.0 · Sovereign AI OS</p>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {(Object.entries(PLAN_LIMITS) as [PlanType, typeof PLAN_LIMITS[PlanType]][]).map(
-              ([key, info]) => {
-                const isCurrent = key === plan;
-                const planKeys = Object.keys(PLAN_LIMITS) as PlanType[];
-                const currentIdx = planKeys.indexOf(plan);
-                const thisIdx = planKeys.indexOf(key);
-                const isDowngrade = thisIdx < currentIdx;
-                const borderColor = isCurrent
-                  ? "border-blue-500 bg-blue-500/10"
-                  : key === "enterprise"
-                  ? "border-slate-700 bg-slate-800/50"
-                  : "border-slate-700 bg-slate-800/50";
+          <div className="space-y-5">
+            {/* Grace Period Progress Bar */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-grace-period">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-indigo-400" />
+                  <p className="text-sm font-medium text-slate-200">Verizon Grace Period</p>
+                </div>
+                {!onboarding?.activationDate ? (
+                  <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs">
+                    MSA Pending
+                  </Badge>
+                ) : graceActive ? (
+                  <Badge className="bg-indigo-500/10 text-indigo-300 border-indigo-500/20 text-xs">
+                    Day {graceDaysElapsed} of {SOVEREIGN_PRICING.gracePeriodDays}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Active · Full Commitment
+                  </Badge>
+                )}
+              </div>
 
-                return (
-                  <div
-                    key={key}
-                    className={`rounded-md border p-4 flex flex-col ${borderColor}`}
-                    data-testid={`plan-card-${key}`}
+              {!onboarding?.activationDate ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-500">
+                    Accept the Master Service Agreement to start your 30-day zero-penalty grace period.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => setLocation("/compliance-gateway")}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8"
+                    data-testid="button-accept-msa"
                   >
-                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">{info.tagline}</p>
-                    <p className="text-sm font-semibold text-white">{info.label}</p>
-                    <p className="text-2xl font-bold text-white mt-1">
-                      {info.price === 0 ? "Free" : `$${info.price}`}
-                      {info.price > 0 && (
-                        <span className="text-xs text-slate-400 font-normal">/mo</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1 mb-3">
-                      {info.maxBusinesses >= 999
-                        ? "Unlimited businesses"
-                        : `${info.maxBusinesses} business${info.maxBusinesses > 1 ? "es" : ""}`}
-                    </p>
-
-                    <div className="space-y-2 flex-1 mb-4">
-                      {info.features.map((feature, i) => (
-                        <div key={i} className="flex items-start gap-2 text-xs">
-                          <Check className="w-3 h-3 text-emerald-400 mt-0.5 flex-shrink-0" />
-                          <span className="text-slate-300">{feature}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {isCurrent ? (
-                      <Badge variant="secondary" className="w-full justify-center bg-blue-500/20 text-blue-300">
-                        Current Plan
-                      </Badge>
-                    ) : isDowngrade ? null : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full"
-                        data-testid={`button-upgrade-${key}`}
-                      >
-                        <Sparkles className="w-3 h-3 mr-1" />
-                        Upgrade
-                      </Button>
-                    )}
-                  </div>
-                );
-              }
-            )}
-          </div>
-
-          {planInfo.liveVoiceMinutes > 0 || planInfo.websiteTtsMinutes > 0 ? (
-            <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
-                <Mic className="w-5 h-5 text-blue-400 mx-auto mb-1" />
-                <p className="text-lg font-bold text-white">{planInfo.websiteTtsMinutes.toLocaleString()}</p>
-                <p className="text-xs text-slate-400">Website Voice Min</p>
-              </div>
-              {planInfo.liveVoiceMinutes > 0 && (
-                <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
-                  <PhoneCall className="w-5 h-5 text-emerald-400 mx-auto mb-1" />
-                  <p className="text-lg font-bold text-white">{planInfo.liveVoiceMinutes.toLocaleString()}</p>
-                  <p className="text-xs text-slate-400">Live Voice Min</p>
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                    Review & Accept MSA
+                  </Button>
                 </div>
+              ) : (
+                <>
+                  <div className="h-2 bg-slate-700 rounded-full overflow-hidden mb-2">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${
+                        graceExpired
+                          ? "bg-emerald-500"
+                          : "bg-gradient-to-r from-indigo-500 to-violet-500"
+                      }`}
+                      style={{ width: `${gracePct}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {graceActive
+                      ? `${onboarding?.trialDaysRemaining} days remaining — terminate before Day 30 with no penalty (MSA §2.3)`
+                      : "Grace period elapsed. 12-month commitment is active."}
+                  </p>
+                </>
               )}
-              {planInfo.dedicatedNumber && (
-                <div className="bg-slate-800/50 border border-slate-700 rounded-md p-3 text-center">
-                  <Shield className="w-5 h-5 text-amber-400 mx-auto mb-1" />
-                  <p className="text-lg font-bold text-white">Active</p>
-                  <p className="text-xs text-slate-400">Dedicated Number</p>
+            </div>
+
+            {/* A2P Compliance Status */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-a2p-compliance">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4 text-indigo-400" />
+                  <p className="text-sm font-medium text-slate-200">A2P 10DLC Registration</p>
+                </div>
+                {complianceStatus === "APPROVED" ? (
+                  <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    Compliant
+                  </Badge>
+                ) : complianceStatus === "PENDING" ? (
+                  <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs">
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Carrier Review In Progress
+                  </Badge>
+                ) : complianceStatus === "REJECTED" ? (
+                  <Badge className="bg-red-500/10 text-red-400 border-red-500/20 text-xs">
+                    <AlertTriangle className="w-3 h-3 mr-1" />
+                    Resubmit Required
+                  </Badge>
+                ) : (
+                  <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-xs">
+                    <AlertTriangle className="w-3 h-3 mr-1" />
+                    Registration Required
+                  </Badge>
+                )}
+              </div>
+              {(!complianceStatus || complianceStatus === "REJECTED") && (
+                <div className="mt-3">
+                  <p className="text-xs text-slate-500 mb-2">
+                    {complianceStatus === "REJECTED"
+                      ? "Your submission was rejected. Review and resubmit your compliance information."
+                      : "Register your SMS brand & campaign to enable A2P messaging (MSA §4.1)."}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setLocation("/compliance-gateway")}
+                    className="border-slate-600 text-slate-300 hover:border-indigo-500 text-xs h-8"
+                    data-testid="button-a2p-compliance"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                    {complianceStatus === "REJECTED" ? "Resubmit Compliance" : "Begin Registration"}
+                  </Button>
                 </div>
               )}
             </div>
-          ) : null}
+
+            {/* Pricing Anchor — sourced from pricing_v1.yaml */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-pricing-anchor">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <p className="text-sm font-medium text-slate-200">Sovereign AI OS</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-white">${SOVEREIGN_PRICING.flatFeeMonthly}</span>
+                  <span className="text-xs text-slate-400">/mo flat fee</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                + metered overage — billed in arrears per MSA §3.2
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Mic2 className="w-3 h-3 text-blue-400" />
+                  ${SOVEREIGN_PRICING.overagePhoneVoice}/min phone AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Activity className="w-3 h-3 text-indigo-400" />
+                  ${SOVEREIGN_PRICING.overageWebVoice}/min web AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <MessageSquare className="w-3 h-3 text-violet-400" />
+                  ${SOVEREIGN_PRICING.overageA2pSms}/msg A2P SMS
+                </div>
+              </div>
+            </div>
+
+            {/* Pricing Anchor — sourced from pricing_v1.yaml */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-pricing-anchor">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <p className="text-sm font-medium text-slate-200">Sovereign AI OS</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-white">${SOVEREIGN_PRICING.flatFeeMonthly}</span>
+                  <span className="text-xs text-slate-400">/mo flat fee</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                + metered overage — billed in arrears per MSA §3.2
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Mic2 className="w-3 h-3 text-blue-400" />
+                  ${SOVEREIGN_PRICING.overagePhoneVoice}/min phone AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Activity className="w-3 h-3 text-indigo-400" />
+                  ${SOVEREIGN_PRICING.overageWebVoice}/min web AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <MessageSquare className="w-3 h-3 text-violet-400" />
+                  ${SOVEREIGN_PRICING.overageA2pSms}/msg A2P SMS
+                </div>
+              </div>            </div>
+          </div>
         </Card>
 
-        <Card className="bg-slate-900 border-slate-800 p-6">
+        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
+          data-testid="card-my-businesses">
           <div className="flex items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                <Building2 className="w-6 h-6 text-emerald-400" />
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                <Building2 className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-white">My Businesses</h2>
                 <p className="text-sm text-slate-400">
-                  {businesses.length} of {planInfo.maxBusinesses >= 999 ? "unlimited" : planInfo.maxBusinesses} used
+                  {businesses.length} site{businesses.length !== 1 ? "s" : ""} registered
                 </p>
               </div>
             </div>
             <Button
               variant="outline"
               onClick={() => setShowAddBusiness(!showAddBusiness)}
+              className="border-slate-700 text-slate-300 hover:border-indigo-500"
               data-testid="button-add-business"
             >
               {showAddBusiness ? (
@@ -492,7 +599,8 @@ export default function MyAccount() {
           </div>
 
           {showAddBusiness && (
-            <div className="mb-4 p-4 bg-slate-800/50 border border-slate-700 rounded-md" data-testid="add-business-panel">
+            <div className="mb-4 p-4 bg-white/5 border border-white/10 rounded-xl backdrop-blur-sm"
+              data-testid="add-business-panel">
               <p className="text-sm text-slate-400 mb-3">
                 <Search className="w-4 h-4 inline-block mr-1 -mt-0.5" />
                 Search Google Maps for your business, then select it to generate your AI website.
@@ -511,8 +619,15 @@ export default function MyAccount() {
             <div className="flex justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
             </div>
+          ) : businessesQuery.isError ? (
+            <div className="text-center py-8 border border-dashed border-amber-500/30 rounded-2xl bg-amber-500/5">
+              <p className="text-amber-200 text-sm mb-3">Couldn&apos;t load businesses. Please try again.</p>
+              <Button variant="outline" size="sm" onClick={() => businessesQuery.refetch()}>
+                Retry
+              </Button>
+            </div>
           ) : businesses.length === 0 && !showAddBusiness ? (
-            <div className="text-center py-8 border border-dashed border-slate-700 rounded-md">
+            <div className="text-center py-8 border border-dashed border-white/10 rounded-2xl">
               <Building2 className="w-10 h-10 mx-auto text-slate-600 mb-3" />
               <p className="text-slate-400 text-sm mb-4">
                 No businesses yet. Generate your first AI-powered website!
@@ -520,6 +635,7 @@ export default function MyAccount() {
               <Button
                 variant="default"
                 onClick={() => setShowAddBusiness(true)}
+                className="bg-indigo-600 hover:bg-indigo-500"
                 data-testid="button-create-first"
               >
                 Get Started
@@ -530,12 +646,12 @@ export default function MyAccount() {
               {businesses.map((biz: any) => (
                 <div
                   key={biz.id}
-                  className="flex items-center justify-between gap-4 p-4 bg-slate-800/50 border border-slate-700 rounded-md"
+                  className="flex items-center justify-between gap-3 p-4 bg-white/5 !border !border-white/10 rounded-2xl backdrop-blur-sm hover:bg-white/[0.07] transition-colors flex-wrap"
                   data-testid={`business-row-${biz.id}`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-md bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-5 h-5 text-blue-400" />
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-5 h-5 text-indigo-400" />
                     </div>
                     <div className="min-w-0">
                       <p className="text-white font-medium truncate">{biz.name}</p>
@@ -545,17 +661,34 @@ export default function MyAccount() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-300">
+                    <Badge
+                      className={`text-xs ${
+                        biz.chatbotEnabled
+                          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                          : "bg-slate-700/50 text-slate-400 border-slate-600/30"
+                      }`}
+                    >
                       {biz.chatbotEnabled ? "Live" : "Draft"}
                     </Badge>
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={() => setLocation(`/mixing-board?site=${biz.id}`)}
+                      className="border-indigo-500/40 text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/10 text-xs h-8"
+                      data-testid={`button-configure-ai-${biz.id}`}
+                    >
+                      <Settings2 className="w-3 h-3 mr-1.5" />
+                      Configure AI
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       onClick={() => setLocation(`/my-account/site/${biz.id}`)}
+                      className="border-slate-700 text-slate-300 hover:border-slate-500 text-xs h-8"
                       data-testid={`button-manage-${biz.id}`}
                     >
                       Manage
-                      <ExternalLink className="w-3 h-3 ml-1" />
+                      <ExternalLink className="w-3 h-3 ml-1.5" />
                     </Button>
                   </div>
                 </div>

@@ -60,19 +60,11 @@ import {
   type VlmCallAttempt,
   type InsertVlmCallAttempt,
   type Inquiry,
-  type   InsertInquiry,
-  hotels,
-  flights,
-  itineraries,
-  agentMarkups,
-  type Hotel,
-  type InsertHotel,
-  type Flight,
-  type InsertFlight,
-  type Itinerary,
-  type InsertItinerary,
-  type AgentMarkup,
-  type InsertAgentMarkup,
+  type InsertInquiry,
+  type PlatformBusinessMap,
+  type VoiceUsageLog,
+  type InsertVoiceUsageLog,
+  voiceUsageLogs,
   botTemplates,
   telephonyConfigs,
   callLogs,
@@ -104,11 +96,53 @@ import {
   vlmCampaigns,
   vlmCallAttempts,
   ogSettings,
-  inquiries
+  inquiries,
+  platformBusinessMap,
+  resellers,
+  commissions,
 } from "@shared/schema";
+import type { Reseller } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
+import { eq, desc, asc, ilike, or, lte, isNull, and, gt, inArray } from "drizzle-orm";
 
+// Placeholder for a future validation service (UPA).
+const UPAValidator = {
+  validate: async (prompt: string) => ({ isValid: true as const, reason: "" }),
+};
+
+/** Explicit site_configs column map (includes granular resource ledger so dashboard 4-card and plan work). */
+const siteConfigsColumns = {
+  id: siteConfigs.id,
+  ownerId: siteConfigs.ownerId,
+  name: siteConfigs.name,
+  domain: siteConfigs.domain,
+  placeId: siteConfigs.placeId,
+  placeData: siteConfigs.placeData,
+  assignedAgentId: siteConfigs.assignedAgentId,
+  botTemplateId: siteConfigs.botTemplateId,
+  systemPromptOverride: siteConfigs.systemPromptOverride,
+  modelProvider: siteConfigs.modelProvider,
+  modelName: siteConfigs.modelName,
+  chatbotEnabled: siteConfigs.chatbotEnabled,
+  voiceConciergeEnabled: siteConfigs.voiceConciergeEnabled,
+  widgetPosition: siteConfigs.widgetPosition,
+  widgetColor: siteConfigs.widgetColor,
+  greetingMessage: siteConfigs.greetingMessage,
+  placeholderText: siteConfigs.placeholderText,
+  knowledgeLibrary: siteConfigs.knowledgeLibrary,
+  plan: siteConfigs.plan,
+  heroImageUrl: siteConfigs.heroImageUrl,
+  heroImagePrompt: siteConfigs.heroImagePrompt,
+  agentConfig: siteConfigs.agentConfig,
+  voiceConfig: siteConfigs.voiceConfig,
+  themeConfig: siteConfigs.themeConfig,
+  voicePhoneAiMinutes: siteConfigs.voicePhoneAiMinutes,
+  voiceWebAiMinutes: siteConfigs.voiceWebAiMinutes,
+  smsMessages: siteConfigs.smsMessages,
+  chatBotMessages: siteConfigs.chatBotMessages,
+  createdAt: siteConfigs.createdAt,
+  updatedAt: siteConfigs.updatedAt,
+};
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -123,6 +157,7 @@ export interface IStorage {
   
   // Agent operations
   getAgents(): Promise<Agent[]>;
+  getAgentsBySiteConfigId(siteConfigId: string): Promise<Agent[]>;
   getAgent(id: string): Promise<Agent | undefined>;
   createAgent(agent: InsertAgent): Promise<Agent>;
   updateAgent(id: string, updates: Partial<InsertAgent>): Promise<Agent | undefined>;
@@ -217,8 +252,11 @@ export interface IStorage {
   // Site Config operations
   getSiteConfigs(): Promise<SiteConfig[]>;
   getSiteConfig(id: string): Promise<SiteConfig | undefined>;
+  getSiteConfigById(id: string): Promise<SiteConfig | null>;
   getSiteConfigByDomain(domain: string): Promise<SiteConfig | undefined>;
   getSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined>;
+  /** Create-or-return safety: only return unclaimed demo/provisioned workspace for this placeId. */
+  getUnclaimedSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined>;
   createSiteConfig(config: InsertSiteConfig): Promise<SiteConfig>;
   updateSiteConfig(id: string, updates: Partial<InsertSiteConfig>): Promise<SiteConfig | undefined>;
   deleteSiteConfig(id: string): Promise<boolean>;
@@ -270,14 +308,14 @@ export interface IStorage {
   upsertOgSettings(settings: any): Promise<any>;
   deleteOgSettings(id: string): Promise<boolean>;
 
-  // B2B Itinerary operations
-  getItinerary(id: number): Promise<Itinerary | undefined>;
-  createItinerary(itinerary: InsertItinerary): Promise<Itinerary>;
-  updateItinerary(id: number, updates: Partial<InsertItinerary>): Promise<Itinerary | undefined>;
-  
-  // Agent Markup operations
-  getAgentMarkup(agentId: number): Promise<AgentMarkup | undefined>;
-  upsertAgentMarkup(markup: InsertAgentMarkup): Promise<AgentMarkup>;
+  // Platform Identity
+  getOrCreatePlatformId(siteConfigId: string): Promise<string>;
+  resolvePlatformId(input: { siteConfigId?: string; googlePlaceId?: string }): Promise<PlatformBusinessMap | null>;
+  getSiteConfigIdByPlatformId(platformId: string): Promise<string | null>;
+
+  // Voice Usage Log operations
+  createVoiceUsageLog(log: InsertVoiceUsageLog): Promise<VoiceUsageLog>;
+  getVoiceUsageLogs(siteConfigId: string, limit?: number): Promise<VoiceUsageLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -354,6 +392,15 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(agents).orderBy(desc(agents.createdAt));
   }
 
+  async getAgentsBySiteConfigId(siteConfigId: string): Promise<Agent[]> {
+    return db
+      .select()
+      .from(agents)
+      .where(eq(agents.siteConfigId, siteConfigId))
+      // Stable roster ordering: 1) roleType (if present), 2) createdAt
+      .orderBy(asc(agents.roleType), asc(agents.createdAt));
+  }
+
   async getAgent(id: string): Promise<Agent | undefined> {
     const [agent] = await db.select().from(agents).where(eq(agents.id, id));
     return agent;
@@ -374,7 +421,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAgent(id: string): Promise<boolean> {
-    const result = await db.delete(agents).where(eq(agents.id, id));
+    await db.delete(agents).where(eq(agents.id, id));
     return true;
   }
 
@@ -414,7 +461,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteCustomer(id: string): Promise<boolean> {
-    const result = await db.delete(customers).where(eq(customers.id, id));
+    await db.delete(customers).where(eq(customers.id, id));
     return true;
   }
 
@@ -527,6 +574,26 @@ export class DatabaseStorage implements IStorage {
     await db.update(adminUsers).set({ lastLoginAt: new Date() }).where(eq(adminUsers.id, id));
   }
 
+  async updateAdminUser(id: string, updates: Partial<{ resellerId: string | null; name: string | null; role: string }>): Promise<AdminUser | undefined> {
+    const [updated] = await db.update(adminUsers).set(updates).where(eq(adminUsers.id, id)).returning();
+    return updated;
+  }
+
+  async createReseller(data: { name?: string; email?: string; phone?: string }): Promise<Reseller> {
+    const [created] = await db.insert(resellers).values(data).returning();
+    return created;
+  }
+
+  async getResellerById(id: string): Promise<Reseller | undefined> {
+    const [r] = await db.select().from(resellers).where(eq(resellers.id, id));
+    return r;
+  }
+
+  async updateReseller(id: string, updates: Partial<{ stripeConnectId: string | null; name: string | null; email: string | null; phone: string | null }>): Promise<Reseller | undefined> {
+    const [updated] = await db.update(resellers).set({ ...updates, updatedAt: new Date() }).where(eq(resellers.id, id)).returning();
+    return updated;
+  }
+
   // OTP Code operations
   async createOtpCode(otp: InsertOtpCode): Promise<OtpCode> {
     const [created] = await db.insert(otpCodes).values(otp).returning();
@@ -597,7 +664,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTwilioSubAccount(id: string): Promise<boolean> {
-    const result = await db.delete(twilioSubAccounts).where(eq(twilioSubAccounts.id, id));
+    await db.delete(twilioSubAccounts).where(eq(twilioSubAccounts.id, id));
     return true;
   }
 
@@ -812,7 +879,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOrganization(id: string): Promise<boolean> {
-    const result = await db.delete(organizations).where(eq(organizations.id, id));
+    await db.delete(organizations).where(eq(organizations.id, id));
     return true;
   }
 
@@ -948,6 +1015,20 @@ export class DatabaseStorage implements IStorage {
     return config;
   }
 
+  async getSiteConfigById(id: string): Promise<SiteConfig | null> {
+    if (!id || id === 'undefined') {
+      console.warn('[Storage] Attempted to fetch site config with null, undefined, or "undefined" string ID');
+      return null;
+    }
+    try {
+      const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.id, id));
+      return config ?? null;
+    } catch (error) {
+      console.error(`[Storage] Error fetching site config for ID ${id}:`, error);
+      throw new Error('Database query for site configuration failed.');
+    }
+  }
+
   async getSiteConfigByDomain(domain: string): Promise<SiteConfig | undefined> {
     const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.domain, domain));
     return config;
@@ -955,6 +1036,22 @@ export class DatabaseStorage implements IStorage {
 
   async getSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined> {
     const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.placeId, placeId));
+    return config;
+  }
+
+  async getUnclaimedSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined> {
+    const [config] = await db
+      .select()
+      .from(siteConfigs)
+      .where(
+        and(
+          eq(siteConfigs.placeId, placeId),
+          isNull(siteConfigs.ownerId),
+          inArray(siteConfigs.workspaceState, ["demo", "provisioned"])
+        )
+      )
+      .orderBy(desc(siteConfigs.createdAt))
+      .limit(1);
     return config;
   }
 
@@ -1050,7 +1147,7 @@ export class DatabaseStorage implements IStorage {
       if (lead.placeId) {
         const site = await this.getSiteConfigByPlaceId(lead.placeId);
         if (site && !site.ownerId) {
-          await this.updateSiteConfig(site.id, { ownerId: customerAccountId } as any);
+          await this.updateSiteConfig(site.id, { ownerId: customerAccountId });
           claimed++;
         }
       }
@@ -1174,7 +1271,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteOgSettings(id: string): Promise<boolean> {
-    const result = await db.delete(ogSettings).where(eq(ogSettings.id, id));
+    await db.delete(ogSettings).where(eq(ogSettings.id, id));
     return true;
   }
 
@@ -1203,12 +1300,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getInquiry(id: string): Promise<Inquiry | undefined> {
-    const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, id));
-    return inquiry;
+    const [inq] = await db.select().from(inquiries).where(eq(inquiries.id, id));
+    return inq;
   }
 
-  async createInquiry(inquiry: InsertInquiry): Promise<Inquiry> {
-    const [created] = await db.insert(inquiries).values(inquiry).returning();
+  async createInquiry(inq: InsertInquiry): Promise<Inquiry> {
+    const [created] = await db.insert(inquiries).values(inq).returning();
     return created;
   }
 
@@ -1225,43 +1322,114 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
-  // B2B Itinerary operations
-  async getItinerary(id: number): Promise<Itinerary | undefined> {
-    const [itinerary] = await db.select().from(itineraries).where(eq(itineraries.id, id));
-    return itinerary;
-  }
+  // ──────────────────────────────────────────────────────────────────────────────
+  // Platform Identity – System of Record for stable internal platform_id
+  // ──────────────────────────────────────────────────────────────────────────────
 
-  async createItinerary(itinerary: InsertItinerary): Promise<Itinerary> {
-    const [created] = await db.insert(itineraries).values(itinerary).returning();
-    return created;
-  }
+  async getOrCreatePlatformId(siteConfigId: string): Promise<string> {
+    const [existing] = await db
+      .select({ platformId: platformBusinessMap.platformId })
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.siteConfigId, siteConfigId))
+      .limit(1);
 
-  async updateItinerary(id: number, updates: Partial<InsertItinerary>): Promise<Itinerary | undefined> {
-    const [updated] = await db.update(itineraries)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(itineraries.id, id))
-      .returning();
-    return updated;
-  }
-
-  // Agent Markup operations
-  async getAgentMarkup(agentId: number): Promise<AgentMarkup | undefined> {
-    const [markup] = await db.select().from(agentMarkups).where(eq(agentMarkups.agentId, agentId));
-    return markup;
-  }
-
-  async upsertAgentMarkup(markup: InsertAgentMarkup): Promise<AgentMarkup> {
-    const existing = await this.getAgentMarkup(markup.agentId);
     if (existing) {
-      const [updated] = await db.update(agentMarkups)
-        .set(markup)
-        .where(eq(agentMarkups.agentId, markup.agentId))
-        .returning();
-      return updated;
+      return existing.platformId;
     }
-    const [created] = await db.insert(agentMarkups).values(markup).returning();
+
+    const [siteConfig] = await db
+      .select({ placeId: siteConfigs.placeId })
+      .from(siteConfigs)
+      .where(eq(siteConfigs.id, siteConfigId))
+      .limit(1);
+
+    const inserted = await db
+      .insert(platformBusinessMap)
+      .values({
+        siteConfigId,
+        googlePlaceId: siteConfig?.placeId ?? null,
+      })
+      .onConflictDoNothing()
+      .returning({ platformId: platformBusinessMap.platformId });
+
+    if (inserted.length > 0) {
+      return inserted[0].platformId;
+    }
+
+    const [raceRow] = await db
+      .select({ platformId: platformBusinessMap.platformId })
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.siteConfigId, siteConfigId))
+      .limit(1);
+
+    if (!raceRow) {
+      throw new Error(`[Storage] Failed to resolve platform_id for siteConfigId=${siteConfigId}`);
+    }
+
+    return raceRow.platformId;
+  }
+
+  async resolvePlatformId(
+    input: { siteConfigId?: string; googlePlaceId?: string },
+  ): Promise<PlatformBusinessMap | null> {
+    if (input.siteConfigId) {
+      const [existing] = await db
+        .select()
+        .from(platformBusinessMap)
+        .where(eq(platformBusinessMap.siteConfigId, input.siteConfigId))
+        .limit(1);
+
+      if (existing) {
+        return existing;
+      }
+
+      await this.getOrCreatePlatformId(input.siteConfigId);
+
+      const [row] = await db
+        .select()
+        .from(platformBusinessMap)
+        .where(eq(platformBusinessMap.siteConfigId, input.siteConfigId))
+        .limit(1);
+      return row ?? null;
+    }
+
+    if (input.googlePlaceId) {
+      const [row] = await db
+        .select()
+        .from(platformBusinessMap)
+        .where(eq(platformBusinessMap.googlePlaceId, input.googlePlaceId))
+        .limit(1);
+      return row ?? null;
+    }
+
+    return null;
+  }
+
+  async getSiteConfigIdByPlatformId(platformId: string): Promise<string | null> {
+    const [row] = await db
+      .select({ siteConfigId: platformBusinessMap.siteConfigId })
+      .from(platformBusinessMap)
+      .where(eq(platformBusinessMap.platformId, platformId as any))
+      .limit(1);
+    return row?.siteConfigId ?? null;
+  }
+
+  async createVoiceUsageLog(log: InsertVoiceUsageLog): Promise<VoiceUsageLog> {
+    const [created] = await db.insert(voiceUsageLogs).values(log).returning();
     return created;
   }
+
+  async getVoiceUsageLogs(siteConfigId: string, limit = 50): Promise<VoiceUsageLog[]> {
+    return db
+      .select()
+      .from(voiceUsageLogs)
+      .where(eq(voiceUsageLogs.siteConfigId, siteConfigId))
+      .orderBy(desc(voiceUsageLogs.createdAt))
+      .limit(limit);
+
+  }
+
+
 }
 
 export const storage = new DatabaseStorage();

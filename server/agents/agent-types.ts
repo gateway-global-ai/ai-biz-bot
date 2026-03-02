@@ -66,6 +66,12 @@ export const agentTemplateSchema = z.object({
         })).optional(),
       }).optional(),
     }).optional(),
+
+    // SerpApi tool access control
+    // Lists the SerpApi engine IDs this agent is allowed to invoke via the MCP server.
+    // Admins can update this list per agent via PATCH /api/agents/:id/serp-tools.
+    // An empty array means no SerpApi tools are enabled for this agent.
+    serpApiTools: z.array(z.string()).optional(),
   }).optional(),
   
   metadata: z.object({

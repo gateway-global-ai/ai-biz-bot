@@ -1,0 +1,76 @@
+# .system_design/pricing_v1.yaml
+# Sovereign AI OS — Structured Pricing Schema
+# Source: MSA v1.0.0, Section 3
+# version key exists to support the Annual Inflation Adjustment process common in telecom.
+# Bump version (v2, v3, ...) with each price change cycle; never mutate in place.
+
+version: "1"
+schema: pricing
+msa_ref: "contracts/MSA_v1.0.0.md#3-pricing--metered-billing"
+
+# ─── Platform (Flat) Fee ─────────────────────────────────────────────────────
+flat_fee:
+  monthly:
+    amount: 49.00
+    currency: USD
+    billing_cycle: monthly
+    refundable: false
+    stripe_price_type: recurring
+  annual_prepaid:
+    amount: 492.00          # 12 × $49.00 = $588.00 retail; $492.00 = $41.00/mo
+    currency: USD
+    billing_cycle: annual
+    refundable: false
+    stripe_price_type: recurring
+    # Derived values for marketing copy generation:
+    monthly_effective: 41.00          # 492.00 / 12
+    savings_vs_monthly: 96.00         # (49.00 × 12) - 492.00
+    savings_label: "Save $96/year"    # Use this string verbatim in frontend copy
+
+# ─── Metered Overage Rates ───────────────────────────────────────────────────
+# Applied once "Essentials Bundle" included limits are exceeded (MSA §3.3).
+overage_rates:
+  phone_voice_ai:
+    rate: 0.25
+    unit: minute
+    currency: USD
+    stripe_meter_event: twilio.call.completed
+  web_voice_ai:
+    rate: 0.18
+    unit: minute
+    currency: USD
+    stripe_meter_event: webrtc.session.ended
+  a2p_sms:
+    rate: 0.125
+    unit: message
+    currency: USD
+    stripe_meter_event: twilio.message.delivered
+
+# ─── Term & Policy Thresholds ────────────────────────────────────────────────
+terms:
+  min_term_months: 12
+  renewal_notice_days: 90             # Written notice required before auto-renewal
+  grace_period_days: 30               # MSA §2.3 — zero penalty before Day 31
+  early_termination_rate: 0.75        # 75% of remaining Flat Fees after Day 30
+  suspension_threshold_days: 15       # Account suspended if payment is 15+ days past due
+
+# ─── Reseller Wholesale Tier (MSA v1.1.0 Addendum) ───────────────────────────
+# Source: contracts/MSA_v1.1.0_RESELLER.md §2
+# The platform operates as a Clearinghouse: Vendor collects the Retail Price, remits Net Margin.
+wholesale_v1:
+  msa_ref: "contracts/MSA_v1.1.0_RESELLER.md#2-wholesale-pricing--revenue-share"
+  base_rate: 49.00                    # Wholesale Rate charged per active SUB_ACCOUNT per month
+  currency: USD
+  billing_model: per_active_sub_account
+  billing_day: 1                      # Debited on the 1st of each billing cycle
+  custom_rate_field: wholesaleRate    # Overridable per high-volume reseller via DB column
+  revenue_share:
+    platform_cut: "100% of base_rate collected first"
+    reseller_cut: "retail_price - base_rate - stripe_processing_fee"
+    formula: "reseller_payout = markup_total - wholesale_base - stripe_processing_fee"
+    ledger_field: resellerCommissionBalance   # Running balance in customerAccounts
+    payout_method: stripe_connect             # Disbursed to stripeConnectedAccountId
+  overage_pass_through:
+    default: reseller_payment_method_on_file
+    managed_billing_option: sub_account_direct
+    rates_ref: "pricing_v1.yaml#overage_rates"

@@ -1,12 +1,23 @@
+import "dotenv/config";
+import { validateSovereignEnv, PROGRAMMATIC_EMAIL_CANONICAL_KEYS } from "./config/sovereignEnvGuard";
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startTaskScheduler } from "./taskScheduler";
 import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
-import { setupBrowserVoiceRoutes, setupBrowserVoiceWebSocket, setupBrowserAudioTempRoute } from "./browserVoice";
+import { setupBrowserAudioTempRoute } from "./browserVoice";
+import { setupGeminiLiveWebSocket } from "./geminiVoice";
 import { storage } from "./storage";
+import { validateGeminiConfig } from "./config/geminiLiveProtocol";
+
+const runtimeDirname =
+  typeof __dirname !== "undefined"
+    ? __dirname
+    : path.dirname(fileURLToPath(import.meta.url));
 
 // Seed default admin user on startup (ensures admin exists in production)
 async function seedDefaultAdmin() {
@@ -45,8 +56,8 @@ const CORE_AGENTS = [
 - Configure the DISC personality profile
 - Set up their first task workflow
 Keep explanations simple and celebrate their progress.`,
-    aiModelProvider: "moonshot",
-    aiModelId: "moonshot-v1-128k",
+    aiModelProvider: "gemini",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
     aiTemperature: 65,
     aiMaxTokens: 4096,
   },
@@ -68,8 +79,8 @@ Keep explanations simple and celebrate their progress.`,
 - WHEN: When should this be used?
 - CONCLUSION: Summarize and actionable next steps
 Generate engaging micro-lessons with quizzes. Track completion rates and improve lessons based on feedback.`,
-    aiModelProvider: "moonshot",
-    aiModelId: "moonshot-v1-128k",
+    aiModelProvider: "gemini",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
     aiTemperature: 55,
     aiMaxTokens: 6000,
   },
@@ -83,15 +94,15 @@ Generate engaging micro-lessons with quizzes. Track completion rates and improve
     steadiness: 55,
     conscientiousness: 90,
     avatarId: "avatar3",
-    systemPrompt: `You are the Gateway Global AI Coding Agent, powered by Kimi K2 for advanced code analysis. Your role is to help developers with:
+    systemPrompt: `You are the Gateway Global AI Coding Agent, powered by Gemini for advanced code analysis. Your role is to help developers with:
 - Code review and debugging
 - Architecture recommendations
 - Best practices guidance
 - Explaining complex code patterns
 - Generating code snippets
 You are precise, thorough, and always explain your reasoning. When reviewing code, provide specific line numbers and concrete suggestions.`,
-    aiModelProvider: "huggingface",
-    aiModelId: "Qwen/Kimi-K2-Instruct",
+    aiModelProvider: "gemini",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
     aiTemperature: 40,
     aiMaxTokens: 8192,
   },
@@ -112,8 +123,8 @@ You are precise, thorough, and always explain your reasoning. When reviewing cod
 - Help with business strategy involving AI
 - Generate website content and marketing copy
 You are enthusiastic about helping businesses grow with AI while keeping explanations accessible to non-technical users.`,
-    aiModelProvider: "moonshot",
-    aiModelId: "moonshot-v1-128k",
+    aiModelProvider: "gemini",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
     aiTemperature: 70,
     aiMaxTokens: 4096,
   },
@@ -162,8 +173,8 @@ Always cite exact URLs and dates. If pricing is not public, say "PRICE NOT PUBLI
 Prefer data from cloud.google.com/pricing, cloud.google.com/quotas, and official release notes dated after 2024-01-01.
 You will refuse to answer anything unrelated to Google APIs.
 End every response with "Next API?" so we can iterate through the stack.`,
-    aiModelProvider: "moonshot",
-    aiModelId: "kimi-k2.5",
+    aiModelProvider: "gemini",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
     aiTemperature: 35,
     aiMaxTokens: 4096,
   },
@@ -230,8 +241,8 @@ Output style rules:
 
 You will answer "I only manage GitHub repos." to any question about non-GitHub topics.
 End every response with "Next repo task?" so maintainers can keep feeding you work iteratively.`,
-    aiModelProvider: "moonshot",
-    aiModelId: "kimi-k2.5",
+    aiModelProvider: "gemini",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
     aiTemperature: 30,
     aiMaxTokens: 8192,
   },
@@ -313,8 +324,8 @@ Response format rules:
 - End every message with: "GRN-Dev-Bot | Sandbox key: grn_sandbox_demo (expires 30 days) -- Next task?"
 
 You will reply "I only assist with GRN Connect travel-tech integrations." to off-topic requests.`,
-    aiModelProvider: "moonshot",
-    aiModelId: "kimi-k2.5",
+    aiModelProvider: "gemini",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
     aiTemperature: 35,
     aiMaxTokens: 8192,
   },
@@ -397,8 +408,8 @@ Output format:
 - Finish with: "Diagnostic complete - copy the prompts, plug the knowledge.json, and you're live. Next business?"
 
 Use the output immediately: paste the 4 agent prompts into your voice/SMS/website bot builders, import the knowledge.json as long-term memory, and run the onboarding script with the owner on Zoom.`,
-    aiModelProvider: "moonshot",
-    aiModelId: "kimi-k2.5",
+    aiModelProvider: "gemini",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
     aiTemperature: 35,
     aiMaxTokens: 8192,
   },
@@ -479,21 +490,46 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
-  
+
+  // Mount Hotel MCP Server at /mcp/hotels (POST, GET, DELETE for Streamable HTTP)
+  const { attachHotelMcpRoutes } = await import("./mcp-hotels");
+  attachHotelMcpRoutes(app, "/mcp/hotels");
+
+  // Mount Voice Transcribe REST API for PTT (Standard tier)
+  const voiceTranscribeRouter = (await import("./routes/voiceTranscribe")).default;
+  app.use(voiceTranscribeRouter);
+
   // Set up audio temp route for serving temporary audio files
   setupAudioTempRoute(app);
   
-  // Set up browser voice AI routes and temp audio serving
-  setupBrowserVoiceRoutes(app);
+  // Temp audio serving for browser (legacy path; voice uses Gemini Live)
   setupBrowserAudioTempRoute(app);
   
-  // Set up WebSocket for Twilio Media Streams (Kimi-Audio voice calls)
+  // WebSocket: Twilio ↔ Gemini 2.5 Flash (PSTN)
   setupVoiceStreamWebSocket(httpServer);
-  
-  // Set up WebSocket for browser-based voice AI
-  setupBrowserVoiceWebSocket(httpServer);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  // WebSocket: Browser ↔ Gemini 2.5 Flash Live (unified: /ws/gemini-live and /ws/browser-voice)
+  setupGeminiLiveWebSocket(httpServer);
+
+  // Initialize the WebSocket router (must be AFTER all routes are registered)
+  const { setupWebSocketRouter } = await import("./websocketRouter");
+  setupWebSocketRouter(httpServer);
+
+  // Socket.io event bridge for live transcript feed (dashboard)
+  const { Server: SocketIOServer } = await import("socket.io");
+  const { initEventBridge } = await import("./services/eventBridge");
+  const io = new SocketIOServer(httpServer, {
+    cors: { origin: process.env.NODE_ENV === "production" ? false : "*" },
+  });
+  initEventBridge(io);
+
+  const { initPayoutCron } = await import("./cron/processPayouts");
+  initPayoutCron();
+
+  const { initFleetHealthCron } = await import("./cron/fleetHealth");
+  initFleetHealthCron();
+
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
@@ -503,44 +539,105 @@ app.use((req, res, next) => {
       return next(err);
     }
 
+    // Non-API errors: redirect to Error Navigator with 500 context
+    if (!req.path.startsWith("/api")) {
+      return res.redirect(`/error?code=500&ref=${encodeURIComponent(req.path)}`);
+    }
+
     return res.status(status).json({ message });
   });
 
   // Serve SDK files statically at /sdk/* (canonical: platform/chat)
-  const sdkPath = path.resolve(import.meta.dirname, '..', 'platform', 'chat', 'src');
+  const sdkPath = path.resolve(runtimeDirname, "..", "platform", "chat", "src");
   app.use('/sdk', express.static(sdkPath));
+
+  // Serve Hotel Search UI at /hotel-search (v2 - latest version)
+  const hotelSearchPath = path.resolve(runtimeDirname, "..", "user_uploads", "new", "v2", "hotel-search-ui", "dist");
+  if (fs.existsSync(hotelSearchPath)) {
+    app.use('/hotel-search', express.static(hotelSearchPath));
+    log(`Hotel Search UI v2 available at /hotel-search`);
+  }
+
+  // Serve NurseNest Lodging Partners demo at /nursenest
+  const nursenestPath = path.resolve(runtimeDirname, "..", "nursnest-lodging-partners", "dist");
+  if (fs.existsSync(nursenestPath)) {
+    app.use('/nursenest', express.static(nursenestPath));
+    log(`NurseNest Lodging Partners available at /nursenest`);
+  }
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
+
+    // Belt-and-suspenders SPA catch-all: placed AFTER serveStatic() so that
+    // express.static() handles /assets/* before this wildcard fires.
+    // Express 5 requires a named wildcard — bare "*" throws in path-to-regexp v8.
+    app.get("/{*path}", (req: Request, res: Response, next: NextFunction) => {
+      if (
+        req.path.startsWith("/api") ||
+        req.path.startsWith("/ws") ||
+        req.path.includes(".")
+      ) {
+        return next();
+      }
+      // runtimeDirname = dist/ in the production bundle, so public/index.html is one level down
+      res.sendFile(
+        path.resolve(runtimeDirname, "public", "index.html"),
+        (err: any) => { if (err) next(err); }
+      );
+    });
   } else {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
+  // PORT is set by Doppler per environment (dev=3004, stg=3003, prd=3002). See npm run doppler:sync-ports.
+  // Default 3004 for dev when PORT is not set. Serves both API and client.
+  const port = parseInt(process.env.PORT || "3004", 10);
   // Seed default admin and core agents before starting server
   await seedDefaultAdmin();
   await seedCoreAgents();
 
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
+  // Validate Gemini Live API configuration
+  try {
+    validateGeminiConfig();
+  } catch (error) {
+    console.error('Server startup aborted due to invalid configuration');
+    process.exit(1);
+  }
+
+  // Sovereign env guard: when SOVEREIGN_ENV_STRICT=true, require canonical env keys (see docs/SOVEREIGN_ENV_MANIFEST.md)
+  if (process.env.SOVEREIGN_ENV_STRICT === "true") {
+    try {
+      validateSovereignEnv();
+      // When Workspace is enabled, require programmatic email keys before any email flow
+      if (process.env.ENABLE_GOOGLE_WORKSPACE === "true") {
+        validateSovereignEnv(PROGRAMMATIC_EMAIL_CANONICAL_KEYS);
+      }
+    } catch (err: any) {
+      if (err?.code === "SOVEREIGN_CONFIGURATION_ERROR") {
+        console.error(err.message);
+        process.exit(1);
+      }
+      throw err;
+    }
+  }
+
+  httpServer
+    .listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
-      
       // Start the task scheduler for 24-hour SMS automation
-      // Checks every 5 minutes for tasks that need updates
       startTaskScheduler(5);
-    },
-  );
+    })
+    .on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE") {
+        console.error(`[express] Port ${port} is already in use.`);
+        console.error(`  Run: npm run kill-port   (uses PORT from Doppler), then start again.`);
+      } else {
+        console.error("[express] Server error:", err.message);
+      }
+      process.exit(1);
+    });
 })();

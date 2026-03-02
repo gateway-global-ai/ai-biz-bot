@@ -3,6 +3,7 @@ import axios from 'axios';
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
 import { getTwilioClient } from '../twilio';
+import { checkSovereignEnv, checkDopplerTokenEnv } from '../config/sovereignEnvGuard';
 
 const router = Router();
 
@@ -60,10 +61,24 @@ async function checkGemini() {
  * Returns 200 if all systems are operational, 503 if any system fails.
  */
 router.get('/api/health', async (_req: Request, res: Response) => {
+  const sovereignEnvCheck = checkSovereignEnv();
+  const dopplerTokenEnvCheck = checkDopplerTokenEnv();
   const checks = await Promise.all([
     checkDatabase(),
     checkTwilio(),
     checkGemini(),
+    Promise.resolve({
+      service: 'sovereign_env',
+      status: sovereignEnvCheck.status,
+      message: sovereignEnvCheck.message,
+      ...(sovereignEnvCheck.missing?.length ? { missing: sovereignEnvCheck.missing } : {}),
+    }),
+    Promise.resolve({
+      service: 'doppler_token_env',
+      status: dopplerTokenEnvCheck.status,
+      message: dopplerTokenEnvCheck.message,
+      ...(dopplerTokenEnvCheck.expected ? { expected: dopplerTokenEnvCheck.expected } : {}),
+    }),
   ]);
 
   const hasError = checks.some(check => check.status === 'error');

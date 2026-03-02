@@ -11,12 +11,15 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { GatewayRouterPanel } from '@/components/admin/GatewayRouterPanel';
+import { AgentCreatorPanel } from '@/components/admin/AgentCreatorPanel';
 import {
   Bot, Plus, Globe, MessageSquare, Settings, Trash2,
-  Send, Loader2, ExternalLink, Code, Copy, Check,
+  Send, Loader2, ExternalLink, Code, Copy, Check, Network, Users,
   Sparkles, Clock, Star, MapPin, Phone, Zap,
-  ShoppingCart, Headphones, Palette, BookOpen, UserPlus
+  ShoppingCart, Headphones, Palette, BookOpen, UserPlus, Image as ImageIcon, Building2
 } from 'lucide-react';
+import { GoogleWorkspacePanel } from '@/components/workspace/GoogleWorkspacePanel';
 import type { Agent, SiteConfig, BotTemplate } from '@shared/schema';
 
 interface ChatMessage {
@@ -289,7 +292,7 @@ function SiteList({
                       <Star className="w-2.5 h-2.5 fill-current" /> {placeData.rating}
                     </span>
                   )}
-                  {site.modelProvider && site.modelProvider !== 'kimi' && (
+                  {site.modelProvider && (
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-emerald-400 border-emerald-400/30">{site.modelProvider}</Badge>
                   )}
                 </div>
@@ -301,6 +304,20 @@ function SiteList({
     </div>
   );
 }
+
+const MODAL_LABELS: Record<string, string> = {
+  'voice-inbound': 'Voice In',
+  'voice-outbound': 'Voice Out',
+  'sms': 'SMS',
+  'chat': 'Chat',
+};
+
+const MODAL_COLORS: Record<string, string> = {
+  'voice-inbound': 'text-emerald-400 border-emerald-400/30',
+  'voice-outbound': 'text-blue-400 border-blue-400/30',
+  'sms': 'text-amber-400 border-amber-400/30',
+  'chat': 'text-violet-400 border-violet-400/30',
+};
 
 function AdminPanel({
   site,
@@ -316,7 +333,109 @@ function AdminPanel({
   isUpdating: boolean;
 }) {
   const placeData = site.placeData as any;
-  const [activeTab, setActiveTab] = useState<'settings' | 'agent' | 'chat' | 'logs' | 'embed' | 'knowledge'>('settings');
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState<'settings' | 'plan' | 'gateway' | 'agents' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'knowledge'>('settings');
+  const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
+  const [deployingTemplateId, setDeployingTemplateId] = useState<string | null>(null);
+  const [savingAgentConfig, setSavingAgentConfig] = useState(false);
+  const [toolCallLog, setToolCallLog] = useState<Array<{ ts: string; tool: string; type: string }>>([]);
+  // Hero image generation
+  const [heroImageUrl, setHeroImageUrl] = useState<string>((site as any).heroImageUrl || '');
+  const [heroCustomPrompt, setHeroCustomPrompt] = useState('');
+  const [generatingHero, setGeneratingHero] = useState(false);
+
+  const { data: agentTemplates = [] } = useQuery<any[]>({
+    queryKey: ['/api/agents/templates'],
+    queryFn: async () => {
+      const res = await fetch('/api/agents/templates');
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const deployAgentTemplate = async (template: any) => {
+    setDeployingTemplateId(template.id);
+    try {
+      const res = await fetch('/api/agents/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateId: template.id,
+          businessId: site.id,
+          name: `${template.name} (${site.name})`,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Deploy failed');
+      }
+      const deployed = await res.json();
+      await queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
+      onUpdate({ assignedAgentId: deployed.id ?? deployed.agentId ?? null });
+      toast({ title: 'Agent Deployed', description: `${template.name} is now active for this business.` });
+    } catch (err: any) {
+      toast({ title: 'Deploy Failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setDeployingTemplateId(null);
+    }
+  };
+
+  // Fetch the live configuration of the currently assigned agent
+  const { data: assignedAgentConfig, refetch: refetchAgentConfig } = useQuery<any>({
+    queryKey: ['/api/agents', site.assignedAgentId],
+    queryFn: async () => {
+      if (!site.assignedAgentId) return null;
+      const res = await fetch(`/api/agents/${site.assignedAgentId}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!site.assignedAgentId && activeTab === 'agent',
+  });
+
+  const assignedTemplateId: string = assignedAgentConfig?.templateId || '';
+  const isQualifier = assignedTemplateId === 'lead-qualifier';
+  const isCloser = assignedTemplateId === 'sales-closer';
+  const hasSkillPanel = isQualifier || isCloser;
+
+  const currentSkillToggles: Record<string, boolean> = assignedAgentConfig?.configuration?.skillToggles || {};
+  const currentToolLimits: Record<string, number> = assignedAgentConfig?.configuration?.toolLimits || {};
+
+  const saveAgentConfiguration = async (patch: Record<string, any>) => {
+    if (!site.assignedAgentId) return;
+    setSavingAgentConfig(true);
+    try {
+      const merged = {
+        ...(assignedAgentConfig?.configuration || {}),
+        ...patch,
+      };
+      const res = await fetch(`/api/agents/${site.assignedAgentId}/configuration`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ configuration: merged }),
+      });
+      if (!res.ok) throw new Error('Failed to save');
+      await refetchAgentConfig();
+      toast({ title: 'Agent Updated', description: 'Configuration saved.' });
+    } catch (err: any) {
+      toast({ title: 'Save Failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setSavingAgentConfig(false);
+    }
+  };
+
+  // Load tool call activity log from localStorage when agent tab is open
+  useEffect(() => {
+    if (activeTab !== 'agent') return;
+    const readLog = () => {
+      try {
+        const raw = localStorage.getItem('gg_tool_log');
+        if (raw) setToolCallLog(JSON.parse(raw).slice(0, 20));
+      } catch { /* ignore */ }
+    };
+    readLog();
+    const interval = setInterval(readLog, 5000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: site.greetingMessage || `Hi! I'm the AI assistant for ${site.name}. How can I help you?` }
   ]);
@@ -388,13 +507,13 @@ function AdminPanel({
 
   const applyTemplate = (template: BotTemplate) => {
     const uiConfig = template.defaultUiConfig as any;
-    const knownProviders = ['kimi', 'gemini', 'openai', 'anthropic'];
-    const model = template.defaultModel || 'kimi';
+    const knownProviders = ['gemini', 'openai', 'anthropic'];
+    const model = template.defaultModel || 'gemini';
     const isProvider = knownProviders.includes(model);
     onUpdate({
       botTemplateId: template.id,
       systemPromptOverride: template.defaultSystemPrompt,
-      modelProvider: isProvider ? model : 'kimi',
+      modelProvider: isProvider ? model : 'gemini',
       modelName: isProvider ? null : model,
       widgetColor: uiConfig?.primaryColor || site.widgetColor,
       greetingMessage: uiConfig?.greetingMessage || site.greetingMessage,
@@ -402,9 +521,14 @@ function AdminPanel({
     });
   };
 
+  const sitePlan = (site as any).plan || 'free';
   const tabs = [
     { id: 'settings' as const, label: 'Settings', icon: Settings },
+    { id: 'plan' as const, label: 'Plan', icon: Sparkles },
+    { id: 'gateway' as const, label: 'Gateway', icon: Network },
+    { id: 'agents' as const, label: 'Agents', icon: Users },
     { id: 'agent' as const, label: 'Agent', icon: Bot },
+    ...(sitePlan === 'voice' ? [{ id: 'workspace' as const, label: 'Workspace', icon: Building2 }] : []),
     { id: 'knowledge' as const, label: 'Knowledge', icon: BookOpen },
     { id: 'chat' as const, label: 'Test Chat', icon: MessageSquare },
     { id: 'logs' as const, label: 'Logs', icon: Clock },
@@ -450,6 +574,124 @@ function AdminPanel({
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
+
+        {activeTab === 'plan' && (() => {
+          const sitePlan = (site as any).plan || 'free';
+          const PLAN_KEYS = ['free', 'pro', 'voice', 'enterprise'] as const;
+          const planLabels: Record<string, string> = {
+            free: 'AI BIZ BOT — FREE',
+            pro: 'Small Business Starter',
+            voice: 'Small Business AI Pro',
+            enterprise: 'Small Business Enterprise',
+          };
+          const planPrices: Record<string, number> = { free: 0, pro: 49.99, voice: 99.99, enterprise: 299.99 };
+          const planFeatures: Record<string, string[]> = {
+            free: ['Static AI website', 'Last 5 reviews', 'Shared SMS number', '500 website voice min'],
+            pro: ['Edit website', 'Review management', 'SMS admin', '500 website voice min'],
+            voice: ['Dedicated phone number', 'Call screening', 'Live voice AI', '400 live voice min', 'Spanish support'],
+            enterprise: ['Unlimited businesses', 'Task management', '1500 live voice min', 'Priority support'],
+          };
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-slate-300 text-xs">Business Subscription</Label>
+                <Badge variant="outline" className="text-indigo-300 border-indigo-300/30 text-[10px]">
+                  {planLabels[sitePlan] || sitePlan}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                {PLAN_KEYS.map((key) => {
+                  const isCurrent = key === sitePlan;
+                  const planOrder = PLAN_KEYS.indexOf(key);
+                  const currentOrder = PLAN_KEYS.indexOf(sitePlan as typeof PLAN_KEYS[number]);
+                  const isDowngrade = planOrder < currentOrder;
+                  return (
+                    <div
+                      key={key}
+                      className={`rounded-lg border p-3 flex flex-col gap-2 ${
+                        isCurrent ? 'border-indigo-500/40 bg-indigo-500/10' : 'border-slate-700 bg-slate-800/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold text-white">{planLabels[key]}</p>
+                          <p className="text-lg font-bold text-white">
+                            {planPrices[key] === 0 ? 'Free' : `$${planPrices[key]}`}
+                            {planPrices[key] > 0 && <span className="text-[10px] text-slate-400 font-normal">/mo</span>}
+                          </p>
+                        </div>
+                        {isCurrent ? (
+                          <Badge variant="secondary" className="bg-indigo-500/20 text-indigo-300 text-[10px]">Current</Badge>
+                        ) : isDowngrade ? (
+                          <span className="text-[10px] text-slate-500">Lower tier</span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-[10px] h-7 px-2 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10"
+                            disabled={upgradingPlan === key}
+                            onClick={async () => {
+                              setUpgradingPlan(key);
+                              try {
+                                const res = await fetch('/api/subscriptions/create-checkout-session', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ plan: key, siteConfigId: site.id }),
+                                });
+                                const data = await res.json();
+                                if (!res.ok) throw new Error(data.error || 'Checkout failed');
+                                window.location.href = data.url;
+                              } catch (err: any) {
+                                toast({ title: 'Upgrade failed', description: err.message, variant: 'destructive' });
+                                setUpgradingPlan(null);
+                              }
+                            }}
+                          >
+                            {upgradingPlan === key ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Sparkles className="w-3 h-3 mr-1" />Upgrade</>}
+                          </Button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {planFeatures[key].map((f) => (
+                          <span key={f} className="text-[9px] bg-slate-700/60 text-slate-400 rounded px-1.5 py-0.5">{f}</span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-[10px] text-slate-500 text-center mt-2">
+                Upgrades apply to this business (Site ID: <span className="font-mono">{site.id.slice(0, 8)}...</span>).
+                Plans are billed monthly. Cancel anytime in your Stripe portal.
+              </p>
+            </div>
+          );
+        })()}
+
+        {activeTab === 'workspace' && (
+          <GoogleWorkspacePanel siteConfigId={site.id} />
+        )}
+
+        {/* Gateway Router — Dynamic Entry Point Engine switchboard */}
+        {activeTab === 'gateway' && (
+          <GatewayRouterPanel
+            siteConfigId={site.id}
+            knowledgeLibrary={site.knowledgeLibrary}
+            onSaved={() => queryClient.invalidateQueries({ queryKey: ['/api/site-configs', site.id] })}
+          />
+        )}
+
+        {/* Agents — Specialty Agent Creator */}
+        {activeTab === 'agents' && (
+          <AgentCreatorPanel
+            siteConfigId={site.id}
+            knowledgeLibrary={site.knowledgeLibrary}
+            onSaved={() => queryClient.invalidateQueries({ queryKey: ['/api/site-configs', site.id] })}
+          />
+        )}
+
         {activeTab === 'settings' && (
           <div className="space-y-5">
             <div>
@@ -496,20 +738,19 @@ function AdminPanel({
             <div>
               <Label className="text-slate-300 text-xs mb-1.5 block">AI Model Provider</Label>
               <Select
-                value={site.modelProvider || 'kimi'}
+                value={site.modelProvider || 'gemini'}
                 onValueChange={(val) => onUpdate({ modelProvider: val })}
               >
                 <SelectTrigger className="bg-slate-800 border-slate-700 text-white" data-testid="select-model-provider">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="kimi">Kimi (Moonshot)</SelectItem>
-                  <SelectItem value="gemini">Gemini (Google)</SelectItem>
+                  <SelectItem value="gemini">Gemini 2.5 Flash (Google)</SelectItem>
                   <SelectItem value="openai">OpenAI</SelectItem>
                   <SelectItem value="anthropic">Anthropic</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-[10px] text-slate-500 mt-1">Select the AI provider. Automatic fallback to other providers if primary fails.</p>
+              <p className="text-[10px] text-slate-500 mt-1">Select the AI provider. Gemini 2.5 Flash Native Audio is the default.</p>
             </div>
             <div>
               <Label className="text-slate-300 text-xs mb-1.5 block">Model Name (optional)</Label>
@@ -520,7 +761,7 @@ function AdminPanel({
                 className="bg-slate-800 border-slate-700 text-white"
                 data-testid="input-model-name"
               />
-              <p className="text-[10px] text-slate-500 mt-1">Override the default model. e.g. kimi-k2.5, gemini-2.0-flash</p>
+              <p className="text-[10px] text-slate-500 mt-1">Override the default model. e.g. gemini-2.5-flash-preview, gemini-2.0-flash</p>
             </div>
             <div>
               <Label className="text-slate-300 text-xs mb-1.5 block">Greeting Message</Label>
@@ -566,6 +807,94 @@ function AdminPanel({
                 </CardContent>
               </Card>
             )}
+
+            {/* ── Hero Image Generator ── */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-violet-400" />
+                  Hero Image
+                </CardTitle>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  AI-generated background for your website hero section. Powered by Flux.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* Current image preview */}
+                {heroImageUrl ? (
+                  <div className="relative rounded-md overflow-hidden h-28 bg-slate-900">
+                    <img
+                      src={heroImageUrl}
+                      alt="Hero preview"
+                      className="w-full h-full object-cover opacity-90"
+                      onError={() => setHeroImageUrl('')}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent" />
+                    <button
+                      className="absolute top-2 right-2 text-[10px] bg-red-600/80 hover:bg-red-500 text-white px-2 py-0.5 rounded"
+                      onClick={async () => {
+                        setHeroImageUrl('');
+                        await fetch(`/api/site-configs/${site.id}`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ heroImageUrl: null }),
+                        });
+                        onUpdate({ heroImageUrl: null } as any);
+                        toast({ title: 'Hero image removed' });
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="rounded-md h-20 bg-gradient-to-br from-blue-950 via-slate-900 to-slate-950 flex items-center justify-center border border-dashed border-slate-700">
+                    <p className="text-[11px] text-slate-500">No hero image — using gradient fallback</p>
+                  </div>
+                )}
+                {/* Custom prompt */}
+                <div>
+                  <Label className="text-slate-400 text-[10px] mb-1 block">Custom prompt (optional)</Label>
+                  <Textarea
+                    value={heroCustomPrompt}
+                    onChange={(e) => setHeroCustomPrompt(e.target.value)}
+                    placeholder="e.g. Modern Italian restaurant interior, warm candlelight, rich wood accents…"
+                    className="bg-slate-900 border-slate-700 text-white text-xs resize-none"
+                    rows={2}
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  className="w-full bg-violet-600 hover:bg-violet-500 text-white"
+                  disabled={generatingHero}
+                  data-testid="button-generate-hero"
+                  onClick={async () => {
+                    setGeneratingHero(true);
+                    try {
+                      const res = await fetch(`/api/site-configs/${site.id}/generate-hero-image`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ customPrompt: heroCustomPrompt || undefined }),
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error || 'Generation failed');
+                      setHeroImageUrl(data.imageUrl);
+                      onUpdate({ heroImageUrl: data.imageUrl } as any);
+                      toast({ title: '✨ Hero image generated!', description: 'Your website hero has been updated.' });
+                    } catch (err: any) {
+                      toast({ title: 'Generation failed', description: err.message, variant: 'destructive' });
+                    } finally {
+                      setGeneratingHero(false);
+                    }
+                  }}
+                >
+                  {generatingHero ? (
+                    <><Loader2 className="w-3 h-3 animate-spin mr-2" />Generating… (~15s)</>
+                  ) : (
+                    <><Sparkles className="w-3 h-3 mr-2" />Generate AI Hero Image</>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -575,6 +904,57 @@ function AdminPanel({
 
         {activeTab === 'agent' && (
           <div className="space-y-5">
+
+            {/* Pre-built Agent Templates from agent swarm registry */}
+            {agentTemplates.length > 0 && (
+              <div>
+                <Label className="text-slate-300 text-xs mb-2 block">Pre-built Agent Templates</Label>
+                <div className="grid grid-cols-1 gap-2">
+                  {agentTemplates.map((tmpl: any) => {
+                    const isDeploying = deployingTemplateId === tmpl.id;
+                    const modalColor = MODAL_COLORS[tmpl.modal] || 'text-slate-400 border-slate-400/30';
+                    return (
+                      <div
+                        key={tmpl.id}
+                        className="p-3 rounded-lg border border-slate-700 bg-slate-800/50 flex items-start gap-3"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="text-xs font-medium text-slate-200">{tmpl.name}</span>
+                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${modalColor}`}>
+                              {MODAL_LABELS[tmpl.modal] || tmpl.modal}
+                            </Badge>
+                          </div>
+                          <p className="text-[10px] text-slate-500 line-clamp-2 mb-1.5">{tmpl.description}</p>
+                          {tmpl.capabilities?.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {tmpl.capabilities.slice(0, 4).map((cap: string) => (
+                                <span key={cap} className="text-[9px] bg-slate-700 text-slate-400 rounded px-1.5 py-0.5">{cap.replace(/_/g, ' ')}</span>
+                              ))}
+                              {tmpl.capabilities.length > 4 && (
+                                <span className="text-[9px] text-slate-500">+{tmpl.capabilities.length - 4} more</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0 text-[10px] h-7 px-2 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10"
+                          onClick={() => deployAgentTemplate(tmpl)}
+                          disabled={isDeploying}
+                        >
+                          {isDeploying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3 mr-1" />}
+                          {isDeploying ? 'Deploying...' : 'Deploy'}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1.5">Deploy a pre-built agent to activate it for this business. It will appear in the Assigned Agent list below.</p>
+              </div>
+            )}
+
             {templates.length > 0 && (
               <div>
                 <Label className="text-slate-300 text-xs mb-2 block">Bot Templates</Label>
@@ -683,6 +1063,179 @@ function AdminPanel({
               />
               <p className="text-[10px] text-slate-500 mt-1">Custom instructions for the AI on this site.</p>
             </div>
+
+            {/* ── Skills Panel (Lead Qualifier & Sales Closer only) ── */}
+            {hasSkillPanel && (
+              <Card className="bg-slate-800/50 border-slate-700">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    Agent Skills
+                    <span className="ml-auto text-[10px] text-slate-500 font-normal">
+                      {isQualifier ? 'Lead Qualifier' : 'Sales Closer'}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {isQualifier && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-slate-200 font-medium">Empathy Mode</p>
+                          <p className="text-[10px] text-slate-500">Agent pivots to calming cadence when frustration is detected in voice.</p>
+                        </div>
+                        <Switch
+                          checked={currentSkillToggles.empathy_mode ?? true}
+                          onCheckedChange={(v) => saveAgentConfiguration({
+                            skillToggles: { ...currentSkillToggles, empathy_mode: v },
+                          })}
+                          disabled={savingAgentConfig}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-slate-200 font-medium">Aggressive Qualification</p>
+                          <p className="text-[10px] text-slate-500">Agent pushes harder on budget and authority signals. Off by default.</p>
+                        </div>
+                        <Switch
+                          checked={currentSkillToggles.aggressive_qualification ?? false}
+                          onCheckedChange={(v) => saveAgentConfiguration({
+                            skillToggles: { ...currentSkillToggles, aggressive_qualification: v },
+                          })}
+                          disabled={savingAgentConfig}
+                        />
+                      </div>
+                    </>
+                  )}
+                  {isCloser && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-slate-200 font-medium">Aggressive Closing Mode</p>
+                          <p className="text-[10px] text-slate-500">Agent uses stronger assumptive closes and urgency signals. Off by default.</p>
+                        </div>
+                        <Switch
+                          checked={currentSkillToggles.aggressive_closing ?? false}
+                          onCheckedChange={(v) => saveAgentConfiguration({
+                            skillToggles: { ...currentSkillToggles, aggressive_closing: v },
+                          })}
+                          disabled={savingAgentConfig}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-slate-200 font-medium">Urgency Injection</p>
+                          <p className="text-[10px] text-slate-500">Agent activates scarcity signals after 8 min without commitment.</p>
+                        </div>
+                        <Switch
+                          checked={currentSkillToggles.urgency_injection ?? true}
+                          onCheckedChange={(v) => saveAgentConfiguration({
+                            skillToggles: { ...currentSkillToggles, urgency_injection: v },
+                          })}
+                          disabled={savingAgentConfig}
+                        />
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── Tool Limits (Lead Qualifier & Sales Closer only) ── */}
+            {hasSkillPanel && (
+              <Card className="bg-slate-800/50 border-slate-700">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-slate-400" />
+                    Tool Limits
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {isQualifier && (
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="text-xs text-slate-200 font-medium">Max Meetings / Day</p>
+                        <p className="text-[10px] text-slate-500">Agent cannot book more than this many meetings per day via <code className="text-slate-400">book_meeting</code>.</p>
+                      </div>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        className="w-20 bg-slate-900 border-slate-700 text-white text-center"
+                        defaultValue={currentToolLimits.max_meetings_per_day ?? 10}
+                        onBlur={(e) => saveAgentConfiguration({
+                          toolLimits: { ...currentToolLimits, max_meetings_per_day: parseInt(e.target.value) || 10 },
+                        })}
+                      />
+                    </div>
+                  )}
+                  {isCloser && (
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex-1">
+                        <p className="text-xs text-slate-200 font-medium">Max Discount %</p>
+                        <p className="text-[10px] text-slate-500">Agent cannot offer more than this % via <code className="text-slate-400">apply_discount</code>. Excess requests are auto-capped.</p>
+                      </div>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={50}
+                        className="w-20 bg-slate-900 border-slate-700 text-white text-center"
+                        defaultValue={currentToolLimits.max_discount_percent ?? 10}
+                        onBlur={(e) => saveAgentConfiguration({
+                          toolLimits: { ...currentToolLimits, max_discount_percent: parseInt(e.target.value) || 10 },
+                        })}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── Tool Call Activity Log ── */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-400" />
+                  Tool Call Activity
+                  <button
+                    className="ml-auto text-[10px] text-slate-500 hover:text-slate-300 transition-colors"
+                    onClick={() => {
+                      localStorage.removeItem('gg_tool_log');
+                      setToolCallLog([]);
+                    }}
+                  >
+                    Clear
+                  </button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {toolCallLog.length === 0 ? (
+                  <p className="text-[11px] text-slate-600 italic text-center py-3">
+                    No tool calls recorded yet. Start a voice session to see agent tool activity here.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {toolCallLog.map((entry, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[11px]">
+                        <span className="text-slate-600 font-mono shrink-0">
+                          {new Date(entry.ts).toLocaleTimeString()}
+                        </span>
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 shrink-0 ${
+                          entry.tool?.includes('crm') || entry.tool?.includes('qualify') ? 'text-emerald-400 border-emerald-400/30' :
+                          entry.tool?.includes('checkout') || entry.tool?.includes('discount') ? 'text-blue-400 border-blue-400/30' :
+                          'text-slate-400 border-slate-600'
+                        }`}>
+                          {entry.tool || entry.type || 'tool'}
+                        </Badge>
+                        <span className="text-slate-500 truncate">
+                          {entry.type ? `→ ${entry.type}` : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         )}
 
@@ -726,7 +1279,7 @@ function AdminPanel({
                 </Button>
               </form>
               <p className="text-[10px] text-slate-500 mt-1.5 text-center">
-                Using {site.modelProvider || 'kimi'} {site.modelName ? `(${site.modelName})` : ''} with auto-fallback
+                Using {site.modelProvider || 'gemini'} {site.modelName ? `(${site.modelName})` : ''} with auto-fallback
               </p>
             </div>
           </div>
@@ -859,10 +1412,20 @@ function AdminPanel({
             <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-3 space-y-2">
               <p className="text-xs font-medium text-slate-300">Configuration Summary</p>
               <div className="grid grid-cols-2 gap-2 text-[10px]">
-                <div className="text-slate-400">Bot ID</div>
-                <div className="text-slate-300 font-mono">{site.id.slice(0, 12)}...</div>
+                <div className="text-slate-400">Site UUID</div>
+                <button
+                  className="text-slate-300 font-mono text-[10px] flex items-center gap-1 hover:text-indigo-300 transition-colors col-span-1"
+                  title="Click to copy UUID"
+                  onClick={() => {
+                    navigator.clipboard.writeText(site.id);
+                    toast({ title: "Copied", description: "Site UUID copied to clipboard" });
+                  }}
+                >
+                  {site.id.slice(0, 16)}...
+                  <Copy className="w-2.5 h-2.5 flex-shrink-0" />
+                </button>
                 <div className="text-slate-400">Provider</div>
-                <div className="text-slate-300">{site.modelProvider || 'kimi'}</div>
+                <div className="text-slate-300">{site.modelProvider || 'gemini'}</div>
                 <div className="text-slate-400">Chatbot</div>
                 <div className={site.chatbotEnabled ? 'text-emerald-400' : 'text-red-400'}>
                   {site.chatbotEnabled ? 'Enabled' : 'Disabled'}

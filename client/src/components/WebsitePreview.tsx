@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ShareButton from '@/components/ShareButton';
 import { LiveVoiceClient } from '@/services/liveService';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
@@ -254,6 +254,37 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
     setIsPTTRecording(false);
     voiceClient.current.setStreaming(false);
   }, [isPTTRecording]);
+
+  // Stable references — prevents ConciergePanel's useEffect from re-running on
+  // every render just because these objects are recreated as inline literals.
+  const conciergeBusinessContext = useMemo(() => ({
+    // `id` is intentionally empty — WebsitePreview is a demo/preview surface that
+    // works with Google Places data, not a stored site_configs record.
+    // ConciergePanel guards against undefined/empty IDs and skips the Handover
+    // Service fetch when id is '' (initialises directly from props instead).
+    id: '',
+    placeId: place.place_id || '',
+    name: place.name,
+    address: place.formatted_address || '',
+    hours: place.opening_hours?.weekday_text?.join(', '),
+    services: place.types,
+    primaryColor: '#3b82f6',
+  }), [place.place_id, place.name, place.formatted_address, place.opening_hours, place.types]);
+
+  const conciergeAgentConfig = useMemo(() => ({
+    role: agentRole,
+    personality: 'Helpful, professional, and friendly',
+    objectives: [
+      `Represent ${place.name} and assist customers`,
+      'Answer questions about services, hours, and location',
+      'Help customers book appointments or place orders',
+    ],
+    constraints: [
+      'Be polite and professional',
+      'Stay on topic about the business',
+      'Provide accurate information from business context',
+    ],
+  }), [place.name, agentRole]);
 
   const heroImage = place.photos && place.photos.length > 0 ? getPhotoUrl(place.photos[0]) : null;
   const galleryImages = (place.photos || []).slice(1, 4).map(p => getPhotoUrl(p, 600)).filter(Boolean) as string[];
@@ -946,9 +977,9 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                     </div>
                     <div className="p-4 space-y-3">
                       {[
-                        { title: 'AI Business Summary', desc: 'Auto-generated business description using AI analysis of all Place data, reviews, and category context.', icon: 'M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z', source: 'Kimi 2.5 + Google Places', status: place.editorial_summary ? 'Available' : 'Can Generate' },
-                        { title: 'AI Business Reviews', desc: 'AI-synthesized review analysis: sentiment trends, common praises/complaints, and key takeaways from all reviews.', icon: 'M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z', source: 'Kimi 2.5 + Reviews API', status: reviews.length > 0 ? 'Can Generate' : 'Needs Reviews' },
-                        { title: 'AI Area Reviews', desc: 'Neighborhood and area analysis including nearby attractions, walkability, transit access, and local character.', icon: 'M15 10.5a3 3 0 11-6 0 3 3 0 016 0z M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z', source: 'Kimi 2.5 + Google Maps Grounding', status: place.geometry ? 'Can Generate' : 'Needs Location' },
+                        { title: 'AI Business Summary', desc: 'Auto-generated business description using AI analysis of all Place data, reviews, and category context.', icon: 'M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z', source: 'Gemini + Google Places', status: place.editorial_summary ? 'Available' : 'Can Generate' },
+                        { title: 'AI Business Reviews', desc: 'AI-synthesized review analysis: sentiment trends, common praises/complaints, and key takeaways from all reviews.', icon: 'M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z', source: 'Gemini + Reviews API', status: reviews.length > 0 ? 'Can Generate' : 'Needs Reviews' },
+                        { title: 'AI Area Reviews', desc: 'Neighborhood and area analysis including nearby attractions, walkability, transit access, and local character.', icon: 'M15 10.5a3 3 0 11-6 0 3 3 0 016 0z M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z', source: 'Gemini + Google Maps Grounding', status: place.geometry ? 'Can Generate' : 'Needs Location' },
                         { title: 'AI Competitor Analysis', desc: 'SWOT analysis comparing the business with nearby competitors in the same category.', icon: 'M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6', source: 'Google Places Aggregate API', status: place.types?.length ? 'Can Generate' : 'Needs Types' },
                         { title: 'Weather Widget', desc: 'Real-time weather conditions and forecast for the business location using Google Maps Grounding.', icon: 'M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z', source: 'Google Maps Grounding Lite', status: place.geometry ? 'Can Generate' : 'Needs Location' },
                         { title: '5 Most Recent Reviews', desc: 'Displays the latest 5 customer reviews sorted by recency with full text and rating.', icon: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z', source: 'Google Places Reviews API', status: reviews.length > 0 ? `${Math.min(5, reviews.length)} Available` : 'Needs Reviews' },
@@ -1010,28 +1041,8 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
 
       {/* --- REPLACED: Old chat UI with new ConciergePanel --- */}
       <ConciergePanel
-        business={{
-          placeId: place.place_id || '',
-          name: place.name,
-          address: place.formatted_address || '',
-          hours: place.opening_hours?.weekday_text?.join(', '),
-          services: place.types,
-          primaryColor: '#3b82f6'
-        }}
-        agent={{
-          role: agentRole,
-          personality: 'Helpful, professional, and friendly',
-          objectives: [
-            `Represent ${place.name} and assist customers`,
-            'Answer questions about services, hours, and location',
-            'Help customers book appointments or place orders'
-          ],
-          constraints: [
-            'Be polite and professional',
-            'Stay on topic about the business',
-            'Provide accurate information from business context'
-          ]
-        }}
+        business={conciergeBusinessContext}
+        agent={conciergeAgentConfig}
         voiceConfig={voiceConfig}
         agentName={agentName}
         isOpen={isChatOpen}

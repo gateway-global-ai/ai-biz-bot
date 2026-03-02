@@ -39,10 +39,11 @@ export default function VantaBackground({
               minWidth: 200.0,
               scale: 1.0,
               scaleMobile: 1.0,
-              color: 0x1a1a2e,
-              shininess: 35.0,
-              waveHeight: 15.0,
-              waveSpeed: 0.75,
+              color: 0xbfdbfe,
+              backgroundColor: 0xf0f9ff,
+              shininess: 50.0,
+              waveHeight: 10.0,
+              waveSpeed: 0.6,
               zoom: 0.85
             });
             break;
@@ -92,8 +93,8 @@ export default function VantaBackground({
               minWidth: 200.0,
               scale: 1.0,
               scaleMobile: 1.0,
-              color: 0x8b5cf6,
-              backgroundColor: 0x0f0a1e,
+              color: 0x3b82f6,
+              backgroundColor: 0xf8fafc,
               points: 10.0,
               maxDistance: 25.0,
               spacing: 18.0,

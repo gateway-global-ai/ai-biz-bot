@@ -246,4 +246,4 @@ Be specific and personalized. No generic templates.`;
   }
 }
 
-export const aiBizBotConsultant = new AiBizBotConsultant();
+export const aiBizBotConsultant = new AIBizBotConsultant();

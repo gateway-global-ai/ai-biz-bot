@@ -12,8 +12,10 @@
  * Protocol version: v1beta
  */
 
-// Environment variable validation
-const GEMINI_MODEL = process.env.GEMINI_MODEL || '';
+import { getServerMapsApiKey } from "./mapsApiKey";
+
+// Environment variable validation (use GEMINI_MODEL_ID per platform standards)
+const GEMINI_MODEL_ID = process.env.GEMINI_MODEL_ID || '';
 const GEMINI_VOICE_NAME = process.env.GEMINI_VOICE_NAME || 'Puck';
 const GEMINI_API_VERSION = process.env.GEMINI_API_VERSION || '';
 
@@ -27,11 +29,11 @@ export function validateGeminiConfig(): void {
   const errors: string[] = [];
 
   // Validate model name
-  if (!GEMINI_MODEL) {
-    errors.push('GEMINI_MODEL is not set in environment variables');
-  } else if (!GEMINI_MODEL.includes('native-audio-preview')) {
+  if (!GEMINI_MODEL_ID) {
+    errors.push('GEMINI_MODEL_ID is not set in environment variables');
+  } else if (!GEMINI_MODEL_ID.includes('native-audio-preview')) {
     errors.push(
-      `Invalid model for Live API: ${GEMINI_MODEL}\n` +
+      `Invalid model for Live API: ${GEMINI_MODEL_ID}\n` +
       `Expected: models/gemini-2.5-flash-native-audio-preview-12-2025`
     );
   }
@@ -63,9 +65,9 @@ export function validateGeminiConfig(): void {
   console.log('✅ Gemini Live API configuration validated');
   
   // Optional: Validate Google Maps configuration (warnings only)
-  const googleMapsKey = process.env.GOOGLE_MAPS_API_KEY;
+  const googleMapsKey = getServerMapsApiKey();
   if (!googleMapsKey) {
-    console.warn('⚠️  GOOGLE_MAPS_API_KEY not set - Map tools will be unavailable');
+    console.warn('⚠️  Google Maps API key not set (set GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_GROUNDING_LITE_API_KEY, or GOOGLE_PLACES_API_KEY) - Map tools will be unavailable');
   } else {
     console.log('✅ Google Maps API key configured');
   }
@@ -84,7 +86,7 @@ export function validateGeminiConfig(): void {
 export function getGeminiLiveSetup(systemInstruction?: string, tools?: any[]) {
   const setup: any = {
     setup: {
-      model: GEMINI_MODEL,
+      model: GEMINI_MODEL_ID,
       generation_config: {
         response_modalities: ["AUDIO"], // MUST be uppercase
         speech_config: {
@@ -139,7 +141,7 @@ export function getGeminiWebSocketUrl(apiKey: string): string {
  * Configuration Constants
  */
 export const GEMINI_CONFIG = {
-  MODEL: GEMINI_MODEL,
+  MODEL: GEMINI_MODEL_ID,
   API_VERSION: GEMINI_API_VERSION,
   VOICE_NAME: GEMINI_VOICE_NAME,
   INPUT_SAMPLE_RATE: parseInt(process.env.GEMINI_INPUT_SAMPLE_RATE || '16000'),

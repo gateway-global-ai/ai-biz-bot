@@ -61,7 +61,7 @@ export interface EnrichmentResult {
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const GOOGLE_CLOUD_API_KEY = process.env.GOOGLE_CLOUD_API_KEY;
-const SERPAPI_API_KEY = process.env.SERPAPI_API_KEY;
+const SERPAPI_API_KEY = process.env.SERPAPI_API_KEY || process.env.SERPAPI_KEY || process.env.SERP_API_KEY;
 /** How many reviews to request from SerpAPI per page. More = better SWOT/vibe. */
 const SERPAPI_NUM_REVIEWS = Math.min(50, Math.max(5, parseInt(process.env.SERPAPI_NUM_REVIEWS ?? "20", 10) || 20));
 /** When we have SerpAPI reviews, send up to this many snippets to Gemini for summary/SWOT/vibe. */

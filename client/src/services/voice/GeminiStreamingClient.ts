@@ -13,6 +13,10 @@
 
 import { IVoiceClient } from './IVoiceClient';
 import { VoiceMessage, VoiceConfig, BusinessContext, AgentConfig } from '@/types/voice';
+import { resolvePlatformUrl, resolvePlatformWs } from '@/sdk/platformConfig';
+
+/** Global PTT silence threshold (ms). Turn-taking gavel — hard-wired for Gateway Global AI signature feel. */
+export const SPEECH_RECOGNITION_THRESHOLD_MS = 800;
 
 function encode(bytes: Uint8Array) {
   let binary = '';
@@ -92,21 +96,43 @@ export class GeminiStreamingClient implements IVoiceClient {
     this.nextStartTime = 0;
     this.currentInputText = '';
     
-    // Build system instruction (optionally fetch enriched version)
+    // Build system instruction — Override-First priority:
+    // 1. DB-backed system_prompt_override (Voice/Enterprise Knowledge Worker prompt)
+    // 2. Server-enriched instruction (business intelligence + SWOT)
+    // 3. Basic template built from BusinessContext + AgentConfig
     let systemInstruction: string;
-    try {
-      // Try to fetch enriched system instruction from server
-      const enriched = await this.fetchEnrichedSystemInstruction(business, agent);
-      systemInstruction = enriched || this.buildSystemInstruction(business, agent);
-    } catch (error) {
-      console.warn('[GeminiStreamingClient] Failed to fetch enriched instruction, using basic:', error);
-      systemInstruction = this.buildSystemInstruction(business, agent);
+    if (business.systemPromptOverride) {
+      systemInstruction = business.systemPromptOverride;
+      console.log('[GeminiStreamingClient] Using system_prompt_override (Knowledge Worker mode)');
+    } else {
+      try {
+        const enriched = await this.fetchEnrichedSystemInstruction(business, agent);
+        systemInstruction = enriched || this.buildSystemInstruction(business, agent);
+      } catch (error) {
+        console.warn('[GeminiStreamingClient] Failed to fetch enriched instruction, using basic:', error);
+        systemInstruction = this.buildSystemInstruction(business, agent);
+      }
+    }
+
+    // Client-side [IMMEDIATE DIRECTIVE] fallback:
+    // The server proxy compiles a definitive instruction via the Contextual Snap when
+    // agentId/metaPrompt are in sessionContext. This prepend acts as belt-and-suspenders —
+    // if the server cannot reach the DB (network error, missing siteConfigId), the client's
+    // instruction already carries the directive so the AI never reverts to a generic greeting.
+    // NOTE: Do NOT also send a client-side kickstart message — the server fires one server-side
+    // after setupComplete at the correct time (before audio is active on the client).
+    if (business.entryPointMetaPrompt) {
+      const labelContext = business.name ? `on the "${business.name}" website` : 'on the website';
+      const immediateDirective = `[IMMEDIATE DIRECTIVE — CLIENT FALLBACK]: The user just clicked a button ${labelContext}. Execute the following instruction in your very first response without waiting for user input: ${business.entryPointMetaPrompt}\n\nRULE: You MUST speak first. Do not wait for the user.\n\n`;
+      systemInstruction = immediateDirective + systemInstruction;
+      console.log('[GeminiStreamingClient] Prepended [IMMEDIATE DIRECTIVE] fallback to system instruction');
     }
 
     try {
-      // Use current host (Nginx will proxy to correct port)
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/gemini-live`;
+      // resolvePlatformWs() returns an absolute wss:// URL when running as an
+      // embedded SDK on a third-party domain; falls back to window.location.host
+      // when running inside the main app so existing behaviour is unchanged.
+      const wsUrl = resolvePlatformWs('/ws/gemini-live');
       
       console.log('[GeminiStreamingClient] Connecting to:', wsUrl);
       this.socket = new WebSocket(wsUrl);
@@ -171,6 +197,33 @@ export class GeminiStreamingClient implements IVoiceClient {
                   type: "object",
                   properties: {}
                 }
+              },
+              // Workspace MCP Suite — read-only; scoped by siteConfigId (Voice/Enterprise plan)
+              {
+                name: "mcp_search_drive",
+                description: "Searches the user's Google Drive for documents, spreadsheets, or folders based on a semantic query. Use this to find business context or client files.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    siteConfigId: { type: "string", description: "The unique UUID of the business to scope the search." },
+                    query: { type: "string", description: "Semantic search term (e.g., 'Project Alpha Requirements')." },
+                    mimeType: { type: "string", description: "Optional: Filter by file type (e.g., 'application/pdf')." }
+                  },
+                  required: ["siteConfigId", "query"]
+                }
+              },
+              {
+                name: "mcp_read_calendar",
+                description: "Retrieves the user's upcoming schedule or checks availability for a specific date range.",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    siteConfigId: { type: "string", description: "The unique UUID of the business." },
+                    timeMin: { type: "string", description: "ISO format start time (e.g., '2026-02-21T09:00:00Z')." },
+                    timeMax: { type: "string", description: "ISO format end time." }
+                  },
+                  required: ["siteConfigId", "timeMin"]
+                }
               }
             ]
           }
@@ -183,18 +236,25 @@ export class GeminiStreamingClient implements IVoiceClient {
               response_modalities: ["audio"], // ✅ Fixed to lowercase for v1beta protocol
               speech_config: {
                 voice_config: {
-                  prebuilt_voice_config: { voice_name: 'Puck' }
+                  prebuilt_voice_config: { voice_name: this.config.voiceName || 'Puck' }
                 }
               }
             },
             tools: tools, // ✅ Tools properly declared
             system_instruction: { parts: [{ text: systemInstruction }] }
-          }
+          },
+          // Identity anchor: server proxy reads sessionContext.siteConfigId and injects it
+          // into MCP tool args so the model never needs to emit the UUID directly.
+          // entryPointAgentId + entryPointMetaPrompt power the Contextual Snap —
+          // the proxy compiles the master system instruction server-side.
+          sessionContext: {
+            siteConfigId: business.id,
+            ...(business.entryPointAgentId ? { agentId: business.entryPointAgentId } : {}),
+            ...(business.entryPointMetaPrompt ? { metaPrompt: business.entryPointMetaPrompt } : {}),
+          },
         };
         
-        // --- DEBUG: Log the exact outgoing setup JSON to audit for formatting errors. ---
-        const setupPayload = JSON.stringify(setupMessage, null, 2);
-        console.log('[GeminiStreamingClient] Sending final validated setup payload');
+        console.log('[GeminiStreamingClient] Sending final validated setup payload:', JSON.stringify(setupMessage, null, 2));
 
         this.socket?.send(JSON.stringify(setupMessage));
         // DON'T start audio yet - wait for server_ready signal
@@ -368,8 +428,7 @@ export class GeminiStreamingClient implements IVoiceClient {
       this.streaming = true;
       this.resumeAudioContexts();
     } else {
-      // Smart buffer: Base delay is 800ms for reliable PTT
-      const baseDelay = this.config.bufferDelay || 800;
+      const baseDelay = SPEECH_RECOGNITION_THRESHOLD_MS;
       
       this.stopTimeout = window.setTimeout(() => {
         this.streaming = false;
@@ -391,7 +450,11 @@ export class GeminiStreamingClient implements IVoiceClient {
     
     try {
       // ✅ Step 1: Load the AudioWorklet module (runs on background thread)
-      await this.inputAudioContext.audioWorklet.addModule('/clear-voice-processor.js');
+      // Resolve the worklet URL against the platform so it loads from the correct
+      // origin when the SDK is embedded on a third-party site.
+      await this.inputAudioContext.audioWorklet.addModule(
+        resolvePlatformUrl('/clear-voice-processor.js')
+      );
       
       // ✅ Step 2: Create the source from microphone
       this.inputSource = this.inputAudioContext.createMediaStreamSource(this.currentStream);
@@ -420,7 +483,7 @@ export class GeminiStreamingClient implements IVoiceClient {
       this.inputSource.connect(this.workletNode);
       this.workletNode.connect(this.inputAudioContext.destination);
       
-      console.log('[GeminiStreamingClient] ✅ AudioWorklet initialized (zero UI interference)');
+      console.log('[GeminiStreamingClient] 🟢 AudioWorklet initialized: PTT Hard-Wired at 800ms');
     } catch (err) {
       console.error('[GeminiStreamingClient] ❌ AudioWorklet failed, ensure clear-voice-processor.js is in /public:', err);
       throw err;
@@ -513,11 +576,29 @@ export class GeminiStreamingClient implements IVoiceClient {
     // Handle tool result metadata from server
     if (message.type === 'tool_result') {
       console.log("[GeminiStreamingClient] Tool result received:", message.tool_name);
+
+      // Write to localStorage for admin activity log (keyed globally; admin reads this)
+      try {
+        const existing = JSON.parse(localStorage.getItem('gg_tool_log') || '[]');
+        existing.unshift({
+          ts: new Date().toISOString(),
+          tool: message.tool_name,
+          type: message.tool_type,
+          placeId: message.placeId,
+        });
+        // Keep last 50 entries
+        localStorage.setItem('gg_tool_log', JSON.stringify(existing.slice(0, 50)));
+      } catch {
+        // Non-fatal: localStorage may be unavailable
+      }
+
       this.messageCallback({
         type: 'response',
-        text: '', // No text, just tool metadata
+        text: '',
         metadata: {
           tool_type: message.tool_type,
+          ui_action: message.ui_action,
+          audio_cue: message.audio_cue,
           ...message.data,
         }
       });
@@ -581,7 +662,7 @@ export class GeminiStreamingClient implements IVoiceClient {
       if (business.services) params.set('services', business.services.join(','));
 
       const response = await fetch(
-        `/api/business/${encodeURIComponent(business.placeId)}/enriched-instruction?${params.toString()}`
+        resolvePlatformUrl(`/api/business/${encodeURIComponent(business.placeId)}/enriched-instruction?${params.toString()}`)
       );
       if (!response.ok) return null;
       const data = await response.json();
