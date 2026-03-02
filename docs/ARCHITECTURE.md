@@ -1,3 +1,10 @@
+---
+Date: 2026-03-02
+Status: ACTIVE
+Supersedes: none
+System_State: "Bedrock v0.16 synced, Worktrees disabled, Main branch only"
+---
+
 # Gateway Global AI Platform — Architecture Reference
 **Official ARCHITECTURE.md — Single Source of Truth**
 **Generated from Structural Audit:** February 26, 2026
@@ -60,7 +67,7 @@
 │       └── config/             ← Client configuration
 │
 ├── shared/
-│   └── schema.ts               ← Single source of truth: Drizzle ORM + Zod schemas (1,956 lines)
+│   └── schema.ts               ← Single source of truth: Drizzle ORM + Zod schemas (~2,400+ lines)
 │
 ├── docs/                       ← Extensive technical documentation
 │   ├── ARCHITECTURE.md         ← THIS FILE — the project Bible
@@ -72,7 +79,7 @@
 │   └── summaries/
 │
 ├── scripts/                    ← Operational & provisioning scripts
-├── migrations/                 ← Drizzle SQL migration files (0001–0010)
+├── migrations/                 ← Drizzle SQL migration files (0001–0016; see Migration Journal below)
 ├── tests/                      ← Test directory
 ├── mcp-servers/                ← Standalone MCP servers (Google Workspace)
 │
@@ -198,7 +205,7 @@
 
 ## 3. Database Schema Overview — The Ledger
 
-**ORM:** Drizzle ORM with PostgreSQL (`drizzle-orm`, `pg`). Schema file: `shared/schema.ts` (1,956 lines).
+**ORM:** Drizzle ORM with PostgreSQL (`drizzle-orm`, `pg`). Schema file: `shared/schema.ts` (~2,400+ lines).
 
 ### 3.1 Primary Tables
 
@@ -296,7 +303,7 @@
 | `server/mcp-hotels.ts` | Standalone MCP server entry point — may no longer be launched |
 | `client/src/pages/showcase/MvpLanding.tsx` | Duplicate alongside `LandingV2.tsx` — verify active route binding |
 | `client/src/pages/showcase/MockConversation.tsx` | "Mock" placeholder — verify if served by active route |
-| `server/services/serpapi-reviews.ts` | May be superseded by Google Places New API as review source |
+| `server/services/serpapi-reviews.ts` | **SerpAPI_Reviews_Connector** — Tier-2 Review Intelligence core; do not purge. Structured ingestion for Raw Reviews Index and Tier-2 C-Suite agents. |
 
 ---
 
@@ -412,16 +419,53 @@
 
 ---
 
+## Migration Journal — Canonical Sequence
+
+Execution order is deterministic: `for f in migrations/*.sql` expands in POSIX alphabetical order. Do not rename migration files; `schema_migrations` tracks by exact filename.
+
+| Order | Filename |
+|---|---|
+| 1 | `0001_add_site_knowledge_library.sql` |
+| 2 | `0001_many_wraith.sql` |
+| 3 | `0002_business_data_tour_guide.sql` |
+| 4 | `0003_business_enrichment_snapshots.sql` |
+| 5 | `0003_platform_business_map.sql` |
+| 6 | `0004_site_plan.sql` |
+| 7 | `0005_analytics_logs.sql` |
+| 8 | `0005_voice_usage_logs.sql` |
+| 9 | `0006_telephony_call_timestamps.sql` |
+| 10 | `0007_resellers_commissions.sql` |
+| 11 | `0008_site_claim_tokens.sql` |
+| 12 | `0009_granular_resource_ledger.sql` |
+| 13 | `0009_nova_idv_sessions.sql` |
+| 14 | `0010_sms_compliance_router.sql` |
+| 15 | `0011_compliance_reseller_gateway.sql` |
+| 16 | `0012_mixing_board_configs.sql` |
+| 17 | `0013_agent_character_engine.sql` |
+| 18 | `0013_industry_agent_templates.sql` |
+| 19 | `0014_agents_site_config_id.sql` |
+| 20 | `0014_reviews_harvested.sql` |
+| 21 | `0015_agents_role_type.sql` |
+| 22 | `0015_industry_agent_templates.sql` |
+| 23 | `0016_site_configs_workspace_lifecycle.sql` |
+| 24 | `0017_site_configs_twilio_sub_account.sql` |
+
+Next migration prefix: **0018**. One file per prefix; no parallel branch splits.
+
+**Note:** 2026-03-02: Added 0017 to align site_configs Twilio provisioning fields with shared/schema.ts after runtime missing-column error on /api/customer/businesses.
+
+---
+
 ## Appendix A: File Counts by Directory
 
 | Directory | Approximate File Count | Status |
 |---|---|---|
 | `server/` (root + subdirs) | ~55 TypeScript files | ✅ Active |
 | `client/src/` | ~70+ TypeScript/TSX files | ✅ Active |
-| `shared/` | 1 file (schema.ts, 1,956 lines) | ✅ Active |
+| `shared/` | 1 file (schema.ts, ~2,400+ lines) | ✅ Active |
 | `scripts/` | 11 files | ✅ Active |
 | `docs/` | 30+ Markdown files | ✅ Reference |
-| `migrations/` | 4 SQL files + 1 GRN subfolder | ✅ Active |
+| `migrations/` | 24 SQL files (see Migration Journal above) | ✅ Active |
 | `_legacy_archive/` | ~200+ files | ⛔ Archived — do not touch |
 
 ---
@@ -440,4 +484,4 @@
 
 ---
 
-*Last updated: February 26, 2026 — chore/the-great-purge*
+*Last updated: March 2, 2026 — Stable Rollback & Relayering; Bedrock v0.16; worktrees disabled*

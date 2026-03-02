@@ -1,9 +1,9 @@
-# Gemini 3.0 Flash Development Rules
+# Gemini Model Development Rules
 
 ## Model Standards
-- **Primary Model:** Always use `gemini-3.0-flash` (Gemini 3.0 Flash).
-- **No Fallbacks:** DO NOT fallback to `gemini-1.5-flash`, `gemini-1.5-pro`, or `gemini-2.0-flash`. The system relies on 3.0-specific features.
-- **Deprecation:** Legacy models (1.5/2.0) use incompatible state patterns and must not be mixed with 3.0 code paths.
+- **Primary Model:** Use **`process.env.GEMINI_MODEL_ID`** only. Never hardcode a model name (e.g. `gemini-3.0-flash`, `gemini-2.0-flash`). Doppler and `.env.example` define the canonical value (e.g. `models/gemini-2.5-flash-native-audio-preview-12-2025` for voice).
+- **No Fallbacks:** Do not fall back to deprecated models unless explicitly configured via env. The system relies on the configured model's features.
+- **Deprecation:** Legacy model names in code are forbidden. All model selection must read from `GEMINI_MODEL_ID` (or equivalent env) at runtime.
 
 ## State Management
 Gemini 3.0 Flash uses stateful architectures. Do not use stateless "send full history" patterns for complex flows.
