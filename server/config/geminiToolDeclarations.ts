@@ -537,3 +537,44 @@ export const TOOL_DECLARATIONS = {
     }
   }
 };
+
+export const generateMarketingArtifactTool = {
+  name: "generate_marketing_artifact",
+  description: "Creates a strategic marketing playbook or campaign artifact based on frontline review signals. Commits the strategy to the control plane database for human approval.",
+  parameters: {
+    type: "OBJECT",
+    properties: {
+      artifactType: {
+        type: "STRING",
+        description: "The category of the playbook: 'SMS_CAMPAIGN', 'FRONTLINE_SCRIPT_UPDATE', 'SEO_POSITIONING', or 'REPUTATION_RESPONSE'."
+      },
+      evidenceReviewIds: {
+        type: "ARRAY",
+        items: { type: "STRING" },
+        description: "Array of raw review_ids that justify this campaign."
+      },
+      evidenceSignalIds: {
+        type: "ARRAY",
+        items: { type: "STRING" },
+        description: "Array of signal_ids from the Tier-1 routing plane that prove this is a valid trend."
+      },
+      evidenceSummary: {
+        type: "STRING",
+        description: "A clinical, 2-sentence executive summary of the data trend triggering this action."
+      },
+      targetMetric: {
+        type: "STRING",
+        description: "The exact KPI this artifact is designed to move (e.g., 'Lead Conversion Rate', 'Google Review Volume')."
+      },
+      metricSource: {
+        type: "STRING",
+        description: "Where this metric is tracked (e.g., 'SerpAPI', 'Twilio Call Logs')."
+      },
+      frontmatter: {
+        type: "OBJECT",
+        description: "The actual payload of the artifact (e.g., the exact SMS copy, the updated agent prompt constraints)."
+      }
+    },
+    required: ["artifactType", "evidenceSummary", "targetMetric", "metricSource", "frontmatter"]
+  }
+};

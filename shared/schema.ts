@@ -351,7 +351,7 @@ export const agents = pgTable("agents", {
   aiMaxTokens: integer("ai_max_tokens").default(4096),
   hfToken: text("hf_token"), // User's HuggingFace token (encrypted)
   // Voice AI Configuration (Google Gemini)
-  voiceModel: text("voice_model").default("gemini-2.5-flash-native-audio-preview-12-2025"), // Gemini model for voice
+  voiceModel: text("voice_model").default(process.env.GEMINI_MODEL_ID ?? ""), // Gemini model for voice; runtime must use process.env.GEMINI_MODEL_ID from Doppler
   voiceRole: text("voice_role").default("AI Business Assistant"),
   voiceCompanyName: text("voice_company_name").default("AI Biz Bot"),
   voicePersona: text("voice_persona").default("friendly"), // professional, friendly, enthusiastic, calm, authoritative
@@ -2392,3 +2392,35 @@ export const PLACES_TYPE_TO_INDUSTRY: Record<string, IndustryGroup> = {
   car_dealer: 'automotive', car_repair: 'automotive', car_wash: 'automotive',
   gas_station: 'automotive', parking: 'automotive',
 };
+
+// Tier-2 CMO: review signals and marketing artifacts
+export const reviewSignals = pgTable("review_signals", {
+  signalId: uuid("signal_id").defaultRandom().primaryKey(),
+  reviewId: text("review_id").notNull(),
+  dataId: text("data_id").notNull(),
+  topic: text("topic").notNull(),
+  aspect: text("aspect").notNull(),
+  sentiment: text("sentiment").notNull(),
+  emotion: text("emotion").notNull(),
+  keyPhrases: jsonb("key_phrases").$type<string[]>().default([]).notNull(),
+  frictionPhrases: jsonb("friction_phrases").$type<string[]>().default([]).notNull(),
+  differentiatorPhrases: jsonb("differentiator_phrases").$type<string[]>().default([]).notNull(),
+  context: jsonb("context").$type<Record<string, unknown>>().default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const reviewArtifacts = pgTable("review_artifacts", {
+  artifactId: uuid("artifact_id").defaultRandom().primaryKey(),
+  artifactType: text("artifact_type").notNull(),
+  tenantId: text("tenant_id").notNull(),
+  generatedBy: text("generated_by").notNull(),
+  evidenceReviewIds: jsonb("evidence_review_ids").$type<string[]>().default([]).notNull(),
+  evidenceSignalIds: jsonb("evidence_signal_ids").$type<string[]>().default([]).notNull(),
+  evidenceSummary: text("evidence_summary").notNull(),
+  targetMetric: text("target_metric").notNull(),
+  metricSource: text("metric_source").notNull(),
+  status: text("status").notNull(),
+  frontmatter: jsonb("frontmatter").$type<Record<string, unknown>>().default({}).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

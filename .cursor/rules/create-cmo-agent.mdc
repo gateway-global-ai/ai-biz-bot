@@ -1,0 +1,118 @@
+---
+description: "Builds the Tier-2 Sovereign CMO Agent with strict DISC/ARCH constraints and read-only marketing artifact generation."
+globs: "server/**/*"
+---
+You are executing the `@create-cmo-agent` protocol. Your job is to scaffold the Tier-2 Chief Marketing Officer agent for the Sovereign AI architecture.
+
+CRITICAL ARCHITECTURE RULES:
+1. The CMO does not execute marketing directly. It writes to the `review_artifacts` database table with the status `"DRAFT_PENDING_APPROVAL"`.
+2. Do not use generic prompts. You MUST use the exact DISC/ARCH behavioral governance provided below.
+
+EXECUTION STEPS:
+
+### Step 1: Create the CMO Agent File
+Create or update `server/agents/ai-cmo-agent.ts` with the following Sovereign System Prompt:
+
+```typescript
+export const tier2CmoPrompt = `
+You are the Tier-2 Chief Marketing Officer (CMO) for Gateway Global AI's client network. 
+
+YOUR BEHAVIORAL GOVERNANCE (DISC/ARCH PROFILE):
+- DISC Profile: High D (Decisive, Strategic), High I (Influential, Persuasive). 
+- ARCH Profile: The Architect & Commander. You do not do busywork; you identify revenue leaks, synthesize raw frontline signals, and deploy high-leverage growth playbooks.
+- Tone: Executive, clinical, data-driven, and relentlessly focused on conversion. No fluff. No marketing jargon without a mathematical ROI attachment.
+
+YOUR DIRECTIVES:
+1. The Sovereign Memory Rule: You will be fed raw 'review_signals' (customer transcripts, complaints, praise, sentiment) gathered by the Tier-1 Execution Plane. You must ingest these without summarizing them away. 
+2. Evidence-Based Strategy: You are forbidden from hallucinating a marketing campaign. Every playbook or artifact you generate MUST cite the specific 'signal_id' or 'review_id' that triggered it. 
+3. Output Actionable Playbooks: Your output must not be advice. It must be a concrete "Marketing Artifact" (e.g., an SMS win-back campaign, a localized SEO differentiator, a frontline agent script adjustment) that the Tier-1 agents can immediately execute.
+
+EXECUTION FORMAT:
+When you have analyzed the signals, you MUST use the 'generate_marketing_artifact' tool to commit your strategy to the database so the human operator can click "Approve" and deploy it.
+`;
+```
+
+### Step 2: Inject the Tool Declaration
+Append this exact JSON schema to server/config/geminiToolDeclarations.ts:
+
+```typescript
+export const generateMarketingArtifactTool = {
+  name: "generate_marketing_artifact",
+  description: "Creates a strategic marketing playbook or campaign artifact based on frontline review signals. Commits the strategy to the control plane database for human approval.",
+  parameters: {
+    type: "OBJECT",
+    properties: {
+      artifactType: {
+        type: "STRING",
+        description: "The category of the playbook: 'SMS_CAMPAIGN', 'FRONTLINE_SCRIPT_UPDATE', 'SEO_POSITIONING', or 'REPUTATION_RESPONSE'."
+      },
+      evidenceReviewIds: {
+        type: "ARRAY",
+        items: { type: "STRING" },
+        description: "Array of raw review_ids that justify this campaign."
+      },
+      evidenceSignalIds: {
+        type: "ARRAY",
+        items: { type: "STRING" },
+        description: "Array of signal_ids from the Tier-1 routing plane that prove this is a valid trend."
+      },
+      evidenceSummary: {
+        type: "STRING",
+        description: "A clinical, 2-sentence executive summary of the data trend triggering this action."
+      },
+      targetMetric: {
+        type: "STRING",
+        description: "The exact KPI this artifact is designed to move (e.g., 'Lead Conversion Rate', 'Google Review Volume')."
+      },
+      metricSource: {
+        type: "STRING",
+        description: "Where this metric is tracked (e.g., 'SerpAPI', 'Twilio Call Logs')."
+      },
+      frontmatter: {
+        type: "OBJECT",
+        description: "The actual payload of the artifact (e.g., the exact SMS copy, the updated agent prompt constraints)."
+      }
+    },
+    required: ["artifactType", "evidenceSummary", "targetMetric", "metricSource", "frontmatter"]
+  }
+};
+```
+
+### Step 3: Scaffold the Execution Logic
+Create server/tools/cmoArtifactHandler.ts with the following strict execution logic:
+
+```typescript
+import { db } from "../db";
+import { reviewArtifacts } from "@shared/schema";
+
+export async function handleGenerateMarketingArtifact(args: any, tenantId: string) {
+  console.log(`[Tier-2 CMO] Generating ${args.artifactType} artifact for tenant ${tenantId}`);
+
+  try {
+    const newArtifact = await db.insert(reviewArtifacts).values({
+      artifactType: args.artifactType,
+      tenantId: tenantId,
+      generatedBy: "TIER_2_CMO_AGENT",
+      evidenceReviewIds: args.evidenceReviewIds || [],
+      evidenceSignalIds: args.evidenceSignalIds || [],
+      evidenceSummary: args.evidenceSummary,
+      targetMetric: args.targetMetric,
+      metricSource: args.metricSource,
+      status: "DRAFT_PENDING_APPROVAL", // STRICT GOVERNANCE: Always draft until human approves
+      frontmatter: args.frontmatter,
+    }).returning();
+
+    return {
+      success: true,
+      message: "Artifact successfully generated and securely locked in the Control Plane. Awaiting human execution approval.",
+      artifactId: newArtifact[0].artifactId
+    };
+  } catch (error) {
+    console.error("[Tier-2 CMO] Failed to write artifact:", error);
+    return {
+      success: false,
+      message: "Database insertion failed. Verify Sovereign Guard constraints."
+    };
+  }
+}
+```
