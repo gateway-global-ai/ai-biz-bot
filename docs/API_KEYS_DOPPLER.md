@@ -56,22 +56,6 @@ The server reads `process.env.PORT` and defaults to 3004 if unset; for the corre
 
 ---
 
-## Ports in Doppler
-
-**PORT** must exist in each Doppler config so `doppler run -- npm run dev` (or start) gets the right port. If you don’t see **PORT** in the Doppler dashboard:
-
-1. **Preferred:** From repo root with a Doppler token set (e.g. `DOPPLER_TOKEN` or `DOPPLER_TOKEN_DEV` in `.env`), run:
-   ```bash
-   npm run doppler:sync-ports
-   ```
-   This sets **PORT** in config **dev** = 3004, **stg** = 3003, **prd** = 3002 (or from your `.env` values for `PORT_DEV`, `PORT_STG`, `PORT_PRD`).
-
-2. **Or add manually in Doppler:** In each config (dev / stg / prd), add a secret **PORT** with value **3004** (dev), **3003** (stg), or **3002** (prd).
-
-The server reads `process.env.PORT` and defaults to 3004 if unset; for the correct env-specific port, ensure PORT is set in Doppler for that config.
-
----
-
 ## Scripts
 
 | Command | Description |

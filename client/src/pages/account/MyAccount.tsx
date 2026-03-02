@@ -539,6 +539,34 @@ export default function MyAccount() {
                 </div>
               </div>
             </div>
+
+            {/* Pricing Anchor — sourced from pricing_v1.yaml */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-pricing-anchor">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <p className="text-sm font-medium text-slate-200">Sovereign AI OS</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-white">${SOVEREIGN_PRICING.flatFeeMonthly}</span>
+                  <span className="text-xs text-slate-400">/mo flat fee</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                + metered overage — billed in arrears per MSA §3.2
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Mic2 className="w-3 h-3 text-blue-400" />
+                  ${SOVEREIGN_PRICING.overagePhoneVoice}/min phone AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Activity className="w-3 h-3 text-indigo-400" />
+                  ${SOVEREIGN_PRICING.overageWebVoice}/min web AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <MessageSquare className="w-3 h-3 text-violet-400" />
+                  ${SOVEREIGN_PRICING.overageA2pSms}/msg A2P SMS
+                </div>
+              </div>            </div>
           </div>
         </Card>
 
@@ -590,6 +618,13 @@ export default function MyAccount() {
           {businessesQuery.isLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+            </div>
+          ) : businessesQuery.isError ? (
+            <div className="text-center py-8 border border-dashed border-amber-500/30 rounded-2xl bg-amber-500/5">
+              <p className="text-amber-200 text-sm mb-3">Couldn&apos;t load businesses. Please try again.</p>
+              <Button variant="outline" size="sm" onClick={() => businessesQuery.refetch()}>
+                Retry
+              </Button>
             </div>
           ) : businesses.length === 0 && !showAddBusiness ? (
             <div className="text-center py-8 border border-dashed border-white/10 rounded-2xl">

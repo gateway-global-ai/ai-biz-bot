@@ -1,4 +1,4 @@
-import { chat, KIMI_MODELS, type KimiMessage } from '../kimi';
+import { chat, GEMINI_MODELS, type GatewayMessage } from '../ai-gateway';
 
 const GOOGLE_API_PRICING: Record<string, {
   name: string;
@@ -207,10 +207,10 @@ export function calculateCosts(scenarios: ApiUsageScenario[]): CostAnalysisResul
   };
 }
 
-export async function analyzeWithKimi(options: {
+export async function analyzeWithGemini(options: {
   type: 'cost_analysis' | 'rate_limits' | 'pricing_strategy' | 'api_comparison' | 'general';
   context: string;
-  conversationHistory?: KimiMessage[];
+  conversationHistory?: GatewayMessage[];
 }): Promise<string> {
   const { type, context, conversationHistory = [] } = options;
 
@@ -279,14 +279,14 @@ You will refuse to answer anything unrelated to Google APIs.
 
 ${roleInstructions[type] || roleInstructions.general}`;
 
-  const messages: KimiMessage[] = [
+  const messages: GatewayMessage[] = [
     { role: 'system', content: systemPrompt },
     ...conversationHistory,
     { role: 'user', content: context }
   ];
 
   const response = await chat({
-    model: KIMI_MODELS.K2_5,
+    model: GEMINI_MODELS.K2_5,
     messages,
     max_tokens: 8192,
   });
@@ -315,7 +315,7 @@ Recommend specific rate limits for each API including:
 4. Budget alert thresholds (50%, 75%, 90%)
 5. What to do when limits are hit (queue, degrade gracefully, or block)`;
 
-  return analyzeWithKimi({ type: 'rate_limits', context });
+  return analyzeWithGemini({ type: 'rate_limits', context });
 }
 
 export async function generatePricingStrategy(
@@ -341,7 +341,7 @@ Create tiered pricing plans (Starter, Pro, Enterprise) for each service.
 Include: per-report pricing, monthly subscription options, and volume discounts.
 Factor in: our operational costs, support overhead, and competitive positioning.`;
 
-  return analyzeWithKimi({ type: 'pricing_strategy', context });
+  return analyzeWithGemini({ type: 'pricing_strategy', context });
 }
 
 export async function compareApis(
@@ -358,5 +358,5 @@ ${apis.map(a => `- ${a.name}: $${a.costPerRequest}/request, ${a.freeMonthly} fre
 
 Recommend the best option considering cost, data quality, and suitability.`;
 
-  return analyzeWithKimi({ type: 'api_comparison', context });
+  return analyzeWithGemini({ type: 'api_comparison', context });
 }

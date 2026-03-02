@@ -171,7 +171,7 @@ export default function GoogleApiAnalyst() {
                   </div>
                   <div>
                     <h3 className="text-lg font-semibold text-foreground" data-testid="text-analyst-title">Google API Analyst</h3>
-                    <p className="text-sm text-muted-foreground mt-1">Powered by Kimi K2.5 with embedded Google API pricing knowledge</p>
+                    <p className="text-sm text-muted-foreground mt-1">Powered by Gemini with embedded Google API pricing knowledge</p>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 w-full max-w-2xl">
                     {quickQuestions.map((q, i) => (
@@ -209,7 +209,7 @@ export default function GoogleApiAnalyst() {
                 <div className="flex justify-start">
                   <div className="bg-muted rounded-lg p-3 flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-sm text-muted-foreground">Analyzing with Kimi K2.5...</span>
+                    <span className="text-sm text-muted-foreground">Analyzing with Gemini...</span>
                   </div>
                 </div>
               )}
@@ -451,7 +451,7 @@ export default function GoogleApiAnalyst() {
           </Link>
           <DollarSign className="w-5 h-5 text-purple-400" />
           <h2 className="text-base font-semibold text-foreground" data-testid="text-page-title">Google API Analyst</h2>
-          <Badge variant="outline">Kimi K2.5</Badge>
+          <Badge variant="outline">Gemini</Badge>
         </div>
 
         <div className="flex gap-1">

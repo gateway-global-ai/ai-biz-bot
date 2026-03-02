@@ -103,8 +103,46 @@ import {
 } from "@shared/schema";
 import type { Reseller } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, ilike, or, lte, isNull, and, gt } from "drizzle-orm";
+import { eq, desc, asc, ilike, or, lte, isNull, and, gt, inArray } from "drizzle-orm";
 
+// Placeholder for a future validation service (UPA).
+const UPAValidator = {
+  validate: async (prompt: string) => ({ isValid: true as const, reason: "" }),
+};
+
+/** Explicit site_configs column map (includes granular resource ledger so dashboard 4-card and plan work). */
+const siteConfigsColumns = {
+  id: siteConfigs.id,
+  ownerId: siteConfigs.ownerId,
+  name: siteConfigs.name,
+  domain: siteConfigs.domain,
+  placeId: siteConfigs.placeId,
+  placeData: siteConfigs.placeData,
+  assignedAgentId: siteConfigs.assignedAgentId,
+  botTemplateId: siteConfigs.botTemplateId,
+  systemPromptOverride: siteConfigs.systemPromptOverride,
+  modelProvider: siteConfigs.modelProvider,
+  modelName: siteConfigs.modelName,
+  chatbotEnabled: siteConfigs.chatbotEnabled,
+  voiceConciergeEnabled: siteConfigs.voiceConciergeEnabled,
+  widgetPosition: siteConfigs.widgetPosition,
+  widgetColor: siteConfigs.widgetColor,
+  greetingMessage: siteConfigs.greetingMessage,
+  placeholderText: siteConfigs.placeholderText,
+  knowledgeLibrary: siteConfigs.knowledgeLibrary,
+  plan: siteConfigs.plan,
+  heroImageUrl: siteConfigs.heroImageUrl,
+  heroImagePrompt: siteConfigs.heroImagePrompt,
+  agentConfig: siteConfigs.agentConfig,
+  voiceConfig: siteConfigs.voiceConfig,
+  themeConfig: siteConfigs.themeConfig,
+  voicePhoneAiMinutes: siteConfigs.voicePhoneAiMinutes,
+  voiceWebAiMinutes: siteConfigs.voiceWebAiMinutes,
+  smsMessages: siteConfigs.smsMessages,
+  chatBotMessages: siteConfigs.chatBotMessages,
+  createdAt: siteConfigs.createdAt,
+  updatedAt: siteConfigs.updatedAt,
+};
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -119,6 +157,7 @@ export interface IStorage {
   
   // Agent operations
   getAgents(): Promise<Agent[]>;
+  getAgentsBySiteConfigId(siteConfigId: string): Promise<Agent[]>;
   getAgent(id: string): Promise<Agent | undefined>;
   createAgent(agent: InsertAgent): Promise<Agent>;
   updateAgent(id: string, updates: Partial<InsertAgent>): Promise<Agent | undefined>;
@@ -216,6 +255,8 @@ export interface IStorage {
   getSiteConfigById(id: string): Promise<SiteConfig | null>;
   getSiteConfigByDomain(domain: string): Promise<SiteConfig | undefined>;
   getSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined>;
+  /** Create-or-return safety: only return unclaimed demo/provisioned workspace for this placeId. */
+  getUnclaimedSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined>;
   createSiteConfig(config: InsertSiteConfig): Promise<SiteConfig>;
   updateSiteConfig(id: string, updates: Partial<InsertSiteConfig>): Promise<SiteConfig | undefined>;
   deleteSiteConfig(id: string): Promise<boolean>;
@@ -349,6 +390,15 @@ export class DatabaseStorage implements IStorage {
   // Agent operations
   async getAgents(): Promise<Agent[]> {
     return db.select().from(agents).orderBy(desc(agents.createdAt));
+  }
+
+  async getAgentsBySiteConfigId(siteConfigId: string): Promise<Agent[]> {
+    return db
+      .select()
+      .from(agents)
+      .where(eq(agents.siteConfigId, siteConfigId))
+      // Stable roster ordering: 1) roleType (if present), 2) createdAt
+      .orderBy(asc(agents.roleType), asc(agents.createdAt));
   }
 
   async getAgent(id: string): Promise<Agent | undefined> {
@@ -986,6 +1036,22 @@ export class DatabaseStorage implements IStorage {
 
   async getSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined> {
     const [config] = await db.select().from(siteConfigs).where(eq(siteConfigs.placeId, placeId));
+    return config;
+  }
+
+  async getUnclaimedSiteConfigByPlaceId(placeId: string): Promise<SiteConfig | undefined> {
+    const [config] = await db
+      .select()
+      .from(siteConfigs)
+      .where(
+        and(
+          eq(siteConfigs.placeId, placeId),
+          isNull(siteConfigs.ownerId),
+          inArray(siteConfigs.workspaceState, ["demo", "provisioned"])
+        )
+      )
+      .orderBy(desc(siteConfigs.createdAt))
+      .limit(1);
     return config;
   }
 

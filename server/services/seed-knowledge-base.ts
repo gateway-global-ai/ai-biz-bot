@@ -285,7 +285,7 @@ Google Workspace offers free APIs for Gmail, Calendar, Drive, Docs, and Sheets.
       alternativeApis: [
         { name: 'OpenAI GPT-4', type: 'commercial', pricing: 'pay_per_use' },
         { name: 'Anthropic Claude', type: 'commercial', pricing: 'pay_per_use' },
-        { name: 'Moonshot Kimi', type: 'commercial', pricing: 'pay_per_use', note: 'Currently using' }
+        { name: 'Gemini', type: 'commercial', pricing: 'pay_per_use', note: 'Currently using' }
       ],
       currentlyUsed: true,
       integrationStatus: 'completed'

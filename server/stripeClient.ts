@@ -70,7 +70,6 @@ export async function getUncachableStripeClient(): Promise<Stripe> {
 }
 
 export async function getStripePublishableKeyAsync(): Promise<string> {
-  return getStripePublishableKey();
-}
+  return getStripePublishableKey();}
 
 // getStripeSync removed — stripe-replit-sync was a Replit-only package

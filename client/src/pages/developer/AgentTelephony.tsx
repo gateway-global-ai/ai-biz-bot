@@ -191,7 +191,7 @@ export default function AgentTelephony() {
                 </div>
                 <div className="pt-4 border-t border-slate-800">
                   <p className="text-sm text-slate-400">
-                    This number is configured for voice calls with Kimi-Audio AI and SMS messaging.
+                    This number is configured for voice calls with Gemini Voice AI and SMS messaging.
                     Inbound calls will be handled by this agent's personality and DISC profile.
                   </p>
                 </div>
@@ -358,7 +358,7 @@ export default function AgentTelephony() {
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <Zap className="w-5 h-5 text-amber-400" />
-              Powered by Kimi-Audio AI
+              Powered by Gemini Voice AI
             </CardTitle>
             <CardDescription>
               Real-time voice AI via Replicate for natural phone conversations
@@ -371,7 +371,7 @@ export default function AgentTelephony() {
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-2">
-                  <h3 className="font-semibold text-white">Kimi-Audio 7B Instruct</h3>
+                  <h3 className="font-semibold text-white">Gemini Voice 7B Instruct</h3>
                   <Badge variant="outline" className="text-xs border-amber-500/30 text-amber-400">
                     via Replicate
                   </Badge>
@@ -390,7 +390,7 @@ export default function AgentTelephony() {
             </div>
             
             <a 
-              href="https://replicate.com/zsxkib/kimi-audio-7b-instruct" 
+              href="https://aistudio.google.com/app/prompts/new_chat" 
               target="_blank" 
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 text-sm text-purple-300 hover:text-purple-200"
@@ -416,7 +416,7 @@ export default function AgentTelephony() {
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
                 <p className="text-sm text-slate-400 mb-1">Voice Model</p>
-                <p className="text-white font-medium">Kimi-Audio 7B</p>
+                <p className="text-white font-medium">Gemini Voice 7B</p>
               </div>
               <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
                 <p className="text-sm text-slate-400 mb-1">Voice Style</p>

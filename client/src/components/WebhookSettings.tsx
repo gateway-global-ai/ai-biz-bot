@@ -117,7 +117,7 @@ export function WebhookSettings() {
   const defaultWebhooks: WebhookConfig = {
     sms: `${baseUrl}/webhook/sms`,
     smsStatus: `${baseUrl}/webhook/sms/status`,
-    voice: `${baseUrl}/webhook/voice/kimi`,
+    voice: `${baseUrl}/webhook/voice/stream`,
     voiceFallback: `${baseUrl}/webhook/voice`,
     voiceStatus: `${baseUrl}/webhook/voice/status`,
   };
@@ -261,7 +261,7 @@ export function WebhookSettings() {
                       <div className="flex justify-between items-center">
                         <span className="text-slate-400">Inbound Voice:</span>
                         <code className="text-xs bg-slate-700 px-2 py-1 rounded text-green-400">
-                          /webhook/voice/kimi
+                          /webhook/voice/stream
                         </code>
                       </div>
                       <div className="flex justify-between items-center">

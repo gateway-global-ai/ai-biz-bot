@@ -5,7 +5,7 @@
  * Gathers insights to customize Google Workspace integration and tools.
  */
 
-import { chat, KIMI_MODELS } from '../kimi';
+import { chat, GEMINI_MODELS } from '../ai-gateway';
 import { db } from '../db';
 import { swotAnalyses, workspaceConfigurations } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -163,7 +163,7 @@ Be specific and personalized. No generic templates.`;
             content: analysisPrompt,
           },
         ],
-        model: KIMI_MODELS['moonshot-v1-128k'],
+        model: GEMINI_MODELS.FALLBACK,
         temperature: 0.3, // Lower temperature for structured output
       });
 
@@ -226,7 +226,7 @@ Be specific and personalized. No generic templates.`;
 
       const response = await chat({
         messages,
-        model: KIMI_MODELS['moonshot-v1-128k'],
+        model: GEMINI_MODELS.FALLBACK,
         temperature: 0.7,
       });
 

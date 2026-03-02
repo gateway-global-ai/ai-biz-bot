@@ -29,7 +29,7 @@ import CustomerManager from "@/pages/biz-dashboard/CustomerManager";
 import TwilioAccountManager from "@/pages/developer/TwilioAccountManager";
 import MvpLanding from "@/pages/showcase/MvpLanding";
 import LandingV2 from "@/pages/showcase/LandingV2";
-// KimiAudioDemo removed — Gemini Live handles all voice demos
+// Gemini Live handles all voice demos
 import TwilioHealthCheck from "@/pages/developer/TwilioHealthCheck";
 import SystemHealthCheck from "@/pages/developer/SystemHealthCheck";
 import TelephonyManager from "@/pages/developer/TelephonyManager";
@@ -281,6 +281,7 @@ function AppRouter() {
       <Route path="/agent/:agentId/classroom" component={TheClassroom} />
       <Route path="/nexus-classroom" component={ImmersiveClassroom} />
       <Route path="/agent/:agentId/telephony" component={AgentTelephony} />
+      <Route path="/brand-admin" component={BrandAdminPage} />
       <Route path="/agent-manager" component={AgentManager} />
       <Route path="/customers" component={CustomerManager} />
       <Route path="/gateway-admin" component={GatewayAdmin} />
@@ -399,7 +400,7 @@ function App() {
               <Route path="/login" component={Login} />
               <Route path="/contact" component={ContactForm} />
               <Route path="/v2" component={LandingV2} />
-              {/* /kimi-audio route removed — Gemini Live handles all voice demos */}
+              {/* voice-demo route — handled by Gemini Live on homepage */}
               <Route path="/sdk" component={SdkShowcase} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
               <Route path="/chat/customer" component={CustomerChatInterface} />

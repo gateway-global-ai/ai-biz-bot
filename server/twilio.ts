@@ -245,10 +245,23 @@ export async function getIncomingPhoneNumbers(): Promise<any[]> {
 }
 
 export async function sendSms(to: string, body: string, from?: string): Promise<{ sid: string }> {
+  // Check for mock mode
+  if (process.env.MOCK_TWILIO_SMS === 'true') {
+    console.log('\n--- MOCK SMS SENT ---');
+    console.log(`TO: ${to}`);
+    console.log(`BODY: ${body}`);
+    console.log('---------------------\n');
+    return { sid: `mock_sid_${Date.now()}` };
+  }
+
   try {
     const client = await getTwilioClient();
     const fromNumber = from || await getTwilioFromPhoneNumber();
     
+    if (!fromNumber) {
+      throw new Error('Twilio from number not configured.');
+    }
+
     const message = await client.messages.create({
       body: body,
       from: fromNumber,

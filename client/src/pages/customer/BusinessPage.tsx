@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/lib/auth';
 import { useCustomerAuth } from '@/lib/customerAuth';
@@ -26,7 +27,7 @@ import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 import { ensureApiLoader, loadPlacesLibrary } from '@/utils/googleMapsLoader';
 
-import Pidea_logo_header__7_ from "@assets/Pidea logo header (7).png";
+import gatewaySquareLogo from "@assets/gatewayglobalai_logo_square.png";
 
 type VoiceState = 'idle' | 'loading' | 'greeting' | 'greeting_paused' | 'conversation' | 'processing' | 'responding' | 'error';
 
@@ -247,6 +248,8 @@ export default function BusinessPage() {
   const [otpError, setOtpError] = useState('');
   const [generatingProgress, setGeneratingProgress] = useState(0);
   const [tokenError, setTokenError] = useState<string | null>(null);
+  const [showCreateTeamConfirm, setShowCreateTeamConfirm] = useState(false);
+  const [provisioningTeam, setProvisioningTeam] = useState(false);
 
   const { user, isAuthenticated, login: authLogin, logout: authLogout } = useAuth();
   const { user: customerUser, isAuthenticated: isCustomerAuth, login: customerLogin, logout: customerLogout } = useCustomerAuth();
@@ -286,6 +289,21 @@ export default function BusinessPage() {
     ...platformIdentity,
     id: 'platform_landing'
   };
+
+  // Bypass hook: if URL has ?siteConfigId= and site is provisioned, redirect to agents
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const siteConfigId = params.get('siteConfigId');
+    if (!siteConfigId) return;
+    fetch(`/api/site-configs/${encodeURIComponent(siteConfigId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((config: { workspaceState?: string } | null) => {
+        if (config?.workspaceState === 'provisioned') {
+          setLocation(`/agents?siteConfigId=${encodeURIComponent(siteConfigId)}`);
+        }
+      })
+      .catch(() => {});
+  }, [setLocation]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -384,78 +402,130 @@ export default function BusinessPage() {
       };
       requestAnimationFrame(applyStyles);
 
+      // Happy Path: user clicks a dropdown suggestion
+      // CRITICAL: No fetchFields — all data fetched securely via server proxy
       autocomplete.addEventListener('gmp-placeselect', async (event: any) => {
         const { placePrediction } = event;
         if (!placePrediction) return;
 
+        // Extract place.id directly without client-side API call
         const place = placePrediction.toPlace();
-        await place.fetchFields({
-          fields: ['id', 'displayName', 'formattedAddress', 'location', 'types', 'rating',
-                   'userRatingCount', 'nationalPhoneNumber', 'websiteURI', 'photos', 'regularOpeningHours'],
+        const placeId: string | undefined = place.id ?? undefined;
+        if (!placeId) return;
+
+        setMapsError(null);
+        // Show a minimal card immediately so the user isn't waiting in the dark
+        setSelectedPlace({
+          name: placePrediction.text?.toString() || 'Loading...',
+          formatted_address: '',
+          place_id: placeId,
+          photos: [],
+          types: [],
+          reviews: [],
         });
 
-        if (!place.displayName) return;
-
-        const placeId = place.id ?? undefined;
-        let geometry: { lat: number; lng: number } | undefined;
-        if (place.location) {
-          geometry = { lat: place.location.lat(), lng: place.location.lng() };
-        }
-
-        const placeData: SelectedPlace = {
-          name: place.displayName || '',
-          formatted_address: place.formattedAddress || '',
-          rating: place.rating ?? undefined,
-          user_ratings_total: place.userRatingCount ?? undefined,
-          formatted_phone_number: place.nationalPhoneNumber ?? undefined,
-          website: place.websiteURI ?? undefined,
-          types: place.types || [],
-          place_id: placeId,
-          photos: place.photos || [],
-          opening_hours: place.regularOpeningHours ?? undefined,
-          reviews: [],
-          geometry,
-        };
-        setSelectedPlace(placeData);
-        setMapsError(null);
-
-        if (placeId) {
-          try {
-            const detailsRes = await fetch(`/api/places/details/${encodeURIComponent(placeId)}`);
-            const details = await detailsRes.json();
-            setSelectedPlace(prev => prev ? {
-              ...prev,
-              reviews: details.reviews?.length > 0 ? details.reviews : prev.reviews,
-              user_ratings_total: details.user_ratings_total || prev.user_ratings_total,
-              rating: details.rating || prev.rating,
-              price_level: details.price_level,
-              business_status: details.business_status,
-              url: details.url,
-              vicinity: details.vicinity,
-              utc_offset: details.utc_offset,
-              international_phone_number: details.international_phone_number,
-              address_components: details.address_components,
-              plus_code: details.plus_code,
-              editorial_summary: details.editorial_summary,
-              wheelchair_accessible_entrance: details.wheelchair_accessible_entrance,
-              delivery: details.delivery,
-              dine_in: details.dine_in,
-              takeout: details.takeout,
-              curbside_pickup: details.curbside_pickup,
-              reservable: details.reservable,
-              serves_beer: details.serves_beer,
-              serves_wine: details.serves_wine,
-              serves_breakfast: details.serves_breakfast,
-              serves_lunch: details.serves_lunch,
-              serves_dinner: details.serves_dinner,
-              serves_brunch: details.serves_brunch,
-              serves_vegetarian_food: details.serves_vegetarian_food,
-            } : prev);
-          } catch (err) {
-            console.error('[Places] Failed to fetch details:', err);
-          }
+        try {
+          const detailsRes = await fetch(`/api/places/details/${encodeURIComponent(placeId)}`);
+          if (!detailsRes.ok) throw new Error(`Server returned ${detailsRes.status}`);
+          const details = await detailsRes.json();
+          setSelectedPlace({
+            name: details.name || placePrediction.text?.toString() || '',
+            formatted_address: details.formatted_address || '',
+            place_id: placeId,
+            rating: details.rating || undefined,
+            user_ratings_total: details.user_ratings_total || undefined,
+            formatted_phone_number: details.formatted_phone_number || undefined,
+            international_phone_number: details.international_phone_number || undefined,
+            website: details.website || undefined,
+            types: details.types || [],
+            // Photos: use server photo-proxy URL instead of client-side getURI()
+            photos: placeId ? [{ proxyUrl: `/api/places/photo-proxy/${encodeURIComponent(placeId)}?maxWidth=600` }] : [],
+            opening_hours: details.opening_hours || undefined,
+            reviews: details.reviews || [],
+            geometry: details.geometry || undefined,
+            price_level: details.price_level,
+            business_status: details.business_status,
+            url: details.url,
+            vicinity: details.vicinity,
+            utc_offset: details.utc_offset,
+            address_components: details.address_components,
+            plus_code: details.plus_code,
+            editorial_summary: details.editorial_summary,
+            wheelchair_accessible_entrance: details.wheelchair_accessible_entrance,
+            delivery: details.delivery,
+            dine_in: details.dine_in,
+            takeout: details.takeout,
+            curbside_pickup: details.curbside_pickup,
+            reservable: details.reservable,
+            serves_beer: details.serves_beer,
+            serves_wine: details.serves_wine,
+            serves_breakfast: details.serves_breakfast,
+            serves_lunch: details.serves_lunch,
+            serves_dinner: details.serves_dinner,
+            serves_brunch: details.serves_brunch,
+            serves_vegetarian_food: details.serves_vegetarian_food,
+          });
+        } catch (err) {
+          console.error('[Places] Server fetch failed:', err);
+          setMapsError('Could not load business details. Please try again.');
+          setSelectedPlace(null);
         }
       });
+
+      // Fallback Path: user types and hits Enter without selecting a dropdown item
+      const handleFormSubmit = async (e: Event) => {
+        e.preventDefault();
+        const shadow = (autocomplete as any).shadowRoot;
+        const input: HTMLInputElement | null = shadow?.querySelector('input');
+        const rawQuery = input?.value?.trim();
+        if (!rawQuery) return;
+
+        setMapsError(null);
+        setSelectedPlace({
+          name: rawQuery,
+          formatted_address: 'Searching...',
+          place_id: undefined,
+          photos: [],
+          types: [],
+          reviews: [],
+        });
+
+        try {
+          const searchRes = await fetch('/api/places/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: rawQuery }),
+          });
+          if (!searchRes.ok) throw new Error(`Search returned ${searchRes.status}`);
+          const searchData = await searchRes.json();
+          const first = searchData.results?.[0] || searchData.places?.[0];
+          if (!first) {
+            setMapsError('No businesses found. Try a different name or location.');
+            setSelectedPlace(null);
+            return;
+          }
+          const placeId = first.place_id;
+          setSelectedPlace({
+            name: first.name || rawQuery,
+            formatted_address: first.formatted_address || first.vicinity || '',
+            place_id: placeId,
+            rating: first.rating || undefined,
+            user_ratings_total: first.user_ratings_total || undefined,
+            types: first.types || [],
+            photos: placeId ? [{ proxyUrl: `/api/places/photo-proxy/${encodeURIComponent(placeId)}?maxWidth=600` }] : [],
+            reviews: [],
+            geometry: first.geometry || undefined,
+          });
+        } catch (err) {
+          console.error('[Places] Search failed:', err);
+          setMapsError('Search failed. Please try again.');
+          setSelectedPlace(null);
+        }
+      };
+
+      // Attach Enter-key submit to the nearest ancestor form (added below)
+      const form = container.closest('form');
+      if (form) form.addEventListener('submit', handleFormSubmit);
 
       container.appendChild(autocomplete);
     };
@@ -481,6 +551,73 @@ export default function BusinessPage() {
       });
     }, 200);
   }, [selectedPlace]);
+
+  const handleCreateAiTeamConfirm = async () => {
+    if (!selectedPlace || provisioningTeam) return;
+    const placeId = selectedPlace.place_id || (selectedPlace as any).placeId;
+    const businessName = selectedPlace.name;
+    const placeTypes = Array.isArray(selectedPlace.types) ? selectedPlace.types : [];
+    if (!businessName) {
+      toast({ title: 'Missing business name', variant: 'destructive' });
+      return;
+    }
+    setProvisioningTeam(true);
+    try {
+      let resolvedPlaceTypes = placeTypes;
+      if (placeId) {
+        try {
+          const resolveRes = await fetch('/api/intelligence/resolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ placeId }),
+          });
+          if (resolveRes.ok) {
+            const resolveData = await resolveRes.json();
+            if (Array.isArray(resolveData.placeTypes) && resolveData.placeTypes.length) {
+              resolvedPlaceTypes = resolveData.placeTypes;
+            }
+          }
+        } catch {
+          // best-effort only: never block provisioning
+        }
+      }
+      const createRes = await fetch('/api/site-configs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: businessName,
+          placeId: placeId || undefined,
+          placeData: selectedPlace,
+        }),
+      });
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to create site');
+      }
+      const siteConfig = await createRes.json();
+      const siteConfigId = siteConfig.id;
+      const provisionRes = await fetch('/api/intelligence/provision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          siteConfigId,
+          placeTypes: resolvedPlaceTypes.length ? resolvedPlaceTypes : ['establishment'],
+          businessName,
+        }),
+      });
+      if (!provisionRes.ok) {
+        const err = await provisionRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to provision agents');
+      }
+      setShowCreateTeamConfirm(false);
+      toast({ title: 'AI team created', description: 'Your 6 agents are ready.' });
+      setLocation(`/agents?siteConfigId=${encodeURIComponent(siteConfigId)}`);
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.message || 'Could not create AI team', variant: 'destructive' });
+    } finally {
+      setProvisioningTeam(false);
+    }
+  };
 
   const prevStageRef = useRef<OnboardingStage>(stage);
   useEffect(() => {
@@ -663,20 +800,20 @@ export default function BusinessPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <nav className="sticky top-0 z-50 bg-white/70 backdrop-blur-md border-b border-white/20 shadow-sm px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
+      <nav className="sticky top-0 z-50 bg-transparent border-b border-white/10 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
         <img src={Pidea_logo_header__7_} alt="Gateway Global AI" className="h-20 w-auto relative z-10" style={{ filter: 'drop-shadow(0 2px 8px rgba(19,70,160,0.15))' }} />
         <div className="flex items-center gap-2 justify-end">
           <ShareButton
-            shareTitle="Gateway Global AI - AI-Powered Business Websites"
-            shareText="Gateway Global AI creates professional AI-powered websites for businesses with voice concierge and chat support."
-            variant="light"
+            shareTitle="Gateway Global AI - AI Business Router"
+            shareText="AI-powered business websites with voice concierge and chat. Fully developed in about an hour. No credit card required."
+            variant="dark"
             testIdPrefix="main-share"
           />
           {isCustomerAuth ? (
             <Button
               variant="ghost"
               size="sm"
-              className="text-slate-600 text-xs"
+              className="text-white/80 hover:text-white hover:bg-white/10 text-xs"
               onClick={() => setLocation('/my-account')}
               data-testid="button-my-account"
             >
@@ -687,7 +824,7 @@ export default function BusinessPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-slate-600 text-xs"
+              className="text-white/80 hover:text-white hover:bg-white/10 text-xs"
               onClick={() => setShowCustomerLoginModal(true)}
               data-testid="button-customer-login"
             >
@@ -955,7 +1092,7 @@ export default function BusinessPage() {
               <VoiceVisualizer />
             </div>
             <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white text-center" data-testid="text-hero-heading">
-              Free Custom Websites<br />
+              AI Business Router<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-3xl md:text-[48px]">
                 AI Voice and Chat Enabled
               </span>
@@ -963,14 +1100,14 @@ export default function BusinessPage() {
             <div className="max-w-2xl w-full" data-testid="container-place-search">
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-                <div className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
+                <form className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
                   <div ref={pickerContainerRef} className="flex-1 min-w-0" />
                   {!mapsKey && (
                     <div className="pr-3">
                       <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
                     </div>
                   )}
-                </div>
+                </form>
               </div>
               {mapsError && (
                 <p className="text-xs text-amber-400 mt-3 flex items-center gap-1" data-testid="text-maps-error">
@@ -978,7 +1115,7 @@ export default function BusinessPage() {
                   {mapsError}
                 </p>
               )}
-              {!mapsError && <p className="text-xs text-slate-600 mt-3 text-center">Powered by Google Places</p>}
+              {!mapsError && <p className="text-xs text-slate-400 mt-3 text-center">Powered by Google Places</p>}
             </div>
             <p className="text-xl text-slate-400 max-w-2xl text-center leading-relaxed font-light">
               Fully Developed Web Site In 1 Hour!<br/>
@@ -995,20 +1132,13 @@ export default function BusinessPage() {
               <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
                 <CardContent className="p-6">
                   <div className="flex flex-col gap-4">
-                    {selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getURI === 'function' ? (
+                    {selectedPlace.photos && selectedPlace.photos.length > 0 && (selectedPlace.photos[0] as any)?.proxyUrl ? (
                       <div className="w-full h-32 rounded-lg overflow-hidden bg-slate-800">
                         <img
-                          src={selectedPlace.photos[0].getURI({ maxWidth: 400 })}
+                          src={(selectedPlace.photos[0] as any).proxyUrl}
                           alt={selectedPlace.name}
                           className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ) : selectedPlace.photos && selectedPlace.photos.length > 0 && typeof selectedPlace.photos[0]?.getUrl === 'function' ? (
-                      <div className="w-full h-32 rounded-lg overflow-hidden bg-slate-800">
-                        <img
-                          src={selectedPlace.photos[0].getUrl({ maxWidth: 400 })}
-                          alt={selectedPlace.name}
-                          className="w-full h-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                         />
                       </div>
                     ) : (
@@ -1059,6 +1189,15 @@ export default function BusinessPage() {
                       </Button>
                       <Button 
                         variant="outline" 
+                        className="w-full border-violet-500/50 text-violet-300 hover:bg-violet-500/10" 
+                        onClick={() => setShowCreateTeamConfirm(true)} 
+                        data-testid="button-create-ai-team"
+                      >
+                        <Bot className="w-4 h-4 mr-2" />
+                        Create my AI team (6 agents)
+                      </Button>
+                      <Button 
+                        variant="outline" 
                         className="w-full border-slate-700 text-slate-300" 
                         onClick={() => setSelectedPlace(null)} 
                         data-testid="button-clear-selection"
@@ -1073,6 +1212,33 @@ export default function BusinessPage() {
             </div>
           </div>
         )}
+
+        {/* Confirmation: Create AI team for this business */}
+        <Dialog open={showCreateTeamConfirm} onOpenChange={setShowCreateTeamConfirm}>
+          <DialogContent className="bg-slate-900 border-slate-700 text-white">
+            <DialogHeader>
+              <DialogTitle>Create your AI team</DialogTitle>
+            </DialogHeader>
+            <p className="text-slate-300">
+              Create your AI team for <span className="font-semibold text-white">{selectedPlace?.name}</span>? We&apos;ll set up 6 agents: Concierge, Booking, Lead Qualifier, Retention, Billing, and Gatekeeper.
+            </p>
+            <div className="flex gap-3 justify-end pt-4">
+              <Button variant="outline" className="border-slate-600 text-slate-300" onClick={() => setShowCreateTeamConfirm(false)} disabled={provisioningTeam}>
+                No
+              </Button>
+              <Button className="bg-indigo-600 hover:bg-indigo-500" onClick={handleCreateAiTeamConfirm} disabled={provisioningTeam} data-testid="button-confirm-create-team">
+                {provisioningTeam ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Yes'
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Website Preview — renders the full website-builder template */}
         {(stage === 'preview' || stage === 'full-access') && selectedPlace && (

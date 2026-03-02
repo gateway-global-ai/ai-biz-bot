@@ -342,7 +342,7 @@ function ChatWithModes() {
                   <ul className="space-y-2 text-slate-300">
                     <li className="flex items-start gap-2">
                       <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                      <span><strong>TTS Voice:</strong> Text-to-speech with Gemini and Kimi Audio</span>
+                      <span><strong>TTS Voice:</strong> Text-to-speech with Gemini and Gemini</span>
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
@@ -376,7 +376,7 @@ function ChatWithModes() {
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                      <span><strong>MCP Server:</strong> Connect to Kimi K2 for agentic coding</span>
+                      <span><strong>MCP Server:</strong> Connect to Gemini for agentic coding</span>
                     </li>
                   </ul>
                 </CardContent>

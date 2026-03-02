@@ -23,28 +23,12 @@ import type { Agent, AIModelProvider } from '@shared/schema';
 import type { DiscScores, ArchProfile } from '@shared/schema';
 
 const AI_MODEL_PROVIDERS: { id: AIModelProvider; name: string; description: string }[] = [
-  { id: 'moonshot', name: 'Moonshot (Kimi 2.5)', description: '256K context, fast responses' },
-  { id: 'huggingface', name: 'HuggingFace (Kimi K2)', description: '1T parameter MoE, best for coding' },
-  { id: 'openai', name: 'OpenAI', description: 'GPT-4o, broad capabilities' },
-  { id: 'anthropic', name: 'Anthropic', description: 'Claude, nuanced reasoning' },
+  { id: 'gemini', name: 'Gemini', description: 'Sole provider for text and chat' },
 ];
 
 const AI_MODELS: Record<AIModelProvider, { id: string; name: string }[]> = {
-  moonshot: [
-    { id: 'moonshot-v1-128k', name: 'Kimi 2.5 128K' },
-    { id: 'moonshot-v1-32k', name: 'Kimi 2.5 32K' },
-    { id: 'moonshot-v1-8k', name: 'Kimi 2.5 8K' },
-  ],
-  huggingface: [
-    { id: 'moonshotai/Kimi-K2-Instruct:novita', name: 'Kimi K2 Instruct (1T MoE)' },
-  ],
-  openai: [
-    { id: 'gpt-4o', name: 'GPT-4o' },
-    { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-  ],
-  anthropic: [
-    { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
-    { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' },
+  gemini: [
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
   ],
 };
 
@@ -206,8 +190,8 @@ export default function TheLab() {
   });
   
   const [aiSettings, setAiSettings] = useState({
-    provider: 'moonshot' as AIModelProvider,
-    modelId: 'moonshot-v1-128k',
+    provider: 'gemini' as AIModelProvider,
+    modelId: 'gemini-2.0-flash',
     temperature: 60,
     maxTokens: 4096,
     hfToken: '',
@@ -270,8 +254,8 @@ export default function TheLab() {
         conscientiousness: agent.conscientiousness || 50,
       });
       setAiSettings({
-        provider: (agent.aiModelProvider as AIModelProvider) || 'moonshot',
-        modelId: agent.aiModelId || 'moonshot-v1-128k',
+        provider: (agent.aiModelProvider as AIModelProvider) || 'gemini',
+        modelId: agent.aiModelId || 'gemini-2.0-flash',
         temperature: agent.aiTemperature || 60,
         maxTokens: agent.aiMaxTokens || 4096,
         hfToken: agent.hfToken || '',
@@ -656,7 +640,7 @@ export default function TheLab() {
                   data-testid="slider-temperature"
                 />
                 <p className="text-xs text-slate-500 mt-2">
-                  Lower = focused, Higher = creative. Recommended: 0.60 for Kimi K2
+                  Lower = focused, Higher = creative. Recommended: 0.60 for Gemini
                 </p>
               </CardContent>
             </Card>

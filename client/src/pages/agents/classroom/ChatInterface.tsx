@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Message } from './types';
-import { generateLessonPlan } from './kimiClassroomService';
+import { generateLessonPlan } from './classroomService';
 
 interface Props {
   onLessonReady: (plan: any) => void;

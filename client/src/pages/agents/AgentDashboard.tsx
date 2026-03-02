@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
-import { useLocation } from 'wouter';
+import { useLocation, useSearch } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,9 +45,17 @@ const VOICES = [
   { id: 'leda', name: 'Leda', description: 'Soft & Gentle' },
 ];
 
+function parseSiteConfigId(search: string): string | null {
+  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const id = params.get('siteConfigId');
+  return id && id !== 'undefined' && id !== '' ? id : null;
+}
+
 export default function AgentDashboard() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const siteConfigId = parseSiteConfigId(search ?? '');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
   const [copiedAgentId, setCopiedAgentId] = useState<string | null>(null);
@@ -63,14 +71,29 @@ export default function AgentDashboard() {
     avatarId: 'avatar1',
   });
 
-  const { data: agents = [], isLoading } = useQuery<Agent[]>({
+  const { data: agentsAll = [], isLoading: loadingAll } = useQuery<Agent[]>({
     queryKey: ['/api/agents'],
+    enabled: !siteConfigId,
   });
+  const { data: agentsSiteResponse, isLoading: loadingSite } = useQuery<{ agents?: Agent[] } | Agent[]>({
+    queryKey: ['/api/site-configs', siteConfigId!, 'agents'],
+    enabled: !!siteConfigId,
+  });
+  const agentsSite = Array.isArray(agentsSiteResponse) ? agentsSiteResponse : (agentsSiteResponse?.agents ?? []);
+  const agents = siteConfigId ? agentsSite : agentsAll;
+  const isLoading = siteConfigId ? loadingSite : loadingAll;
+
+  const invalidateAgentQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
+    if (siteConfigId) {
+      queryClient.invalidateQueries({ queryKey: ['/api/site-configs', siteConfigId, 'agents'] });
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: typeof newAgent) => apiRequest('POST', '/api/agents', data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
+      invalidateAgentQueries();
       setIsCreateOpen(false);
       setNewAgent({ name: '', voiceId: 'kore', voiceName: 'Kore', status: 'active', dominance: 50, influence: 50, steadiness: 50, conscientiousness: 50, avatarId: 'avatar1' });
       toast({ title: 'Agent created successfully' });
@@ -81,7 +104,7 @@ export default function AgentDashboard() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiRequest('DELETE', `/api/agents/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
+      invalidateAgentQueries();
       toast({ title: 'Agent deleted' });
     },
     onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
@@ -91,7 +114,7 @@ export default function AgentDashboard() {
     mutationFn: ({ id, data }: { id: string; data: Partial<Agent> }) => 
       apiRequest('PATCH', `/api/agents/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
+      invalidateAgentQueries();
       setEditingAgent(null);
       toast({ title: 'Agent updated successfully' });
     },
@@ -224,6 +247,14 @@ export default function AgentDashboard() {
                   </div>
 
                   <CardContent className="p-4">
+                    {((agent as Agent & { coreFocusPreview?: string }).coreFocusPreview || agent.systemPrompt) && (
+                      <div className="mb-4 p-3 bg-slate-100 rounded-lg border border-slate-200">
+                        <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Core Focus</div>
+                        <p className="text-sm text-slate-700 line-clamp-3">
+                          {(agent as Agent & { coreFocusPreview?: string }).coreFocusPreview || agent.systemPrompt}
+                        </p>
+                      </div>
+                    )}
                     <div className="mb-4 p-3 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 rounded-lg border border-purple-500/20">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -322,6 +353,7 @@ export default function AgentDashboard() {
               );
             })}
 
+            {!siteConfigId && (
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
                 <Card 
@@ -422,6 +454,7 @@ export default function AgentDashboard() {
                 </div>
               </DialogContent>
             </Dialog>
+            )}
           </div>
         )}
 

@@ -271,6 +271,32 @@ router.get('/:id', async (req, res) => {
     return res.status(400).json({ error: 'A valid site configuration ID is required.' });
   }
 
+  // Platform landing page — no DB record needed, return default Gateway Global AI config
+  if (id === 'platform_landing' || id === 'platform-landing' || id === 'platform') {
+    return res.status(200).json({
+      id,
+      name: 'Gateway Global AI',
+      placeId: null,
+      agentId: null,
+      chatbotEnabled: true,
+      widgetPosition: 'bottom-right',
+      primaryColor: '#6366f1',
+      systemPromptOverride: null,
+      knowledgeLibrary: null,
+      voiceConfig: null,
+      agentConfig: {
+        name: 'Gateway AI',
+        role: 'AI Business Assistant',
+        personality: 'Helpful, professional, and enthusiastic about AI-powered business solutions.',
+        discProfile: 'I:75 S:65 D:50 C:60',
+        objectives: ['Help visitors understand the platform', 'Answer questions about features and pricing', 'Demo Clear Voice technology'],
+        constraints: ['Focus on Gateway Global AI platform topics'],
+      },
+      heroImageUrl: null,
+      domain: null,
+    });
+  }
+
   try {
     const siteConfig = await storage.getSiteConfigById(id);
 

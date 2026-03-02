@@ -37,6 +37,7 @@ interface ConciergePanelProps {
   layoutMode?: 'floating' | 'fixed' | 'fullscreen';
   onClose: () => void;
   onCycleLayout?: () => void;
+  onOpenSettings?: () => void;
   /** When set, header shows "Admin Mode" button that opens admin (e.g. partner dashboard). */
   onOpenAdmin?: () => void;
   className?: string;
@@ -142,6 +143,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
         console.log('[ConciergePanel] Initializing with model:', validatedVoiceConfig.model, '| Persona:', resolvedAgent.role, hasValidId ? '(Handover Service)' : '(props — preview mode)');
 
+        console.log('[ConciergePanel] Initializing with model:', validatedVoiceConfig.model, '| Persona:', resolvedAgent.role, hasValidId ? '(Handover Service)' : '(props — preview mode)');
         // 3. Create client with the VALIDATED config
         const newClient = VoiceClientFactory.createClient(validatedVoiceConfig);
         

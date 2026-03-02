@@ -104,7 +104,7 @@ function MyWebsite() {
 - ✅ Google Maps/Places API - Business location and details lookup
 - ✅ Google Workspace - Calendar, Drive, Tasks, Docs integration
 - ✅ Twilio Telephony - SMS and voice call support
-- ✅ TTS Voice - Gemini 2.5 Flash and Kimi Audio
+- ✅ TTS Voice - Gemini 2.5 Flash
 - ✅ Real-time Chat - WebSocket-based communication
 - ✅ AI Biz Bot - Intelligent assistant with context awareness
 

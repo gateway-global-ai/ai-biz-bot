@@ -25,6 +25,15 @@ The Doppler CLI reads **`DOPPLER_TOKEN`**. Each environment has its own token; u
 
 On the dev server, set `DOPPLER_TOKEN_DEV` in .env; scripts (e.g. `npm run db:migrate:nova`, `npm run doppler:sync-ports`) use `DOPPLER_TOKEN` or fall back to `DOPPLER_TOKEN_DEV`. PM2 sets `DOPPLER_TOKEN` from the matching _DEV/_PRD var when starting the app.
 
+## Deployment (mandatory)
+
+- **Do not** leave deployment as "manual steps" (migrate SQL, then restart, then fix port). **Always** wire through the deploy scripts.
+- **Dev:** `./script/deploy-dev.sh aibizbot-dev.gatewayglobal.ai` (from `/opt/gatewayglobal/aibizbot-dev.gatewayglobal.ai`). Runs: pull → stop app (free port) → **migrations** → install → build → start.
+- **Stage:** `./script/deploy-staging.sh aibizbot-stage.gatewayglobal.ai`. Same flow.
+- **Prod:** `./script/deploy-server.sh aibizbot.gatewayglobal.ai`. Same flow.
+- Migrations run via `npm run db:migrate` (Doppler must be configured so `DATABASE_URL` is set). New `.sql` files in `migrations/` are run in order when deploy runs.
+- If "port in use" appears: run `npm run kill-port` once (uses PORT from Doppler), then run the deploy script again. Do not instruct the user to "manually kill the process" or "restart and hope."
+
 ## Commands
 
 - List processes: `pm2 list`
@@ -35,5 +44,6 @@ On the dev server, set `DOPPLER_TOKEN_DEV` in .env; scripts (e.g. `npm run db:mi
 
 ## Reference
 
+- **Deploy scripts (single path):** `docs/deployment/DEPLOY_SCRIPTS.md`
 - Decoupled strategy: `docs/deployment/DECOUPLED_ENVIRONMENT_STRATEGY.md`
 - Doppler copy/sync: `npm run doppler:copy-config`, `npm run doppler:sync-ports`

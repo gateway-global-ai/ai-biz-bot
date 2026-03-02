@@ -116,7 +116,7 @@ export class VlmAutoAgentService {
         widgetColor: "#2563eb",
         greetingMessage,
         placeholderText: "Ask me anything...",
-        modelProvider: "kimi",
+        modelProvider: "gemini",
       });
 
       return siteConfig.id;
