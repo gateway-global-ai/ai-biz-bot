@@ -5,6 +5,7 @@ interface User {
   phone: string;
   name: string | null;
   role: string;
+  resellerId?: string | null;
 }
 
 interface AuthContextType {

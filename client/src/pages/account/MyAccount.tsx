@@ -20,14 +20,7 @@ import {
   Loader2,
   Check,
   ExternalLink,
-  Sparkles,
-  Mic,
   Search,
-  X,
-  Copy,
-  LayoutGrid,
-  List,
-  ImageOff,  Search,
   X,
   ShieldCheck,
   AlertTriangle,
@@ -36,7 +29,8 @@ import {
   Settings2,
   Activity,
   MessageSquare,
-  Mic2,} from "lucide-react";
+  Mic2,
+} from "lucide-react";
 
 // ── Pricing constants sourced from .system_design/pricing_v1.yaml ─────────────
 const SOVEREIGN_PRICING = {
@@ -59,10 +53,6 @@ export default function MyAccount() {
   const [emailValue, setEmailValue] = useState("");
   const [showAddBusiness, setShowAddBusiness] = useState(false);
   const [addingBusiness, setAddingBusiness] = useState(false);
-  const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  // Track which plan tab is previewed per business (defaults to current plan)
-  const [planTabs, setPlanTabs] = useState<Record<string, PlanType>>({});
   const [mapsKey, setMapsKey] = useState<string | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -109,7 +99,8 @@ export default function MyAccount() {
                     width:100%!important;padding:8px 12px!important; }
             input::placeholder { color:#64748b!important; }
           `;
-          shadow.appendChild(style);        }
+          shadow.appendChild(style);
+        }
       });
 
       const handlePlaceSelect = async (event: any) => {
@@ -199,16 +190,13 @@ export default function MyAccount() {
     enabled: isAuthenticated,
   });
 
-  // Onboarding status requires owner auth; My Account is customer-facing. Skip to avoid 401.
   const onboardingQuery = useQuery({
     queryKey: ["/api/onboarding/status"],
     queryFn: async () => {
-      const res = await fetch("/api/onboarding/status", { credentials: "include" });
-      if (res.status === 401) return null;
-      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      const res = await apiRequest("GET", "/api/onboarding/status");
       return res.json();
     },
-    enabled: false, // Owner-only endpoint; customer My Account does not use it
+    enabled: isAuthenticated,
   });
 
   const updateProfileMutation = useMutation({
@@ -549,6 +537,35 @@ export default function MyAccount() {
                   <MessageSquare className="w-3 h-3 text-violet-400" />
                   ${SOVEREIGN_PRICING.overageA2pSms}/msg A2P SMS
                 </div>
+              </div>
+            </div>
+
+            {/* Pricing Anchor — sourced from pricing_v1.yaml */}
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+              data-testid="section-pricing-anchor">
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <p className="text-sm font-medium text-slate-200">Sovereign AI OS</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold text-white">${SOVEREIGN_PRICING.flatFeeMonthly}</span>
+                  <span className="text-xs text-slate-400">/mo flat fee</span>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mb-3">
+                + metered overage — billed in arrears per MSA §3.2
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Mic2 className="w-3 h-3 text-blue-400" />
+                  ${SOVEREIGN_PRICING.overagePhoneVoice}/min phone AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <Activity className="w-3 h-3 text-indigo-400" />
+                  ${SOVEREIGN_PRICING.overageWebVoice}/min web AI
+                </div>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-xs text-slate-400">
+                  <MessageSquare className="w-3 h-3 text-violet-400" />
+                  ${SOVEREIGN_PRICING.overageA2pSms}/msg A2P SMS
+                </div>
               </div>            </div>
           </div>
         </Card>
@@ -578,7 +595,8 @@ export default function MyAccount() {
               ) : (
                 <><Globe className="w-4 h-4 mr-2" />Add Business</>
               )}
-            </Button>          </div>
+            </Button>
+          </div>
 
           {showAddBusiness && (
             <div className="mb-4 p-4 bg-white/5 border border-white/10 rounded-xl backdrop-blur-sm"
@@ -638,155 +656,8 @@ export default function MyAccount() {
                     <div className="min-w-0">
                       <p className="text-white font-medium truncate">{biz.name}</p>
                       {biz.domain && (
-                        <p className="text-xs text-slate-500 truncate">{biz.domain}</p>                      )}
-
-                      {/* Grid view: UUID + Manage row */}
-                      {viewMode === "grid" && (
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <button
-                            className="flex items-center gap-1 group min-w-0"
-                            title="Copy Site ID"
-                            onClick={() => {
-                              navigator.clipboard.writeText(biz.id);
-                              toast({ title: "Copied", description: "Site ID copied to clipboard" });
-                            }}
-                            data-testid={`copy-uuid-${biz.id}`}
-                          >
-                            <span className="text-[10px] text-slate-600 font-mono group-hover:text-slate-400 transition-colors truncate">{biz.id}</span>
-                            <Copy className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 flex-shrink-0" />
-                          </button>
-                          <Button size="sm" variant="outline" className="flex-shrink-0" onClick={() => setLocation(`/my-account/site/${biz.id}`)} data-testid={`button-manage-${biz.id}`}>
-                            Manage <ExternalLink className="w-3 h-3 ml-1" />
-                          </Button>
-                        </div>
+                        <p className="text-xs text-slate-500 truncate">{biz.domain}</p>
                       )}
-
-                      {/* List view: UUID + Manage */}
-                      {viewMode === "list" && (
-                        <div className="flex items-center gap-2 mb-3">
-                          <button
-                            className="flex items-center gap-1 group flex-1 min-w-0"
-                            title="Copy Site ID"
-                            onClick={() => {
-                              navigator.clipboard.writeText(biz.id);
-                              toast({ title: "Copied", description: "Site ID copied to clipboard" });
-                            }}
-                            data-testid={`copy-uuid-${biz.id}`}
-                          >
-                            <span className="text-[10px] text-slate-600 font-mono group-hover:text-slate-400 transition-colors truncate">{biz.id}</span>
-                            <Copy className="w-2.5 h-2.5 text-slate-600 group-hover:text-slate-400 flex-shrink-0" />
-                          </button>
-                          <Button size="sm" variant="outline" className="flex-shrink-0" onClick={() => setLocation(`/my-account/site/${biz.id}`)} data-testid={`button-manage-${biz.id}`}>
-                            Manage <ExternalLink className="w-3 h-3 ml-1" />
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* Plan tab navigator */}
-                      {(() => {
-                      const planKeys = Object.keys(PLAN_LIMITS) as PlanType[];
-                      const selectedTab = planTabs[biz.id] ?? bizPlan;
-                      const tabInfo = PLAN_LIMITS[selectedTab];
-                      const tabIdx = planKeys.indexOf(selectedTab);
-                      const isCurrentPlan = selectedTab === bizPlan;
-                      const isUpgrade = tabIdx > planKeys.indexOf(bizPlan);
-                      const upgradeId = `${biz.id}-${selectedTab}`;
-
-                      return (
-                        <div className="pt-2 border-t border-slate-700/50">
-                          {/* Tab strip */}
-                          <div className="flex gap-0.5 bg-slate-900/60 rounded-md p-0.5 mb-3">
-                            {planKeys.map((pk) => {
-                              const pkInfo = PLAN_LIMITS[pk];
-                              const isActive = pk === selectedTab;
-                              const isCurrent = pk === bizPlan;
-                              return (
-                                <button
-                                  key={pk}
-                                  onClick={() => setPlanTabs((prev) => ({ ...prev, [biz.id]: pk }))}
-                                  className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-all ${
-                                    isActive
-                                      ? "bg-slate-700 text-white shadow-sm"
-                                      : "text-slate-500 hover:text-slate-300"
-                                  }`}
-                                  data-testid={`plan-tab-${biz.id}-${pk}`}
-                                >
-                                  {pkInfo.label}
-                                  {isCurrent && (
-                                    <span className="ml-1 text-[9px] text-emerald-400">✓</span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          {/* Selected tab content */}
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-baseline gap-2 mb-2">
-                                <span className="text-lg font-bold text-white">
-                                  {tabInfo.price === 0 ? "Free" : `$${tabInfo.price}`}
-                                </span>
-                                {tabInfo.price > 0 && (
-                                  <span className="text-xs text-slate-400">/mo per site</span>
-                                )}
-                                <span className="text-xs text-slate-500 italic">{tabInfo.tagline}</span>
-                              </div>
-                              <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                                {tabInfo.features.map((f, i) => (
-                                  <div key={i} className="flex items-start gap-1 text-xs text-slate-400">
-                                    <Check className="w-3 h-3 text-emerald-400 mt-0.5 flex-shrink-0" />
-                                    <span>{f}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div className="flex-shrink-0">
-                              {isCurrentPlan ? (
-                                <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-300 whitespace-nowrap">
-                                  <Check className="w-3 h-3 mr-1" />
-                                  Current Plan
-                                </Badge>
-                              ) : isUpgrade ? (
-                                <Button
-                                  size="sm"
-                                  className="bg-blue-600 hover:bg-blue-500 text-white whitespace-nowrap"
-                                  disabled={upgradingPlan === upgradeId}
-                                  data-testid={`button-upgrade-${biz.id}-${selectedTab}`}
-                                  onClick={async () => {
-                                    setUpgradingPlan(upgradeId);
-                                    try {
-                                      const res = await fetch("/api/subscriptions/create-checkout-session", {
-                                        method: "POST",
-                                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                                        body: JSON.stringify({ plan: selectedTab, siteConfigId: biz.id }),
-                                      });
-                                      const data = await res.json();
-                                      if (!res.ok) throw new Error(data.error || "Failed to start checkout");
-                                      window.location.href = data.url;
-                                    } catch (err: any) {
-                                      toast({ title: "Upgrade failed", description: err.message, variant: "destructive" });
-                                      setUpgradingPlan(null);
-                                    }
-                                  }}
-                                >
-                                  {upgradingPlan === upgradeId ? (
-                                    <><Loader2 className="w-3 h-3 animate-spin mr-1" />Redirecting...</>
-                                  ) : (
-                                    <><Sparkles className="w-3 h-3 mr-1" />Upgrade</>
-                                  )}
-                                </Button>
-                              ) : (
-                                <Badge variant="secondary" className="bg-slate-700 text-slate-400 whitespace-nowrap">
-                                  Lower tier
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                      })()}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
@@ -821,7 +692,8 @@ export default function MyAccount() {
                     </Button>
                   </div>
                 </div>
-              ))}            </div>
+              ))}
+            </div>
           )}
         </Card>
       </div>

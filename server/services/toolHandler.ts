@@ -11,6 +11,9 @@ import { workspaceConfigurations } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "../mcp/googleWorkspace";
 import { isKnowledgeWorkerPlan } from "../prompts/knowledgeWorkerPrompt";
+import { handleGetHotelInventory } from "../tools/hotelInventoryHandler";
+import { handleFetchCityWarrants } from "../tools/fetchCityWarrantsHandler";
+import { handleVineLookupAndDispatch } from "../tools/vineDispatchHandler";
 
 /**
  * Interface for the tool call structure received from the Gemini v1beta protocol
@@ -19,6 +22,10 @@ interface ToolCall {
   name: string;
   args: any;
   id?: string;
+}
+
+export interface ToolCallContext {
+  siteConfigId?: string | null;
 }
 
 // ── Lead Qualifier tool handlers ─────────────────────────────────────────────
@@ -364,12 +371,30 @@ async function handleSendOnboardingEmail(args: any) {
 /**
  * Main dispatcher that routes Gemini's function calls to internal services.
  * Every tool declared in the client's setupMessage must be handled here.
+ * @param context Optional session context (e.g. siteConfigId) for site-anchored tools.
  */
-export async function handleToolCall(toolCall: ToolCall) {
+export async function handleToolCall(toolCall: ToolCall, context?: ToolCallContext) {
   console.log(`[ToolHandler] 🛠️ Executing tool: ${toolCall.name} with args:`, toolCall.args);
 
   try {
     switch (toolCall.name) {
+      case "get_hotel_inventory":
+        return await handleGetHotelInventory({
+          ...toolCall.args,
+          _sessionSiteConfigId: context?.siteConfigId ?? undefined,
+        });
+
+      case "fetch_city_warrants":
+        return await handleFetchCityWarrants({
+          ...toolCall.args,
+          _sessionSiteConfigId: context?.siteConfigId ?? undefined,
+        });
+
+      case "vine_lookup_and_dispatch":
+        return await handleVineLookupAndDispatch({
+          ...toolCall.args,
+          _sessionSiteConfigId: context?.siteConfigId ?? undefined,
+        });
       case "get_business_details":
         return await getBusinessDetails(toolCall.args.placeId || toolCall.args.place_id);
 

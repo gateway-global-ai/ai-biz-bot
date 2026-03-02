@@ -1,2 +1,36 @@
-echo "🔍 Running API Permit Diagnostics..."
+#!/usr/bin/env sh
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  Sovereign Pre-Commit Gate"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Gate 1: Sovereign Rule Enforcement (checks staged files for violations)
+echo ""
+echo "Gate 1: Sovereign Guard — Rule Enforcement"
+doppler run -- npx tsx scripts/sovereign-guard.ts
+GUARD_EXIT=$?
+if [ $GUARD_EXIT -ne 0 ]; then
+  echo ""
+  echo "COMMIT BLOCKED by Sovereign Guard."
+  echo "Fix violations or use --no-verify with a documented reason."
+  exit 1
+fi
+
+# Gate 2: API Permit Diagnostics (Gemini, Twilio, Maps)
+echo ""
+echo "Gate 2: API Permit Diagnostics"
 doppler run -- npx tsx scripts/check-google-key-permissions.ts
+PERMIT_EXIT=$?
+if [ $PERMIT_EXIT -ne 0 ]; then
+  echo ""
+  echo "COMMIT BLOCKED: API permits are not valid."
+  echo "Check Doppler secrets and retry."
+  exit 1
+fi
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  All gates passed. Proceeding with commit."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""

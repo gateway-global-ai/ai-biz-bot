@@ -1,136 +1,229 @@
 /**
- * Agent provisioning from industry templates: maps place types to industry group,
- * clones industry_agent_templates into live agents for a site.
+ * Agent Provisioning Service
+ *
+ * On business signup, detects the industry group from Google Places types,
+ * then clones all 6 pre-tuned archetypes into the site's agent roster.
+ *
+ * The owner arrives to a fully configured team on day one — no blank screen,
+ * no DISC sliders to figure out, no prompt engineering required.
  */
-import { and, eq } from "drizzle-orm";
+
+import { db } from '../db.js';
+import { storage } from '../storage.js';
+import { eq, and } from 'drizzle-orm';
 import {
   industryAgentTemplates,
-  INDUSTRY_GROUPS,
+  agents,
   PLACES_TYPE_TO_INDUSTRY,
-  siteConfigs,
-  type InsertAgent,
-} from "@shared/schema";
-import { db } from "../db";
-import { storage } from "../storage";
+  type IndustryGroup,
+  type IndustryAgentTemplate,
+} from '@shared/schema';
+import { buildBehavioralPrompt } from './promptCompiler.js';
 
-const DEFAULT_VOICE_ID = "default";
-const DEFAULT_VOICE_NAME = "Default";
-
-export type IndustryGroup = (typeof INDUSTRY_GROUPS)[number];
-
-export interface ProvisionResult {
-  industryGroup: string;
-  agentsCreated: number;
-  archetypesProvisioned: string[];
-  agentIds: string[];
-}
+// ── Industry Detection ─────────────────────────────────────────────────────────
 
 /**
- * Resolve industry group from place types (e.g. ["restaurant","food"] -> food_beverage).
+ * Map Google Places types[] to an IndustryGroup.
+ * Returns the best match or 'professional_services' as default.
  */
-function resolveIndustryGroup(placeTypes: string[]): IndustryGroup {
-  const normalized = placeTypes.map((t) => t.toLowerCase().replace(/\s+/g, "_"));
-  for (const t of normalized) {
-    const group = PLACES_TYPE_TO_INDUSTRY[t];
+export function detectIndustryGroup(placeTypes: string[]): IndustryGroup {
+  for (const type of placeTypes) {
+    const group = PLACES_TYPE_TO_INDUSTRY[type];
     if (group) return group;
   }
-  return "professional_services";
+  return 'professional_services'; // sensible default
+}
+
+// ── Template → Agent Conversion ────────────────────────────────────────────────
+
+function buildSystemPromptFromTemplate(template: IndustryAgentTemplate): string {
+  // Build a minimal agent-like object for the prompt compiler
+  const agentLike = {
+    name: template.defaultName,
+    voiceRole: template.roleType,
+    voiceCompanyName: 'Gateway Global AI',
+    voicePersona: 'professional',
+    dominance: template.dominance,
+    influence: template.influence,
+    steadiness: template.steadiness,
+    conscientiousness: template.conscientiousness,
+    archProfile: {
+      acknowledge: template.archAcknowledge,
+      reflect: template.archReflect,
+      context: template.archContext,
+      handoff: template.archHandoff,
+    },
+    shortTermMemory: template.shortTermMemoryTemplate ? {
+      specialty: template.shortTermMemoryTemplate,
+      focus: template.primaryIntent || '',
+      method: 'consistent, character-driven interaction',
+      differentiator: template.worldView || '',
+      discAnalysis: `D:${template.dominance} I:${template.influence} S:${template.steadiness} C:${template.conscientiousness}`,
+    } : null,
+    longTermMemory: template.longTermCoreTemplate ? {
+      dominantTrait: template.longTermCoreTemplate.split('.')[0] || '',
+      years: '5',
+      originStory: template.longTermCoreTemplate,
+      unbreakableRule: template.unbreakableRule || '',
+      ruleReason: template.worldView || '',
+      primaryIntent: template.primaryIntent || '',
+      happySeeing: 'a customer who leaves knowing exactly what they needed',
+      sadSeeing: 'an inquiry left unresolved or a caller feeling unheard',
+      priorityOverMoney: 'Trust',
+      philosophyPeople: 'deserve clarity, care, and competence in every interaction',
+      philosophyLife: 'better when people help each other get what they actually need',
+      philosophyToday: 'about being the most helpful version of myself for whoever calls',
+    } : null,
+  } as any;
+
+  return buildBehavioralPrompt(agentLike);
+}
+
+// ── Main Provisioning Function ──────────────────────────────────────────────────
+
+export interface ProvisioningResult {
+  industryGroup: IndustryGroup;
+  agentsCreated: number;
+  agentIds: string[];
+  archetypesProvisioned: string[];
 }
 
 /**
- * Fetch all templates for an industry group.
- */
-export async function getTemplatesForIndustry(
-  industryGroup: string
-): Promise<typeof industryAgentTemplates.$inferSelect[]> {
-  const rows = await db
-    .select()
-    .from(industryAgentTemplates)
-    .where(eq(industryAgentTemplates.industryGroup, industryGroup));
-  return rows;
-}
-
-/**
- * Return the list of industry group slugs.
- */
-export async function getAllIndustryGroups(): Promise<string[]> {
-  return [...INDUSTRY_GROUPS];
-}
-
-/**
- * Provision agents for a business: map placeTypes to industry, clone templates into agents.
- * Idempotent: if 6+ agents already exist for this site, returns existing roster (no duplicates).
+ * Provision all 6 agent archetypes for a business on signup.
+ *
+ * @param siteConfigId — the new site's config ID
+ * @param placeTypes — Google Places types[] from the business search result
+ * @param businessName — the business name (used for display in agent names)
+ * @param customerId — optional customer account ID for tracking
  */
 export async function provisionAgentsForBusiness(
   siteConfigId: string,
   placeTypes: string[],
-  businessName: string
-): Promise<ProvisionResult> {
-  const industryGroup = resolveIndustryGroup(placeTypes);
-  const templates = await getTemplatesForIndustry(industryGroup);
+  businessName: string,
+  customerId?: string,
+): Promise<ProvisioningResult> {
+  const industryGroup = detectIndustryGroup(placeTypes);
 
-  // Idempotency guard: if agents already exist for this site, return them and ensure Concierge is assigned
-  const existing = await storage.getAgentsBySiteConfigId(siteConfigId);
-  if (existing.length >= 6) {
-    const concierge = existing.find((a) => (a.roleType ?? '').toLowerCase() === 'concierge') ?? existing[0];
-    if (concierge) {
-      await storage.updateSiteConfig(siteConfigId, { assignedAgentId: concierge.id } as any);
+  console.log(`[Provisioning] Detected industry: ${industryGroup} for "${businessName}"`);
+
+  // Fetch all 6 templates for this industry group
+  const templates = await db
+    .select()
+    .from(industryAgentTemplates)
+    .where(
+      and(
+        eq(industryAgentTemplates.industryGroup, industryGroup),
+        eq(industryAgentTemplates.isActive, true),
+      )
+    )
+    .orderBy(industryAgentTemplates.sortOrder);
+
+  if (templates.length === 0) {
+    console.warn(`[Provisioning] No templates found for industry: ${industryGroup}`);
+    return { industryGroup, agentsCreated: 0, agentIds: [], archetypesProvisioned: [] };
+  }
+
+  const agentIds: string[] = [];
+  const archetypesProvisioned: string[] = [];
+
+  for (const template of templates) {
+    try {
+      const systemPrompt = buildSystemPromptFromTemplate(template);
+
+      const agent = await storage.createAgent({
+        name: template.defaultName,
+        voiceId: template.voiceId || 'Kore',
+        voiceName: template.voiceName || 'Kore - Calm & Professional',
+        status: 'active',
+        dominance: template.dominance,
+        influence: template.influence,
+        steadiness: template.steadiness,
+        conscientiousness: template.conscientiousness,
+        avatarId: template.avatarId || 'avatar1',
+        systemPrompt,
+        shortTermMemory: template.shortTermMemoryTemplate ? {
+          specialty: template.shortTermMemoryTemplate,
+          focus: template.primaryIntent || '',
+          method: 'character-first behavioral alignment',
+          differentiator: template.worldView || '',
+          discAnalysis: `D:${template.dominance} I:${template.influence} S:${template.steadiness} C:${template.conscientiousness}`,
+        } : null,
+        longTermMemory: template.longTermCoreTemplate ? {
+          dominantTrait: 'Dedicated',
+          years: '5',
+          originStory: template.longTermCoreTemplate,
+          unbreakableRule: template.unbreakableRule || '',
+          ruleReason: template.worldView || '',
+          primaryIntent: template.primaryIntent || '',
+          happySeeing: 'a caller who hangs up with exactly what they needed',
+          sadSeeing: 'an opportunity to help someone that was missed',
+          priorityOverMoney: 'Trust',
+          philosophyPeople: 'deserve to be heard and helped efficiently',
+          philosophyLife: 'is better when we make our interactions count',
+          philosophyToday: 'is a chance to be the best version of this role',
+        } : null,
+        archProfile: {
+          acknowledge: template.archAcknowledge,
+          reflect: template.archReflect,
+          context: template.archContext,
+          handoff: template.archHandoff,
+        },
+        voiceRole: template.roleType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        voiceCompanyName: businessName,
+        voicePersona: 'professional',
+        aiModelProvider: 'gemini',
+        aiModelId: process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash',
+        aiTemperature: 65,
+        aiMaxTokens: 4096,
+        budgetAmountUsd: '0',
+        budgetPeriod: 'monthly',
+        budgetSpentUsd: '0',
+        startupStatus: 'pending',
+      });
+
+      agentIds.push(agent.id);
+      archetypesProvisioned.push(template.roleType);
+
+      console.log(`[Provisioning] Created agent: ${template.defaultName} (${template.roleType})`);
+    } catch (err: any) {
+      console.error(`[Provisioning] Failed to create agent for ${template.roleType}:`, err.message);
     }
-    return {
-      industryGroup,
-      agentsCreated: 0,
-      archetypesProvisioned: existing.map((a) => a.roleType ?? 'unknown'),
-      agentIds: existing.map((a) => a.id),
-    };
   }
 
-  const createdAgents: Awaited<ReturnType<typeof storage.createAgent>>[] = [];
-  for (const t of templates) {
-    const name = `${t.defaultName} (${businessName})`;
-    const agent: InsertAgent = {
-      siteConfigId,
-      roleType: t.roleType,
-      name,
-      voiceId: DEFAULT_VOICE_ID,
-      voiceName: DEFAULT_VOICE_NAME,
-      status: "active",
-      dominance: t.dominance,
-      influence: t.influence,
-      steadiness: t.steadiness,
-      conscientiousness: t.conscientiousness,
-      systemPrompt: t.primaryIntent ?? undefined,
-    };
-    const created = await storage.createAgent(agent);
-    createdAgents.push(created);
-  }
-
-  // Workspace lifecycle: flip demo -> provisioned after successful agent creation.
-  // Only flips when currently 'demo'; does not overwrite claimed/active/archived.
-  try {
-    await db
-      .update(siteConfigs)
-      .set({ workspaceState: "provisioned", updatedAt: new Date() })
-      .where(
-        and(
-          eq(siteConfigs.id, siteConfigId),
-          eq(siteConfigs.workspaceState, "demo")
-        )
-      );
-  } catch (err) {
-    console.error("[agentProvisioning] workspace_state flip failed:", err);
-  }
-
-  // Concierge assignment: by roleType (re-fetch so we have DB-backed roleType)
-  const createdRoster = await storage.getAgentsBySiteConfigId(siteConfigId);
-  const concierge = createdRoster.find((a) => (a.roleType ?? '').toLowerCase() === 'concierge');
-  if (concierge) {
-    await storage.updateSiteConfig(siteConfigId, { assignedAgentId: concierge.id } as any);
+  // If a siteConfig exists, assign the concierge as the primary agent
+  if (agentIds.length > 0) {
+    try {
+      const conciergeIdx = archetypesProvisioned.indexOf('concierge');
+      const primaryAgentId = conciergeIdx >= 0 ? agentIds[conciergeIdx] : agentIds[0];
+      await storage.updateSiteConfig(siteConfigId, { agentId: primaryAgentId });
+      console.log(`[Provisioning] Assigned primary agent (concierge) to siteConfigId=${siteConfigId}`);
+    } catch (err: any) {
+      console.warn('[Provisioning] Failed to assign primary agent:', err.message);
+    }
   }
 
   return {
     industryGroup,
-    agentsCreated: createdAgents.length,
-    archetypesProvisioned: createdAgents.map((a) => a.roleType).filter(Boolean) as string[],
-    agentIds: createdAgents.map((a) => a.id),
+    agentsCreated: agentIds.length,
+    agentIds,
+    archetypesProvisioned,
   };
+}
+
+// ── Query helpers ──────────────────────────────────────────────────────────────
+
+export async function getTemplatesForIndustry(group: IndustryGroup): Promise<IndustryAgentTemplate[]> {
+  return db
+    .select()
+    .from(industryAgentTemplates)
+    .where(and(eq(industryAgentTemplates.industryGroup, group), eq(industryAgentTemplates.isActive, true)))
+    .orderBy(industryAgentTemplates.sortOrder);
+}
+
+export async function getAllIndustryGroups(): Promise<string[]> {
+  const results = await db
+    .selectDistinct({ group: industryAgentTemplates.industryGroup })
+    .from(industryAgentTemplates)
+    .where(eq(industryAgentTemplates.isActive, true));
+  return results.map(r => r.group);
 }

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, pgEnum, uuid, index, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index, pgEnum, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -360,6 +360,12 @@ export const agents = pgTable("agents", {
   budgetPeriod: text("budget_period").default("monthly"), // daily, weekly, monthly
   budgetSpentUsd: numeric("budget_spent_usd", { precision: 10, scale: 2 }).default("0"),
   budgetResetAt: timestamp("budget_reset_at"),
+  // Character Engine — Three-Layer Behavioral System
+  // Layer 1: Character (who the agent IS)
+  shortTermMemory: jsonb("short_term_memory"), // { specialty, focus, method, differentiator, discAnalysis, archBehavior }
+  longTermMemory: jsonb("long_term_memory"),   // { dominantTrait, years, originStory, unbreakableRule, ruleReason, primaryIntent, happySeeing, sadSeeing, priorityOverMoney, philosophyPeople, philosophyLife, philosophyToday }
+  // Layer 3: Conversation Mechanics (how the agent structures dialogue)
+  archProfile: jsonb("arch_profile"),          // { acknowledge, reflect, context, handoff } — 0-100 each
   // Startup Script
   startupScript: text("startup_script"),
   startupBudgetUsd: numeric("startup_budget_usd", { precision: 10, scale: 2 }).default("0"),
@@ -466,12 +472,37 @@ export const insertTaskSchema = createInsertSchema(tasks).omit({
 export type InsertTask = z.infer<typeof insertTaskSchema>;
 export type Task = typeof tasks.$inferSelect;
 
+// ── Resellers (Digital Franchise) ─────────────────────────────────────────────
+// Self-referential hierarchy: a reseller can have a parent (sub-reseller model).
+// commission_rate stored as decimal 0–1, e.g. 0.10 = 10%.
+// stripe_account_id = Stripe Connect Express account for automated payouts.
+export const resellers = pgTable("resellers", {
+  id:               varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  parentResellerId: varchar("parent_reseller_id").references((): any => resellers.id, { onDelete: "set null" }),
+  stripeAccountId:  text("stripe_account_id"),
+  commissionRate:   numeric("commission_rate", { precision: 5, scale: 4 }).notNull().default("0.10"),
+  name:             text("name"),
+  email:            text("email"),
+  phone:            text("phone"),
+  createdAt:        timestamp("created_at").defaultNow().notNull(),
+  updatedAt:        timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertResellerSchema = createInsertSchema(resellers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertReseller = z.infer<typeof insertResellerSchema>;
+export type Reseller = typeof resellers.$inferSelect;
+
 // Admin users for OTP authentication
 export const adminUsers = pgTable("admin_users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   phone: text("phone").notNull().unique(),
   name: text("name"),
   role: text("role").default("admin"), // admin, superadmin
+  resellerId: varchar("reseller_id").references(() => resellers.id),
   isActive: boolean("is_active").default(true),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -520,6 +551,26 @@ export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({
 
 export type InsertAuthSession = z.infer<typeof insertAuthSessionSchema>;
 export type AuthSession = typeof authSessions.$inferSelect;
+
+// NOVA Sovereign IDV sessions — constitution: .system_design/nova_sovereign_ruleset_v1.yaml
+export const novaIdvSessions = pgTable("nova_idv_sessions", {
+  sessionId: uuid("session_id").primaryKey(),
+  businessId: uuid("business_id").notNull(),
+  clientPhone: text("client_phone"),
+  clientEmail: text("client_email"),
+  protocolLevel: integer("protocol_level").notNull(),
+  otpVerified: boolean("otp_verified").default(false),
+  magicLinkVerified: boolean("magic_link_verified").default(false),
+  biometricVerified: boolean("biometric_verified").default(false),
+  idVerified: boolean("id_verified").default(false),
+  signatureUrl: text("signature_url"),
+  invoiceId: uuid("invoice_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export type NovaIdvSession = typeof novaIdvSessions.$inferSelect;
+export type InsertNovaIdvSession = typeof novaIdvSessions.$inferInsert;
 
 // Demo leads for business website onboarding flow
 export const demoLeads = pgTable("demo_leads", {
@@ -1038,6 +1089,8 @@ export const siteConfigs = pgTable("site_configs", {
   placeholderText: text("placeholder_text").default("Type a message..."),
   /** Knowledge library: array of { id, title, content, addedAt } for agent training. */
   knowledgeLibrary: jsonb("knowledge_library"),
+  /** Total reviews harvested via SerpAPI pipeline — used for billing ($0.10/review above 10). */
+  reviewsHarvested: integer("reviews_harvested").default(0),
   /** Per-business subscription plan: 'free' | 'pro' | 'voice' | 'enterprise' */
   plan: text("plan").default("free"),
   /** AI-generated or custom hero image URL stored on the platform */
@@ -1061,6 +1114,34 @@ export const siteConfigs = pgTable("site_configs", {
   provisionedPhoneNumber: text("provisioned_phone_number"),
   /** Twilio IncomingPhoneNumber SID for the provisioned number. */
   provisionedPhoneSid: text("provisioned_phone_sid"),
+  /** Reseller (Digital Franchise) who owns this site – for commission attribution. */
+  resellerId: varchar("reseller_id").references(() => resellers.id),
+  /** When the low-energy SMS nudge was last sent; reset on refill so nudge can fire again. */
+  lastNudgeSentAt: timestamp("last_nudge_sent_at"),
+  // ── Site Claim / Assignment lifecycle ──────────────────────────────────────
+  /** Secure random hex token embedded in the SMS claim link. */
+  claimToken:               varchar("claim_token", { length: 64 }),
+  /** Token expiry — defaults to 7 days from when the invite is sent. */
+  claimTokenExpiresAt:      timestamp("claim_token_expires_at"),
+  /** The E.164 phone number the invite SMS was dispatched to. */
+  assignedToPhone:          text("assigned_to_phone"),
+  /** Claim lifecycle: 'unclaimed' | 'invite_sent' | 'payment_pending' | 'claimed' */
+  claimStatus:              text("claim_status").notNull().default("unclaimed"),
+  /** Timestamp when the site was successfully claimed and payment confirmed. */
+  claimedAt:                timestamp("claimed_at"),
+  /** Stripe Checkout session ID used for the $49.99 activation payment. */
+  claimCheckoutSessionId:   text("claim_checkout_session_id"),
+  /** Agent Persona config: { name, role, discProfile, basePrompt } */
+  agentConfig: jsonb("agent_config"),
+  /** Audio / voice settings: { voiceName, language, isPushToTalk } */
+  voiceConfig: jsonb("voice_config"),
+  /** Showroom UI theme tokens: { primaryColor, fontFamily, borderRadius } */
+  themeConfig: jsonb("theme_config"),
+  /** Granular resource ledger: prepaid quotas per cost center (all default 0). */
+  voicePhoneAiMinutes: integer("voice_phone_ai_minutes").default(0).notNull(),
+  voiceWebAiMinutes: integer("voice_web_ai_minutes").default(0).notNull(),
+  smsMessages: integer("sms_messages").default(0).notNull(),
+  chatBotMessages: integer("chat_bot_messages").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1103,6 +1184,36 @@ export const insertVoiceUsageLogSchema = createInsertSchema(voiceUsageLogs).omit
 
 export type InsertVoiceUsageLog = z.infer<typeof insertVoiceUsageLogSchema>;
 export type VoiceUsageLog = typeof voiceUsageLogs.$inferSelect;
+
+// ── Reseller Commissions ledger ────────────────────────────────────────────────
+// One row per commission event.  Amounts in cents to avoid floating-point drift.
+// Status lifecycle: pending → paid | cancelled
+// Event types: subscription | top_up | manual
+export const resellerCommissions = pgTable("reseller_commissions", {
+  id:                 varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resellerId:         varchar("reseller_id")
+                        .references(() => resellers.id, { onDelete: "cascade" })
+                        .notNull(),
+  siteConfigId:       varchar("site_config_id")
+                        .references(() => siteConfigs.id, { onDelete: "set null" }),
+  eventType:          text("event_type").notNull(),   // 'subscription' | 'top_up' | 'manual'
+  grossAmountCents:   integer("gross_amount_cents").notNull(),  // revenue that triggered commission
+  commissionCents:    integer("commission_cents").notNull(),    // reseller's cut in cents
+  status:             text("status").notNull().default("pending"), // 'pending' | 'paid' | 'cancelled'
+  stripeTransferId:   text("stripe_transfer_id"),     // set once Stripe transfer fires
+  note:               text("note"),                   // optional operator note for manual events
+  createdAt:          timestamp("created_at").defaultNow().notNull(),
+  paidAt:             timestamp("paid_at"),            // set when status → paid
+});
+
+export const insertResellerCommissionSchema = createInsertSchema(resellerCommissions).omit({
+  id: true,
+  createdAt: true,
+  paidAt: true,
+  stripeTransferId: true,
+});
+export type InsertResellerCommission = z.infer<typeof insertResellerCommissionSchema>;
+export type ResellerCommission = typeof resellerCommissions.$inferSelect;
 
 // ── Google Workspace Integration ──────────────────────────────────────────────
 // Per-site workspace configuration (tied to siteConfigs, not customerAccounts,
@@ -2145,78 +2256,6 @@ export const insertEnrichmentSnapshotSchema = createInsertSchema(
 export type InsertEnrichmentSnapshot = z.infer<typeof insertEnrichmentSnapshotSchema>;
 export type EnrichmentSnapshot = typeof platformBusinessEnrichmentSnapshots.$inferSelect;
 
-// ============================================================
-// Reseller Hierarchy (migration 0007_resellers_commissions)
-// ============================================================
-
-/** One row per reseller partner.  parentResellerId enables multi-level trees. */
-export const resellers = pgTable(
-  "resellers",
-  {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-    name: text("name").notNull(),
-    email: text("email").notNull().unique(),
-    phone: text("phone"),
-    company: text("company"),
-    parentResellerId: varchar("parent_reseller_id").references((): any => resellers.id, {
-      onDelete: "set null",
-    }),
-    commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }).notNull().default("0.10"),
-    stripeAccountId: text("stripe_account_id"),
-    isActive: boolean("is_active").notNull().default(true),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-    updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  },
-  (table) => [
-    index("idx_resellers_parent_id").on(table.parentResellerId),
-    index("idx_resellers_email").on(table.email),
-  ],
-);
-
-export const insertResellerSchema = createInsertSchema(resellers).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-export type InsertReseller = z.infer<typeof insertResellerSchema>;
-export type Reseller = typeof resellers.$inferSelect;
-
-/** One row per commission event (subscription payment, energy top-up, manual credit). */
-export const resellerCommissions = pgTable(
-  "reseller_commissions",
-  {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-    resellerId: varchar("reseller_id")
-      .notNull()
-      .references(() => resellers.id, { onDelete: "cascade" }),
-    customerAccountId: varchar("customer_account_id").references(
-      () => customerAccounts.id,
-      { onDelete: "set null" },
-    ),
-    stripePaymentIntentId: text("stripe_payment_intent_id"),
-    /** 'subscription' | 'top_up' | 'manual' */
-    eventType: text("event_type").notNull(),
-    grossAmount: integer("gross_amount").notNull(),     // cents
-    commissionAmount: integer("commission_amount").notNull(), // cents
-    commissionRate: numeric("commission_rate", { precision: 5, scale: 4 }).notNull(),
-    /** 'pending' | 'paid' | 'cancelled' */
-    status: text("status").notNull().default("pending"),
-    paidAt: timestamp("paid_at"),
-    createdAt: timestamp("created_at").defaultNow().notNull(),
-  },
-  (table) => [
-    index("idx_reseller_commissions_reseller_id").on(table.resellerId),
-    index("idx_reseller_commissions_customer_id").on(table.customerAccountId),
-    index("idx_reseller_commissions_status").on(table.status),
-  ],
-);
-
-export const insertResellerCommissionSchema = createInsertSchema(resellerCommissions).omit({
-  id: true,
-  createdAt: true,
-});
-export type InsertResellerCommission = z.infer<typeof insertResellerCommissionSchema>;
-export type ResellerCommission = typeof resellerCommissions.$inferSelect;
 // --- SOVEREIGN SMS ROUTER COMPLIANCE TABLES ---
 
 export const smsIntentEnum = pgEnum("sms_intent", [
@@ -2249,74 +2288,120 @@ export const smsLogs = pgTable("sms_logs", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// ============================================================
-// Industry Agent Templates (8 business groups × 6 archetypes)
-// ============================================================
+// ==========================================
+// Industry Agent Template Engine
+// 8 Business Groups × 6 Archetypes = 48 pre-tuned psychological profiles
+// ==========================================
+
 export const INDUSTRY_GROUPS = [
-  "food_beverage",
-  "health_wellness",
-  "home_services",
-  "professional_services",
-  "hospitality_travel",
-  "retail",
-  "real_estate",
-  "automotive",
+  'food_beverage',
+  'health_wellness',
+  'home_services',
+  'professional_services',
+  'hospitality_travel',
+  'retail',
+  'real_estate',
+  'automotive',
 ] as const;
+
+export type IndustryGroup = typeof INDUSTRY_GROUPS[number];
 
 export const AGENT_ARCHETYPES = [
-  "concierge",
-  "booking_coordinator",
-  "lead_qualifier",
-  "retention_empath",
-  "billing_analyst",
-  "gatekeeper",
+  'concierge',            // High I/S — warm welcome, FAQ, routing
+  'booking_coordinator',  // High C/D — calendar ops, commits
+  'lead_qualifier',       // High D/I — capture, qualify, prep for human closer
+  'retention_empath',     // Max S / High ARCH-A — de-escalation, make it right
+  'billing_analyst',      // Max C — invoices, payments, Stripe links
+  'gatekeeper',           // High S/C mid-D — triage, protect, route main line
 ] as const;
 
-/** Maps Google Places types (or slugs) to industry group for provisioning. */
-export const PLACES_TYPE_TO_INDUSTRY: Record<string, (typeof INDUSTRY_GROUPS)[number]> = {
-  restaurant: "food_beverage",
-  food: "food_beverage",
-  cafe: "food_beverage",
-  bar: "food_beverage",
-  spa: "health_wellness",
-  gym: "health_wellness",
-  salon: "health_wellness",
-  health: "health_wellness",
-  plumber: "home_services",
-  hvac: "home_services",
-  landscaping: "home_services",
-  roofer: "home_services",
-  home_services: "home_services",
-  lawyer: "professional_services",
-  accountant: "professional_services",
-  professional_services: "professional_services",
-  hotel: "hospitality_travel",
-  travel: "hospitality_travel",
-  lodging: "hospitality_travel",
-  hospitality_travel: "hospitality_travel",
-  store: "retail",
-  retail: "retail",
-  shop: "retail",
-  real_estate: "real_estate",
-  realtor: "real_estate",
-  automotive: "automotive",
-  car_dealer: "automotive",
-  mechanic: "automotive",
-};
+export type AgentArchetype = typeof AGENT_ARCHETYPES[number];
 
+/**
+ * Pre-tuned agent personality templates — one per (industryGroup × archetype).
+ * On business signup, all 6 archetypes for the detected industry are cloned into the
+ * site's agent roster. The owner sees a fully configured team on day one.
+ */
 export const industryAgentTemplates = pgTable("industry_agent_templates", {
-  id: serial("id").primaryKey(),
-  industryGroup: text("industry_group").notNull(),
-  roleType: text("role_type").notNull(),
-  defaultName: text("default_name").notNull(),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Categorization
+  industryGroup: text("industry_group").notNull(),   // IndustryGroup
+  roleType: text("role_type").notNull(),             // AgentArchetype
+
+  // Identity
+  defaultName: text("default_name").notNull(),        // e.g. "Sarah (Intake Specialist)"
+  voiceId: text("voice_id").default("Kore"),          // Gemini voice character
+  voiceName: text("voice_name").default("Kore - Calm & Professional"),
+  avatarId: text("avatar_id").default("avatar1"),
+
+  // Character Architecture — Layer 1
   shortTermMemoryTemplate: text("short_term_memory_template"),
   longTermCoreTemplate: text("long_term_core_template"),
   primaryIntent: text("primary_intent"),
   worldView: text("world_view"),
+  unbreakableRule: text("unbreakable_rule"),
+
+  // Layer 2: Pre-tuned DISC Psychology (0-100)
   dominance: integer("dominance").notNull().default(50),
   influence: integer("influence").notNull().default(50),
   steadiness: integer("steadiness").notNull().default(50),
   conscientiousness: integer("conscientiousness").notNull().default(50),
+
+  // Layer 3: ARCH Conversation Mechanics (0-100)
+  archAcknowledge: integer("arch_acknowledge").notNull().default(60),
+  archReflect: integer("arch_reflect").notNull().default(50),
+  archContext: integer("arch_context").notNull().default(60),
+  archHandoff: integer("arch_handoff").notNull().default(50),
+
+  // Default Tools & Config
   defaultTools: jsonb("default_tools").default([]),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  defaultSystemPrompt: text("default_system_prompt"),
+
+  // Meta
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+export const insertIndustryAgentTemplateSchema = createInsertSchema(industryAgentTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertIndustryAgentTemplate = z.infer<typeof insertIndustryAgentTemplateSchema>;
+export type IndustryAgentTemplate = typeof industryAgentTemplates.$inferSelect;
+
+// Google Places types → Industry Group mapping
+export const PLACES_TYPE_TO_INDUSTRY: Record<string, IndustryGroup> = {
+  // Food & Beverage
+  restaurant: 'food_beverage', cafe: 'food_beverage', bar: 'food_beverage',
+  bakery: 'food_beverage', meal_takeaway: 'food_beverage', meal_delivery: 'food_beverage',
+  food: 'food_beverage', night_club: 'food_beverage',
+  // Health & Wellness
+  beauty_salon: 'health_wellness', hair_care: 'health_wellness', spa: 'health_wellness',
+  gym: 'health_wellness', physiotherapist: 'health_wellness', dentist: 'health_wellness',
+  doctor: 'health_wellness', health: 'health_wellness',
+  // Home Services
+  plumber: 'home_services', electrician: 'home_services', painter: 'home_services',
+  roofing_contractor: 'home_services', general_contractor: 'home_services',
+  home_goods_store: 'home_services', locksmith: 'home_services',
+  // Professional Services
+  lawyer: 'professional_services', accounting: 'professional_services',
+  insurance_agency: 'professional_services', finance: 'professional_services',
+  real_estate_agency: 'real_estate',
+  // Hospitality & Travel
+  lodging: 'hospitality_travel', hotel: 'hospitality_travel', motel: 'hospitality_travel',
+  travel_agency: 'hospitality_travel', tourist_attraction: 'hospitality_travel',
+  // Retail
+  store: 'retail', clothing_store: 'retail', shoe_store: 'retail',
+  jewelry_store: 'retail', book_store: 'retail', electronics_store: 'retail',
+  furniture_store: 'retail', shopping_mall: 'retail',
+  // Real Estate
+  real_estate: 'real_estate', moving_company: 'real_estate',
+  // Automotive
+  car_dealer: 'automotive', car_repair: 'automotive', car_wash: 'automotive',
+  gas_station: 'automotive', parking: 'automotive',
+};

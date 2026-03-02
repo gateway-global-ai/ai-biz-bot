@@ -1,0 +1,15 @@
+{
+  "name": "google-workspace",
+  "version": "0.0.2",
+  "contextFileName": "workspace-server${/}WORKSPACE-Context.md",
+  "mcpServers": {
+    "google-workspace": {
+      "program": "./workspace-server/dist/index.js",
+      "command": "node",
+      "args": [
+        "scripts${/}start.js"
+      ],
+      "cwd": "${extensionPath}"
+    }
+  }
+}

@@ -120,6 +120,7 @@ export async function verifyOtp(req: Request, res: Response): Promise<void> {
         phone: adminUser.phone,
         name: adminUser.name,
         role: adminUser.role,
+        resellerId: (adminUser as any).resellerId ?? null,
       },
     });
   } catch (error: any) {
@@ -157,6 +158,7 @@ export async function verifySession(req: Request, res: Response): Promise<void> 
         phone: adminUser.phone,
         name: adminUser.name,
         role: adminUser.role,
+        resellerId: (adminUser as any).resellerId ?? null,
       },
     });
   } catch (error: any) {

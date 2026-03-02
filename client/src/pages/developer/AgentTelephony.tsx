@@ -390,7 +390,7 @@ export default function AgentTelephony() {
             </div>
             
             <a 
-              href="https://replicate.com/zsxkib/kimi-audio-7b-instruct" 
+              href="https://aistudio.google.com/app/prompts/new_chat" 
               target="_blank" 
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-2 text-sm text-purple-300 hover:text-purple-200"

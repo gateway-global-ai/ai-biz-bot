@@ -1,0 +1,15 @@
+---
+description: Signature check for .env.example — no edits without Naming Constitution
+globs: "**/.env.example,.env.example"
+alwaysApply: false
+---
+
+# .env.example signature check (Rule 1)
+
+**No agent and no PR may modify `.env.example` without a Signature Check against the Naming Constitution.**
+
+- Every **new** or **renamed** environment variable MUST appear in **`docs/SOVEREIGN_ENV_MANIFEST.md`** with a canonical name and section (Server / Doppler / Vite / Nova).
+- Follow naming rules: server vars **UPPERCASE_SNAKE_CASE**; client-exposed vars **VITE_** prefix; Gemini key **GEMINI_API_KEY**; Doppler tokens **DOPPLER_TOKEN**, **DOPPLER_TOKEN_DEV** / **DOPPLER_TOKEN_STG** / **DOPPLER_TOKEN_PRD**; Nova **NOVA_RSA_PUBLIC_KEY**.
+- Before committing changes to `.env.example`: update `docs/SOVEREIGN_ENV_MANIFEST.md` (canonical names + allowed aliases table) and run `npm run check-env-manifest` to verify keys are documented.
+
+See: `docs/SOVEREIGN_ENV_MANIFEST.md`, `docs/SOVEREIGN_ENV_DISCREPANCY_REPORT.md`.

@@ -19,8 +19,9 @@ function normalizePlaceId(placeId: string): string {
  */
 export async function getPlaceDetails(placeId: string) {
   const normalizedId = normalizePlaceId(placeId);
-  const API_KEY = process.env.GOOGLE_MAPS_API_KEY ?? process.env.GOOGLE_API_KEY;
-  if (!API_KEY) throw new Error('GOOGLE_MAPS_API_KEY is not configured');
+  const { getServerMapsApiKey } = await import("../config/mapsApiKey");
+  const API_KEY = getServerMapsApiKey();
+  if (!API_KEY) throw new Error('Google Maps/Places API key not configured (set GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_GROUNDING_LITE_API_KEY, or GOOGLE_PLACES_API_KEY)');
 
   const res = await axios.get(
     `https://places.googleapis.com/v1/places/${normalizedId}`,
@@ -49,10 +50,10 @@ export async function getPlaceDetails(placeId: string) {
 }
 
 export async function handlePlacesSearch(query: string, location?: string) {
-  const API_KEY = process.env.GOOGLE_MAPS_API_KEY;
-  
+  const { getServerMapsApiKey } = await import("../config/mapsApiKey");
+  const API_KEY = getServerMapsApiKey();
   if (!API_KEY) {
-    throw new Error('GOOGLE_MAPS_API_KEY is not configured');
+    throw new Error('Google Maps/Places API key not configured (set GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_GROUNDING_LITE_API_KEY, or GOOGLE_PLACES_API_KEY)');
   }
   
   const response = await axios.post(

@@ -67,7 +67,6 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   zIndex = 50
 }) => {
   const siteConfigId = business.id;
-  const isValidSiteConfigId = !!(siteConfigId && siteConfigId !== 'undefined' && siteConfigId !== '');
 
   // --- State ---
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -143,6 +142,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         } : agent;
 
         console.log('[ConciergePanel] Initializing with model:', validatedVoiceConfig.model, '| Persona:', resolvedAgent.role, hasValidId ? '(Handover Service)' : '(props — preview mode)');
+
+        console.log('[ConciergePanel] Initializing with model:', validatedVoiceConfig.model, '| Persona:', resolvedAgent.role, hasValidId ? '(Handover Service)' : '(props — preview mode)');
         // 3. Create client with the VALIDATED config
         const newClient = VoiceClientFactory.createClient(validatedVoiceConfig);
         
@@ -184,23 +185,6 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             } else if (msg.metadata?.tool_type) {
               // Tool result without text (e.g. map, business intelligence)
               addMessage('assistant', undefined, msg.metadata);
-
-              // Show SuccessAnimation when an onboarding email is confirmed sent
-              if (msg.metadata.tool_type === 'email_sent') {
-                setShowSuccessAnimation(true);
-                setTimeout(() => setShowSuccessAnimation(false), 3000);
-              }
-
-              // Surface upgrade / workspace-connect notices from MCP tool errors.
-              if (msg.metadata.tool_type === 'mcp_action') {
-                let notice: string | undefined;
-                if (msg.metadata.ui_action === 'SHOW_UPGRADE_MODAL') {
-                  notice = '⚠️ Voice or Enterprise plan required to use Workspace tools. Upgrade in your Admin Panel.';
-                } else if (msg.metadata.ui_action === 'SHOW_WORKSPACE_CONNECT') {
-                  notice = '🔗 Google Workspace is not connected. Go to Admin Panel → Workspace tab to connect it.';
-                }
-                if (notice) addMessage('system', notice);
-              }
             }
           } else if (msg.type === 'error') {
             setIsProcessing(false);
@@ -251,6 +235,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   // `currentVoiceConfig` is React state so its identity is already stable.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, siteConfigId, currentVoiceConfig]);
+
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -575,7 +560,6 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             onMouseLeave={stopPTT}
             onTouchStart={(e) => { e.preventDefault(); startPTT(); }}
             onTouchEnd={(e) => { e.preventDefault(); stopPTT(); }}
-            onContextMenu={(e) => e.preventDefault()}
             disabled={connectionStatus !== 'connected'}
             className={`w-[50%] h-14 rounded-xl font-bold text-sm tracking-wider transition-all transform active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed select-none ${
               isRecording 

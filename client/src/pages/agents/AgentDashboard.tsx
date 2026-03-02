@@ -156,15 +156,9 @@ export default function AgentDashboard() {
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-2">
             <Sparkles className="w-8 h-8 text-indigo-500" />
-            <h1 className="text-3xl font-bold text-slate-900">
-              {siteConfigId ? 'Neural Team' : 'Agent Dashboard'}
-            </h1>
+            <h1 className="text-3xl font-bold text-slate-900">Agent Dashboard</h1>
           </div>
-          <p className="text-slate-500">
-            {siteConfigId
-              ? 'Your team of AI agents for this site — DISC and Core Focus from your roster'
-              : 'Create, configure, and interact with your AI agents'}
-          </p>
+          <p className="text-slate-500">Create, configure, and interact with your AI agents</p>
         </div>
 
         {isLoading ? (

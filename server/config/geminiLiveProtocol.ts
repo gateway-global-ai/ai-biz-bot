@@ -12,7 +12,9 @@
  * Protocol version: v1beta
  */
 
-// Environment variable validation (api-lockdown: use GEMINI_MODEL_ID only)
+import { getServerMapsApiKey } from "./mapsApiKey";
+
+// Environment variable validation (use GEMINI_MODEL_ID per platform standards)
 const GEMINI_MODEL_ID = process.env.GEMINI_MODEL_ID || '';
 const GEMINI_VOICE_NAME = process.env.GEMINI_VOICE_NAME || 'Puck';
 const GEMINI_API_VERSION = process.env.GEMINI_API_VERSION || '';
@@ -63,9 +65,9 @@ export function validateGeminiConfig(): void {
   console.log('✅ Gemini Live API configuration validated');
   
   // Optional: Validate Google Maps configuration (warnings only)
-  const googleMapsKey = process.env.GOOGLE_MAPS_API_KEY;
+  const googleMapsKey = getServerMapsApiKey();
   if (!googleMapsKey) {
-    console.warn('⚠️  GOOGLE_MAPS_API_KEY not set - Map tools will be unavailable');
+    console.warn('⚠️  Google Maps API key not set (set GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_GROUNDING_LITE_API_KEY, or GOOGLE_PLACES_API_KEY) - Map tools will be unavailable');
   } else {
     console.log('✅ Google Maps API key configured');
   }

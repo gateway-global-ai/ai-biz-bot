@@ -1,14 +1,16 @@
 /**
- * DashboardCard Component
- *
- * Owner-facing business intelligence dashboard displaying SWOT analysis,
- * executive summary, and interactive tour preview.
+ * DashboardCard — Sovereign OS edition.
+ * Owner-facing business intelligence dashboard: SWOT, executive summary, amenity toggles.
+ * Jason Standard: glass panels, framer-motion, indigo accents, emerald verified badges.
  *
  * Spec: client/src/components/chat/gemini_2_5_flash_react_instructions/tour_guide/business_intelligence_suite.md
  */
-
 import React, { useState, useEffect } from 'react';
-import { Play, Map as MapIcon, Monitor, TrendingUp, AlertCircle, Lightbulb, ShieldAlert, Save, Globe } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Play, Map as MapIcon, Monitor, TrendingUp, AlertCircle,
+  Lightbulb, ShieldAlert, Save, Globe, Check,
+} from 'lucide-react';
 import { TourRunner, TourSpec } from './TourRunner';
 
 export interface BusinessIntelligenceData {
@@ -31,15 +33,26 @@ interface DashboardCardProps {
   tourSpec?: TourSpec;
   tourYamlUrl?: string;
   onTriggerSpeech?: (text: string) => void;
-  placeId?: string; // Required for saving public amenities
+  placeId?: string;
 }
 
 interface SwotSection {
   title: string;
   items: string[];
   icon: React.ReactNode;
-  colorClass: string;
+  glassClass: string;
+  iconColor: string;
 }
+
+const containerVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } },
+};
 
 export const DashboardCard: React.FC<DashboardCardProps> = ({
   data,
@@ -53,14 +66,13 @@ export const DashboardCard: React.FC<DashboardCardProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  // Load existing public amenities on mount
   useEffect(() => {
     if (placeId) {
       fetch(`/api/business/${placeId}/owner-data`)
-        .then((res) => res.json())
-        .then((ownerData) => {
-          if (ownerData.publicAmenities && Array.isArray(ownerData.publicAmenities)) {
-            setPublicAmenitySet(new Set(ownerData.publicAmenities));
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.publicAmenities && Array.isArray(d.publicAmenities)) {
+            setPublicAmenitySet(new Set(d.publicAmenities));
           }
         })
         .catch((err) => console.error('[DashboardCard] Failed to load owner data:', err));
@@ -70,41 +82,29 @@ export const DashboardCard: React.FC<DashboardCardProps> = ({
   const handleToggleAmenity = (amenity: string) => {
     setPublicAmenitySet((prev) => {
       const next = new Set(prev);
-      if (next.has(amenity)) {
-        next.delete(amenity);
-      } else {
-        next.add(amenity);
-      }
+      if (next.has(amenity)) next.delete(amenity);
+      else next.add(amenity);
       return next;
     });
   };
 
   const handleSavePublicAmenities = async () => {
-    if (!placeId) {
-      console.error('[DashboardCard] placeId required to save public amenities');
-      return;
-    }
-
+    if (!placeId) return;
     setIsSaving(true);
     setSaveStatus('idle');
-
     try {
-      const response = await fetch(`/api/business/${placeId}/owner-data`, {
+      const res = await fetch(`/api/business/${placeId}/owner-data`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          publicAmenities: Array.from(publicAmenitySet),
-        }),
+        body: JSON.stringify({ publicAmenities: Array.from(publicAmenitySet) }),
       });
-
-      if (response.ok) {
+      if (res.ok) {
         setSaveStatus('success');
         setTimeout(() => setSaveStatus('idle'), 3000);
       } else {
         throw new Error('Failed to save');
       }
-    } catch (error) {
-      console.error('[DashboardCard] Failed to save public amenities:', error);
+    } catch {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     } finally {
@@ -113,158 +113,206 @@ export const DashboardCard: React.FC<DashboardCardProps> = ({
   };
 
   const handleTriggerSpeech = (text: string) => {
-    if (onTriggerSpeech) {
-      onTriggerSpeech(text);
-    } else {
-      console.log('[DashboardCard] AI Narrating:', text);
-      // Fallback: could emit an event or use a global voice client
-    }
+    if (onTriggerSpeech) onTriggerSpeech(text);
   };
 
   const sections: SwotSection[] = [
     {
       title: 'Strengths',
       items: data.owner_insights.strengths,
-      icon: <TrendingUp size={18} />,
-      colorClass: 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800',
+      icon: <TrendingUp size={16} />,
+      glassClass: 'bg-emerald-950/40 border-emerald-500/20',
+      iconColor: 'text-emerald-400',
     },
     {
-      title: 'Weaknesses',
+      title: 'Blind Spots',
       items: data.owner_insights.blind_spots,
-      icon: <AlertCircle size={18} />,
-      colorClass: 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800',
+      icon: <AlertCircle size={16} />,
+      glassClass: 'bg-amber-950/40 border-amber-500/20',
+      iconColor: 'text-amber-400',
     },
     {
       title: 'Opportunities',
       items: data.owner_insights.action_plan,
-      icon: <Lightbulb size={18} />,
-      colorClass: 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800',
+      icon: <Lightbulb size={16} />,
+      glassClass: 'bg-indigo-950/40 border-indigo-500/20',
+      iconColor: 'text-indigo-400',
     },
     {
       title: 'Threats',
-      items: ['Market Volatility', 'New Local Competitor'], // Could be dynamic from data
-      icon: <ShieldAlert size={18} />,
-      colorClass: 'bg-rose-50 text-rose-700 border-rose-100 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-800',
+      items: ['Market Volatility', 'New Local Competitor'],
+      icon: <ShieldAlert size={16} />,
+      glassClass: 'bg-rose-950/40 border-rose-500/20',
+      iconColor: 'text-rose-400',
     },
   ];
 
   return (
-    <div className="w-full max-w-5xl mx-auto p-4 space-y-6">
-      {/* Desktop Recommendation Banner (Mobile Only) */}
-      <div className="md:hidden flex items-center gap-3 p-3 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-600 dark:text-slate-400">
-        <Monitor size={16} />
-        <span>
-          For detailed reporting and deeper insights, we recommend using a <b>Desktop display</b>.
-        </span>
-      </div>
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="w-full max-w-5xl mx-auto p-4 space-y-5"
+    >
+      {/* Mobile advisory */}
+      <motion.div
+        variants={itemVariants}
+        className="md:hidden flex items-center gap-3 p-3 rounded-[14px] bg-slate-800/40 border border-slate-700/30 text-xs text-slate-500"
+      >
+        <Monitor size={14} className="text-slate-500 shrink-0" />
+        <span>For detailed reporting, use a <b className="text-slate-300">Desktop display</b>.</span>
+      </motion.div>
 
-      {/* Interactive Tour Preview Banner */}
+      {/* Cinematic tour banner */}
       {(tourSpec || tourYamlUrl) && (
-        <div className="relative overflow-hidden rounded-2xl bg-slate-900 dark:bg-slate-950 text-white p-8 shadow-2xl border border-slate-800">
-          <div className="relative z-10 space-y-4 max-w-lg">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-xs font-bold uppercase tracking-widest">
-              <MapIcon size={14} />
+        <motion.div
+          variants={itemVariants}
+          className="relative overflow-hidden rounded-sui bg-slate-950 border border-indigo-500/20 shadow-2xl"
+        >
+          {/* Sovereign hero gradient */}
+          <div className="absolute inset-0 bg-sovereign-hero pointer-events-none" />
+          <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-indigo-600/15 to-transparent pointer-events-none" />
+
+          <div className="relative z-10 p-8 space-y-4 max-w-lg">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 text-xs font-bold uppercase tracking-widest">
+              <MapIcon size={12} />
               Experience Preview
             </div>
-            <h2 className="text-3xl font-bold">Your Cinematic Concierge Tour</h2>
+            <h2 className="text-2xl font-bold text-white leading-tight">
+              Your Cinematic Concierge Tour
+            </h2>
             <p className="text-slate-400 text-sm leading-relaxed">
-              See exactly how our AI presents your business to travelers. This tour demonstrates
-              the 3D touchdown and local narration hooks generated from your reviews.
+              See how our AI presents your business to travelers — 3D touchdown,
+              local narration hooks, review-powered storytelling.
             </p>
-
-            <button
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => setIsTourActive(true)}
               disabled={isTourActive}
-              className="flex items-center gap-2 bg-white text-slate-900 px-6 py-3 rounded-full font-bold hover:bg-blue-50 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-[14px] font-semibold text-sm transition-colors shadow-lg shadow-indigo-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Play size={18} fill="currentColor" />
-              {isTourActive ? 'Tour in Progress...' : 'Start Interactive Tour'}
-            </button>
+              <Play size={16} fill="currentColor" />
+              {isTourActive ? 'Tour in Progress…' : 'Start Interactive Tour'}
+            </motion.button>
           </div>
-
-          {/* Decorative background visual */}
-          <div className="absolute right-0 top-0 w-1/2 h-full bg-gradient-to-l from-blue-600/20 to-transparent pointer-events-none" />
-        </div>
+        </motion.div>
       )}
 
-      {/* Executive Summary Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800">
-        <h2 className="text-2xl font-bold mb-2">Executive Brand Soul</h2>
-        <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-          {data.executive_summary}
-        </p>
-      </div>
+      {/* Executive Brand Soul */}
+      <motion.div
+        variants={itemVariants}
+        className="rounded-sui bg-slate-900/50 backdrop-blur-xl border border-indigo-500/15 p-6 shadow-xl"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span className="badge-insight">Brand Soul</span>
+        </div>
+        <h2 className="text-lg font-bold text-white mb-2">Executive Summary</h2>
+        <p className="text-slate-300 leading-relaxed text-sm">{data.executive_summary}</p>
+      </motion.div>
 
-      {/* Share with Public - Amenities Toggle */}
-      {placeId && data.amenity_list && data.amenity_list.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800">
+      {/* Amenity toggle panel */}
+      {placeId && data.amenity_list?.length > 0 && (
+        <motion.div
+          variants={itemVariants}
+          className="rounded-sui bg-slate-900/50 backdrop-blur-xl border border-indigo-500/15 p-6 shadow-xl"
+        >
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Globe size={20} className="text-blue-500" />
-              <h2 className="text-xl font-bold">Share with Public</h2>
+              <Globe size={18} className="text-indigo-400" />
+              <h2 className="text-base font-bold text-white">Share with Public</h2>
             </div>
-            <button
+            <motion.button
+              whileTap={{ scale: 0.96 }}
               onClick={handleSavePublicAmenities}
               disabled={isSaving}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
+              className={[
+                'flex items-center gap-2 px-4 py-2 rounded-[14px] text-sm font-semibold transition-all',
                 isSaving
-                  ? 'bg-slate-300 dark:bg-slate-700 cursor-not-allowed'
+                  ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                   : saveStatus === 'success'
-                  ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
                   : saveStatus === 'error'
-                  ? 'bg-rose-500 hover:bg-rose-600 text-white'
-                  : 'bg-blue-500 hover:bg-blue-600 text-white'
-              }`}
+                  ? 'bg-rose-600 hover:bg-rose-500 text-white'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20',
+              ].join(' ')}
             >
-              <Save size={16} />
-              {isSaving ? 'Saving...' : saveStatus === 'success' ? 'Saved!' : saveStatus === 'error' ? 'Error' : 'Save'}
-            </button>
+              <Save size={14} />
+              {isSaving ? 'Saving…' : saveStatus === 'success' ? 'Saved!' : saveStatus === 'error' ? 'Error' : 'Save'}
+            </motion.button>
           </div>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-            Select which amenities you want to display on your public traveler-facing card:
+
+          <p className="text-xs text-slate-500 mb-4">
+            Select amenities to display on your public traveler-facing card:
           </p>
-          <div className="space-y-2">
-            {data.amenity_list.map((amenity) => (
-              <label
-                key={amenity}
-                className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={publicAmenitySet.has(amenity)}
-                  onChange={() => handleToggleAmenity(amenity)}
-                  className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                />
-                <span className="text-sm text-slate-700 dark:text-slate-300">{amenity}</span>
-              </label>
-            ))}
+
+          <div className="space-y-1.5">
+            <AnimatePresence>
+              {data.amenity_list.map((amenity) => (
+                <motion.label
+                  key={amenity}
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className={[
+                    'flex items-center gap-3 p-3 rounded-[14px] border cursor-pointer transition-colors',
+                    publicAmenitySet.has(amenity)
+                      ? 'bg-indigo-950/40 border-indigo-500/30 text-slate-200'
+                      : 'bg-slate-800/30 border-slate-700/30 text-slate-400 hover:border-indigo-500/20',
+                  ].join(' ')}
+                >
+                  <div className={[
+                    'w-4 h-4 rounded flex items-center justify-center border transition-colors shrink-0',
+                    publicAmenitySet.has(amenity)
+                      ? 'bg-indigo-600 border-indigo-500'
+                      : 'bg-slate-800 border-slate-600',
+                  ].join(' ')}>
+                    {publicAmenitySet.has(amenity) && <Check size={10} className="text-white" />}
+                    <input
+                      type="checkbox"
+                      checked={publicAmenitySet.has(amenity)}
+                      onChange={() => handleToggleAmenity(amenity)}
+                      className="sr-only"
+                    />
+                  </div>
+                  <span className="text-sm">{amenity}</span>
+                  {publicAmenitySet.has(amenity) && (
+                    <span className="ml-auto badge-insight">Public</span>
+                  )}
+                </motion.label>
+              ))}
+            </AnimatePresence>
           </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* SWOT Matrix (Responsive Grid) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {sections.map((section) => (
-          <div
+      {/* SWOT Matrix */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {sections.map((section, i) => (
+          <motion.div
             key={section.title}
-            className={`p-5 rounded-xl border ${section.colorClass} transition-all hover:shadow-md`}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.07, duration: 0.3, ease: 'easeOut' }}
+            whileHover={{ scale: 1.02, y: -2, transition: { type: 'spring', stiffness: 300, damping: 22 } }}
+            className={`p-5 rounded-sui border backdrop-blur-xl shadow-lg ${section.glassClass}`}
           >
-            <div className="flex items-center gap-2 mb-3">
+            <div className={`flex items-center gap-2 mb-3 ${section.iconColor}`}>
               {section.icon}
-              <h3 className="font-bold uppercase tracking-wider text-sm">{section.title}</h3>
+              <h3 className="font-bold uppercase tracking-wider text-xs">{section.title}</h3>
             </div>
-            <ul className="space-y-2">
-              {section.items.map((item, i) => (
-                <li key={i} className="flex gap-2 text-sm leading-snug">
-                  <span className="opacity-50">•</span> {item}
+            <ul className="space-y-1.5">
+              {section.items.map((item, j) => (
+                <li key={j} className="flex gap-2 text-xs text-slate-300 leading-snug">
+                  <span className={`${section.iconColor} opacity-60 mt-0.5`}>▸</span>
+                  {item}
                 </li>
               ))}
             </ul>
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
-      {/* Tour Runner Logic (Hidden) */}
+      {/* Tour runner */}
       {isTourActive && (tourSpec || tourYamlUrl) && (
         <TourRunner
           tourSpec={tourSpec}
@@ -273,6 +321,6 @@ export const DashboardCard: React.FC<DashboardCardProps> = ({
           onTourComplete={() => setIsTourActive(false)}
         />
       )}
-    </div>
+    </motion.div>
   );
 };

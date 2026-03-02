@@ -140,6 +140,37 @@ export const TOOL_DECLARATIONS = {
     }
   },
 
+  get_hotel_inventory: {
+    name: "get_hotel_inventory",
+    description: "Fetches live room availability and rates for a specific hotel already linked to the platform. Use when the user asks for availability at THIS business (Boardwalk Suites or any site with a GRN hotel code). Requires check-in and check-out dates.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        platformId: {
+          type: "STRING",
+          description: "Internal UUID from platform_business_map. Omit to use the session anchor."
+        },
+        checkIn: {
+          type: "STRING",
+          description: "Check-in date YYYY-MM-DD"
+        },
+        checkOut: {
+          type: "STRING",
+          description: "Check-out date YYYY-MM-DD"
+        },
+        guests: {
+          type: "INTEGER",
+          description: "Number of adult guests (default 2)"
+        },
+        roomFilter: {
+          type: "STRING",
+          description: "Optional keyword to filter room types, e.g. 'jacuzzi' or 'kitchen'"
+        }
+      },
+      required: ["checkIn", "checkOut"]
+    }
+  },
+
   get_business_details: {
     name: "get_business_details",
     description: "Fetches enriched business data for a Google Place (name, address, hours, rating, etc.). Use when the user asks about a specific business or when you need current place details.",
@@ -346,6 +377,58 @@ export const TOOL_DECLARATIONS = {
     }
   },
 
+  // ── Bail Bonds / Legal vertical ──────────────────────────────────────────
+
+  vine_lookup_and_dispatch: {
+    name: "vine_lookup_and_dispatch",
+    description: "Looks up an inmate in the statewide jail roster to confirm custody status and bond amount, then dispatches an urgent SMS to their outside contact (the indemnitor / payer) with a deep link to arrange bail payment. Use this immediately after the inmate provides their name and the outside contact's phone number.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        inmateFirstName: {
+          type: "STRING",
+          description: "First name of the inmate in custody."
+        },
+        inmateLastName: {
+          type: "STRING",
+          description: "Last name of the inmate in custody."
+        },
+        outsideContactNumber: {
+          type: "STRING",
+          description: "10-digit US phone number of the person on the outside who will pay the bail premium."
+        },
+        platformId: {
+          type: "STRING",
+          description: "Internal UUID. Omit — the session anchor is injected automatically."
+        }
+      },
+      required: ["inmateFirstName", "inmateLastName", "outsideContactNumber"]
+    }
+  },
+
+  fetch_city_warrants: {
+    name: "fetch_city_warrants",
+    description: "Searches the official Baton Rouge City Court open-data database for active warrants by first and last name. Use this whenever a user asks whether they or someone else has a warrant in Baton Rouge.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        firstName: {
+          type: "STRING",
+          description: "The first name of the individual to search."
+        },
+        lastName: {
+          type: "STRING",
+          description: "The last name of the individual to search."
+        },
+        platformId: {
+          type: "STRING",
+          description: "Internal UUID. Omit — the session anchor is injected automatically."
+        }
+      },
+      required: ["firstName", "lastName"]
+    }
+  },
+
   // ── Post-payment follow-up ────────────────────────────────────────────────
 
   send_onboarding_email: {
@@ -376,6 +459,81 @@ export const TOOL_DECLARATIONS = {
         }
       },
       required: ["platformId", "customerEmail", "customerName", "planName"]
+    }
+  },
+
+  // ── Business Intelligence Tools (Data Miner / Sage) ──────────────────────────
+
+  resolve_data_id: {
+    name: "resolve_data_id",
+    description: "Resolve a business name string to a stable SerpAPI data_id. The data_id never rotates — unlike Google's place_id. Use this first to anchor any business before review harvesting.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        query: {
+          type: "STRING",
+          description: "The business name and location as a string (e.g., 'Boardwalk Suites Lafayette')."
+        },
+        ll: {
+          type: "STRING",
+          description: "Optional GPS coordinates in SerpAPI format: @lat,lng,zoom. Improves local search accuracy."
+        },
+        site_config_id: {
+          type: "STRING",
+          description: "Optional. If provided, stores the resolved data_id to the platform_business_map for this site."
+        }
+      },
+      required: ["query"]
+    }
+  },
+
+  ingest_serpapi_reviews: {
+    name: "ingest_serpapi_reviews",
+    description: "Harvest all available Google Maps reviews for a business using its stable SerpAPI data_id. Paginates automatically through the full review corpus. First 10 reviews per site are free; additional reviews billed at $0.10 each.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        data_id: {
+          type: "STRING",
+          description: "The stable SerpAPI data_id for the business (from resolve_data_id)."
+        },
+        max_reviews: {
+          type: "INTEGER",
+          description: "Maximum reviews to harvest. Range: 1-500. Default: 100."
+        },
+        sort_by: {
+          type: "STRING",
+          description: "Review sort order: qualityScore (default, most relevant), newestFirst, ratingHigh, or ratingLow."
+        },
+        site_config_id: {
+          type: "STRING",
+          description: "Optional. If provided, stores the raw review snapshot in the database."
+        }
+      },
+      required: ["data_id"]
+    }
+  },
+
+  compile_knowledge_base: {
+    name: "compile_knowledge_base",
+    description: "Analyze harvested reviews with Gemini to produce a structured SWOT intelligence brief. Auto-tunes the recommended DISC profile for the business's ideal agent. Inserts the compiled markdown document into the site's knowledgeLibrary.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        data_id: {
+          type: "STRING",
+          description: "The stable SerpAPI data_id for the business."
+        },
+        business_name: {
+          type: "STRING",
+          description: "The full business name as it should appear in the compiled brief."
+        },
+        site_config_id: {
+          type: "STRING",
+          description: "The site config ID where the compiled intelligence brief will be stored."
+        }
+      },
+      required: ["data_id", "business_name", "site_config_id"]
     }
   }
 };

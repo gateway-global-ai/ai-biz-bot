@@ -1,220 +1,189 @@
-import { Router } from "express";
-import { z } from "zod";
+/**
+ * Intelligence Routes — Business Data Ingestion Pipeline
+ *
+ * POST /api/intelligence/resolve  — resolve stable data_id from a business name string
+ * POST /api/intelligence/ingest   — full autonomous pipeline: resolve → harvest → analyze → store
+ *
+ * These routes power the "Data Miner" agent (Sage) and can also be called
+ * directly from the frontend onboarding flow after a business is confirmed.
+ */
+
+import { Router } from 'express';
+import { z } from 'zod';
+import { storage } from '../storage.js';
 import {
-  provisionAgentsForBusiness,
-  getTemplatesForIndustry,
-  getAllIndustryGroups,
-} from "../services/agentProvisioning";
-import { runSageIngest } from "../services/sageIngestService";
+  resolve_data_id,
+  ingest_serpapi_reviews,
+  compile_knowledge_base,
+} from '../tools/dataIngestionHandler.js';
+import { fetchSerpApiReviews, type SerpApiReview, type SerpApiTopic } from '../services/serpapi-reviews.js';
 
 const router = Router();
 
-/** Normalize place id for use as data_id (strip places/ prefix if present). */
-function toDataId(placeId: string): string {
-  return placeId.replace(/^places\//i, "").trim() || placeId;
-}
+// ── POST /api/intelligence/resolve ─────────────────────────────────────────────
 
-/**
- * POST /api/intelligence/resolve
- * Resolve a business name (and optional placeId) to a stable data_id and place metadata
- * for use in provision and ingest. Uses Google Places when SerpAPI is not integrated.
- */
-router.post("/api/intelligence/resolve", async (req, res) => {
+router.post('/api/intelligence/resolve', async (req, res) => {
   const schema = z.object({
-    query: z.string().min(1).optional(),
-    placeId: z.string().min(1).optional(),
+    query: z.string().min(2).max(200),
+    ll: z.string().optional(),
+    siteConfigId: z.string().optional(),
   });
+
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid request", details: parsed.error.message });
-  }
-  const { query, placeId } = parsed.data;
-  if (!query && !placeId) {
-    return res.status(400).json({ error: "Either query or placeId is required" });
-  }
-
-  const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: "Google API key not configured" });
+    return res.status(400).json({ error: 'Invalid request', details: parsed.error.message });
   }
 
   try {
-    if (placeId) {
-      const fields = "name,types";
-      const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=${fields}&key=${apiKey}`
+    const identity = await resolve_data_id(
+      parsed.data.query,
+      parsed.data.ll,
+      parsed.data.siteConfigId,
+    );
+
+    return res.json({
+      success: true,
+      data_id: identity.data_id,
+      lat: identity.lat,
+      lng: identity.lng,
+      business_name: identity.business_name,
+      address: identity.address,
+    });
+  } catch (err: any) {
+    console.error('[IntelligenceRoutes] resolve error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/intelligence/ingest ──────────────────────────────────────────────
+
+router.post('/api/intelligence/ingest', async (req, res) => {
+  const schema = z.object({
+    // Either provide data_id directly, or provide query + optional ll to resolve it
+    data_id: z.string().optional(),
+    query: z.string().optional(),
+    ll: z.string().optional(),
+    // Required business context
+    business_name: z.string().min(1).max(200),
+    site_config_id: z.string().min(1),
+    // Harvest controls
+    max_reviews: z.number().int().min(1).max(500).default(100),
+    sort_by: z.enum(['qualityScore', 'newestFirst', 'ratingHigh', 'ratingLow']).default('qualityScore'),
+  }).refine(d => d.data_id || d.query, {
+    message: 'Provide either data_id or query to resolve the business',
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid request', details: parsed.error.message });
+  }
+
+  const startTime = Date.now();
+  const { business_name, site_config_id, max_reviews, sort_by } = parsed.data;
+
+  try {
+    // Step 1: Resolve data_id if not provided
+    let data_id = parsed.data.data_id;
+    let resolved_identity = null;
+
+    if (!data_id) {
+      console.log(`[Intelligence] Resolving data_id for: "${parsed.data.query}"`);
+      resolved_identity = await resolve_data_id(
+        parsed.data.query!,
+        parsed.data.ll,
+        site_config_id,
       );
-      const data = await response.json();
-      if (data.status !== "OK" || !data.result) {
-        return res.status(404).json({
-          error: "Place not found",
-          dataId: null,
-          placeId: null,
-          businessName: null,
-          placeTypes: [],
-        });
-      }
-      const r = data.result;
-      return res.json({
-        dataId: toDataId(placeId),
-        placeId,
-        businessName: r.name || null,
-        placeTypes: Array.isArray(r.types) ? r.types : [],
+      data_id = resolved_identity.data_id;
+    }
+
+    // Step 2: Harvest reviews
+    console.log(`[Intelligence] Harvesting up to ${max_reviews} reviews for data_id=${data_id}`);
+    const ingestResult = await ingest_serpapi_reviews(
+      data_id,
+      max_reviews,
+      sort_by,
+      site_config_id,
+    );
+
+    if (ingestResult.review_count === 0) {
+      return res.status(422).json({
+        error: 'No reviews found for this business',
+        data_id,
+        business_name,
       });
     }
 
-    const response = await fetch(
-      "https://places.googleapis.com/v1/places:searchText",
+    // Step 3: Fetch full review data for analysis (use cached snapshot data)
+    const apiKey = process.env.SERPAPI_API_KEY ?? process.env.SERPAPI_KEY ?? process.env.SERP_API_KEY;
+    const firstPage = await fetchSerpApiReviews(data_id, apiKey, { num: 20 });
+    const reviews: SerpApiReview[] = firstPage?.reviews ?? [];
+    const topics: SerpApiTopic[] = firstPage?.topics ?? [];
+
+    // If more reviews were harvested, fetch additional pages for analysis
+    let nextToken = firstPage?.next_page_token;
+    while (reviews.length < Math.min(ingestResult.review_count, 100) && nextToken) {
+      const page = await fetchSerpApiReviews(data_id, apiKey, { num: 20, next_page_token: nextToken });
+      if (!page) break;
+      reviews.push(...page.reviews);
+      nextToken = page.next_page_token;
+    }
+
+    // Step 4: Compile knowledge base
+    console.log(`[Intelligence] Compiling knowledge base from ${reviews.length} reviews`);
+    const knowledgeResult = await compile_knowledge_base(
+      reviews,
+      topics,
       {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": apiKey,
-          "X-Goog-FieldMask":
-            "places.id,places.displayName,places.formattedAddress,places.types",
-        },
-        body: JSON.stringify({ textQuery: query }),
-      }
+        title: business_name,
+        rating: ingestResult.place_info.rating,
+        total_reviews: ingestResult.place_info.total_reviews,
+        type: ingestResult.place_info.type,
+      },
+      site_config_id,
     );
-    const data = await response.json();
-    if (!response.ok) {
-      console.error("[IntelligenceRoutes] resolve search error:", data);
-      return res.status(500).json({
-        error: data.error?.message || "Resolve search failed",
-        dataId: null,
-        placeId: null,
-        businessName: null,
-        placeTypes: [],
-      });
-    }
-    const places = data.places || [];
-    if (places.length === 0) {
-      return res.json({
-        dataId: null,
-        placeId: null,
-        businessName: null,
-        placeTypes: [],
-      });
-    }
-    const first = places[0];
-    const id = first.id || "";
-    const name = first.displayName?.text || first.displayName || null;
-    const types = first.types || [];
-    return res.json({
-      dataId: toDataId(id),
-      placeId: id,
-      businessName: name,
-      placeTypes: types,
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Resolve failed";
-    console.error("[IntelligenceRoutes] resolve error:", message);
-    return res.status(500).json({
-      error: message,
-      dataId: null,
-      placeId: null,
-      businessName: null,
-      placeTypes: [],
-    });
-  }
-});
 
-// POST /api/intelligence/provision
-router.post("/api/intelligence/provision", async (req, res) => {
-  const schema = z.object({
-    siteConfigId: z.string().min(1),
-    placeTypes: z.array(z.string()).min(1),
-    businessName: z.string().min(1).max(200),
-  });
+    const processingMs = Date.now() - startTime;
 
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({
-      error: "Invalid request",
-      details: parsed.error.message,
-    });
-  }
-
-  const { siteConfigId, placeTypes, businessName } = parsed.data;
-
-  try {
-    const result = await provisionAgentsForBusiness(
-      siteConfigId,
-      placeTypes,
-      businessName
-    );
     return res.json({
       success: true,
-      industryGroup: result.industryGroup,
-      agentsCreated: result.agentsCreated,
-      archetypesProvisioned: result.archetypesProvisioned,
-      agentIds: result.agentIds,
+      data_id,
+      business_name,
+      knowledge_entry_id: knowledgeResult.knowledge_entry_id,
+      review_count: ingestResult.review_count,
+      topics_extracted: knowledgeResult.topics_extracted,
+      disc_recommendation: knowledgeResult.disc_recommendation,
+      snapshot_id: ingestResult.snapshot_id,
+      processing_time_ms: processingMs,
+      markdown_preview: knowledgeResult.markdown_preview,
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Provision failed";
-    console.error("[IntelligenceRoutes] provision error:", message);
-    return res.status(500).json({ error: message });
+  } catch (err: any) {
+    console.error('[IntelligenceRoutes] ingest error:', err.message);
+    return res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/intelligence/templates/:industryGroup
-router.get("/api/intelligence/templates/:industryGroup", async (req, res) => {
-  try {
-    const templates = await getTemplatesForIndustry(
-      req.params.industryGroup as string
-    );
-    return res.json({ templates });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to load templates";
-    return res.status(500).json({ error: message });
-  }
-});
+// ── GET /api/intelligence/status/:siteConfigId ─────────────────────────────────
 
-// GET /api/intelligence/industry-groups
-router.get("/api/intelligence/industry-groups", async (_req, res) => {
+router.get('/api/intelligence/status/:siteConfigId', async (req, res) => {
   try {
-    const groups = await getAllIndustryGroups();
-    return res.json({ groups });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Failed to load groups";
-    return res.status(500).json({ error: message });
-  }
-});
+    const siteConfig = await storage.getSiteConfigById(req.params.siteConfigId);
+    if (!siteConfig) return res.status(404).json({ error: 'Site config not found' });
 
-/**
- * POST /api/intelligence/ingest
- * Run Sage pipeline: fetch reviews (SerpAPI) → compile with Gemini → persist to siteConfigs.knowledgeLibrary.
- * Input: { siteConfigId, dataId, businessName? }. dataId is the place_id for SerpAPI.
- */
-router.post("/api/intelligence/ingest", async (req, res) => {
-  const schema = z.object({
-    siteConfigId: z.string().min(1),
-    dataId: z.string().min(1),
-    businessName: z.string().optional(),
-  });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Invalid request", details: parsed.error.message });
-  }
-  const { siteConfigId, dataId, businessName } = parsed.data;
-  try {
-    const result = await runSageIngest(siteConfigId, dataId, businessName ?? "");
-    if (!result.success) {
-      return res.status(400).json({
-        success: false,
-        error: result.error,
-        reviewsHarvested: result.reviewsHarvested ?? 0,
-      });
-    }
+    const library = (siteConfig.knowledgeLibrary as any[] | null) ?? [];
+    const intelligenceBriefs = library.filter((e: any) => e.title?.includes('Review Intelligence Brief'));
+
     return res.json({
-      success: true,
-      reviewsHarvested: result.reviewsHarvested,
-      knowledgeDocId: result.knowledgeDocId,
+      has_intelligence: intelligenceBriefs.length > 0,
+      brief_count: intelligenceBriefs.length,
+      briefs: intelligenceBriefs.map((b: any) => ({
+        id: b.id,
+        title: b.title,
+        addedAt: b.addedAt,
+        preview: b.content?.slice(0, 200),
+      })),
     });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Ingest failed";
-    console.error("[IntelligenceRoutes] ingest error:", message);
-    return res.status(500).json({ error: message });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
 });
 

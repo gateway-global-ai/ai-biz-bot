@@ -32,8 +32,9 @@ const allowlist = [
   "zod-validation-error",
 ];
 
-// These packages must always remain external — they rely on native bindings or
-// use dynamic require() patterns that break when bundled into a single ESM file.
+// socket.io uses dynamic require() patterns and native addons that esbuild
+// cannot resolve reliably.  Force them external unconditionally — regardless
+// of whether they appear in package.json deps — to prevent bundler crashes.
 const forceExternal = ["socket.io", "socket.io-client"];
 
 async function buildAll() {

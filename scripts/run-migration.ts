@@ -5,8 +5,7 @@
  */
 
 import { readFileSync } from 'fs';
-import path from 'path';
-import { db } from '../server/db.js';
+import { db } from '../server/db';
 import { sql } from 'drizzle-orm';
 
 const migrationFile = process.argv[2];
