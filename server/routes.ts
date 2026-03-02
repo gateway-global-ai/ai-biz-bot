@@ -93,8 +93,8 @@ const webhooksUpdateSchema = z.object({
 const SOCIAL_CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|LinkedInBot|WhatsApp|Slackbot|TelegramBot|Pinterest|Googlebot|bingbot|Discordbot|vkShare/i;
 
 const DEFAULT_OG: Record<string, string> = {
-  ogTitle: "Free Custom Websites, AI Voice and Chat Enabled",
-  ogDescription: "We support small business owners with free websites, enabled with voice AI agents, AI chat bots, and beautiful modern designs. Websites are free. No Credit card required.",
+  ogTitle: "AI Business Router — AI Voice and Chat Enabled",
+  ogDescription: "AI-powered business websites with voice concierge and chat. Fully developed in about an hour. No credit card required.",
   ogUrl: "http://aibizbot.gatewayglobal.ai",
   ogImage: "http://aibizbot.gatewayglobal.ai/og-image.png",
   ogType: "website",

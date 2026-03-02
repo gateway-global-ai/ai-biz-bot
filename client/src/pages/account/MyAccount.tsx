@@ -199,13 +199,16 @@ export default function MyAccount() {
     enabled: isAuthenticated,
   });
 
+  // Onboarding status requires owner auth; My Account is customer-facing. Skip to avoid 401.
   const onboardingQuery = useQuery({
     queryKey: ["/api/onboarding/status"],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/onboarding/status");
+      const res = await fetch("/api/onboarding/status", { credentials: "include" });
+      if (res.status === 401) return null;
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
       return res.json();
     },
-    enabled: isAuthenticated,
+    enabled: false, // Owner-only endpoint; customer My Account does not use it
   });
 
   const updateProfileMutation = useMutation({
@@ -597,6 +600,13 @@ export default function MyAccount() {
           {businessesQuery.isLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+            </div>
+          ) : businessesQuery.isError ? (
+            <div className="text-center py-8 border border-dashed border-amber-500/30 rounded-2xl bg-amber-500/5">
+              <p className="text-amber-200 text-sm mb-3">Couldn&apos;t load businesses. Please try again.</p>
+              <Button variant="outline" size="sm" onClick={() => businessesQuery.refetch()}>
+                Retry
+              </Button>
             </div>
           ) : businesses.length === 0 && !showAddBusiness ? (
             <div className="text-center py-8 border border-dashed border-white/10 rounded-2xl">
