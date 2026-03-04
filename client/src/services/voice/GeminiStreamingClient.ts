@@ -138,7 +138,7 @@ export class GeminiStreamingClient implements IVoiceClient {
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
-        console.log('[GeminiStreamingClient] Connected to voice proxy, waiting for server ready signal...');
+        console.log('[GeminiStreamingClient] WebSocket onopen fired (mic stream already captured). Waiting for server_ready...');
         
         // Use the model from the configuration to ensure protocol alignment.
         const modelToUse = this.config.model?.startsWith('models/')
@@ -245,10 +245,11 @@ export class GeminiStreamingClient implements IVoiceClient {
           },
           // Identity anchor: server proxy reads sessionContext.siteConfigId and injects it
           // into MCP tool args so the model never needs to emit the UUID directly.
+          // Only include siteConfigId when we have a non-empty Business UUID (avoid sending "").
           // entryPointAgentId + entryPointMetaPrompt power the Contextual Snap —
           // the proxy compiles the master system instruction server-side.
           sessionContext: {
-            siteConfigId: business.id,
+            ...(business.id?.trim() ? { siteConfigId: business.id.trim() } : {}),
             ...(business.entryPointAgentId ? { agentId: business.entryPointAgentId } : {}),
             ...(business.entryPointMetaPrompt ? { metaPrompt: business.entryPointMetaPrompt } : {}),
           },
@@ -448,55 +449,50 @@ export class GeminiStreamingClient implements IVoiceClient {
   private async setupAudioProcessing() {
     if (!this.currentStream || !this.inputAudioContext) return;
     
+    const workletUrl = resolvePlatformUrl('/clear-voice-processor.js');
     try {
-      // ✅ Step 1: Load the AudioWorklet module (runs on background thread)
-      // Resolve the worklet URL against the platform so it loads from the correct
-      // origin when the SDK is embedded on a third-party site.
-      await this.inputAudioContext.audioWorklet.addModule(
-        resolvePlatformUrl('/clear-voice-processor.js')
-      );
+      // Step 1: Load the AudioWorklet module (runs on background thread)
+      console.log('[GeminiStreamingClient] Loading AudioWorklet from:', workletUrl);
+      await this.inputAudioContext.audioWorklet.addModule(workletUrl);
       
-      // ✅ Step 2: Create the source from microphone
+      // Step 2: Create the source from microphone
       this.inputSource = this.inputAudioContext.createMediaStreamSource(this.currentStream);
       
-      // ✅ Step 3: Create the AudioWorklet node
+      // Step 3: Create the AudioWorklet node
       this.workletNode = new AudioWorkletNode(this.inputAudioContext, 'clear-voice-processor');
 
-      // ✅ Step 4: Listen for audio data from the background thread
+      // Step 4: Listen for audio data from the background thread
       this.workletNode.port.onmessage = (event) => {
         const { audioData, volume } = event.data;
-        
-        // Update volume visualizer
         this.volumeCallback(volume);
-
-        // Send audio to server if streaming
         if (this.streaming && this.socket && this.socket.readyState === WebSocket.OPEN) {
           const pcmBlob = this.createPcmBlob(audioData);
-          this.socket.send(JSON.stringify({
-            type: 'audio',
-            data: pcmBlob.data
-          }));
+          this.socket.send(JSON.stringify({ type: 'audio', data: pcmBlob.data }));
         }
       };
 
-      // ✅ Step 5: Connect the nodes (Microphone → Worklet → Output)
+      // Step 5: Connect the nodes (Microphone → Worklet → Output)
       this.inputSource.connect(this.workletNode);
       this.workletNode.connect(this.inputAudioContext.destination);
-      
-      console.log('[GeminiStreamingClient] 🟢 AudioWorklet initialized: PTT Hard-Wired at 800ms');
-    } catch (err) {
-      console.error('[GeminiStreamingClient] ❌ AudioWorklet failed, ensure clear-voice-processor.js is in /public:', err);
+      console.log('[GeminiStreamingClient] AudioWorklet initialized');
+    } catch (err: any) {
+      console.error('[GeminiStreamingClient] AudioWorklet addModule failed:', workletUrl, err?.message ?? err, err);
       throw err;
     }
   }
 
   private async handleMessage(message: any) {
-    // Handle server ready signal
+    // Handle server ready signal — await worklet setup so we only mark connected when audio pipeline is ready
     if (message.type === 'server_ready') {
       console.log('[GeminiStreamingClient] Server is ready! Starting audio processing...');
-      this.setupAudioProcessing();
-      this.connected = true;
-      this.connectionCallback(true);
+      try {
+        await this.setupAudioProcessing();
+        this.connected = true;
+        this.connectionCallback(true);
+      } catch (err: any) {
+        console.error('[GeminiStreamingClient] setupAudioProcessing failed, staying disconnected:', err?.message ?? err);
+        this.connectionCallback(false);
+      }
       return;
     }
 

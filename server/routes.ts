@@ -14,6 +14,7 @@ import bailRescueRoutes from "./routes/bailRescueRoutes";
 import agentResearchRoutes from "./routes/agentResearch";
 import novaSovereignRouter from "./routes/novaSovereignRoutes";
 import onboardingRoutes from "./routes/onboardingRoutes";
+import customerOnboardingRoutes from "./routes/customerOnboardingRoutes";
 import { registerMenuRoutes } from "./routes/menu-routes";
 import healthRoutes from "./routes/healthRoutes";
 import a2pPreflightRoutes from "./routes/a2pPreflightRoutes";
@@ -54,6 +55,7 @@ import { enrichBusinessData } from "./services/businessDataService";
 import { buildRichSystemInstruction } from "./services/systemInstructionBuilder";
 import { getFreshPlaceId, getFreshPlaceIdWithSource } from "./services/placeDiscoveryService";
 import { enrichBusinessProfile } from "./services/enrichBusinessProfile";
+import { provisionAgentsForBusiness } from "./services/agentProvisioning";
 import { handleAdminToolCall, ADMIN_TOOL_DEFINITIONS } from "./tools/adminToolHandlers";
 // MCP K2 routes decommissioned; use Gemini.
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
@@ -131,7 +133,7 @@ export async function registerRoutes(
   app.use(workspaceRoutes);
 
   // Business Intelligence: SerpAPI data mining pipeline (Sage / Data Miner)
-  app.use(intelligenceRoutes);
+  app.use('/api/intelligence', intelligenceRoutes);
 
   // Agent System: DISC, Agents, Organizations, Projects, BotTemplates
   app.use(agentSystemRoutes);
@@ -247,6 +249,7 @@ export async function registerRoutes(
           domain,
           placeId: placeId || null,
           placeData: placeData || null,
+          heroImageUrl: placeId ? `/api/places/photo-proxy/${placeId}?maxWidth=1200` : null,
           ownerId: customerAccount?.id || null,
           chatbotEnabled: true,
           voiceConciergeEnabled: true,
@@ -331,6 +334,7 @@ export async function registerRoutes(
           domain,
           placeId: placeId || null,
           placeData: placeData || null,
+          heroImageUrl: placeId ? `/api/places/photo-proxy/${placeId}?maxWidth=1200` : null,
           ownerId: customerAccount?.id || null,
           chatbotEnabled: true,
           voiceConciergeEnabled: true,
@@ -548,6 +552,7 @@ export async function registerRoutes(
           domain,
           placeId: lead.placeId || null,
           placeData: lead.placeData || null,
+          heroImageUrl: lead.placeId ? `/api/places/photo-proxy/${lead.placeId}?maxWidth=1200` : null,
           ownerId: customerAccount?.id || null,
           chatbotEnabled: true,
           voiceConciergeEnabled: true,
@@ -1370,6 +1375,7 @@ export async function registerRoutes(
         domain: z.string().optional(),
         placeId: z.string().optional(),
         placeData: z.any().optional(),
+        heroImageUrl: z.string().optional(),
         assignedAgentId: z.string().nullable().optional(),
         systemPromptOverride: z.string().optional(),
         chatbotEnabled: z.boolean().optional(),
@@ -1380,7 +1386,16 @@ export async function registerRoutes(
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const config = await storage.createSiteConfig(parsed.data);
+      const payload = parsed.data;
+      const heroImageUrl =
+        payload.heroImageUrl ?? (payload.placeId ? `/api/places/photo-proxy/${payload.placeId}?maxWidth=1200` : undefined);
+      const config = await storage.createSiteConfig({ ...payload, heroImageUrl });
+      try {
+        const placeTypes = (config.placeData as { types?: string[] } | null)?.types ?? ['establishment'];
+        await provisionAgentsForBusiness(config.id, placeTypes, config.name);
+      } catch (provisionErr: any) {
+        console.error('[SiteConfig] Agent swarm provisioning failed (site created):', provisionErr?.message ?? provisionErr);
+      }
       res.status(201).json(config);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1922,7 +1937,7 @@ ${businessContext}`;
       const agentTemp = agent.aiTemperature ? agent.aiTemperature / 100 : 0.7;
       const agentMaxTokens = agent.aiMaxTokens || 4096;
       // Sovereign: Gemini is the sole AI provider. Model from Doppler.
-      const modelToUse = process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash';
+      const modelToUse = process.env.GEMINI_MODEL_FALLBACK;
 
       let response: string;
       try {
@@ -2133,6 +2148,7 @@ ${businessContext}`;
   app.use("/api/business", businessRoutes);
   app.use("/api/site-configs", siteConfigRoutes);
   app.use("/api/onboarding", onboardingRoutes);
+  app.use("/api/customer/onboarding", customerOnboardingRoutes);
 
   // Register Site Claim / Assignment routes (assign + preview + OTP + Stripe checkout)
   app.use(claimRoutes);

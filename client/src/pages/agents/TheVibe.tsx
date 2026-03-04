@@ -191,6 +191,7 @@ export default function TheVibe() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const sessionRef = useRef<any>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const inputAudioContextRef = useRef<AudioContext | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const nextStartTimeRef = useRef<number>(0);
@@ -219,6 +220,10 @@ export default function TheVibe() {
     if (sessionRef.current) {
       sessionRef.current.close?.();
       sessionRef.current = null;
+    }
+    if (inputAudioContextRef.current) {
+      inputAudioContextRef.current.close().catch(() => {});
+      inputAudioContextRef.current = null;
     }
     if (micStreamRef.current) {
       micStreamRef.current.getTracks().forEach((track: MediaStreamTrack) => track.stop());
@@ -294,32 +299,38 @@ export default function TheVibe() {
       `;
 
       const sessionPromise = ai.live.connect({
-        model: 'gemini-2.0-flash-live-001',
+        model: process.env.GEMINI_MODEL_ID ?? '',
         callbacks: {
           onopen: () => {
             setIsVoiceCallActive(true);
             setIsListening(true);
             const inCtx = new AudioContext({ sampleRate: 16000 });
+            inputAudioContextRef.current = inCtx;
             const source = inCtx.createMediaStreamSource(stream);
-            const scriptProcessor = inCtx.createScriptProcessor(4096, 1, 1);
-            
-            scriptProcessor.onaudioprocess = (e) => {
-              const inputData = e.inputBuffer.getChannelData(0);
-              const int16 = new Int16Array(inputData.length);
-              for (let i = 0; i < inputData.length; i++) {
-                int16[i] = inputData[i] * 32768;
-              }
-              const pcmBlob = {
-                data: encodeBase64(new Uint8Array(int16.buffer)),
-                mimeType: 'audio/pcm;rate=16000',
+
+            const workletUrl = '/clear-voice-processor.js';
+            inCtx.audioWorklet.addModule(workletUrl).then(() => {
+              const workletNode = new AudioWorkletNode(inCtx, 'clear-voice-processor');
+              workletNode.port.onmessage = (event: MessageEvent<{ audioData: Float32Array; volume: number }>) => {
+                const { audioData } = event.data;
+                if (!audioData?.length) return;
+                const int16 = new Int16Array(audioData.length);
+                for (let i = 0; i < audioData.length; i++) {
+                  int16[i] = Math.max(-32768, Math.min(32767, Math.round(audioData[i] * 32768)));
+                }
+                const pcmBlob = {
+                  data: encodeBase64(new Uint8Array(int16.buffer)),
+                  mimeType: 'audio/pcm;rate=16000',
+                };
+                sessionPromise.then(session => {
+                  session.sendRealtimeInput({ media: pcmBlob });
+                }).catch(e => console.error("Session send error:", e));
               };
-              sessionPromise.then(session => {
-                session.sendRealtimeInput({ media: pcmBlob });
-              }).catch(e => console.error("Session send error:", e));
-            };
-            
-            source.connect(scriptProcessor);
-            scriptProcessor.connect(inCtx.destination);
+              source.connect(workletNode);
+              workletNode.connect(inCtx.destination);
+            }).catch((e: any) => {
+              console.error('[TheVibe] AudioWorklet addModule failed:', workletUrl, e?.message ?? e, e);
+            });
           },
           onmessage: async (message: LiveServerMessage) => {
             const serverContent = message.serverContent as any;

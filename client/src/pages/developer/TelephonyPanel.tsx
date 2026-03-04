@@ -511,7 +511,7 @@ export default function TelephonyPanel() {
         {/* Header */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-border">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-primary/10 rounded-xl border border-primary/20">
+            <div className="p-3 bg-primary/10 rounded-sui border border-primary/20">
               <Phone className="w-7 h-7 text-primary" />
             </div>
             <div>
@@ -525,7 +525,7 @@ export default function TelephonyPanel() {
             </div>
           </div>
           
-          <div className={`px-4 py-2.5 rounded-xl border flex items-center gap-3 transition-all ${
+          <div className={`px-4 py-2.5 rounded-sui border flex items-center gap-3 transition-all ${
             config?.phoneNumber 
               ? 'bg-chart-3/10 border-chart-3/30' 
               : 'bg-muted border-border'
@@ -542,7 +542,7 @@ export default function TelephonyPanel() {
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex gap-1.5 p-1.5 bg-card rounded-xl border border-card-border overflow-x-auto">
+        <div className="flex gap-1.5 p-1.5 bg-card rounded-sui border border-card-border overflow-x-auto">
           {tabs.map(tab => (
             <button
               key={tab.id}
@@ -618,7 +618,7 @@ export default function TelephonyPanel() {
                       {availableNumbers.map(num => (
                         <div 
                           key={num.phoneNumber} 
-                          className="flex justify-between items-center p-4 bg-accent/50 rounded-xl border border-border hover:border-primary/50 hover:bg-accent transition-all"
+                          className="flex justify-between items-center p-4 bg-accent/50 rounded-sui border border-border hover:border-primary/50 hover:bg-accent transition-all"
                         >
                           <div>
                             <span className="font-mono text-foreground text-lg block">{num.phoneNumber}</span>
@@ -643,7 +643,7 @@ export default function TelephonyPanel() {
                   )}
                   
                   {availableNumbers.length === 0 && !searchNumbersMutation.isPending && (
-                    <div className="text-center py-16 border-2 border-dashed border-border rounded-xl">
+                    <div className="text-center py-16 border-2 border-dashed border-border rounded-sui">
                       <Search className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
                       <p className="text-muted-foreground font-medium">Search for available numbers</p>
                       <p className="text-muted-foreground/70 text-sm mt-1">Enter a 3-digit US area code above</p>
@@ -669,7 +669,7 @@ export default function TelephonyPanel() {
                       Add Existing Number
                     </Button>
                   ) : (
-                    <div className="border border-border rounded-xl p-6 bg-accent/30 space-y-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="border border-border rounded-sui p-6 bg-accent/30 space-y-4 animate-in fade-in slide-in-from-top-2">
                       <div className="flex justify-between items-center mb-2">
                         <h4 className="font-semibold flex items-center gap-2">
                           <Key className="w-4 h-4 text-primary" />
@@ -858,7 +858,7 @@ export default function TelephonyPanel() {
                   
                   {/* Credentials Info */}
                   {config.accountSid && (
-                    <div className="bg-accent/30 border border-border p-4 rounded-xl">
+                    <div className="bg-accent/30 border border-border p-4 rounded-sui">
                       <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
                         <Key className="w-4 h-4 text-primary" />
                         Twilio Credentials
@@ -1093,14 +1093,14 @@ export default function TelephonyPanel() {
               </div>
 
               {/* Firewall Toggle */}
-              <div className={`p-6 rounded-xl border-2 mb-8 transition-all ${
+              <div className={`p-6 rounded-sui border-2 mb-8 transition-all ${
                 config?.firewallEnabled 
                   ? 'bg-chart-3/5 border-chart-3/30' 
                   : 'bg-destructive/5 border-destructive/30'
               }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-xl ${
+                    <div className={`p-3 rounded-sui ${
                       config?.firewallEnabled ? 'bg-chart-3/20' : 'bg-destructive/20'
                     }`}>
                       {config?.firewallEnabled ? (
@@ -1131,7 +1131,7 @@ export default function TelephonyPanel() {
               </div>
 
               {/* Owner Verification Section */}
-              <div className="p-6 rounded-xl border border-primary/30 bg-primary/5 mb-8">
+              <div className="p-6 rounded-sui border border-primary/30 bg-primary/5 mb-8">
                 <h4 className="text-sm font-bold text-primary uppercase tracking-wider mb-4 flex items-center gap-2">
                   <User className="w-4 h-4" /> Owner Verification
                 </h4>
@@ -1221,7 +1221,7 @@ export default function TelephonyPanel() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-12 border-2 border-dashed border-border rounded-xl">
+                  <div className="text-center py-12 border-2 border-dashed border-border rounded-sui">
                     <User className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" />
                     <p className="text-muted-foreground">No numbers in allow list</p>
                     <p className="text-muted-foreground/70 text-sm mt-1">
@@ -1261,7 +1261,7 @@ export default function TelephonyPanel() {
 
               {/* Test Controls */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="p-4 bg-accent/50 rounded-xl border border-border space-y-3">
+                <div className="p-4 bg-accent/50 rounded-sui border border-border space-y-3">
                   <h4 className="font-semibold text-sm flex items-center gap-2">
                     <PhoneIncoming className="w-4 h-4 text-chart-3" />
                     Test Inbound Call
@@ -1283,7 +1283,7 @@ export default function TelephonyPanel() {
                     {testInboundMutation.isPending ? 'Testing...' : 'Test Inbound'}
                   </Button>
                 </div>
-                <div className="p-4 bg-accent/50 rounded-xl border border-border space-y-3">
+                <div className="p-4 bg-accent/50 rounded-sui border border-border space-y-3">
                   <h4 className="font-semibold text-sm flex items-center gap-2">
                     <PhoneOutgoing className="w-4 h-4 text-primary" />
                     Test Outbound Call
@@ -1319,7 +1319,7 @@ export default function TelephonyPanel() {
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <Button 
-                    onClick={() => simulateWebhookMutation.mutate({ type: 'sms', from: testNumber || '+15550001234', body: 'Hello from webhook simulator!' })}
+                    onClick={() => simulateWebhookMutation.mutate({ type: 'sms', from: testNumber || undefined, body: 'Hello from webhook simulator!' })}
                     variant="outline" 
                     className="gap-2"
                     disabled={simulateWebhookMutation.isPending}
@@ -1329,7 +1329,7 @@ export default function TelephonyPanel() {
                     Simulate SMS
                   </Button>
                   <Button 
-                    onClick={() => simulateWebhookMutation.mutate({ type: 'voice', from: testNumber || '+15550001234' })}
+                    onClick={() => simulateWebhookMutation.mutate({ type: 'voice', from: testNumber || undefined })}
                     variant="outline" 
                     className="gap-2"
                     disabled={simulateWebhookMutation.isPending}
@@ -1339,7 +1339,7 @@ export default function TelephonyPanel() {
                     Simulate Voice
                   </Button>
                   <Button 
-                    onClick={() => simulateWebhookMutation.mutate({ type: 'status', from: testNumber || '+15550001234', callStatus: 'completed' })}
+                    onClick={() => simulateWebhookMutation.mutate({ type: 'status', from: testNumber || undefined, callStatus: 'completed' })}
                     variant="outline" 
                     className="gap-2"
                     disabled={simulateWebhookMutation.isPending}
@@ -1352,7 +1352,7 @@ export default function TelephonyPanel() {
               </div>
 
               {/* Console Output */}
-              <div className="bg-[#0d1117] rounded-xl border border-border overflow-hidden">
+              <div className="bg-[#0d1117] rounded-sui border border-border overflow-hidden">
                 <div className="px-4 py-2 bg-[#161b22] border-b border-border flex items-center justify-between">
                   <span className="text-xs text-muted-foreground font-mono">Event Log</span>
                   <div className="flex items-center gap-2">
@@ -1434,7 +1434,7 @@ export default function TelephonyPanel() {
                   {callLogs?.map((call, i) => (
                     <div 
                       key={call.sid || i}
-                      className="flex items-center justify-between p-4 bg-accent/30 rounded-xl border border-border hover:bg-accent/50 transition-colors"
+                      className="flex items-center justify-between p-4 bg-accent/30 rounded-sui border border-border hover:bg-accent/50 transition-colors"
                     >
                       <div className="flex items-center gap-4">
                         <div className={`p-2 rounded-lg ${
@@ -1477,7 +1477,7 @@ export default function TelephonyPanel() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-16 border-2 border-dashed border-border rounded-xl">
+                <div className="text-center py-16 border-2 border-dashed border-border rounded-sui">
                   <History className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
                   <p className="text-muted-foreground font-medium">No call history yet</p>
                   <p className="text-muted-foreground/70 text-sm mt-1">

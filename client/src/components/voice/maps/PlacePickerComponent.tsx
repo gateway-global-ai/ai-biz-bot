@@ -30,7 +30,7 @@ export const PlacePickerComponent: React.FC<PlacePickerProps> = ({
       autocomplete.setAttribute('placeholder', placeholder);
       autocomplete.style.cssText = 'width:100%;display:block;';
 
-      autocomplete.addEventListener('gmp-placeselect', async (event: any) => {
+      autocomplete.addEventListener('gmp-select', async (event: any) => {
         const { placePrediction } = event;
         if (!placePrediction) return;
         const place = placePrediction.toPlace();
@@ -52,7 +52,7 @@ export const PlacePickerComponent: React.FC<PlacePickerProps> = ({
   }, [placeholder, mapsKey, onPlaceChange]);
 
   return (
-    <div className="w-full p-2 bg-white border-b border-gray-200">
+    <div className="w-full p-2 bg-slate-50 border-b border-gray-200">
       <div ref={containerRef} style={{ width: '100%' }} />
     </div>
   );

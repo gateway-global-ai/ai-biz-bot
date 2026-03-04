@@ -1,11 +1,11 @@
 /**
  * Intelligence Routes — Business Data Ingestion Pipeline
  *
- * POST /api/intelligence/resolve  — resolve stable data_id from a business name string
- * POST /api/intelligence/ingest   — full autonomous pipeline: resolve → harvest → analyze → store
- *
- * These routes power the "Data Miner" agent (Sage) and can also be called
- * directly from the frontend onboarding flow after a business is confirmed.
+ * Mounted at /api/intelligence
+ * POST /resolve  — resolve data_id or placeTypes (accepts query or placeId)
+ * POST /ingest   — full autonomous pipeline: resolve → harvest → analyze → store
+ * POST /provision — provision 6 agents for a site from industry templates
+ * GET /status/:siteConfigId — intelligence brief status
  */
 
 import { Router } from 'express';
@@ -17,16 +17,22 @@ import {
   compile_knowledge_base,
 } from '../tools/dataIngestionHandler.js';
 import { fetchSerpApiReviews, type SerpApiReview, type SerpApiTopic } from '../services/serpapi-reviews.js';
+import { provisionAgentsForBusiness } from '../services/agentProvisioning.js';
 
 const router = Router();
 
-// ── POST /api/intelligence/resolve ─────────────────────────────────────────────
+// ── POST /resolve ─────────────────────────────────────────────────────────────
+// Accepts either query (text search) or placeId (Google Place ID). When placeId
+// is provided, returns placeTypes for industry detection (e.g. for provision).
 
-router.post('/api/intelligence/resolve', async (req, res) => {
+router.post('/resolve', async (req, res) => {
   const schema = z.object({
-    query: z.string().min(2).max(200),
+    query: z.string().min(2).max(200).optional(),
+    placeId: z.string().min(1).max(200).optional(),
     ll: z.string().optional(),
     siteConfigId: z.string().optional(),
+  }).refine(d => d.query || d.placeId, {
+    message: 'Provide either query or placeId',
   });
 
   const parsed = schema.safeParse(req.body);
@@ -34,9 +40,32 @@ router.post('/api/intelligence/resolve', async (req, res) => {
     return res.status(400).json({ error: 'Invalid request', details: parsed.error.message });
   }
 
+  // When placeId is provided, fetch place_info from SerpAPI and return placeTypes
+  if (parsed.data.placeId) {
+    try {
+      const apiKey = process.env.SERPAPI_API_KEY ?? process.env.SERPAPI_KEY ?? process.env.SERP_API_KEY;
+      const result = await fetchSerpApiReviews(parsed.data.placeId, apiKey, { num: 1 });
+      const placeTypes: string[] = [];
+      if (result?.place_info?.type) {
+        const t = result.place_info.type.toLowerCase().replace(/[éèê]/g, 'e').replace(/\s+/g, '_');
+        placeTypes.push(t);
+      }
+      return res.json({
+        success: true,
+        placeTypes: placeTypes.length ? placeTypes : ['establishment'],
+        data_id: parsed.data.placeId,
+        business_name: result?.place_info?.title ?? '',
+        address: result?.place_info?.address ?? '',
+      });
+    } catch (err: any) {
+      console.error('[IntelligenceRoutes] resolve by placeId error:', err.message);
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
   try {
     const identity = await resolve_data_id(
-      parsed.data.query,
+      parsed.data.query!,
       parsed.data.ll,
       parsed.data.siteConfigId,
     );
@@ -55,9 +84,44 @@ router.post('/api/intelligence/resolve', async (req, res) => {
   }
 });
 
-// ── POST /api/intelligence/ingest ──────────────────────────────────────────────
+// ── POST /provision ───────────────────────────────────────────────────────────
+// Provision 6 industry-specific agents for a site (Concierge, Booking, Lead Qualifier, etc.).
 
-router.post('/api/intelligence/ingest', async (req, res) => {
+router.post('/provision', async (req, res) => {
+  const schema = z.object({
+    siteConfigId: z.string().min(1),
+    placeTypes: z.array(z.string()).default(['establishment']),
+    businessName: z.string().min(1),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid request', details: parsed.error.message });
+  }
+
+  try {
+    const result = await provisionAgentsForBusiness(
+      parsed.data.siteConfigId,
+      parsed.data.placeTypes,
+      parsed.data.businessName,
+    );
+
+    return res.json({
+      success: true,
+      agentsCreated: result.agentsCreated,
+      agentIds: result.agentIds,
+      industryGroup: result.industryGroup,
+      archetypesProvisioned: result.archetypesProvisioned,
+    });
+  } catch (err: any) {
+    console.error('[IntelligenceRoutes] provision error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /ingest ───────────────────────────────────────────────────────────────
+
+router.post('/ingest', async (req, res) => {
   const schema = z.object({
     // Either provide data_id directly, or provide query + optional ll to resolve it
     data_id: z.string().optional(),
@@ -162,9 +226,9 @@ router.post('/api/intelligence/ingest', async (req, res) => {
   }
 });
 
-// ── GET /api/intelligence/status/:siteConfigId ─────────────────────────────────
+// ── GET /status/:siteConfigId ──────────────────────────────────────────────────
 
-router.get('/api/intelligence/status/:siteConfigId', async (req, res) => {
+router.get('/status/:siteConfigId', async (req, res) => {
   try {
     const siteConfig = await storage.getSiteConfigById(req.params.siteConfigId);
     if (!siteConfig) return res.status(404).json({ error: 'Site config not found' });

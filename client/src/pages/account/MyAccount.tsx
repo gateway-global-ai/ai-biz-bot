@@ -1,3 +1,9 @@
+/**
+ * @ADMIN-DASHBOARD-KERNEL
+ * @STABILITY_LEVEL: IMMUTABLE
+ * @DEPENDENCIES: Google Maps JS API (gmp-select), Auth Session
+ * @NOTE: Do not modify event listeners or auth-guards without explicit bypass.
+ */
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useCustomerAuth } from "@/lib/customerAuth";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -30,7 +36,15 @@ import {
   Activity,
   MessageSquare,
   Mic2,
+  FileText,
+  AlertCircle,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // ── Pricing constants sourced from .system_design/pricing_v1.yaml ─────────────
 const SOVEREIGN_PRICING = {
@@ -40,8 +54,244 @@ const SOVEREIGN_PRICING = {
   overageA2pSms: 0.125,
   gracePeriodDays: 30,
 } as const;
+
+// MSA text for in-app review (matches OnboardingGateway)
+const MSA_VERSION_DIRECT = "1.0.0";
+const MSA_VERSION_RESELLER = "1.1.0";
+const MSA_TEXT = `SOVEREIGN AI OS MASTER SERVICE AGREEMENT (v1.0.0)
+This Agreement is made between Gateway Global AI ("The Vendor") and the entity identified in the Service Order ("The Customer").
+
+1. SCOPE OF SERVICE & ACTIVATION
+Cognitive Dial Tone: The Vendor provides an AI-native Operating System ("Sovereign OS") consisting of voice, SMS, and chat interfaces.
+Activation Date: Customer is deemed to have accepted Services on the date the "Let's Talk" button is enabled.
+Availability: Vendor aims for 99.9% uptime for voice connectivity, excluding scheduled maintenance.
+
+2. SUBSCRIPTION TERM & COMMITMENT
+Primary Term: A minimum 12-month Service Commitment applies to all paid accounts unless otherwise stated in the Service Order.
+Automatic Renewal: Upon expiration of the Primary Term, this Agreement automatically renews for successive 12-month periods ("Extended Term") unless a Party provides written notice of non-renewal at least 90 days prior to expiration.
+The "Verizon Grace Period": Customer may terminate for any reason within the first 30 calendar days following the Activation Date with no early termination penalty.
+
+3. PRICING & METERED BILLING
+Platform Fee: A non-refundable monthly recurring charge ("Flat Fee") of $49.00 covers OS access and core brand management.
+Metered Usage: Usage-based charges (minutes, SMS, tokens) accrue from the Activation Date and are invoiced in arrears based on actual consumption.
+Overage Rates: Phone Voice AI — $0.25/min | Web Voice AI — $0.18/min | A2P SMS — $0.125/message
+
+4. A2P 10DLC & REGULATORY COMPLIANCE
+Mandatory Registration: All Customer-initiated SMS messaging must be registered via the A2P 10DLC protocol.
+Compliance Responsibility: Customer warrants that it has obtained Prior Express Written Consent for all messaging recipients.
+Indemnification: Customer shall indemnify Vendor against all fines or penalties (e.g., $1,000+ carrier pass-through fines) resulting from snowshoeing, unauthorized number replacement, or prohibited content violations.
+
+5. AI DATA & INTELLECTUAL PROPERTY
+Input Data: Customer retains all ownership of prompts, business data, and training inputs provided to the AI.
+Output Data: Vendor grants Customer a non-exclusive license to use all AI-generated outputs for business purposes.
+Training Restriction: Vendor is strictly prohibited from using Customer data to train foundational models for other customers.
+
+6. TERMINATION & UNDERUTILIZATION
+Termination for Convenience: If Customer terminates after the 30-day grace period but before the end of the Primary Term, Customer shall pay 75% of the remaining Flat Fees for the duration of the term.
+Suspension: Vendor reserves the right to suspend Service for any account that is 15 days past due.
+
+7. LIMITATION OF LIABILITY
+"As-Is" Provision: The Service is provided "AS-IS" with all faults.
+Autonomous Actions: Vendor is not liable for financial losses resulting from "hallucinations" or autonomous actions taken by the AI agent unless caused by Vendor's gross negligence.`.trim();
+const MSA_TEXT_RESELLER_ADDENDUM = `
+
+─────────────────────────────────────────────────────────
+RESELLER SERVICE ADDENDUM (MSA v1.1.0)
+─────────────────────────────────────────────────────────
+
+This Addendum extends the MSA above and governs the Reseller relationship.
+
+1. THE FRANCHISE HIERARCHY
+Reseller maintains a Master UUID with authority to provision Sub-Account UUIDs for end-customers. Reseller must countersign before any end-customer may activate. Reseller is the Account Owner; the end-customer is the A2P Content Provider.
+
+2. WHOLESALE PRICING & REVENUE SHARE
+Reseller pays $49.00/month per active Sub-Account. Reseller sets the retail markup price. Vendor collects retail price and remits: Retail − $49.00 − Stripe Processing Fee = Reseller Payout, credited to the Reseller Commission Balance and disbursed via Stripe Connect.
+
+3. BRAND PROTECTION & WHITE LABELING
+All interfaces must display "Powered by Gateway Global AI" unless a White Label tier is purchased. Reseller may not represent the AI as proprietary technology without a White Label agreement. No sub-licensing or daisy-chaining of the reseller right.
+
+4. TERMINATION & SUB-ACCOUNT MIGRATION
+Reseller termination causes Sub-Account suspension within 48 hours. Sub-Account end-customers may convert to DIRECT accounts at standard retail pricing for 90 days post-migration.`.trim();
 import gatewayLogo from "@assets/gatewaylogo_header_left_1770354860467.png";
 import { ensureApiLoader, loadPlacesLibrary } from "@/utils/googleMapsLoader";
+
+// ── MSA Modal (review & accept in-app; no OTP) ─────────────────────────────────
+interface MsaModalContentProps {
+  status: {
+    onboardingStatus?: string;
+    accountType?: string;
+    msaAcceptedAt?: string | null;
+    resellerMsaConfirmedAt?: string | null;
+  } | undefined;
+  token: string | null;
+  onAccepted: () => void;
+  onClose: () => void;
+}
+
+function MsaModalContent({ status, token, onAccepted, onClose }: MsaModalContentProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
+  const [accepting, setAccepting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 20;
+    setHasScrolledToBottom(atBottom);
+  }, []);
+
+  const acceptMutation = useMutation({
+    mutationFn: async () => {
+      const accountType = status?.accountType ?? "DIRECT";
+      const msaVersion = accountType === "DIRECT" ? MSA_VERSION_DIRECT : MSA_VERSION_RESELLER;
+      const res = await fetch("/api/customer/onboarding/accept-msa", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ msaVersion, scrollConfirmed: true }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to accept MSA");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      onAccepted();
+    },
+    onError: (err: Error) => {
+      setError(err.message);
+      setAccepting(false);
+    },
+  });
+
+  const handleAccept = () => {
+    setError(null);
+    setAccepting(true);
+    acceptMutation.mutate(undefined, {
+      onSettled: () => setAccepting(false),
+    });
+  };
+
+  if (!status) {
+    return (
+      <div className="py-8 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
+      </div>
+    );
+  }
+
+  if (status.msaAcceptedAt) {
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+            MSA Already Accepted
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-slate-400 text-sm">
+          You have already accepted the Master Service Agreement. Your grace period is active.
+        </p>
+        <Button onClick={onClose} className="mt-4 bg-indigo-600 hover:bg-indigo-500">
+          Close
+        </Button>
+      </>
+    );
+  }
+
+  const isSubAccount = status.accountType === "SUB_ACCOUNT";
+  const isReseller = status.accountType === "RESELLER";
+  const needsResellerSign = isSubAccount && !status.resellerMsaConfirmedAt;
+  const msaVersion = isReseller || isSubAccount ? MSA_VERSION_RESELLER : MSA_VERSION_DIRECT;
+  const fullMsaText = isReseller || isSubAccount ? `${MSA_TEXT}\n\n${MSA_TEXT_RESELLER_ADDENDUM}` : MSA_TEXT;
+
+  if (status.onboardingStatus === "PENDING_MSA" && needsResellerSign) {
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-amber-400" />
+            Reseller Countersignature Required
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-slate-400 text-sm">
+          Your reseller must complete their countersignature before you can accept the MSA. Please contact your account manager.
+        </p>
+        <Button onClick={onClose} variant="outline" className="mt-4 border-slate-600">
+          Close
+        </Button>
+      </>
+    );
+  }
+
+  if (status.onboardingStatus !== "PENDING_MSA") {
+    return (
+      <>
+        <DialogHeader>
+          <DialogTitle className="text-white">MSA Status</DialogTitle>
+        </DialogHeader>
+        <p className="text-slate-400 text-sm">No pending MSA acceptance for your account.</p>
+        <Button onClick={onClose} className="mt-4 bg-indigo-600 hover:bg-indigo-500">Close</Button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle className="text-white flex items-center gap-2">
+          <FileText className="w-5 h-5 text-indigo-400" />
+          Master Service Agreement {isReseller || isSubAccount ? `+ Addendum v${msaVersion}` : `v${msaVersion}`}
+        </DialogTitle>
+      </DialogHeader>
+      <p className="text-sm text-slate-500">
+        Please read the agreement in full. Scroll to the bottom to unlock the Accept button.
+      </p>
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex-1 min-h-[280px] max-h-[50vh] overflow-y-auto p-4 rounded-lg bg-slate-800/60 border border-slate-700 text-sm leading-relaxed whitespace-pre-wrap font-mono text-slate-300"
+        aria-label="Master Service Agreement text"
+      >
+        {fullMsaText}
+      </div>
+      <div className="flex items-center justify-between gap-4 pt-3 border-t border-slate-700">
+        {!hasScrolledToBottom ? (
+          <p className="text-xs text-slate-500 flex items-center gap-1.5">
+            <AlertCircle className="w-3.5 h-3.5" />
+            Scroll to the bottom to confirm you have read the agreement.
+          </p>
+        ) : (
+          <p className="text-xs text-emerald-500 flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            You have read the agreement.
+          </p>
+        )}
+        <Button
+          onClick={handleAccept}
+          disabled={!hasScrolledToBottom || accepting}
+          className="bg-indigo-600 hover:bg-indigo-500 min-w-[120px]"
+        >
+          {accepting ? "Saving..." : "I Accept"}
+        </Button>
+      </div>
+      {error && (
+        <p className="text-sm text-red-400 flex items-center gap-1.5">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          {error}
+        </p>
+      )}
+      <p className="text-xs text-slate-500">
+        By clicking &quot;I Accept&quot; you agree to the Sovereign AI OS Master Service Agreement
+        {isReseller || isSubAccount ? " and Reseller Addendum" : ""} v{msaVersion}.
+      </p>
+    </>
+  );
+}
 
 export default function MyAccount() {
   const { user, token, logout, updateUser, isAuthenticated, isLoading } = useCustomerAuth();
@@ -77,8 +327,6 @@ export default function MyAccount() {
     let autocomplete: any = null;
     let cancelled = false;
 
-    const phone = user?.phone || "";
-
     const setup = async () => {
       const { PlaceAutocompleteElement } = await loadPlacesLibrary();
       if (cancelled) return;
@@ -86,7 +334,7 @@ export default function MyAccount() {
       autocomplete = new PlaceAutocompleteElement();
       autocomplete.setAttribute("placeholder", "Search for your business...");
       autocomplete.setAttribute("data-testid", "input-add-business-search");
-      autocomplete.style.cssText = "width:100%;display:block;border:1px solid #334155;border-radius:0.5rem;overflow:hidden;";
+      autocomplete.style.cssText = "width:100%;display:block;border:1px solid #334155;border-radius:0.5rem;";
 
       // Apply dark theme inside the shadow DOM
       requestAnimationFrame(() => {
@@ -103,6 +351,7 @@ export default function MyAccount() {
         }
       });
 
+      // Admin bypass: authenticated dashboard adds business silently (no OTP/phone modal, no SMS).
       const handlePlaceSelect = async (event: any) => {
         const { placePrediction } = event;
         if (!placePrediction) return;
@@ -128,31 +377,36 @@ export default function MyAccount() {
           placeData.geometry = { location: { lat: place.location.lat(), lng: place.location.lng() } };
         }
 
-        if (!phone) {
-          toast({ title: "Error", description: "Phone number is missing from your account", variant: "destructive" });
-          return;
-        }
-
         setAddingBusiness(true);
         try {
-          const res = await fetch("/api/demo/create", {
+          const createRes = await fetch("/api/site-configs", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              phone,
-              businessName,
-              businessAddress,
-              placeId: placeId || null,
+              name: businessName,
+              placeId: placeId || undefined,
               placeData,
             }),
           });
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || "Failed to create business");
+          if (!createRes.ok) {
+            const errData = await createRes.json().catch(() => ({}));
+            throw new Error(errData.error || "Failed to create site");
+          }
+          const siteConfig = await createRes.json();
+          if (token) {
+            const claimRes = await fetch("/api/customer/claim-business", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({ siteConfigId: siteConfig.id }),
+            });
+            if (!claimRes.ok) {
+              const errData = await claimRes.json().catch(() => ({}));
+              throw new Error(errData.error || "Failed to link to your account");
+            }
           }
           await queryClient.invalidateQueries({ queryKey: ["/api/customer/businesses"] });
           setShowAddBusiness(false);
-          toast({ title: "Business Added", description: `${businessName} has been created.` });
+          toast({ title: "Business Added", description: `${businessName} has been added to your account.` });
         } catch (err: any) {
           toast({ title: "Error", description: err.message || "Failed to add business", variant: "destructive" });
         } finally {
@@ -160,7 +414,7 @@ export default function MyAccount() {
         }
       };
 
-      autocomplete.addEventListener("gmp-placeselect", handlePlaceSelect);
+      autocomplete.addEventListener("gmp-select", handlePlaceSelect);
       container.appendChild(autocomplete);
 
       setTimeout(() => {
@@ -175,7 +429,7 @@ export default function MyAccount() {
       cancelled = true;
       container.innerHTML = "";
     };
-  }, [mapsKey, showAddBusiness, user?.phone]);
+  }, [mapsKey, showAddBusiness, token]);
 
   const businessesQuery = useQuery({
     queryKey: ["/api/customer/businesses"],
@@ -191,13 +445,18 @@ export default function MyAccount() {
   });
 
   const onboardingQuery = useQuery({
-    queryKey: ["/api/onboarding/status"],
+    queryKey: ["/api/customer/onboarding/status"],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/onboarding/status");
+      const res = await fetch("/api/customer/onboarding/status", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed to fetch onboarding status");
       return res.json();
     },
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !!token,
   });
+
+  const [showMsaModal, setShowMsaModal] = useState(false);
 
   const updateProfileMutation = useMutation({
     mutationFn: async (updates: { name?: string; email?: string }) => {
@@ -288,9 +547,9 @@ export default function MyAccount() {
           </p>
         </div>
 
-        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6">
+        <Card className="bg-slate-50/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+            <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-sui">
               <User className="w-5 h-5 text-blue-400" />
             </div>
             <div>
@@ -386,11 +645,11 @@ export default function MyAccount() {
         </Card>
 
         {/* ── Governance Layer ──────────────────────────────────────────────── */}
-        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
+        <Card className="bg-slate-50/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
           data-testid="card-governance-layer">
 
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+            <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-sui">
               <Activity className="w-5 h-5 text-indigo-400" />
             </div>
             <div>
@@ -401,7 +660,7 @@ export default function MyAccount() {
 
           <div className="space-y-5">
             {/* Grace Period Progress Bar */}
-            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-sui"
               data-testid="section-grace-period">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
@@ -431,7 +690,7 @@ export default function MyAccount() {
                   </p>
                   <Button
                     size="sm"
-                    onClick={() => setLocation("/compliance-gateway")}
+                    onClick={() => setShowMsaModal(true)}
                     className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs h-8"
                     data-testid="button-accept-msa"
                   >
@@ -461,7 +720,7 @@ export default function MyAccount() {
             </div>
 
             {/* A2P Compliance Status */}
-            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-sui"
               data-testid="section-a2p-compliance">
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2">
@@ -512,7 +771,7 @@ export default function MyAccount() {
             </div>
 
             {/* Pricing Anchor — sourced from pricing_v1.yaml */}
-            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-sui"
               data-testid="section-pricing-anchor">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <p className="text-sm font-medium text-slate-200">Sovereign AI OS</p>
@@ -541,7 +800,7 @@ export default function MyAccount() {
             </div>
 
             {/* Pricing Anchor — sourced from pricing_v1.yaml */}
-            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-xl"
+            <div className="p-4 bg-slate-800/40 border border-slate-700/50 rounded-sui"
               data-testid="section-pricing-anchor">
               <div className="flex items-center justify-between gap-3 mb-3">
                 <p className="text-sm font-medium text-slate-200">Sovereign AI OS</p>
@@ -570,11 +829,11 @@ export default function MyAccount() {
           </div>
         </Card>
 
-        <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
+        <Card className="bg-slate-50/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
           data-testid="card-my-businesses">
           <div className="flex items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-sui">
                 <Building2 className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
@@ -599,7 +858,7 @@ export default function MyAccount() {
           </div>
 
           {showAddBusiness && (
-            <div className="mb-4 p-4 bg-white/5 border border-white/10 rounded-xl backdrop-blur-sm"
+            <div className="mb-4 p-4 bg-slate-50/5 border border-white/10 rounded-sui backdrop-blur-sm relative z-50"
               data-testid="add-business-panel">
               <p className="text-sm text-slate-400 mb-3">
                 <Search className="w-4 h-4 inline-block mr-1 -mt-0.5" />
@@ -646,11 +905,11 @@ export default function MyAccount() {
               {businesses.map((biz: any) => (
                 <div
                   key={biz.id}
-                  className="flex items-center justify-between gap-3 p-4 bg-white/5 !border !border-white/10 rounded-2xl backdrop-blur-sm hover:bg-white/[0.07] transition-colors flex-wrap"
+                  className="flex items-center justify-between gap-3 p-4 bg-slate-50/5 !border !border-white/10 rounded-2xl backdrop-blur-sm hover:bg-slate-50/[0.07] transition-colors flex-wrap"
                   data-testid={`business-row-${biz.id}`}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 rounded-sui bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
                       <Bot className="w-5 h-5 text-indigo-400" />
                     </div>
                     <div className="min-w-0">
@@ -697,6 +956,22 @@ export default function MyAccount() {
           )}
         </Card>
       </div>
+
+      {/* MSA Review & Accept modal — no OTP; uses customer token */}
+      <Dialog open={showMsaModal} onOpenChange={setShowMsaModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col bg-slate-900 border-slate-700 text-slate-200">
+          <MsaModalContent
+            status={onboarding}
+            token={token}
+            onAccepted={() => {
+              queryClient.invalidateQueries({ queryKey: ["/api/customer/onboarding/status"] });
+              setShowMsaModal(false);
+              toast({ title: "MSA accepted", description: "Your 30-day grace period has started." });
+            }}
+            onClose={() => setShowMsaModal(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

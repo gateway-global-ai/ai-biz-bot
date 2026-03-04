@@ -217,7 +217,7 @@ export class BusinessResearchService {
     reviewInsights: any,
     competitorAnalysis: CompetitorAnalysis
   ): Promise<SwotAnalysis> {
-    // Use AI (Kimi/Gemini) to generate comprehensive SWOT analysis
+    // Use AI to generate comprehensive SWOT analysis
     return {
       strengths: [
         {

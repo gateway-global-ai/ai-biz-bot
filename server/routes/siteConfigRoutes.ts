@@ -18,6 +18,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { storage } from '../storage';
+import { provisionAgentsForBusiness } from '../services/agentProvisioning';
 
 const router = Router();
 
@@ -110,7 +111,17 @@ router.post('/', async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.message });
     }
-    const config = await storage.createSiteConfig(parsed.data as any);
+    const data = { ...parsed.data };
+    if (data.placeId && !data.heroImageUrl) {
+      data.heroImageUrl = `/api/places/photo-proxy/${data.placeId}?maxWidth=1200`;
+    }
+    const config = await storage.createSiteConfig(data as any);
+    try {
+      const placeTypes = (config.placeData as { types?: string[] } | null)?.types ?? ['establishment'];
+      await provisionAgentsForBusiness(config.id, placeTypes, config.name);
+    } catch (provisionErr: any) {
+      console.error('[SiteConfig] Agent swarm provisioning failed (site created):', provisionErr?.message ?? provisionErr);
+    }
     res.status(201).json(config);
   } catch (error: any) {
     // Surface UPAValidator rejections with a 422 so the client can distinguish

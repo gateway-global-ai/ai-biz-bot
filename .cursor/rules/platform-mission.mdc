@@ -1,0 +1,53 @@
+---
+description: Gateway Global AI — Platform Mission, S4 Architecture, and Economic Model. Always-on context for every agent session.
+alwaysApply: true
+---
+
+# Gateway Global AI — Platform Mission
+
+## 1. What We Build
+
+We build **AI Business Routers**, not chatbots. Gateway Global AI is Customer Interaction Infrastructure for mid-market operators. The goal is to replace legacy communication stacks with a **Hardened AI Distribution** — the "Voice Expressway" for local and enterprise businesses.
+
+## 2. S4 Architecture Standard (Non-Negotiable)
+
+| Pillar | Rule |
+|--------|------|
+| **Security** | Zero-PII footprint. All identity is verified via NOVA Sovereign IDV (OTP, Biometrics, Magic Link). Never store raw PII in transit. |
+| **Stability** | The 685KB Kernel must remain stateless and lean. No zombie WebSockets. Clean up sessions on disconnect. |
+| **Speed** | Clear Voice PTT is the priority lane. Mouth-to-ear latency target: **sub-150ms** via native multimodal orchestration. Never add middleware that degrades voice latency. |
+| **Structure** | Everything is a **Sovereign Session**. Usage is tracked at millisecond precision for telecom-grade billing. |
+
+## 3. Economic Model — Unit Logic
+
+- **Base Tier**: $49/mo Platform Fee
+- **Comms Tier**: $50/mo Voice AI Package
+- **Utility Tier**: $0.25/min Overage — the "AI Minute"
+- **Revenue Events**: Inbound PSTN calls must convert to logged revenue events (Bookings, Sales, Leads). This is the primary business metric.
+
+Every architectural decision must protect or grow the Revenue Event conversion rate.
+
+## 4. Technical Invariants
+
+- **No Hardcoding**: All model IDs, phone numbers, and API keys resolve via `process.env`. Never inline credentials or model strings.
+- **Asset Economy**: 98% image reduction is the standard. All UI assets must be WebP-crushed. No PNG in production.
+- **Model Monoculture**: Gemini 2.5 Native Multimodal is the sole AI engine. Do not fracture prompts across agnostic wrappers or introduce secondary LLM providers.
+- **Atomic Logic**: One file per domain — Identity, Telephony, Agents, Billing. Cross-domain coupling must be explicit and minimal.
+
+## 5. Tier-2 Strategic Layer
+
+Beyond voice concierge, the platform deploys **Management Agents** (e.g., AI CMO) that:
+- Consume Review Signals and Artifact Schemas
+- Generate high-level business playbooks
+- Operate as autonomous, scheduled background processes — not request/response
+
+These agents are not UI features; they are infrastructure services.
+
+## Enforcement
+
+When writing any new code, ask:
+1. Does this introduce a hardcoded value? → Move it to `process.env`.
+2. Does this add latency to the voice path? → Reject it.
+3. Does this create a zombie connection or unbounded state? → Add cleanup.
+4. Does this fracture the Gemini monoculture? → Reject it.
+5. Does this help convert an inbound call into a revenue event? → Ship it.

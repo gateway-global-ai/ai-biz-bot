@@ -17,6 +17,7 @@
 import { useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -615,9 +616,18 @@ function GracePeriodBanner({ status }: { status: OnboardingStatus }) {
 
 export default function OnboardingGateway() {
   const queryClient = useQueryClient();
+  const { token, isAuthenticated } = useAuth();
 
   const { data: status, isLoading, isError } = useQuery<OnboardingStatus>({
     queryKey: ["/api/onboarding/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/onboarding/status", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch onboarding status");
+      return res.json();
+    },
+    enabled: isAuthenticated,
     refetchOnWindowFocus: false,
   });
 

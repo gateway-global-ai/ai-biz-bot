@@ -72,7 +72,7 @@ declare global {
        * deprecated google.maps.places.Autocomplete widget.
        * Created via `new PlaceAutocompleteElement()` (from importLibrary('places'))
        * or as the custom element `<gmp-place-autocomplete>`.
-       * Fires `gmp-placeselect` when the user selects a prediction.
+       * Fires `gmp-select` when the user selects a prediction.
        */
       'gmp-place-autocomplete': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & {
         placeholder?: string;

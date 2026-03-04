@@ -77,11 +77,8 @@ export class LiveVoiceClient {
   private outputAudioContext: AudioContext | null = null;
   private inputSource: MediaStreamAudioSourceNode | null = null;
   
-  /**
-   * @deprecated ScriptProcessorNode is deprecated by browsers
-   * @see AudioWorkletNode in GeminiStreamingClient.ts
-   */
-  private processor: ScriptProcessorNode | null = null;
+  /** AudioWorkletNode (replaces deprecated ScriptProcessorNode) — uses public/clear-voice-processor.js */
+  private workletNode: AudioWorkletNode | null = null;
   private socket: WebSocket | null = null;
   private currentStream: MediaStream | null = null;
   private isConnected = false;
@@ -236,7 +233,7 @@ export class LiveVoiceClient {
         };
         
         this.socket?.send(JSON.stringify(setupMessage));
-        this.setupAudioProcessing();
+        this.setupAudioProcessing().catch((e) => console.error('[LiveVoiceClient] setupAudioProcessing:', e));
       };
 
       this.socket.onmessage = async (event) => {
@@ -266,35 +263,32 @@ export class LiveVoiceClient {
     }
   }
 
-  private setupAudioProcessing() {
+  private async setupAudioProcessing() {
     if (!this.currentStream || !this.inputAudioContext) return;
-    
+
     this.inputSource = this.inputAudioContext.createMediaStreamSource(this.currentStream);
-    this.processor = this.inputAudioContext.createScriptProcessor(4096, 1, 1);
 
-    this.processor.onaudioprocess = (e) => {
-      const inputData = e.inputBuffer.getChannelData(0);
-      
-      let sum = 0;
-      for (let i = 0; i < inputData.length; i++) {
-        sum += inputData[i] * inputData[i];
-      }
-      const rms = Math.sqrt(sum / inputData.length);
-      
-      // Scale RMS for visualizer (0.0 to 1.0 range usually, but can be higher)
-      this.onVolumeChange(rms);
+    const workletUrl = '/clear-voice-processor.js';
+    try {
+      console.log('[LiveVoiceClient] Loading AudioWorklet from:', workletUrl);
+      await this.inputAudioContext.audioWorklet.addModule(workletUrl);
+      this.workletNode = new AudioWorkletNode(this.inputAudioContext, 'clear-voice-processor');
 
-      if (this.isStreaming && this.socket && this.socket.readyState === WebSocket.OPEN) {
-        const pcmBlob = this.createPcmBlob(inputData);
-        this.socket.send(JSON.stringify({
-          type: 'audio',
-          data: pcmBlob.data
-        }));
-      }
-    };
+      this.workletNode.port.onmessage = (event: MessageEvent<{ audioData: Float32Array; volume: number }>) => {
+        const { audioData, volume } = event.data;
+        this.onVolumeChange(volume);
+        if (this.isStreaming && this.socket && this.socket.readyState === WebSocket.OPEN && audioData?.length) {
+          const pcmBlob = this.createPcmBlob(audioData);
+          this.socket.send(JSON.stringify({ type: 'audio', data: pcmBlob.data }));
+        }
+      };
 
-    this.inputSource.connect(this.processor);
-    this.processor.connect(this.inputAudioContext.destination);
+      this.inputSource.connect(this.workletNode);
+      this.workletNode.connect(this.inputAudioContext.destination);
+    } catch (err: any) {
+      console.error('[LiveVoiceClient] AudioWorklet addModule failed:', workletUrl, err?.message ?? err, err);
+      this.onError('Audio setup failed');
+    }
   }
 
   public setStreaming(enabled: boolean) {
@@ -434,7 +428,7 @@ export class LiveVoiceClient {
     this.currentStream?.getTracks().forEach(t => t.stop());
     this.activeSources.forEach(s => { try { s.stop(); } catch(e) {} });
     this.activeSources.clear();
-    this.processor?.disconnect();
+    this.workletNode?.disconnect();
     this.inputSource?.disconnect();
     this.inputAudioContext?.close();
     this.outputAudioContext?.close();

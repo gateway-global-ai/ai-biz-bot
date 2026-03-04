@@ -60,7 +60,7 @@ export default function CustomerSiteManager() {
   return (
     <div className="relative">
       {/* Assign to phone — floating action button */}
-      <div className="fixed top-4 right-4 z-50">
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
         <Button
           onClick={() => setShowAssignModal(true)}
           className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-[14px] shadow-lg shadow-indigo-500/30 text-xs h-9 px-4 font-semibold"

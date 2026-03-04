@@ -1,3 +1,11 @@
+/**
+ * @PUBLIC-SURFACE-STABLE
+ * @STABILITY_LEVEL: REFERENCE_IMPLEMENTATION
+ * @ELEMENTS: Hero Background, Header, Voice AI PTT
+ * @DEPENDENCIES: Google Maps JS API (gmp-select), Gemini Streaming Client
+ * @NOTE: This is the stable visual and functional reference for the platform.
+ * Do not modify the Hero CSS or PTT logic without a full regression test.
+ */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import gatewayLogo from '@assets/gatewaylogo_header_left_1770354860467.png';
 import WebsitePreview from '@/components/WebsitePreview';
@@ -97,7 +105,7 @@ const VoiceVisualizer = () => {
         />
         
         <div 
-          className="absolute w-16 h-16 rounded-xl flex items-center justify-center bg-slate-900 border-2 z-10 transition-all duration-500"
+          className="absolute w-16 h-16 rounded-sui flex items-center justify-center bg-slate-900 border-2 z-10 transition-all duration-500"
           style={{
             borderColor: sentimentConfig.primary,
             boxShadow: `0 0 25px ${sentimentConfig.glow}, 0 0 12px ${sentimentConfig.glow}`,
@@ -262,7 +270,9 @@ export default function BusinessPage() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatLayout, setChatLayout] = useState<'floating' | 'fixed' | 'fullscreen'>('floating');
   const [initialView, setInitialView] = useState<'chat' | 'voice'>('voice');
-  
+  // Resolved Business UUID (siteConfigId) for voice sessionContext — from URL or after create
+  const [resolvedSiteConfigId, setResolvedSiteConfigId] = useState<string | null>(null);
+
   // Voice configuration - default to Premium (Clear Voice) for demo
   const voiceConfig = VoiceClientFactory.getDefaultConfig('premium');
 
@@ -276,9 +286,10 @@ export default function BusinessPage() {
     primaryColor: '#6366f1'
   };
 
-  // Determine which business context to use
+  // Determine which business context to use. Use resolved siteConfigId (Business UUID) when
+  // available so voice sessionContext and MCP tools receive the correct site config id.
   const currentBusiness = selectedPlace ? {
-    id: selectedPlace.place_id || 'platform_landing',
+    id: resolvedSiteConfigId ?? selectedPlace.place_id ?? 'platform_landing',
     placeId: selectedPlace.place_id || '',
     name: selectedPlace.name,
     address: selectedPlace.formatted_address || '',
@@ -287,8 +298,15 @@ export default function BusinessPage() {
     primaryColor: '#6366f1'
   } : {
     ...platformIdentity,
-    id: 'platform_landing'
+    id: resolvedSiteConfigId ?? 'platform_landing'
   };
+
+  // Sync resolvedSiteConfigId from URL so voice gets the Business UUID when present
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const siteConfigId = params.get('siteConfigId');
+    if (siteConfigId) setResolvedSiteConfigId(siteConfigId);
+  }, []);
 
   // Bypass hook: if URL has ?siteConfigId= and site is provisioned, redirect to agents
   useEffect(() => {
@@ -404,7 +422,7 @@ export default function BusinessPage() {
 
       // Happy Path: user clicks a dropdown suggestion
       // CRITICAL: No fetchFields — all data fetched securely via server proxy
-      autocomplete.addEventListener('gmp-placeselect', async (event: any) => {
+      autocomplete.addEventListener('gmp-select', async (event: any) => {
         const { placePrediction } = event;
         if (!placePrediction) return;
 
@@ -596,6 +614,7 @@ export default function BusinessPage() {
       }
       const siteConfig = await createRes.json();
       const siteConfigId = siteConfig.id;
+      setResolvedSiteConfigId(siteConfigId);
       const provisionRes = await fetch('/api/intelligence/provision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -801,7 +820,7 @@ export default function BusinessPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <nav className="sticky top-0 z-50 bg-transparent border-b border-white/10 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
-        <img src={Pidea_logo_header__7_} alt="Gateway Global AI" className="h-20 w-auto relative z-10" style={{ filter: 'drop-shadow(0 2px 8px rgba(19,70,160,0.15))' }} />
+        <img src={gatewayLogo} alt="Gateway Global AI" className="h-20 w-auto relative z-10" style={{ filter: 'drop-shadow(0 2px 8px rgba(19,70,160,0.15))' }} />
         <div className="flex items-center gap-2 justify-end">
           <ShareButton
             shareTitle="Gateway Global AI - AI Business Router"
@@ -813,7 +832,7 @@ export default function BusinessPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-white/80 hover:text-white hover:bg-white/10 text-xs"
+              className="text-white/80 hover:text-white hover:bg-slate-50/10 text-xs"
               onClick={() => setLocation('/my-account')}
               data-testid="button-my-account"
             >
@@ -824,7 +843,7 @@ export default function BusinessPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-white/80 hover:text-white hover:bg-white/10 text-xs"
+              className="text-white/80 hover:text-white hover:bg-slate-50/10 text-xs"
               onClick={() => setShowCustomerLoginModal(true)}
               data-testid="button-customer-login"
             >
@@ -1076,7 +1095,7 @@ export default function BusinessPage() {
         </div>
       )}
       {/* Hero Section — exactly one viewport tall so Enterprise starts below the fold */}
-      <section className="relative min-h-[100vh] min-h-[100svh] flex flex-col px-6 overflow-hidden">
+      <section className="relative min-h-[100vh] min-h-[100svh] flex flex-col px-6 overflow-hidden bg-slate-900">
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none" />
         <div className="flex-1 flex items-center relative z-10">
@@ -1100,7 +1119,7 @@ export default function BusinessPage() {
             <div className="max-w-2xl w-full" data-testid="container-place-search">
               <div className="relative group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-                <form className="relative bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
+                <form className="relative bg-slate-50/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
                   <div ref={pickerContainerRef} className="flex-1 min-w-0" />
                   {!mapsKey && (
                     <div className="pr-3">
@@ -1129,7 +1148,7 @@ export default function BusinessPage() {
         {selectedPlace && stage === 'landing' && (
           <div className="absolute inset-0 z-20 bg-slate-950/95 backdrop-blur-sm flex items-center justify-center px-6">
             <div className="max-w-lg w-full">
-              <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
+              <Card className="bg-slate-50/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
                 <CardContent className="p-6">
                   <div className="flex flex-col gap-4">
                     {selectedPlace.photos && selectedPlace.photos.length > 0 && (selectedPlace.photos[0] as any)?.proxyUrl ? (
@@ -1294,7 +1313,7 @@ export default function BusinessPage() {
             </div>
           </div>
 
-          <Card className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
+          <Card className="bg-slate-50/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
             <CardContent className="p-8">
               {!isSubmitted ? (
                 <form onSubmit={handleSubmit} className="space-y-4">

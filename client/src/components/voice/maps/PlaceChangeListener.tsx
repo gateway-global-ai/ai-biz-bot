@@ -28,7 +28,7 @@ export const PlaceChangeListener: React.FC<PlaceChangeListenerProps> = ({
       autocomplete.setAttribute('placeholder', 'Type to search or correct location...');
       autocomplete.style.cssText = 'width:100%;display:block;';
 
-      autocomplete.addEventListener('gmp-placeselect', async (event: any) => {
+      autocomplete.addEventListener('gmp-select', async (event: any) => {
         const { placePrediction } = event;
         if (!placePrediction) return;
         const place = placePrediction.toPlace();

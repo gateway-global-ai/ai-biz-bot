@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Sparkles, MessageSquare, Clock, ArrowRight, Target, Users, Shield, Search, Mic, Phone, Compass, type LucideIcon } from 'lucide-react';
-import headerLogo from '@assets/Pidea_logo_header_(7)_1770381083770.png';
+import headerLogo from '@assets/gatewaylogo_header_left_1770354860467.png';
 import { apiRequest } from '@/lib/queryClient';
 
 type Step = 'input' | 'personality' | 'submitting' | 'success';
@@ -336,7 +336,7 @@ export default function MvpLanding() {
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.75 }}
-                      className="bg-black/40 rounded-xl p-5 text-left border border-purple-500/30"
+                      className="bg-black/40 rounded-sui p-5 text-left border border-purple-500/30"
                       data-testid="call-coordinates-panel"
                     >
                       <p className="text-xs font-bold tracking-[0.2em] text-purple-400 uppercase mb-3 flex items-center gap-2">
@@ -357,7 +357,7 @@ export default function MvpLanding() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: 1 }}
-                    className="bg-black/30 rounded-xl p-5 text-left space-y-3"
+                    className="bg-black/30 rounded-sui p-5 text-left space-y-3"
                   >
                     <h3 className="font-semibold text-white flex items-center gap-2 text-sm">
                       <MessageSquare className="h-4 w-4 text-purple-400" />

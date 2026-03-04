@@ -1,0 +1,61 @@
+---
+description: Teams/Agents schema and provisioning flow - ensures swarm provisioning is properly wired to site creation
+alwaysApply: true
+---
+
+# Teams/Agents Provisioning Matrix
+
+## Database Schema Relationships
+
+### Agents Table
+- Each row represents one AI agent tied to a site via `site_config_id`
+- Contains: roleType, name, voice config, DiSC profile, AI model settings
+- Status: active/paused/inactive
+
+### Site Configs Table
+- One per business, holds single assigned agent + knowledge/agent config
+- `assignedAgentId`: Primary agent (typically Concierge)
+- Does NOT contain the full team - that's in the agents table
+
+### Industry Agent Templates
+- Blueprints for teams: one row per (industryGroup × archetype)
+- Used to clone 6 agents on business signup
+- Contains default names, voices, DiSC profiles, system prompts
+
+**Note**: No separate "SwarmConfig" or "Team" table exists. The "team" is agents rows with same `site_config_id` + `site_configs.assignedAgentId`.
+
+## Provisioning Flow Requirements
+
+### Current Implementation
+- Provisioning logic: `server/services/agentProvisioning.ts`
+- Route: `POST /api/intelligence/provision`
+- **NOT called from site creation path**
+
+### Blueprint When Provisioning Runs
+```typescript
+provisionAgentsForBusiness(siteConfigId, placeTypes[], businessName)
+// 1. Detect industryGroup from placeTypes via PLACES_TYPE_TO_INDUSTRY
+// 2. Load active industry_agent_templates for that industryGroup (typically 6)
+// 3. For each template: build system prompt → create agent row
+// 4. Set site_configs.assignedAgentId to Concierge (or first agent)
+```
+
+### The Disconnect
+- `POST /api/site-configs` creates site_config row only
+- Does NOT call `provisionAgentsForBusiness`
+- Result: Only default Concierge works (no swarm agents in DB)
+
+## Wiring Requirement
+
+To provision swarm on new business signup:
+
+```typescript
+// After createSiteConfig returns:
+const result = await provisionAgentsForBusiness(
+  newSite.id,
+  placeTypes,  // from placeData
+  businessName
+);
+```
+
+**Critical**: Full swarm (6 DB agents + assigned Concierge) only exists after explicit `POST /api/intelligence/provision` call with siteConfigId, placeTypes, and businessName.

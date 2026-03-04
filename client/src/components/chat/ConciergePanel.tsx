@@ -118,7 +118,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           const dbVoiceConfig = dbSiteConfig!.voiceConfig as { voiceName?: string } | null | undefined;
           validatedVoiceConfig = {
             ...currentVoiceConfig,
-            model: dbSiteConfig!.modelName || currentVoiceConfig.model || process.env.GEMINI_MODEL_ID || "gemini-2.5-flash-native-audio-preview-12-2025",
+            model: dbSiteConfig!.modelName || currentVoiceConfig.model || process.env.GEMINI_MODEL_ID,
             voiceName: dbVoiceConfig?.voiceName ?? currentVoiceConfig.voiceName,
           };
         }
@@ -202,8 +202,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
         // 4. Connect — enrich context with DB-validated systemPromptOverride when
         //    Handover Service ran; in preview mode use business as-is.
+        //    CRITICAL: Always pass the resolved siteConfigId (UUID) into sessionContext so
+        //    the voice proxy and MCP tools receive the Business UUID, not place_id or empty string.
         const handoverBusinessContext = dbSiteConfig
-          ? { ...business, systemPromptOverride: dbSiteConfig.systemPromptOverride }
+          ? { ...business, id: siteConfigId, systemPromptOverride: dbSiteConfig.systemPromptOverride }
           : business;
 
         await newClient.connect(handoverBusinessContext, resolvedAgent, validatedVoiceConfig);
@@ -326,7 +328,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
   // --- Layout Classes ---
   const getContainerClasses = () => {
-    const base = "fixed bg-white shadow-2xl transition-all duration-300 flex flex-col overflow-hidden";
+    const base = "fixed bg-slate-50 shadow-2xl transition-all duration-300 flex flex-col overflow-hidden";
     switch (layoutMode) {
       case 'fullscreen': 
         return `${base} inset-0 rounded-none`;
@@ -369,7 +371,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               if (isDesktop && layoutMode !== 'fullscreen' && onCycleLayout) onCycleLayout();
               setShowSettings(true);
             }} 
-            className="p-2 hover:bg-white/20 rounded-lg text-white transition-colors"
+            className="p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors"
             title="Voice AI Settings"
           >
             <Settings size={18} />
@@ -377,7 +379,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           {onOpenAdmin && (
             <button 
               onClick={onOpenAdmin} 
-              className="p-2 hover:bg-white/20 rounded-lg text-white transition-colors flex items-center gap-1"
+              className="p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors flex items-center gap-1"
               title="Admin Mode"
             >
               <Shield size={18} />
@@ -387,7 +389,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           {onCycleLayout && (
             <button 
               onClick={onCycleLayout} 
-              className="p-2 hover:bg-white/20 rounded-lg text-white transition-colors"
+              className="p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors"
               title="Toggle Layout"
             >
               {layoutMode === 'fullscreen' ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
@@ -444,7 +446,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               ? (currentVoiceConfig.mode === 'clear_voice' ? 'text-green-300' : 'text-blue-300')
               : isProcessing 
               ? (currentVoiceConfig.mode === 'clear_voice' ? 'text-emerald-300' : 'text-purple-300')
-              : 'text-gray-500'
+              : 'text-slate-500'
           }`}>
             {isRecording ? '● LISTENING' : isProcessing ? '◐ THINKING' : 'READY'}
           </p>
@@ -452,15 +454,15 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       </div>
 
       {/* 3. CONTENT WINDOW - 40% (Multimodal Communication Area) */}
-      <div className="h-[40%] bg-white overflow-y-auto shrink-0 border-y border-gray-200">
+      <div className="h-[40%] bg-slate-50 overflow-y-auto shrink-0 border-y border-gray-200">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center px-8 text-gray-400">
-            <Mic className="w-12 h-12 mb-3 text-gray-300" />
-            <p className="text-sm font-medium text-gray-600">Hold the button below to speak</p>
-            <p className="text-xs mt-2 text-gray-400">
+          <div className="h-full flex flex-col items-center justify-center text-center px-8 text-slate-400">
+            <Mic className="w-12 h-12 mb-3 text-slate-300" />
+            <p className="text-sm font-medium text-slate-600">Hold the button below to speak</p>
+            <p className="text-xs mt-2 text-slate-400">
               Voice input & AI responses appear here
             </p>
-            <p className="text-[10px] mt-4 text-gray-300 max-w-xs">
+            <p className="text-[10px] mt-4 text-slate-300 max-w-xs">
               This window supports multimodal content: maps, forms, catalogs, and interactive tools
             </p>
           </div>
@@ -482,8 +484,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                       ? 'bg-blue-600 text-white shadow-sm' 
                       : msg.role === 'assistant'
                       ? hasTool 
-                        ? 'bg-gray-50 text-gray-800 border border-gray-200' 
-                        : 'bg-gray-100 text-gray-800 shadow-sm'
+                        ? 'bg-gray-50 text-slate-800 border border-gray-200' 
+                        : 'bg-gray-100 text-slate-800 shadow-sm'
                       : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
                   }`}>
                     {msg.text && (
@@ -547,7 +549,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         <div className="flex items-center justify-center gap-3 w-full">
           {/* Left Button: Text Mode */}
           <button
-            className="w-[20%] h-12 flex items-center justify-center text-xs font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors border border-gray-200"
+            className="w-[20%] h-12 flex items-center justify-center text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-sui transition-colors border border-gray-200"
             title="Switch to Text Chat"
           >
             <Send size={16} />
@@ -561,7 +563,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             onTouchStart={(e) => { e.preventDefault(); startPTT(); }}
             onTouchEnd={(e) => { e.preventDefault(); stopPTT(); }}
             disabled={connectionStatus !== 'connected'}
-            className={`w-[50%] h-14 rounded-xl font-bold text-sm tracking-wider transition-all transform active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed select-none ${
+            className={`w-[50%] h-14 rounded-sui font-bold text-sm tracking-wider transition-all transform active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed select-none ${
               isRecording 
                 ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/50 ring-4 ring-blue-300/30' 
                 : isProcessing
@@ -581,7 +583,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               }
               setTimeout(() => window.location.reload(), 300);
             }}
-            className="w-[20%] h-12 flex items-center justify-center text-xs font-medium text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-xl transition-colors border border-gray-200"
+            className="w-[20%] h-12 flex items-center justify-center text-xs font-medium text-slate-600 hover:text-green-600 hover:bg-green-50 rounded-sui transition-colors border border-gray-200"
             title="Restart Connection"
           >
             <RefreshCw size={16} />
@@ -589,7 +591,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         </div>
 
         {/* Footer Info */}
-        <div className="flex items-center justify-between w-full text-[10px] text-gray-400">
+        <div className="flex items-center justify-between w-full text-[10px] text-slate-400">
           <span>
             {currentVoiceConfig.mode === 'clear_voice' ? '⚡ Clear Voice' : '💬 Standard PTT'}
           </span>

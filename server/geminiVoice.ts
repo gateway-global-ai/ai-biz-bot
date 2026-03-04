@@ -171,7 +171,8 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           
           console.log('📤 [PROXY -> GOOGLE] Sending Setup:', JSON.stringify(message, null, 2));
           // #region agent log
-          fetch('http://localhost:7243/ingest/6f0f5ac2-b8b0-4db0-890a-ab1f1e0dff06',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'geminiVoice.ts:73',message:'Setup message sent to Google',data:{model:message.setup?.model,toolCount:tools.length},timestamp:Date.now(),hypothesisId:'H2,H5'})}).catch(()=>{});
+          const toolCount = Array.isArray(message.setup.tools) ? message.setup.tools.length : 0;
+          fetch('http://localhost:7243/ingest/6f0f5ac2-b8b0-4db0-890a-ab1f1e0dff06',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'geminiVoice.ts:73',message:'Setup message sent to Google',data:{model:message.setup?.model,toolCount},timestamp:Date.now(),hypothesisId:'H2,H5'})}).catch(()=>{});
           // #endregion
         }
 

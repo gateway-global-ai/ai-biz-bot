@@ -5,7 +5,6 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes";
-import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startTaskScheduler } from "./taskScheduler";
 import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
@@ -21,7 +20,8 @@ const runtimeDirname =
 
 // Seed default admin user on startup (ensures admin exists in production)
 async function seedDefaultAdmin() {
-  const defaultAdminPhone = "+17025405471";
+  const defaultAdminPhone = process.env.DEFAULTADMINPHONE;
+  if (!defaultAdminPhone) return;
   try {
     const existing = await storage.getAdminUserByPhone(defaultAdminPhone);
     if (!existing) {
@@ -57,7 +57,7 @@ const CORE_AGENTS = [
 - Set up their first task workflow
 Keep explanations simple and celebrate their progress.`,
     aiModelProvider: "gemini",
-    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK,
     aiTemperature: 65,
     aiMaxTokens: 4096,
   },
@@ -80,7 +80,7 @@ Keep explanations simple and celebrate their progress.`,
 - CONCLUSION: Summarize and actionable next steps
 Generate engaging micro-lessons with quizzes. Track completion rates and improve lessons based on feedback.`,
     aiModelProvider: "gemini",
-    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK,
     aiTemperature: 55,
     aiMaxTokens: 6000,
   },
@@ -102,7 +102,7 @@ Generate engaging micro-lessons with quizzes. Track completion rates and improve
 - Generating code snippets
 You are precise, thorough, and always explain your reasoning. When reviewing code, provide specific line numbers and concrete suggestions.`,
     aiModelProvider: "gemini",
-    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK,
     aiTemperature: 40,
     aiMaxTokens: 8192,
   },
@@ -124,7 +124,7 @@ You are precise, thorough, and always explain your reasoning. When reviewing cod
 - Generate website content and marketing copy
 You are enthusiastic about helping businesses grow with AI while keeping explanations accessible to non-technical users.`,
     aiModelProvider: "gemini",
-    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK,
     aiTemperature: 70,
     aiMaxTokens: 4096,
   },
@@ -174,7 +174,7 @@ Prefer data from cloud.google.com/pricing, cloud.google.com/quotas, and official
 You will refuse to answer anything unrelated to Google APIs.
 End every response with "Next API?" so we can iterate through the stack.`,
     aiModelProvider: "gemini",
-    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK,
     aiTemperature: 35,
     aiMaxTokens: 4096,
   },
@@ -242,7 +242,7 @@ Output style rules:
 You will answer "I only manage GitHub repos." to any question about non-GitHub topics.
 End every response with "Next repo task?" so maintainers can keep feeding you work iteratively.`,
     aiModelProvider: "gemini",
-    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK,
     aiTemperature: 30,
     aiMaxTokens: 8192,
   },
@@ -325,7 +325,7 @@ Response format rules:
 
 You will reply "I only assist with GRN Connect travel-tech integrations." to off-topic requests.`,
     aiModelProvider: "gemini",
-    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK,
     aiTemperature: 35,
     aiMaxTokens: 8192,
   },
@@ -409,7 +409,7 @@ Output format:
 
 Use the output immediately: paste the 4 agent prompts into your voice/SMS/website bot builders, import the knowledge.json as long-term memory, and run the onboarding script with the owner on Zoom.`,
     aiModelProvider: "gemini",
-    aiModelId: process.env.GEMINI_MODEL_FALLBACK || "gemini-2.0-flash",
+    aiModelId: process.env.GEMINI_MODEL_FALLBACK,
     aiTemperature: 35,
     aiMaxTokens: 8192,
   },
@@ -565,15 +565,13 @@ app.use((req, res, next) => {
     log(`NurseNest Lodging Partners available at /nursenest`);
   }
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Dev/Prod lockdown: production MUST NOT import or setup Vite. Only serve compiled assets.
   if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-
-    // Belt-and-suspenders SPA catch-all: placed AFTER serveStatic() so that
-    // express.static() handles /assets/* before this wildcard fires.
-    // Express 5 requires a named wildcard — bare "*" throws in path-to-regexp v8.
+    const publicDir = path.resolve(runtimeDirname, "public");
+    if (!fs.existsSync(publicDir)) {
+      throw new Error(`Production build missing: ${publicDir}. Run npm run build.`);
+    }
+    app.use(express.static(publicDir));
     app.get("/{*path}", (req: Request, res: Response, next: NextFunction) => {
       if (
         req.path.startsWith("/api") ||
@@ -582,11 +580,9 @@ app.use((req, res, next) => {
       ) {
         return next();
       }
-      // runtimeDirname = dist/ in the production bundle, so public/index.html is one level down
-      res.sendFile(
-        path.resolve(runtimeDirname, "public", "index.html"),
-        (err: any) => { if (err) next(err); }
-      );
+      res.sendFile(path.resolve(publicDir, "index.html"), (err: any) => {
+        if (err) next(err);
+      });
     });
   } else {
     const { setupVite } = await import("./vite");

@@ -43,6 +43,12 @@ import { buildBehavioralPrompt } from "../services/promptCompiler";
 
 const router = Router();
 
+/** Model ID for API URLs: strip "models/" prefix if present (env may include it). */
+function modelSlugForUrl(): string {
+  const raw = process.env.GEMINI_MODEL_FALLBACK || process.env.GEMINI_MODEL_ID || "";
+  return raw.startsWith("models/") ? raw.slice(7) : raw;
+}
+
 // ── Local schemas (extracted from routes.ts module scope) ─────────────────────
 const updateConfigSchema = z.object({
   phoneNumber: z.string().nullable().optional(),
@@ -646,24 +652,26 @@ const webhooksUpdateSchema = z.object({
         await updateCallerIdName(result.sid, friendlyName);
       }
       
-      // Add to Customer Care Messaging Service if specified or use default
-      const targetMsgService = messagingServiceSid || 'MGd16163508f2fcc1236a989f83664d9fb';
-      try {
-        await client.messaging.v1.services(targetMsgService)
-          .phoneNumbers
-          .create({ phoneNumberSid: result.sid });
-        console.log(`[Phone Setup] Added ${normalizedNumber} to Messaging Service ${targetMsgService}`);
-      } catch (msErr: any) {
-        console.warn(`[Phone Setup] Could not add to Messaging Service: ${msErr.message}`);
+      // Add to Messaging Service if specified in request or TWILIO_MS_REPLIT env
+      const targetMsgService = messagingServiceSid || process.env.TWILIO_MS_REPLIT;
+      if (targetMsgService) {
+        try {
+          await client.messaging.v1.services(targetMsgService)
+            .phoneNumbers
+            .create({ phoneNumberSid: result.sid });
+          console.log(`[Phone Setup] Added ${normalizedNumber} to Messaging Service ${targetMsgService}`);
+        } catch (msErr: any) {
+          console.warn(`[Phone Setup] Could not add to Messaging Service: ${msErr.message}`);
+        }
       }
-      
+
       res.json({
         sid: result.sid,
         phoneNumber: result.phoneNumber,
         friendlyName: friendlyName || 'AI Agent Trunk',
         webhooksConfigured: true,
         baseUrl,
-        messagingServiceSid: targetMsgService
+        ...(targetMsgService && { messagingServiceSid: targetMsgService }),
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -1418,8 +1426,13 @@ const webhooksUpdateSchema = z.object({
   router.post("/api/telephony/test/inbound", async (req, res) => {
     try {
       const { from } = req.body;
-      const testFrom = from || "+15550001234";
-      
+      const testFrom = from || process.env.TWILIO_DEV_TOOLING_NUM;
+      if (!testFrom) {
+        return res.status(400).json({
+          error: "Missing caller number. Set TWILIO_DEV_TOOLING_NUM or send 'from' in the request body.",
+        });
+      }
+
       const config = await storage.getTelephonyConfig();
       if (!config?.phoneNumber) {
         return res.status(400).json({ error: "No phone number provisioned. Please provision a number first." });
@@ -1463,8 +1476,13 @@ const webhooksUpdateSchema = z.object({
     try {
       const { type, from, body, callStatus } = req.body;
       const webhookType = type || 'sms';
-      const testFrom = from || '+15550001234';
-      
+      const testFrom = from || process.env.TWILIO_DEV_TOOLING_NUM;
+      if (!testFrom) {
+        return res.status(400).json({
+          error: "Missing caller number. Set TWILIO_DEV_TOOLING_NUM or send 'from' in the request body.",
+        });
+      }
+
       const config = await storage.getTelephonyConfig();
       if (!config?.phoneNumber) {
         return res.status(400).json({ error: "No phone number provisioned. Please provision a number first." });
@@ -1901,9 +1919,12 @@ const webhooksUpdateSchema = z.object({
         return res.status(500).json({ error: "Gemini API key not configured" });
       }
 
-      // Use Gemini 2.5 Flash TTS model
+      const slug = modelSlugForUrl();
+      if (!slug) {
+        return res.status(500).json({ error: "Gemini model not configured (GEMINI_MODEL_FALLBACK or GEMINI_MODEL_ID)" });
+      }
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${slug}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2212,7 +2233,7 @@ const webhooksUpdateSchema = z.object({
       
       // ========== ADMIN COMMANDS (Health Check & Repair Agent) ==========
       
-      // ========== CODING AGENT (Kimi K2) ==========
+      // ========== CODING AGENT ==========
       const codingKeywords = ['error:', 'exception', 'traceback', 'syntaxerror', 'typeerror', 'referenceerror', 
         'undefined is not', 'cannot read property', 'is not defined', 'unexpected token',
         'fix this code', 'debug this', 'why is this error', 'code help', 'coding help',
@@ -2483,7 +2504,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       
       const fullPersonality = `${agentPersonality}${customerContext}${taskContext}${onboardingContext}\n\nAddress the customer by name when appropriate. Be warm, helpful, and reference their projects if relevant to the conversation.`;
       
-      // Generate AI response using Kimi (primary) or Gemini (fallback)
+      // Generate AI response using Gemini
       let responseText = `Hi ${callerName}! Thank you for your message. An agent will respond shortly.`;
       
       // Get conversation history for context
@@ -2498,13 +2519,18 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         // Gemini SMS response
         try {
           const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          const modelId = process.env.GEMINI_MODEL_FALLBACK || process.env.GEMINI_MODEL_ID;
+          const model = modelId ? genAI.getGenerativeModel({ model: modelId }) : null;
+          if (!model) {
+            console.error('[SMS Webhook] Gemini model not configured');
+          } else {
           const historyText = history.map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`).join('\n');
           const prompt = `${fullPersonality}\n\nRespond to this SMS conversation naturally and helpfully. Keep responses under 160 characters for SMS.\n\nConversation history:\n${historyText}\n\nCustomer's latest message: ${Body}\n\nRespond as ${agentName}:`;
           const result = await model.generateContent(prompt);
           responseText = result.response.text() || responseText;
           if (responseText.length > 160) {
             responseText = responseText.substring(0, 157) + '...';
+          }
           }
         } catch (geminiError) {
           console.error('[SMS Webhook] Gemini error:', geminiError);
@@ -2721,11 +2747,14 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       // Generate AI response using Gemini (sole provider)
       if (SpeechResult && process.env.GEMINI_API_KEY) {
         try {
+          const modelId = process.env.GEMINI_MODEL_FALLBACK || process.env.GEMINI_MODEL_ID;
+          if (modelId) {
           const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          const model = genAI.getGenerativeModel({ model: modelId });
           const prompt = `You are a helpful AI phone assistant for Gateway Global. Respond naturally to this caller's request. Keep your response under 200 words for phone readability.\n\nCaller said: "${SpeechResult}"\n\nRespond helpfully:`;
           const result = await model.generateContent(prompt);
           responseText = result.response.text() || responseText;
+          }
         } catch (geminiError) {
           console.error('[Voice Gather] Gemini error:', geminiError);
         }
@@ -3119,7 +3148,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       }
       
       res.json({
-        model: agent.voiceModel || 'gemini-2.5-flash-native-audio-preview',
+        model: agent.voiceModel || process.env.GEMINI_MODEL_ID,
         voice: agent.voiceName || 'Puck',
         role: agent.voiceRole || 'AI Business Assistant',
         companyName: agent.voiceCompanyName || 'AI Biz Bot',
@@ -3138,15 +3167,8 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       const { agentId } = req.params;
       const { model, voice, role, companyName, systemPrompt, voicePersona } = req.body;
       
-      // Validate inputs
-      const validModels = [
-        'gemini-2.5-flash-native-audio-preview-12-2025',
-        'gemini-2.5-flash-native-audio-preview',
-        'gemini-2.5-flash-latest',
-        'gemini-2.0-flash-native-audio',
-      ];
-      
-      if (model && !validModels.includes(model)) {
+      const allowedModels = [process.env.GEMINI_MODEL_ID, process.env.GEMINI_MODEL_FALLBACK].filter(Boolean) as string[];
+      if (model && allowedModels.length > 0 && !allowedModels.includes(model)) {
         return res.status(400).json({ error: "Invalid model specified" });
       }
       
@@ -3186,9 +3208,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   // Get available voices for a model
   router.get("/api/voice/models/:modelId/voices", (req, res) => {
     const { modelId } = req.params;
-    
+    const defaultModelSlug = (process.env.GEMINI_MODEL_ID || "").replace(/^models\//, "");
     const modelVoices: Record<string, Array<{ id: string; name: string; gender: string; description: string }>> = {
-      'gemini-2.5-flash-native-audio-preview-12-2025': [
+      [defaultModelSlug]: [
         { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
         { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
         { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
@@ -3197,32 +3219,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
         { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
         { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
-      ],
-      'gemini-2.5-flash-native-audio-preview': [
-        { id: 'Aoede', name: 'Aoede', gender: 'female', description: 'Warm and expressive' },
-        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
-        { id: 'Leda', name: 'Leda', gender: 'female', description: 'Soft and soothing' },
-        { id: 'Zephyr', name: 'Zephyr', gender: 'female', description: 'Bright and energetic' },
-        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
-        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
-        { id: 'Orus', name: 'Orus', gender: 'male', description: 'Professional and clear' },
-        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
-      ],
-      'gemini-2.5-flash-latest': [
-        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
-        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
-        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
-        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
-      ],
-      'gemini-2.0-flash-native-audio': [
-        { id: 'Puck', name: 'Puck', gender: 'male', description: 'Friendly and approachable' },
-        { id: 'Charon', name: 'Charon', gender: 'male', description: 'Deep and authoritative' },
-        { id: 'Kore', name: 'Kore', gender: 'female', description: 'Clear and articulate' },
-        { id: 'Fenrir', name: 'Fenrir', gender: 'male', description: 'Strong and confident' },
       ],
     };
-    
-    const voices = modelVoices[modelId] || modelVoices['gemini-2.5-flash-native-audio-preview-12-2025'];
+    const voices = modelVoices[modelId] || modelVoices[defaultModelSlug] || [];
     res.json({ voices });
   });
   
@@ -3242,7 +3241,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       // Get agent configuration
       let config: any = {
         agentId: agentId || 'default',
-        model: 'gemini-2.5-flash-native-audio-preview',
+        model: process.env.GEMINI_MODEL_ID,
         voice: 'Puck',
         systemPrompt: 'You are a helpful AI assistant for small businesses.'
       };

@@ -46,6 +46,10 @@ interface PlaceData {
 interface WebsitePreviewProps {
   place: PlaceData;
   onBack: () => void;
+  /** Server-resolved hero image URL (e.g. /api/places/photo-proxy/:placeId). Preferred over place.photos when present. */
+  heroImageUrl?: string | null;
+  placeId?: string | null;
+  siteConfigId?: string | null;
 }
 
 function getPhotoUrl(photo: any, maxWidth = 1200): string | null {
@@ -91,7 +95,7 @@ interface ChatMessage {
   content: string;
 }
 
-export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
+export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageUrlProp, placeId: _placeId, siteConfigId: _siteConfigId }: WebsitePreviewProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
@@ -286,7 +290,8 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
     ],
   }), [place.name, agentRole]);
 
-  const heroImage = place.photos && place.photos.length > 0 ? getPhotoUrl(place.photos[0]) : null;
+  const heroFromPlace = place.photos && place.photos.length > 0 ? getPhotoUrl(place.photos[0]) : null;
+  const heroImageUrl = heroImageUrlProp ?? heroFromPlace;
   const galleryImages = (place.photos || []).slice(1, 4).map(p => getPhotoUrl(p, 600)).filter(Boolean) as string[];
   const tagline = generateTagline(place);
   const description = generateDescription(place);
@@ -301,7 +306,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}>
-      <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-100 px-3 sm:px-6 py-3 flex justify-between items-center gap-2">
+      <nav className="sticky top-0 z-40 bg-slate-50/80 backdrop-blur-md border-b border-slate-100 px-3 sm:px-6 py-3 flex justify-between items-center gap-2">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <button onClick={onBack} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0" data-testid="button-preview-back">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
@@ -334,17 +339,25 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
 
       <main>
         <div className="relative h-[85vh] min-h-[600px] w-full bg-slate-900 text-white overflow-hidden rounded-b-[4rem] shadow-2xl group">
-          <div className="absolute inset-0 select-none">
-            {heroImage ? (
-              <img src={heroImage} alt={place.name} className="w-full h-full object-cover transition-transform duration-[2s] ease-out scale-105 group-hover:scale-110 opacity-60" />
+          <div className="absolute inset-0 select-none z-0">
+            {heroImageUrl ? (
+              <div
+                className="w-full h-full bg-slate-900"
+                style={{
+                  backgroundImage: `url(${heroImageUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900" />
             )}
-            <div className="absolute inset-0 bg-gradient-to-b from-slate-900/30 via-slate-900/60 to-slate-900" />
+            <div className="absolute inset-0 bg-slate-950/70" aria-hidden />
+            <div className="absolute inset-0 bg-gradient-to-b from-slate-900/30 via-slate-900/60 to-slate-900" aria-hidden />
           </div>
           <div className="relative h-full max-w-7xl mx-auto px-6 flex flex-col items-center justify-center text-center z-10">
             <div className="flex flex-col items-center">
-              <div className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-white/10 text-white/90 text-sm font-medium mb-8 border border-white/20 backdrop-blur-md shadow-lg">
+              <div className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-slate-50/10 text-white/90 text-sm font-medium mb-8 border border-white/20 backdrop-blur-md shadow-lg">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                 {tagline}
               </div>
@@ -357,7 +370,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
             </div>
             <div className="w-full mt-4 flex flex-col items-center">
               <div className="flex flex-col sm:flex-row gap-5 w-full sm:w-auto">
-                <button onClick={() => { setIsChatOpen(true); if (!isVoiceMode) toggleVoiceMode(); }} className="group relative flex items-center justify-center gap-3 px-8 py-4 bg-white text-slate-900 rounded-full font-bold transition-all hover:scale-105 hover:shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] active:scale-95" data-testid="button-preview-voice">
+                <button onClick={() => { setIsChatOpen(true); if (!isVoiceMode) toggleVoiceMode(); }} className="group relative flex items-center justify-center gap-3 px-8 py-4 bg-slate-50 text-slate-900 rounded-full font-bold transition-all hover:scale-105 hover:shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] active:scale-95" data-testid="button-preview-voice">
                   <span className="relative z-10 flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-blue-600">
                       <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
@@ -368,7 +381,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                 </button>
                 <button
                   onClick={() => { setIsChatOpen(true); setIsVoiceMode(false); }}
-                  className="flex items-center justify-center gap-2 px-8 py-4 bg-white/5 hover:bg-white/10 text-white rounded-full font-semibold transition-all backdrop-blur-sm border border-white/10 hover:border-white/20"
+                  className="flex items-center justify-center gap-2 px-8 py-4 bg-slate-50/5 hover:bg-slate-50/10 text-white rounded-full font-semibold transition-all backdrop-blur-sm border border-white/10 hover:border-white/20"
                   data-testid="button-preview-chat"
                 >
                   <span>Chat Concierge</span>
@@ -383,7 +396,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
 
         <div className="max-w-7xl mx-auto px-6 -mt-20 relative z-20 pb-20">
           <div className="grid grid-cols-1 md:grid-cols-4 md:grid-rows-2 gap-6 auto-rows-min">
-            <div className="md:col-span-2 bg-white p-8 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col justify-between">
+            <div className="md:col-span-2 bg-slate-50 p-8 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -398,7 +411,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
               {types.length > 0 && (
                 <div className="mt-8 flex flex-wrap gap-2">
                   {types.map((t, i) => (
-                    <span key={i} className="px-4 py-2 bg-slate-50 text-slate-700 text-sm font-medium rounded-xl border border-slate-100 capitalize">
+                    <span key={i} className="px-4 py-2 bg-slate-50 text-slate-700 text-sm font-medium rounded-sui border border-slate-100 capitalize">
                       {t.replace(/_/g, ' ')}
                     </span>
                   ))}
@@ -458,7 +471,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                     </div>
                   )}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
-                  <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-md px-4 py-2 rounded-full text-xs font-bold text-slate-900 shadow-lg">
+                  <div className="absolute bottom-4 right-4 bg-slate-50/90 backdrop-blur-md px-4 py-2 rounded-full text-xs font-bold text-slate-900 shadow-lg">
                     See Gallery
                   </div>
                 </div>
@@ -466,7 +479,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
             )}
 
             {mapsApiKey && (place.place_id || place.geometry) && (
-              <div className="md:col-span-2 bg-white rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col overflow-hidden" data-testid="section-location">
+              <div className="md:col-span-2 bg-slate-50 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col overflow-hidden" data-testid="section-location">
                 <div className="p-8 pb-0">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
@@ -589,7 +602,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
               const activeAmenities = amenities.filter(a => place[a.key] === true);
               if (activeAmenities.length === 0) return null;
               return (
-                <div className="md:col-span-2 bg-white p-8 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100" data-testid="section-amenities">
+                <div className="md:col-span-2 bg-slate-50 p-8 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100" data-testid="section-amenities">
                   <div className="flex items-center gap-3 mb-6">
                     <div className="w-10 h-10 rounded-full bg-violet-50 text-violet-600 flex items-center justify-center">
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
@@ -600,7 +613,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                   </div>
                   <div className="flex flex-wrap gap-3">
                     {activeAmenities.map(a => (
-                      <div key={a.key} className="flex items-center gap-2 px-4 py-2.5 bg-violet-50 text-violet-700 rounded-xl text-sm font-medium border border-violet-100">
+                      <div key={a.key} className="flex items-center gap-2 px-4 py-2.5 bg-violet-50 text-violet-700 rounded-sui text-sm font-medium border border-violet-100">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                           <path strokeLinecap="round" strokeLinejoin="round" d={a.icon} />
                         </svg>
@@ -613,7 +626,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
             })()}
 
             {reviews.length > 0 && (
-              <div className="md:col-span-2 bg-white p-8 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col">
+              <div className="md:col-span-2 bg-slate-50 p-8 rounded-[2rem] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col">
                 <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
                   <span className="text-amber-500">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
@@ -672,7 +685,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
 
       {isAdminOpen && (
         <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex justify-end">
-          <div className="w-full max-w-2xl bg-white h-full shadow-2xl flex flex-col">
+          <div className="w-full max-w-2xl bg-slate-50 h-full shadow-2xl flex flex-col">
             <div className="p-6 bg-slate-900 text-white shrink-0">
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -726,7 +739,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
 
                     return (
                       <>
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="bg-slate-50 rounded-sui shadow-sm border border-slate-200 overflow-hidden">
                           <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-emerald-500" />
                             <span className="text-sm font-bold text-emerald-800">Google Places &mdash; Active on Website</span>
@@ -758,7 +771,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                                   <td className="p-3 w-14">
                                     <label className="relative inline-flex items-center cursor-pointer">
                                       <input type="checkbox" defaultChecked className="sr-only peer" />
-                                      <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600" />
+                                      <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-50 after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600" />
                                     </label>
                                   </td>
                                   <td className="p-3 font-medium text-slate-700 font-mono text-xs">{field}</td>
@@ -775,7 +788,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                           </table>
                         </div>
 
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="bg-slate-50 rounded-sui shadow-sm border border-slate-200 overflow-hidden">
                           <div className="px-4 py-3 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-blue-500" />
                             <span className="text-sm font-bold text-blue-800">Google Places &mdash; Additional Fields Available</span>
@@ -819,7 +832,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                         </div>
 
                         {hasAnyAmenity && (
-                          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                          <div className="bg-slate-50 rounded-sui shadow-sm border border-slate-200 overflow-hidden">
                             <div className="px-4 py-3 bg-violet-50 border-b border-violet-100 flex items-center gap-2">
                               <div className="w-2 h-2 rounded-full bg-violet-500" />
                               <span className="text-sm font-bold text-violet-800">Amenities &amp; Services</span>
@@ -848,7 +861,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                           </div>
                         )}
 
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="bg-slate-50 rounded-sui shadow-sm border border-slate-200 overflow-hidden">
                           <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-amber-500" />
                             <span className="text-sm font-bold text-amber-800">Map Views</span>
@@ -873,7 +886,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                           </div>
                         </div>
 
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div className="bg-slate-50 rounded-sui shadow-sm border border-slate-200 overflow-hidden">
                           <div className="px-4 py-3 bg-sky-50 border-b border-sky-100 flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-sky-500" />
                             <span className="text-sm font-bold text-sky-800">Weather &mdash; Google Maps Grounding</span>
@@ -919,7 +932,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
 
               {adminTab === 'reviews' && (
                 <div className="space-y-4">
-                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="bg-slate-50 rounded-sui shadow-sm border border-slate-200 overflow-hidden">
                     <div className="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-amber-500" />
@@ -970,7 +983,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
 
               {adminTab === 'ai' && (
                 <div className="space-y-4">
-                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                  <div className="bg-slate-50 rounded-sui shadow-sm border border-slate-200 overflow-hidden">
                     <div className="px-4 py-3 bg-gradient-to-r from-indigo-50 to-violet-50 border-b border-indigo-100 flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-indigo-500" />
                       <span className="text-sm font-bold text-indigo-800">AI-Powered Features</span>
@@ -984,7 +997,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                         { title: 'Weather Widget', desc: 'Real-time weather conditions and forecast for the business location using Google Maps Grounding.', icon: 'M2.25 15a4.5 4.5 0 004.5 4.5H18a3.75 3.75 0 001.332-7.257 3 3 0 00-3.758-3.848 5.25 5.25 0 00-10.233 2.33A4.502 4.502 0 002.25 15z', source: 'Google Maps Grounding Lite', status: place.geometry ? 'Can Generate' : 'Needs Location' },
                         { title: '5 Most Recent Reviews', desc: 'Displays the latest 5 customer reviews sorted by recency with full text and rating.', icon: 'M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z', source: 'Google Places Reviews API', status: reviews.length > 0 ? `${Math.min(5, reviews.length)} Available` : 'Needs Reviews' },
                       ].map(feature => (
-                        <div key={feature.title} className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                        <div key={feature.title} className="p-4 rounded-sui bg-slate-50 border border-slate-100">
                           <div className="flex items-start gap-3">
                             <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
                               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -1022,7 +1035,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                   </div>
 
                   {place.editorial_summary && (
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="bg-slate-50 rounded-sui shadow-sm border border-slate-200 overflow-hidden">
                       <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full bg-emerald-500" />
                         <span className="text-sm font-bold text-emerald-800">Google Editorial Summary</span>
@@ -1065,7 +1078,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
       {/* OLD CHAT UI REMOVED - Now using ConciergePanel above */}
       {false && isChatOpen && (
         <div
-          className={`fixed z-50 flex flex-col overflow-hidden bg-white shadow-2xl border border-slate-200 transition-all duration-300 ${
+          className={`fixed z-50 flex flex-col overflow-hidden bg-slate-50 shadow-2xl border border-slate-200 transition-all duration-300 ${
             chatLayoutMode === 'fullscreen'
               ? 'inset-0 w-full h-full rounded-none border-none'
               : chatLayoutMode === 'fixed'
@@ -1122,21 +1135,21 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
           </div>
           {isChatMenuOpen && (
             <div className="absolute inset-0 z-50 bg-slate-50 animate-in slide-in-from-right duration-200 flex flex-col">
-              <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-white shadow-sm">
+              <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shadow-sm">
                 <h3 className="font-bold text-slate-800 text-lg">System Options</h3>
                 <button onClick={() => setIsChatMenuOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                <button onClick={() => { setIsVoiceMode(false); setIsChatMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all text-left">
+                <button onClick={() => { setIsVoiceMode(false); setIsChatMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 bg-slate-50 border border-slate-200 rounded-sui shadow-sm hover:shadow-md transition-all text-left">
                   <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
                   </div>
                   <div><span className="block font-bold text-slate-900 text-sm">Text Concierge</span><span className="text-[10px] text-slate-500 uppercase font-black tracking-widest">Standard Chat</span></div>
                 </button>
-                <button onClick={() => { setIsVoiceMode(true); setIsChatMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 bg-slate-900 border border-slate-900 rounded-xl shadow-md hover:bg-slate-800 transition-all text-left">
-                  <div className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center">
+                <button onClick={() => { setIsVoiceMode(true); setIsChatMenuOpen(false); }} className="w-full flex items-center gap-4 p-4 bg-slate-900 border border-slate-900 rounded-sui shadow-md hover:bg-slate-800 transition-all text-left">
+                  <div className="w-10 h-10 rounded-full bg-slate-50/10 text-white flex items-center justify-center">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" /></svg>
                   </div>
                   <div><span className="block font-bold text-white text-sm">Voice Concierge</span><span className="text-[10px] text-blue-400 uppercase font-black tracking-widest">Push to Talk</span></div>
@@ -1153,7 +1166,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
               <div className="h-full flex flex-col bg-[#0a0f1c] text-white -m-4 rounded-b-2xl overflow-hidden">
                 <div className="p-5 border-b border-white/10 flex justify-between items-center bg-[#0d1321] shrink-0">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/40">
+                    <div className="w-10 h-10 rounded-sui bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-900/40">
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
                       </svg>
@@ -1165,7 +1178,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                   </div>
                   <button
                     onClick={toggleVoiceMode}
-                    className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border border-white/10"
+                    className="px-4 py-2 bg-slate-50/5 hover:bg-slate-50/10 rounded-full text-xs font-bold uppercase tracking-widest transition-colors border border-white/10"
                   >
                     Text Mode
                   </button>
@@ -1214,13 +1227,13 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                     className={`w-full py-7 rounded-[2.5rem] font-black text-sm uppercase tracking-[0.25em] transition-all flex flex-col items-center justify-center gap-2 shadow-2xl touch-none select-none ${
                       isPTTRecording
                         ? 'bg-red-600 text-white scale-[0.98] shadow-red-900/40 ring-4 ring-red-600/20'
-                        : 'bg-white text-slate-900 hover:bg-slate-100 shadow-slate-900/20'
+                        : 'bg-slate-50 text-slate-900 hover:bg-slate-100 shadow-slate-900/20'
                     }`}
                     data-testid="button-voice-ptt"
                   >
                     {isPTTRecording ? (
                       <>
-                        <span className="w-3 h-3 bg-white rounded-full animate-ping" />
+                        <span className="w-3 h-3 bg-slate-50 rounded-full animate-ping" />
                         Capturing...
                       </>
                     ) : (
@@ -1248,7 +1261,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                     <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${
                       msg.role === 'user' 
                         ? 'bg-blue-600 text-white rounded-br-none' 
-                        : 'bg-white text-slate-700 border border-slate-100 rounded-tl-none'
+                        : 'bg-slate-50 text-slate-700 border border-slate-100 rounded-tl-none'
                     }`}>
                       {msg.content}
                     </div>
@@ -1256,7 +1269,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
                 ))}
                 {chatLoading && (
                   <div className="flex justify-start">
-                    <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm bg-white text-slate-400 shadow-sm border border-slate-100 rounded-tl-none flex items-center gap-1">
+                    <div className="max-w-[80%] px-4 py-2.5 rounded-2xl text-sm bg-slate-50 text-slate-400 shadow-sm border border-slate-100 rounded-tl-none flex items-center gap-1">
                       <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                       <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                       <span className="w-2 h-2 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
@@ -1268,7 +1281,7 @@ export default function WebsitePreview({ place, onBack }: WebsitePreviewProps) {
             )}
           </div>
           {!isVoiceMode && (
-            <div className="p-4 bg-white border-t border-slate-100 shrink-0">
+            <div className="p-4 bg-slate-50 border-t border-slate-100 shrink-0">
               <form onSubmit={(e) => { e.preventDefault(); sendChatMessage(); }} className="flex gap-2">
                 <input
                   type="text"

@@ -4,7 +4,6 @@ import { type Server } from "http";
 import viteConfig from "../vite.config";
 import fs from "fs";
 import path from "path";
-import { nanoid } from "nanoid";
 
 const viteLogger = createLogger();
 
@@ -15,14 +14,22 @@ export async function setupVite(server: Server, app: Express) {
     allowedHosts: true as const,
   };
 
+  // Resolve async config so root, plugins, etc. are applied (spreading the raw export would miss them)
+  const resolvedConfig =
+    typeof viteConfig === "function"
+      ? await (viteConfig as (env: { mode: string; command?: string }) => Promise<object>)({
+          mode: "development",
+          command: "serve",
+        })
+      : viteConfig;
+
   const vite = await createViteServer({
-    ...viteConfig,
+    ...resolvedConfig,
     configFile: false,
     customLogger: {
       ...viteLogger,
       error: (msg, options) => {
         viteLogger.error(msg, options);
-        process.exit(1);
       },
     },
     server: serverOptions,
@@ -33,6 +40,11 @@ export async function setupVite(server: Server, app: Express) {
 
   app.use("/{*path}", async (req, res, next) => {
     const url = req.originalUrl;
+    const p = req.path;
+    // Never serve HTML for source or asset paths — let Vite (or next) handle them
+    if (p.startsWith("/src/") || p.startsWith("/@") || p.startsWith("/node_modules/") || /\.[a-zA-Z0-9]+$/.test(p)) {
+      return next();
+    }
 
     try {
       const clientTemplate = path.resolve(
@@ -42,12 +54,7 @@ export async function setupVite(server: Server, app: Express) {
         "index.html",
       );
 
-      // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
-      template = template.replace(
-        `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`,
-      );
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
