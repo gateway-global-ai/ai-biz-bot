@@ -8,9 +8,11 @@ import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding
 import knowledgeRoutes from "./routes/knowledge-routes";
 import businessRoutes from "./routes/businessRoutes";
 import siteConfigRoutes from "./routes/siteConfigRoutes";
+import cloudbedsRoutes from "./routes/cloudbedsRoutes";
 import { claimRoutes, handleClaimCheckoutCompleted } from "./routes/claimRoutes";
 import ingestPlanRoutes from "./routes/ingestPlanRoutes";
 import bailRescueRoutes from "./routes/bailRescueRoutes";
+import shareRoutes from "./routes/shareRoutes";
 import agentResearchRoutes from "./routes/agentResearch";
 import novaSovereignRouter from "./routes/novaSovereignRoutes";
 import onboardingRoutes from "./routes/onboardingRoutes";
@@ -27,6 +29,8 @@ import workspaceRoutes from "./routes/workspaceRoutes"; // Google Workspace + Dr
 import intelligenceRoutes from "./routes/intelligenceRoutes"; // Business Intelligence: SerpAPI data mining pipeline
 import agentSystemRoutes from "./routes/agentSystemRoutes"; // DISC + Agents + Orgs + Projects + BotTemplates
 import chatRoutes from "./routes/chatRoutes";           // Website Chat + Chat + Conversations
+import investorDemoRoutes from "./routes/investorDemoRoutes"; // Investor report SMS gate + view tracking
+import aiStudioRoutes from "./routes/aiStudioRoutes"; // AI Studio OAuth/Webhook + PTT session initiation
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -41,7 +45,9 @@ import {
   updateCallerIdName,
   getTwilioFromPhoneNumber,
   getTwilioClient,
-  createSubAccountAndProvisionNumber
+  createSubAccountAndProvisionNumber,
+  sendVerification,
+  checkVerification,
 } from "./twilio";
 import { insertTelephonyConfigSchema, insertCallLogSchema, insertAgentSchema, insertCustomerSchema, DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, PLAN_LIMITS, type DiscRanking, type DiscAssessmentResult } from "@shared/schema";
 import { z } from "zod";
@@ -67,7 +73,7 @@ import { db } from "./db";
 import { workspaceConfigurations, analyticsLogs } from "@shared/schema";
 import { logVoiceUsage, hasEnergyBalance, getEnergyBalance, getVoiceUsageLogs } from "./services/energy-monitor";
 import { eq } from "drizzle-orm";
-
+import { getServerMapsApiKey } from "./config/mapsApiKey";
 
 // schemas moved to telephonyRoutes.ts
 
@@ -134,6 +140,10 @@ export async function registerRoutes(
 
   // Business Intelligence: SerpAPI data mining pipeline (Sage / Data Miner)
   app.use('/api/intelligence', intelligenceRoutes);
+
+  app.use('/api/investor-demo', investorDemoRoutes);
+
+  app.use('/api/ai-studio', aiStudioRoutes);
 
   // Agent System: DISC, Agents, Organizations, Projects, BotTemplates
   app.use(agentSystemRoutes);
@@ -305,10 +315,6 @@ export async function registerRoutes(
       const { phone, businessName, businessAddress, placeId, placeData } = parsed.data;
       const normalizedPhone = normalizePhone(phone);
 
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-      await storage.createOtpCode({ phone: normalizedPhone, code, expiresAt });
-
       const magicToken = crypto.randomBytes(32).toString("hex");
       const lead = await storage.createDemoLead({
         phone: normalizedPhone,
@@ -346,14 +352,7 @@ export async function registerRoutes(
         });
       }
 
-      const fromNumber = await getTwilioFromPhoneNumber();
-      if (fromNumber) {
-        await sendSms(
-          normalizedPhone,
-          `Your Gateway verification code is: ${code}\n\nThis code expires in 5 minutes.`,
-          fromNumber
-        );
-      }
+      await sendVerification(normalizedPhone);
 
       res.json({
         success: true,
@@ -381,11 +380,10 @@ export async function registerRoutes(
       const { leadId, phone, code } = parsed.data;
       const normalizedPhone = normalizePhone(phone);
 
-      const otpRecord = await storage.getValidOtpCode(normalizedPhone, code);
-      if (!otpRecord) {
+      const verifyResult = await checkVerification(normalizedPhone, code);
+      if (!verifyResult.valid) {
         return res.status(401).json({ error: "Invalid or expired verification code" });
       }
-      await storage.markOtpUsed(otpRecord.id);
 
       let account = await storage.getCustomerAccountByPhone(normalizedPhone);
       if (!account) {
@@ -1033,29 +1031,60 @@ export async function registerRoutes(
 
   // Photo proxy: fetch a business hero image by placeId (keeps API key server-side)
   app.get("/api/places/photo-proxy/:placeId", async (req, res) => {
-    const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+    const apiKey = getServerMapsApiKey() || process.env.GOOGLE_CLOUD_API_KEY;
     if (!apiKey) return res.status(500).send("API key not configured");
     const { placeId } = req.params;
     const maxWidth = Math.min(Number(req.query.maxWidth) || 800, 1200);
 
+    const servePhoto = async (photoUrl: string): Promise<boolean> => {
+      const photoRes = await fetch(photoUrl);
+      if (!photoRes.ok) return false;
+      res.setHeader("Content-Type", photoRes.headers.get("content-type") || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.end(Buffer.from(await photoRes.arrayBuffer()));
+      return true;
+    };
+
     try {
-      // Fetch photo_reference from legacy Places Details API
+      // ── Primary: New Places API v1 (places.googleapis.com) ──────────────────
+      let served = false;
+      try {
+        const newApiUrl = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}?fields=photos&key=${apiKey}`;
+        const newDetailsRes = await fetch(newApiUrl, {
+          headers: { "X-Goog-FieldMask": "photos" },
+        });
+        if (newDetailsRes.ok) {
+          const newData = await newDetailsRes.json() as any;
+          const photoName: string | undefined = newData?.photos?.[0]?.name;
+          if (photoName) {
+            const mediaUrl = `https://places.googleapis.com/v1/${photoName}/media?maxWidthPx=${maxWidth}&key=${apiKey}`;
+            served = await servePhoto(mediaUrl);
+          }
+        }
+      } catch (newApiErr: any) {
+        console.error("[photo-proxy] New Places API failed:", newApiErr?.message);
+      }
+
+      if (served) return;
+
+      // ── Fallback: Legacy Places Details + Photo API ──────────────────────────
       const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=photos&key=${apiKey}`;
       const detailsRes = await fetch(detailsUrl);
       const detailsData = await detailsRes.json() as any;
       const photoRef = detailsData?.result?.photos?.[0]?.photo_reference;
-      if (!photoRef) return res.status(404).send("No photo available");
+      if (!photoRef) {
+        console.error(`[photo-proxy] No photo available for placeId=${placeId}. Status: ${detailsData?.status}`);
+        return res.status(404).send("No photo available");
+      }
 
-      // Redirect through the Places Photo API (Google handles caching)
-      const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?photoreference=${encodeURIComponent(photoRef)}&maxwidth=${maxWidth}&key=${apiKey}`;
-      const photoRes = await fetch(photoUrl);
-      if (!photoRes.ok) return res.status(502).send("Photo fetch failed");
-
-      res.setHeader("Content-Type", photoRes.headers.get("content-type") || "image/jpeg");
-      res.setHeader("Cache-Control", "public, max-age=86400"); // 24h cache
-      const buffer = await photoRes.arrayBuffer();
-      res.end(Buffer.from(buffer));
+      const legacyPhotoUrl = `https://maps.googleapis.com/maps/api/place/photo?photoreference=${encodeURIComponent(photoRef)}&maxwidth=${maxWidth}&key=${apiKey}`;
+      const ok = await servePhoto(legacyPhotoUrl);
+      if (!ok) {
+        console.error(`[photo-proxy] Legacy photo fetch failed for placeId=${placeId}`);
+        res.status(502).send("Photo fetch failed");
+      }
     } catch (err: any) {
+      console.error("[photo-proxy] Unhandled error:", err?.message);
       res.status(500).send(err.message);
     }
   });
@@ -2147,6 +2176,8 @@ ${businessContext}`;
   app.use("/api/knowledge", knowledgeRoutes);
   app.use("/api/business", businessRoutes);
   app.use("/api/site-configs", siteConfigRoutes);
+  app.use("/api/share", shareRoutes);
+  app.use("/api/cloudbeds", cloudbedsRoutes);
   app.use("/api/onboarding", onboardingRoutes);
   app.use("/api/customer/onboarding", customerOnboardingRoutes);
 

@@ -1,11 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { storage } from "./storage";
-import { sendSms, getTwilioFromPhoneNumber } from "./twilio";
+import { sendVerification, checkVerification } from "./twilio";
 import crypto from "crypto";
-
-function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
 
 function generateSessionToken(): string {
   return crypto.randomBytes(32).toString("hex");
@@ -33,26 +29,7 @@ export async function customerSendOtp(req: Request, res: Response): Promise<void
 
     const normalizedPhone = normalizePhone(phone);
 
-    const code = generateOtp();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-    await storage.createOtpCode({
-      phone: normalizedPhone,
-      code,
-      expiresAt,
-    });
-
-    const fromNumber = await getTwilioFromPhoneNumber();
-    if (!fromNumber) {
-      res.status(500).json({ error: "SMS service not configured" });
-      return;
-    }
-
-    await sendSms(
-      normalizedPhone,
-      `Your Gateway login code is: ${code}\n\nThis code expires in 5 minutes.`,
-      fromNumber
-    );
+    await sendVerification(normalizedPhone);
 
     res.json({
       success: true,
@@ -76,13 +53,11 @@ export async function customerVerifyOtp(req: Request, res: Response): Promise<vo
 
     const normalizedPhone = normalizePhone(phone);
 
-    const otpRecord = await storage.getValidOtpCode(normalizedPhone, code);
-    if (!otpRecord) {
+    const verifyResult = await checkVerification(normalizedPhone, code);
+    if (!verifyResult.valid) {
       res.status(401).json({ error: "Invalid or expired verification code" });
       return;
     }
-
-    await storage.markOtpUsed(otpRecord.id);
 
     let account = await storage.getCustomerAccountByPhone(normalizedPhone);
     if (!account) {

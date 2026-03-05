@@ -244,6 +244,56 @@ export async function getIncomingPhoneNumbers(): Promise<any[]> {
   }
 }
 
+// ── Twilio Verify API ──────────────────────────────────────────────────────────
+// Extracts the VA* SID from TWILIO_VERIFY_SERVICE_URL_SID (handles both a raw
+// SID string "VA…" and a full URL "https://verify.twilio.com/v2/Services/VA…").
+
+function getVerifyServiceSid(): string {
+  const raw = process.env.TWILIO_VERIFY_SERVICE_URL_SID || '';
+  const match = raw.match(/(VA[a-f0-9]{32})/i);
+  if (match) return match[1];
+  if (raw.toUpperCase().startsWith('VA')) return raw;
+  throw new Error(
+    'TWILIO_VERIFY_SERVICE_URL_SID is not configured or does not contain a valid VA* SID.'
+  );
+}
+
+/**
+ * Send a Twilio Verify SMS to the given E.164 phone number.
+ * Twilio generates the code, handles delivery, retry, and expiry.
+ * Use checkVerification() to validate the code the user entered.
+ */
+export async function sendVerification(to: string): Promise<{ status: string; sid: string }> {
+  if (process.env.MOCK_TWILIO_SMS === 'true') {
+    console.log(`\n--- MOCK VERIFY SEND ---\nTO: ${to}\n------------------------\n`);
+    return { status: 'pending', sid: `mock_verify_${Date.now()}` };
+  }
+  const client = await getTwilioClient();
+  const v = await client.verify.v2
+    .services(getVerifyServiceSid())
+    .verifications.create({ to, channel: 'sms' });
+  console.log(`[Verify] Sent | to=${to} | status=${v.status} | sid=${v.sid}`);
+  return { status: v.status, sid: v.sid };
+}
+
+/**
+ * Check a Twilio Verify code entered by the user.
+ * Returns { valid: true } when the code is correct and the verification is approved.
+ */
+export async function checkVerification(
+  to: string,
+  code: string
+): Promise<{ valid: boolean; status: string }> {
+  const client = await getTwilioClient();
+  const check = await client.verify.v2
+    .services(getVerifyServiceSid())
+    .verificationChecks.create({ to, code });
+  console.log(`[Verify] Check | to=${to} | status=${check.status}`);
+  return { valid: check.status === 'approved', status: check.status };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function sendSms(to: string, body: string, from?: string): Promise<{ sid: string }> {
   // Check for mock mode
   if (process.env.MOCK_TWILIO_SMS === 'true') {

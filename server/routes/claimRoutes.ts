@@ -18,9 +18,9 @@
 import { Router, Request, Response } from "express";
 import crypto from "crypto";
 import { db } from "../db";
-import { siteConfigs, customerAccounts, otpCodes } from "@shared/schema";
+import { siteConfigs, customerAccounts } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
-import { sendSms, getTwilioFromPhoneNumber } from "../twilio";
+import { sendSms, getTwilioFromPhoneNumber, sendVerification, checkVerification } from "../twilio";
 import { getStripeClient, STRIPE_PRICE_IDS } from "../stripeClient";
 import { storage } from "../storage";
 
@@ -33,10 +33,6 @@ function normalizePhone(phone: string): string {
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
   return `+${digits}`;
-}
-
-function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 function buildClaimUrl(req: Request, token: string): string {
@@ -272,27 +268,10 @@ router.post("/api/claim/:token/send-otp", async (req: Request, res: Response) =>
       return res.status(400).json({ error: "No phone number on file for this invite" });
     }
 
-    const code = generateOtp();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
-
-    await storage.createOtpCode({
-      phone: site.assignedToPhone,
-      code,
-      expiresAt,
-    });
-
-    const fromNumber = await getTwilioFromPhoneNumber();
-    if (fromNumber) {
-      await sendSms(
-        site.assignedToPhone,
-        `Your verification code for claiming "${site.name}" is: ${code}\n\nExpires in 10 minutes.`,
-        fromNumber
-      );
-    }
+    await sendVerification(site.assignedToPhone);
 
     res.json({
       success: true,
-      // Return masked phone so the UI can confirm who it was sent to
       phone: `***-***-${site.assignedToPhone.slice(-4)}`,
     });
   } catch (err: any) {
@@ -334,12 +313,11 @@ router.post("/api/claim/:token/verify-otp", async (req: Request, res: Response) 
       return res.status(400).json({ error: "No phone on file for this invite" });
     }
 
-    // Verify OTP
-    const otpRecord = await storage.getValidOtpCode(site.assignedToPhone, code);
-    if (!otpRecord) {
+    // Verify OTP via Twilio Verify
+    const verifyResult = await checkVerification(site.assignedToPhone, code);
+    if (!verifyResult.valid) {
       return res.status(401).json({ error: "Invalid or expired verification code" });
     }
-    await storage.markOtpUsed(otpRecord.id);
 
     // Find or create customer account for this phone
     let account = await storage.getCustomerAccountByPhone(site.assignedToPhone);

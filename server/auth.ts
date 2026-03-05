@@ -1,11 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { storage } from "./storage";
-import { dispatchSms, SmsIntent } from "./services/smsRouter";
+import { sendVerification, checkVerification } from "./twilio";
 import crypto from "crypto";
-
-function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-}
 
 function generateSessionToken(): string {
   return crypto.randomBytes(32).toString("hex");
@@ -44,26 +40,7 @@ export async function sendOtp(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const code = generateOtp();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-    await storage.createOtpCode({
-      phone: normalizedPhone,
-      code,
-      expiresAt,
-    });
-
-    const result = await dispatchSms({
-      to: normalizedPhone,
-      body: `Your Gateway Global AI verification code is: ${code}\n\nThis code expires in 5 minutes.`,
-      intent: SmsIntent.PLATFORM_OTP,
-      siteConfigId: "SYSTEM",
-    });
-
-    if (!result.ok) {
-      res.status(500).json({ error: result.message || "Failed to send verification code" });
-      return;
-    }
+    await sendVerification(normalizedPhone);
 
     res.json({ 
       success: true, 
@@ -87,13 +64,11 @@ export async function verifyOtp(req: Request, res: Response): Promise<void> {
 
     const normalizedPhone = normalizePhone(phone);
 
-    const otpRecord = await storage.getValidOtpCode(normalizedPhone, code);
-    if (!otpRecord) {
+    const result = await checkVerification(normalizedPhone, code);
+    if (!result.valid) {
       res.status(401).json({ error: "Invalid or expired verification code" });
       return;
     }
-
-    await storage.markOtpUsed(otpRecord.id);
 
     const adminUser = await storage.getAdminUserByPhone(normalizedPhone);
     if (!adminUser) {
