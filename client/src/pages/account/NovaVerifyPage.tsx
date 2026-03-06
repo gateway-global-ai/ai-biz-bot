@@ -1,15 +1,17 @@
 /**
  * NOVA Sovereign IDV flow — protected route.
+ * Identity + invoicing: shows session state and billing summary (platform fee, voice by agent, overages).
  * Spec: .system_design/nova_sovereign_ruleset_v1.yaml
  * Extraction: .system_design/extractions/extraction_2026-02-28.md (Step enum, progress, layout)
- * Path: /nova-verify/:businessType/:clientId (clientId = sessionId)
+ * Path: /nova-verify/:businessType/:clientId (clientId = sessionId) or /account/nova-verify
  */
 
 import { useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
+import { useCustomerAuth } from "@/lib/customerAuth";
 import { motion } from "framer-motion";
-import { Loader2, Shield, CheckCircle } from "lucide-react";
+import { Loader2, Shield, CheckCircle, CreditCard } from "lucide-react";
 
 // From extraction: step names for display (protocol steps from YAML, not full 11-step enum)
 interface NovaSessionState {
@@ -30,6 +32,7 @@ export default function NovaVerifyPage() {
   const businessType = params?.businessType ?? "";
   const clientId = params?.clientId ?? "";
   const { token } = useAuth();
+  const { token: customerToken, isAuthenticated: isCustomerAuthenticated } = useCustomerAuth();
 
   const { data: session, isLoading, isError, error } = useQuery<NovaSessionState>({
     queryKey: ["/api/nova/dashboard/session", clientId],
@@ -42,6 +45,18 @@ export default function NovaVerifyPage() {
       return res.json();
     },
     enabled: !!clientId && !!token,
+  });
+
+  const { data: currentBill, isLoading: billLoading } = useQuery({
+    queryKey: ["/api/customer/current-bill"],
+    queryFn: async () => {
+      const res = await fetch("/api/customer/current-bill", {
+        headers: customerToken ? { Authorization: `Bearer ${customerToken}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed to load bill");
+      return res.json();
+    },
+    enabled: isCustomerAuthenticated && !!customerToken,
   });
 
   const totalSteps = session?.steps?.length ?? 1;
@@ -120,6 +135,58 @@ export default function NovaVerifyPage() {
             </p>
           </>
         )}
+      </motion.div>
+
+      {/* Billing summary — same structure as MyAccount (Software / Services / Overages) */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut", delay: 0.1 }}
+        className="mt-6 rounded-sui bg-slate-900/40 border border-indigo-500/20 backdrop-blur-xl p-6 shadow-2xl"
+      >
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center">
+            <CreditCard className="w-5 h-5 text-indigo-400" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-white">Billing summary</h3>
+            <p className="text-[10px] text-slate-500 uppercase tracking-wider">Platform fee · Voice by agent · Overages</p>
+          </div>
+        </div>
+        {!isCustomerAuthenticated || !customerToken ? (
+          <p className="text-sm text-slate-500">
+            Sign in to your account to see your bill, or view it in your{" "}
+            <a href="/my-account" className="text-indigo-400 hover:underline">Command Center</a>.
+          </p>
+        ) : billLoading ? (
+          <div className="flex items-center gap-2 py-4 text-slate-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">Loading bill…</span>
+          </div>
+        ) : currentBill ? (
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Software — {currentBill.platformFee?.label ?? "Platform fee"}</span>
+              <span className="text-white font-medium">${Number(currentBill.platformFee?.amount ?? 0).toFixed(2)}</span>
+            </div>
+            {(currentBill.voiceByAgent ?? []).map((v: { agentName: string; amount: number }, i: number) => (
+              <div key={i} className="flex justify-between text-sm">
+                <span className="text-slate-400">Services — Voice AI · {v.agentName}</span>
+                <span className="text-white font-medium">${Number(v.amount ?? 0).toFixed(2)}</span>
+              </div>
+            ))}
+            {(currentBill.overages ?? []).map((o: { label: string; units: number; amount: number }, i: number) => (
+              <div key={i} className="flex justify-between text-sm">
+                <span className="text-slate-400">Overages — {o.label} ({o.units} min)</span>
+                <span className="text-white font-medium">${Number(o.amount ?? 0).toFixed(2)}</span>
+              </div>
+            ))}
+            <div className="border-t border-slate-700/60 pt-2 flex justify-between text-sm font-semibold">
+              <span className="text-slate-200">Total</span>
+              <span className="text-white">${Number(currentBill.total ?? 0).toFixed(2)}</span>
+            </div>
+          </div>
+        ) : null}
       </motion.div>
     </div>
   );

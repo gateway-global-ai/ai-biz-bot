@@ -1,0 +1,674 @@
+version: '1.0'
+taxonomy:
+- auth_oauth
+- api_endpoints
+- reservation_flow
+- payments
+- housekeeping
+- webhooks
+- global_variables
+- schema_aliasing
+- ui_react
+- voice_workflow
+- best_practices
+items:
+- id: cloudbeds_api_CLOUDBEDS_API_QUERY_GUIDE_md
+  title: Cloudbeds Api Query Guide
+  category: cloudbeds
+  tags:
+  - api
+  - best-practices
+  - templates
+  source_path: /root/cloudbeds-api-integration/docs/CLOUDBEDS_API_QUERY_GUIDE.md
+  library_path: cloudbeds/api/CLOUDBEDS_API_QUERY_GUIDE.md
+  file_type: md
+  topic:
+  - api_endpoints
+  - best_practices
+  - ui_react
+  integration_stage: runtime
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_api_OAUTH_IMPLEMENTATION_md
+  title: Oauth Implementation
+  category: cloudbeds
+  tags:
+  - oauth
+  - api
+  source_path: /root/cloudbeds-api-integration/docs/OAUTH_IMPLEMENTATION.md
+  library_path: cloudbeds/api/OAUTH_IMPLEMENTATION.md
+  file_type: md
+  topic:
+  - auth_oauth
+  - api_endpoints
+  integration_stage: runtime
+  best_practice_flags: []
+  related_items: []
+- id: cloudbeds_api_PROPERTY_PARAMETER_GUIDE_md
+  title: Property Parameter Guide
+  category: cloudbeds
+  tags:
+  - api
+  - best-practices
+  - templates
+  source_path: /root/cloudbeds-api-integration/docs/PROPERTY_PARAMETER_GUIDE.md
+  library_path: cloudbeds/api/PROPERTY_PARAMETER_GUIDE.md
+  file_type: md
+  topic:
+  - api_endpoints
+  - best_practices
+  - ui_react
+  integration_stage: runtime
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_api_pms-v1_3-openapi_yaml
+  title: Pms V1.3 Openapi
+  category: cloudbeds
+  tags:
+  - api
+  source_path: /root/cloudbeds-api-integration/generated/pms-v1.3-openapi.yaml
+  library_path: cloudbeds/api/pms-v1.3-openapi.yaml
+  file_type: yaml
+  topic:
+  - api_endpoints
+  integration_stage: runtime
+  best_practice_flags: []
+  related_items: []
+- id: cloudbeds_validation_validation-rules_yaml
+  title: Validation Rules
+  category: cloudbeds
+  tags:
+  - best-practices
+  source_path: /root/cloudbeds-api-integration/validation-rules/validation-rules.yaml
+  library_path: cloudbeds/validation/validation-rules.yaml
+  file_type: yaml
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_validation_README_md
+  title: Readme
+  category: cloudbeds
+  tags:
+  - best-practices
+  source_path: /root/cloudbeds-api-integration/validation-rules/README.md
+  library_path: cloudbeds/validation/README.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_workflows_CLOUDBEDS_HOUSEKEEPING_GUIDE_md
+  title: Cloudbeds Housekeeping Guide
+  category: cloudbeds
+  tags:
+  - housekeeping
+  - workflow
+  - best-practices
+  - templates
+  source_path: /root/cloudbeds-api-integration/docs/CLOUDBEDS_HOUSEKEEPING_GUIDE.md
+  library_path: cloudbeds/workflows/CLOUDBEDS_HOUSEKEEPING_GUIDE.md
+  file_type: md
+  topic:
+  - housekeeping
+  - voice_workflow
+  - best_practices
+  - ui_react
+  integration_stage: build
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_workflows_CLOUDBEDS_PAYMENT_GUIDE_md
+  title: Cloudbeds Payment Guide
+  category: cloudbeds
+  tags:
+  - payments
+  - workflow
+  - best-practices
+  - templates
+  source_path: /root/cloudbeds-api-integration/docs/CLOUDBEDS_PAYMENT_GUIDE.md
+  library_path: cloudbeds/workflows/CLOUDBEDS_PAYMENT_GUIDE.md
+  file_type: md
+  topic:
+  - payments
+  - voice_workflow
+  - best_practices
+  - ui_react
+  integration_stage: build
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_workflows_CLOUDBEDS_RESERVATION_MODIFICATION_GUIDE_md
+  title: Cloudbeds Reservation Modification Guide
+  category: cloudbeds
+  tags:
+  - reservation
+  - workflow
+  - best-practices
+  - templates
+  source_path: /root/cloudbeds-api-integration/docs/CLOUDBEDS_RESERVATION_MODIFICATION_GUIDE.md
+  library_path: cloudbeds/workflows/CLOUDBEDS_RESERVATION_MODIFICATION_GUIDE.md
+  file_type: md
+  topic:
+  - reservation_flow
+  - voice_workflow
+  - best_practices
+  - ui_react
+  integration_stage: build
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_workflows_CRITICAL_WORKFLOW_PATTERNS_md
+  title: Critical Workflow Patterns
+  category: cloudbeds
+  tags:
+  - workflow
+  source_path: /root/cloudbeds-api-integration/docs/CRITICAL_WORKFLOW_PATTERNS.md
+  library_path: cloudbeds/workflows/CRITICAL_WORKFLOW_PATTERNS.md
+  file_type: md
+  topic:
+  - voice_workflow
+  integration_stage: build
+  best_practice_flags:
+  - critical
+  related_items: []
+- id: cloudbeds_workflows_HOTEL_WORKFLOW_DEVELOPER_DOCUMENTATION_md
+  title: Hotel Workflow Developer Documentation
+  category: cloudbeds
+  tags:
+  - workflow
+  - best-practices
+  - hotel-matching
+  source_path: /root/cloudbeds-api-integration/docs/HOTEL_WORKFLOW_DEVELOPER_DOCUMENTATION.md
+  library_path: cloudbeds/workflows/HOTEL_WORKFLOW_DEVELOPER_DOCUMENTATION.md
+  file_type: md
+  topic:
+  - voice_workflow
+  - best_practices
+  integration_stage: build
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_workflows_WORKFLOW_CREATION_GUIDE_md
+  title: Workflow Creation Guide
+  category: cloudbeds
+  tags:
+  - workflow
+  - best-practices
+  - templates
+  source_path: /root/cloudbeds-api-integration/docs/WORKFLOW_CREATION_GUIDE.md
+  library_path: cloudbeds/workflows/WORKFLOW_CREATION_GUIDE.md
+  file_type: md
+  topic:
+  - voice_workflow
+  - best_practices
+  - ui_react
+  integration_stage: build
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_API_CLIENT_USAGE_md
+  title: Cloudbeds Api Client Usage
+  category: cloudbeds
+  tags:
+  - api
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_API_CLIENT_USAGE.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_API_CLIENT_USAGE.md
+  file_type: md
+  topic:
+  - api_endpoints
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_API_INTEGRATION_GUIDE_md
+  title: Cloudbeds Api Integration Guide
+  category: cloudbeds
+  tags:
+  - api
+  - best-practices
+  - templates
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_API_INTEGRATION_GUIDE.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_API_INTEGRATION_GUIDE.md
+  file_type: md
+  topic:
+  - api_endpoints
+  - best_practices
+  - ui_react
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_AUTHENTICATION_GUIDE_md
+  title: Cloudbeds Authentication Guide
+  category: cloudbeds
+  tags:
+  - oauth
+  - best-practices
+  - templates
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_AUTHENTICATION_GUIDE.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_AUTHENTICATION_GUIDE.md
+  file_type: md
+  topic:
+  - auth_oauth
+  - best_practices
+  - ui_react
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_BOOKING_FLOW_GUIDE_md
+  title: Cloudbeds Booking Flow Guide
+  category: cloudbeds
+  tags:
+  - reservation
+  - best-practices
+  - templates
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_BOOKING_FLOW_GUIDE.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_BOOKING_FLOW_GUIDE.md
+  file_type: md
+  topic:
+  - reservation_flow
+  - best_practices
+  - ui_react
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_BOOKING_FLOW_SEQUENCE_md
+  title: Cloudbeds Booking Flow Sequence
+  category: cloudbeds
+  tags:
+  - reservation
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_BOOKING_FLOW_SEQUENCE.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_BOOKING_FLOW_SEQUENCE.md
+  file_type: md
+  topic:
+  - reservation_flow
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_COMPLETE_API_DOCUMENTATION_md
+  title: Cloudbeds Complete Api Documentation
+  category: cloudbeds
+  tags:
+  - api
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_COMPLETE_API_DOCUMENTATION.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_COMPLETE_API_DOCUMENTATION.md
+  file_type: md
+  topic:
+  - api_endpoints
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_ENDPOINT_MAPPING_md
+  title: Cloudbeds Endpoint Mapping
+  category: cloudbeds
+  tags:
+  - api
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_ENDPOINT_MAPPING.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_ENDPOINT_MAPPING.md
+  file_type: md
+  topic:
+  - api_endpoints
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_INPUT_COLLECTION_md
+  title: Cloudbeds Input Collection
+  category: cloudbeds
+  tags:
+  - reference
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_INPUT_COLLECTION.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_INPUT_COLLECTION.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_NATURAL_LANGUAGE_FORMATTING_md
+  title: Cloudbeds Natural Language Formatting
+  category: cloudbeds
+  tags:
+  - reference
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_NATURAL_LANGUAGE_FORMATTING.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_NATURAL_LANGUAGE_FORMATTING.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_OAUTH_CALLBACK_SETUP_md
+  title: Cloudbeds Oauth Callback Setup
+  category: cloudbeds
+  tags:
+  - oauth
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_OAUTH_CALLBACK_SETUP.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_OAUTH_CALLBACK_SETUP.md
+  file_type: md
+  topic:
+  - auth_oauth
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_OAUTH_SETUP_md
+  title: Cloudbeds Oauth Setup
+  category: cloudbeds
+  tags:
+  - oauth
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_OAUTH_SETUP.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_OAUTH_SETUP.md
+  file_type: md
+  topic:
+  - auth_oauth
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_OAUTH_TEST_RESULTS_md
+  title: Cloudbeds Oauth Test Results
+  category: cloudbeds
+  tags:
+  - oauth
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_OAUTH_TEST_RESULTS.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_OAUTH_TEST_RESULTS.md
+  file_type: md
+  topic:
+  - auth_oauth
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_PAYMENT_METHODS_md
+  title: Cloudbeds Payment Methods
+  category: cloudbeds
+  tags:
+  - payments
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_PAYMENT_METHODS.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_PAYMENT_METHODS.md
+  file_type: md
+  topic:
+  - payments
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_RESERVATION_SUCCESS_md
+  title: Cloudbeds Reservation Success
+  category: cloudbeds
+  tags:
+  - reservation
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/CLOUDBEDS_RESERVATION_SUCCESS.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_RESERVATION_SUCCESS.md
+  file_type: md
+  topic:
+  - reservation_flow
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: cloudbeds_supplemental_CLOUDBEDS_SDK_SUMMARY_md
+  title: Cloudbeds Sdk Summary
+  category: cloudbeds
+  tags:
+  - reference
+  source_path: /root/twilio.platformeconomics.ai/cloudbeds-oauth-sdk/CLOUDBEDS_SDK_SUMMARY.md
+  library_path: cloudbeds/supplemental/CLOUDBEDS_SDK_SUMMARY.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: cloudbeds_supplemental_ENDPOINTS_DATABASE_GUIDE_md
+  title: Endpoints Database Guide
+  category: cloudbeds
+  tags:
+  - api
+  - best-practices
+  - templates
+  source_path: /root/twilio.platformeconomics.ai/demo/cloudbeds-integration/docs/ENDPOINTS_DATABASE_GUIDE.md
+  library_path: cloudbeds/supplemental/ENDPOINTS_DATABASE_GUIDE.md
+  file_type: md
+  topic:
+  - api_endpoints
+  - best_practices
+  - ui_react
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: global-variables_GLOBAL_VARIABLES_REFERENCE_md
+  title: Global Variables Reference
+  category: global-variables
+  tags:
+  - global-variables
+  source_path: /root/cloudbeds-api-integration/docs/GLOBAL_VARIABLES_REFERENCE.md
+  library_path: global-variables/GLOBAL_VARIABLES_REFERENCE.md
+  file_type: md
+  topic:
+  - global_variables
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: global-variables_schema-aliasing_json
+  title: Schema Aliasing
+  category: global-variables
+  tags:
+  - global-variables
+  - schema-aliasing
+  source_path: /root/.cursor/rules/schema-aliasing.json
+  library_path: global-variables/schema-aliasing.json
+  file_type: json
+  topic:
+  - global_variables
+  - schema_aliasing
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: global-variables_schema-aliasing_mdc
+  title: Schema Aliasing
+  category: global-variables
+  tags:
+  - global-variables
+  - schema-aliasing
+  source_path: /root/.cursor/rules/schema-aliasing.mdc
+  library_path: global-variables/schema-aliasing.mdc
+  file_type: mdc
+  topic:
+  - global_variables
+  - schema_aliasing
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: hospitality_industry-mapping_EXTRACTION_ANALYSIS_md
+  title: Extraction Analysis
+  category: hospitality
+  tags:
+  - hospitality
+  source_path: /root/industry-solutions/EXTRACTION_ANALYSIS.md
+  library_path: hospitality/industry-mapping/EXTRACTION_ANALYSIS.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: hospitality_industry-mapping_INDUSTRY_ANALYSIS_PLAN_md
+  title: Industry Analysis Plan
+  category: hospitality
+  tags:
+  - hospitality
+  source_path: /root/industry-solutions/INDUSTRY_ANALYSIS_PLAN.md
+  library_path: hospitality/industry-mapping/INDUSTRY_ANALYSIS_PLAN.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: hospitality_industry-mapping_README_md
+  title: Readme
+  category: hospitality
+  tags:
+  - hospitality
+  source_path: /root/industry-solutions/README.md
+  library_path: hospitality/industry-mapping/README.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: hospitality_templates_hotel-booking-template_json
+  title: Hotel Booking Template
+  category: hospitality
+  tags:
+  - reservation
+  - templates
+  - hotel-matching
+  - hospitality
+  source_path: /root/industry-solutions/hospitality/hotel-booking-template.json
+  library_path: hospitality/templates/hotel-booking-template.json
+  file_type: json
+  topic:
+  - reservation_flow
+  - ui_react
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: hospitality_templates_identity-verification-template_json
+  title: Identity Verification Template
+  category: hospitality
+  tags:
+  - templates
+  - hospitality
+  source_path: /root/industry-solutions/hospitality/identity-verification-template.json
+  library_path: hospitality/templates/identity-verification-template.json
+  file_type: json
+  topic:
+  - ui_react
+  integration_stage: reference
+  best_practice_flags: []
+  related_items: []
+- id: hotel-matching_HOTEL_DISPLAY_FIXES_md
+  title: Hotel Display Fixes
+  category: hotel-matching
+  tags:
+  - hotel-matching
+  source_path: /root/grn-travel/HOTEL_DISPLAY_FIXES.md
+  library_path: hotel-matching/HOTEL_DISPLAY_FIXES.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: hotel-matching_HOTEL_MATCHING_ARCHITECTURE_md
+  title: Hotel Matching Architecture
+  category: hotel-matching
+  tags:
+  - hotel-matching
+  source_path: /root/grn-travel/mcp-auto-agent/mcp-orchestrator/HOTEL_MATCHING_ARCHITECTURE.md
+  library_path: hotel-matching/HOTEL_MATCHING_ARCHITECTURE.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: hotel-matching_HOTEL_MATCHING_INTEGRATION_md
+  title: Hotel Matching Integration
+  category: hotel-matching
+  tags:
+  - hotel-matching
+  source_path: /root/grn-travel/mcp-auto-agent/mcp-orchestrator/HOTEL_MATCHING_INTEGRATION.md
+  library_path: hotel-matching/HOTEL_MATCHING_INTEGRATION.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: hotel-matching_HOTEL_MATCHING_LOGIC_md
+  title: Hotel Matching Logic
+  category: hotel-matching
+  tags:
+  - hotel-matching
+  source_path: /root/grn-travel/HOTEL_MATCHING_LOGIC.md
+  library_path: hotel-matching/HOTEL_MATCHING_LOGIC.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: hotel-matching_HOTEL_RATES_FILTERING_md
+  title: Hotel Rates Filtering
+  category: hotel-matching
+  tags:
+  - hotel-matching
+  source_path: /root/grn-travel/mcp-auto-agent/mcp-orchestrator/HOTEL_RATES_FILTERING.md
+  library_path: hotel-matching/HOTEL_RATES_FILTERING.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: hotel-matching_IMPLEMENTATION_PLAN_HOTEL_MATCHING_md
+  title: Implementation Plan Hotel Matching
+  category: hotel-matching
+  tags:
+  - hotel-matching
+  source_path: /root/grn-travel/mcp-auto-agent/training-library/IMPLEMENTATION_PLAN_HOTEL_MATCHING.md
+  library_path: hotel-matching/IMPLEMENTATION_PLAN_HOTEL_MATCHING.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: hotel-matching_hotel-matching-algorithm_md
+  title: Hotel Matching Algorithm
+  category: hotel-matching
+  tags:
+  - hotel-matching
+  source_path: /root/grn-travel/mcp-auto-agent/training-library/frameworks/hotel-matching-algorithm.md
+  library_path: hotel-matching/hotel-matching-algorithm.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []
+- id: hotel-matching_hotel-rate-matching_md
+  title: Hotel Rate Matching
+  category: hotel-matching
+  tags:
+  - hotel-matching
+  source_path: /root/grn-travel/mcp-auto-agent/training-library/frameworks/hotel-rate-matching.md
+  library_path: hotel-matching/hotel-rate-matching.md
+  file_type: md
+  topic:
+  - best_practices
+  integration_stage: reference
+  best_practice_flags:
+  - guardrails
+  related_items: []

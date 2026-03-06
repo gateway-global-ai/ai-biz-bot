@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { GatewayRouterPanel } from '@/components/admin/GatewayRouterPanel';
 import { AgentCreatorPanel } from '@/components/admin/AgentCreatorPanel';
+import { Link } from 'wouter';
 import {
   Bot, Plus, Globe, MessageSquare, Settings, Trash2,
   Send, Loader2, ExternalLink, Code, Copy, Check, Network, Users,
@@ -1566,6 +1567,17 @@ export default function AiBizBotAdmin() {
             AI Biz Bot
           </h2>
           <p className="text-xs text-slate-500 mt-1">Manage chatbots on customer websites</p>
+          <Link href="/chat/owner">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full mt-3 bg-indigo-500/10 border-indigo-400/30 text-indigo-300 hover:bg-indigo-500/20 hover:text-white"
+            >
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Chat with AI Biz Bot
+            </Button>
+          </Link>
+          <p className="text-[10px] text-slate-500 mt-1.5">Ask questions, modify router & agents</p>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
           {sitesLoading ? (

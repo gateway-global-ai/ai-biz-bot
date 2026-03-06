@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { storage } from "../storage";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray, and, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth } from "../auth";
 import {
@@ -8,9 +8,11 @@ import {
   siteConfigs,
   resellers,
   resellerCommissions,
+  voiceUsageLogs,
   type CustomerAccount,
 } from "@shared/schema";
 import { db } from "../db";
+import { getPricingConfig, getEffectiveRate } from "../utils/pricing";
 // All Stripe calls use dynamic imports: await import('../stripeClient')
 
 const router = Router();
@@ -176,12 +178,13 @@ const router = Router();
       const protocol = (req.headers['x-forwarded-proto'] as string) || 'https';
       const baseUrl = `${protocol}://${host}`;
 
+      const category = plan === 'voice' ? 'service' : 'platform';
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${baseUrl}/my-account/site/${siteConfigId}?upgrade=success&plan=${plan}`,
         cancel_url: `${baseUrl}/my-account?upgrade=cancelled`,
-        metadata: { siteConfigId, plan, customerId: customerSession.id },
+        metadata: { siteConfigId, plan, customerId: customerSession.id, category },
         client_reference_id: siteConfigId,
       });
 
@@ -282,6 +285,20 @@ const router = Router();
             console.error('[Stripe] Onboarding email failed (non-fatal):', emailErr.message);
           }
         }
+        // Set invoice metadata.category for every completed checkout (platform | service | usage)
+        try {
+          const category = (meta.category as string) ?? 'platform';
+          let invoiceId: string | null = (session as any).invoice ?? null;
+          if (!invoiceId && (session as any).subscription) {
+            const sub = await stripe.subscriptions.retrieve((session as any).subscription);
+            invoiceId = typeof sub.latest_invoice === 'string' ? sub.latest_invoice : (sub.latest_invoice as any)?.id ?? null;
+          }
+          if (invoiceId) {
+            await stripe.invoices.update(invoiceId, { metadata: { category } });
+          }
+        } catch (invErr: any) {
+          console.error('[Stripe] Invoice metadata update failed (non-fatal):', invErr?.message);
+        }
       }
 
       res.json({ received: true });
@@ -300,6 +317,113 @@ const router = Router();
       res.json({ publishableKey: key });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  /** Voice bundle monthly price per agent (MSA / legacy ShoppingCart: "AI Communication Bundle" $50/line). */
+  const VOICE_BUNDLE_MONTHLY = 50;
+
+  router.get("/api/customer/current-bill", async (req, res) => {
+    try {
+      const bearerToken = (req.headers.authorization || "").replace("Bearer ", "").trim();
+      if (!bearerToken) return res.status(401).json({ error: "Authentication required" });
+      const dbSession = await storage.getValidCustomerSession(bearerToken);
+      if (!dbSession) return res.status(401).json({ error: "Invalid or expired session" });
+      const accountId = dbSession.customerAccountId;
+      const rates = await getEffectiveRate(accountId);
+      const sites = await storage.getSiteConfigsByOwner(accountId);
+      const siteIds = sites.map((s) => s.id);
+
+      const platformFee = {
+        label: "Platform fee",
+        description: "Sovereign AI OS — Small Business Router",
+        amount: rates.monthlyFlatFee,
+        currency: "USD",
+        category: "platform" as const,
+      };
+
+      const voiceByAgent: Array<{ agentName: string; identifier?: string; amount: number; currency: string }> = [];
+      for (const site of sites) {
+        const agents = await storage.getAgentsBySiteConfigId(site.id);
+        for (const agent of agents) {
+          voiceByAgent.push({
+            agentName: agent.name || "Voice AI Agent",
+            identifier: undefined,
+            amount: VOICE_BUNDLE_MONTHLY,
+            currency: "USD",
+          });
+        }
+      }
+
+      const now = new Date();
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      let phoneMinutes = 0;
+      let webMinutes = 0;
+      let overagePhoneCents = 0;
+      let overageWebCents = 0;
+      if (siteIds.length > 0) {
+        const rows = await db
+          .select({
+            callType: voiceUsageLogs.callType,
+            minutes: sql<number>`COALESCE(SUM(${voiceUsageLogs.billedMinutes}), 0)::int`,
+            cents: sql<number>`COALESCE(SUM(${voiceUsageLogs.billedAmountCents}), 0)::int`,
+          })
+          .from(voiceUsageLogs)
+          .where(
+            and(
+              inArray(voiceUsageLogs.siteConfigId, siteIds),
+              gte(voiceUsageLogs.createdAt, startOfMonth)
+            )
+          )
+          .groupBy(voiceUsageLogs.callType);
+        for (const row of rows) {
+          const min = Number(row.minutes ?? 0);
+          const cents = Number(row.cents ?? 0);
+          if (row.callType === "phone") {
+            phoneMinutes = min;
+            overagePhoneCents = cents;
+          } else {
+            webMinutes = min;
+            overageWebCents = cents;
+          }
+        }
+      }
+
+      const overages: Array<{ label: string; units: number; rate: number; amount: number; currency: string }> = [];
+      if (phoneMinutes > 0 || overagePhoneCents > 0) {
+        overages.push({
+          label: "Voice AI (Phone)",
+          units: phoneMinutes,
+          rate: rates.phoneVoiceAiRate,
+          amount: overagePhoneCents / 100,
+          currency: "USD",
+        });
+      }
+      if (webMinutes > 0 || overageWebCents > 0) {
+        overages.push({
+          label: "Voice AI (Web)",
+          units: webMinutes,
+          rate: rates.webVoiceAiRate,
+          amount: overageWebCents / 100,
+          currency: "USD",
+        });
+      }
+
+      const platformTotal = platformFee.amount;
+      const voiceTotal = voiceByAgent.reduce((s, v) => s + v.amount, 0);
+      const overageTotal = overages.reduce((s, o) => s + o.amount, 0);
+      const total = platformTotal + voiceTotal + overageTotal;
+
+      res.json({
+        platformFee,
+        voiceByAgent,
+        overages,
+        total: Math.round(total * 100) / 100,
+        currency: "USD",
+      });
+    } catch (error: any) {
+      console.error("[Billing] current-bill error:", error?.message);
+      res.status(500).json({ error: error?.message ?? "Failed to load current bill" });
     }
   });
 

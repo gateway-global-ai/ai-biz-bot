@@ -1,18 +1,20 @@
 /**
  * Setup Script: Boardwalk Suites Lafayette
- * 
+ *
  * Creates the complete partner profile for Boardwalk Suites Lafayette:
  * - Customer account for Jason Trindade
  * - Site configuration
  * - Owner business data
  * - Featured partner entry (if GRN DB accessible)
- * 
- * Run: tsx scripts/setup-boardwalk-suites.ts
+ * - Cloudbeds PMS integration (if CLOUDBEDS_API_KEY is set in Doppler)
+ *
+ * Run: npm run setup:boardwalk
+ * (Uses doppler run + npx tsx; ensure CLOUDBEDS_API_KEY is in your Doppler dev config.)
  */
 
 import { db } from '../server/db.js';
-import { customerAccounts, siteConfigs, ownerBusinessData, featuredPartners } from '@shared/schema';
-import { eq } from 'drizzle-orm';
+import { customerAccounts, siteConfigs, ownerBusinessData, featuredPartners, sitePmsIntegrations } from '../shared/schema.js';
+import { and, eq } from 'drizzle-orm';
 
 const BOARDWALK_SUITES = {
   placeId: 'ChIJB4qU6oXvJIgR_2p602OaK_U',
@@ -28,6 +30,7 @@ const BOARDWALK_SUITES = {
   cityCode: 'LAF', // Lafayette
   category: 'Extended Stay Hotel',
   badgeLabel: 'Extended Stay Expert',
+  cloudbedsPropertyId: '315701',
 };
 
 function normalizePhone(phone: string): string {
@@ -162,10 +165,7 @@ async function setupBoardwalkSuites() {
     } else {
       await db
         .update(ownerBusinessData)
-        .set({
-          ownerId: accountId,
-          ...ownerDataPayload,
-        })
+        .set(ownerDataPayload)
         .where(eq(ownerBusinessData.placeId, BOARDWALK_SUITES.placeId));
       console.log(`✅ Updated owner business data`);
     }
@@ -216,6 +216,46 @@ async function setupBoardwalkSuites() {
       } else {
         console.error(`⚠️  Failed to update featured_partners:`, error.message);
       }
+    }
+
+    // Step 5: Upsert Cloudbeds PMS integration (rates/availability for get_hotel_inventory)
+    const siteId = siteConfig[0].id;
+    const cloudbedsApiKey = process.env.CLOUDBEDS_API_KEY;
+    console.log(`\n🔗 Cloudbeds PMS integration (site ${siteId})...`);
+    const existingPms = await db
+      .select()
+      .from(sitePmsIntegrations)
+      .where(
+        and(
+          eq(sitePmsIntegrations.siteConfigId, siteId),
+          eq(sitePmsIntegrations.pmsType, 'cloudbeds')
+        )
+      )
+      .limit(1);
+    if (cloudbedsApiKey) {
+      if (existingPms.length > 0) {
+        await db
+          .update(sitePmsIntegrations)
+          .set({
+            propertyId: BOARDWALK_SUITES.cloudbedsPropertyId,
+            apiKey: cloudbedsApiKey,
+            isActive: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(sitePmsIntegrations.id, existingPms[0].id));
+        console.log(`✅ Updated Cloudbeds integration (property ${BOARDWALK_SUITES.cloudbedsPropertyId})`);
+      } else {
+        await db.insert(sitePmsIntegrations).values({
+          siteConfigId: siteId,
+          pmsType: 'cloudbeds',
+          propertyId: BOARDWALK_SUITES.cloudbedsPropertyId,
+          apiKey: cloudbedsApiKey,
+          isActive: true,
+        });
+        console.log(`✅ Created Cloudbeds integration (property ${BOARDWALK_SUITES.cloudbedsPropertyId})`);
+      }
+    } else {
+      console.log(`⚠️  CLOUDBEDS_API_KEY not set; skip Cloudbeds. Add it to Doppler dev config, then: npm run setup:boardwalk`);
     }
 
     console.log(`\n✅ Setup complete!`);

@@ -39,6 +39,13 @@ export default defineConfig(async ({ mode }) => {
     ),
   },
   server: {
+    host: "0.0.0.0",
+    port: 5173,
+    hmr: {
+      protocol: "ws", // Force non-secure WebSocket
+      host: "localhost", // Force it to connect locally, ignoring the public domain
+      clientPort: 5173,
+    },
     fs: {
       strict: true,
       deny: ["**/.*"],

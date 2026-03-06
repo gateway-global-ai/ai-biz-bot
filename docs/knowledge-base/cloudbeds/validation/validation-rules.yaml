@@ -1,0 +1,157 @@
+# Vapi Assistant Validation Rules
+# Simple rules for no-code platforms to validate Vapi assistant configurations
+
+version: "1.0.0"
+description: "Simple validation rules for no-code platform integration"
+
+# Standard Variables (MUST use these)
+standard_variables:
+  identifiers:
+    - guestID
+    - reservationID
+    - hotel.propertyid
+  contact:
+    - customer.phone
+    - guest.phone
+    - guest.email
+    - guest.name
+  verification:
+    - phone.verified
+    - email.verified
+    - customer.verified
+  status:
+    - guest.status
+    - reservation.status
+  dates:
+    - now
+    - reservation.arrivalDate
+    - reservation.departureDate
+
+# Forbidden Variables (MUST NOT use these)
+forbidden_variables:
+  guestPhone: "Use {{guest.phone}} instead"
+  guestEmail: "Use {{guest.email}} instead"
+  guestName: "Use {{guest.name}} instead"
+  propertyid: "Use {{hotel.propertyid}} instead"
+  property_id: "Use {{hotel.propertyid}} instead"
+  customer_number: "Use {{customer.phone}} instead"
+  customerNumber: "Use {{customer.phone}} instead"
+  reservationId: "Use {{reservationID}} instead"
+  guestId: "Use {{guestID}} instead"
+  propertyId: "Use {{hotel.propertyid}} instead"
+
+# Variable Format Rules
+variable_format:
+  pattern: "^{{[a-zA-Z][a-zA-Z0-9._]*}}$"
+  description: "Must use LiquidJS format: {{variable.name}}"
+  examples:
+    correct: "{{guest.phone}}"
+    incorrect: "{{guestPhone}}"
+
+# API Version Rules
+api_version:
+  required: "v1.3"
+  forbidden:
+    - v1.1
+    - v1.2
+    - v1.0
+  check_in: ["serverUrl", "endpoint", "baseURL"]
+
+# Parameter Casing Rules
+parameter_casing:
+  correct:
+    propertyID: "propertyID"
+    propertyIDs: "propertyIDs"
+    guestID: "guestID"
+    reservationID: "reservationID"
+  forbidden:
+    propertyid: "Use propertyID"
+    property_id: "Use propertyID"
+    PropertyID: "Use propertyID"
+    guestid: "Use guestID"
+    reservationid: "Use reservationID"
+
+# Endpoint Path Rules
+endpoint_paths:
+  required_prefix: "/api/v1.3"
+  forbidden_prefixes:
+    - "/api/v1.1"
+    - "/api/v1.2"
+    - "/api/v1.0"
+  check_in: ["serverUrl", "endpoint", "path"]
+
+# Prompt Validation Rules
+prompt_validation:
+  min_length: 10
+  max_length: 10000
+  required_checks:
+    - variables_exist
+    - variables_standard
+    - no_forbidden_variables
+    - syntax_valid
+  blocking: true
+
+# Tool Validation Rules
+tool_validation:
+  server_url_pattern: "^(https://)?[a-zA-Z0-9.-]+(supabase\\.co|platformeconomics\\.ai)"
+  required_headers:
+    - Authorization
+    - Content-Type
+  blocking: true
+
+# Validation Steps (Order matters)
+validation_steps:
+  - step: 1
+    name: "Variable Extraction Check"
+    description: "Verify all variables use standard names"
+    blocking: true
+    
+  - step: 2
+    name: "Prompt Syntax Check"
+    description: "Verify prompts use correct variable syntax"
+    blocking: true
+    
+  - step: 3
+    name: "API Version Check"
+    description: "Verify API version is v1.3"
+    blocking: true
+    
+  - step: 4
+    name: "Parameter Casing Check"
+    description: "Verify parameter casing is correct"
+    blocking: true
+    
+  - step: 5
+    name: "Endpoint Path Check"
+    description: "Verify endpoint paths are correct"
+    blocking: true
+    
+  - step: 6
+    name: "Tool Configuration Check"
+    description: "Verify tools are correctly configured"
+    blocking: true
+
+# Error Messages (for no-code platforms)
+error_messages:
+  invalid_variable: "Variable '{{variable}}' is not standard. Use '{{standard}}' instead."
+  forbidden_variable: "Variable '{{variable}}' is forbidden. Use '{{replacement}}' instead."
+  wrong_api_version: "API version must be v1.3, not {{version}}"
+  wrong_parameter_casing: "Parameter '{{param}}' must be '{{correct}}', not '{{wrong}}'"
+  wrong_endpoint_path: "Endpoint path must include /api/v1.3, not {{path}}"
+  missing_required_field: "Missing required field: {{field}}"
+  invalid_prompt_syntax: "Prompt contains invalid variable syntax: {{variable}}"
+
+# Examples for Documentation
+examples:
+  correct:
+    variable: "{{guest.phone}}"
+    parameter: "propertyID"
+    endpoint: "/api/v1.3/getGuestList"
+    prompt: "Hello {{guest.name}}, your phone number is {{guest.phone}}."
+    
+  incorrect:
+    variable: "{{guestPhone}}"
+    parameter: "propertyid"
+    endpoint: "/api/v1.2/getGuestList"
+    prompt: "Hello {{guestName}}, your phone is {{guestPhone}}."
+

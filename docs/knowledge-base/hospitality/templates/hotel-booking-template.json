@@ -1,0 +1,243 @@
+{
+  "name": "Hotel Booking Assistant",
+  "description": "Voice AI assistant for hotel reservations using Cloudbeds integration",
+  "industry": "hospitality",
+  "assistant": {
+    "model": {
+      "provider": "openai",
+      "model": "gpt-4",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful hotel booking assistant. Help guests find available rooms, check rates, and make reservations. Use the tools provided to search availability, get rates, and create reservations."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "getAvailableRoomTypes",
+            "description": "Search for available room types and rates for a date range (Cloudbeds /getAvailableRoomTypes endpoint)",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "startDate": {
+                  "type": "string",
+                  "description": "Check-in date (ISO format: YYYY-MM-DD)",
+                  "format": "date"
+                },
+                "endDate": {
+                  "type": "string",
+                  "description": "Check-out date (ISO format: YYYY-MM-DD)",
+                  "format": "date"
+                },
+                "rooms": {
+                  "type": "integer",
+                  "description": "Number of rooms needed",
+                  "minimum": 1,
+                  "default": 1
+                },
+                "adults": {
+                  "type": "integer",
+                  "description": "Number of adult guests",
+                  "minimum": 1
+                },
+                "children": {
+                  "type": "integer",
+                  "description": "Number of children",
+                  "default": 0
+                },
+                "detailedRates": {
+                  "type": "boolean",
+                  "description": "Include detailed rate information (must be true to get all rate plans)",
+                  "default": true
+                }
+              },
+              "required": ["startDate", "endDate", "rooms", "adults"]
+            }
+          },
+          "server": {
+            "url": "{{EDGE_FUNCTION_URL}}/cloudbeds-api",
+            "method": "POST",
+            "headers": {
+              "Authorization": "Bearer {{SUPABASE_ANON_KEY}}"
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "getRatePlans",
+            "description": "Get available rate plans for a room type",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "roomTypeId": {
+                  "type": "string",
+                  "description": "Room type ID"
+                },
+                "startDate": {
+                  "type": "string",
+                  "description": "Check-in date"
+                },
+                "endDate": {
+                  "type": "string",
+                  "description": "Check-out date"
+                }
+              },
+              "required": ["roomTypeId", "startDate", "endDate"]
+            }
+          },
+          "server": {
+            "url": "{{EDGE_FUNCTION_URL}}/cloudbeds-api",
+            "method": "POST"
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "createReservation",
+            "description": "Create a hotel reservation",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "roomTypeId": {
+                  "type": "string",
+                  "description": "Selected room type ID"
+                },
+                "ratePlanId": {
+                  "type": "string",
+                  "description": "Selected rate plan ID"
+                },
+                "startDate": {
+                  "type": "string",
+                  "description": "Check-in date"
+                },
+                "endDate": {
+                  "type": "string",
+                  "description": "Check-out date"
+                },
+                "guestName": {
+                  "type": "string",
+                  "description": "Guest name"
+                },
+                "guestEmail": {
+                  "type": "string",
+                  "description": "Guest email"
+                },
+                "guestPhone": {
+                  "type": "string",
+                  "description": "Guest phone number"
+                },
+                "adults": {
+                  "type": "integer",
+                  "description": "Number of adults"
+                },
+                "children": {
+                  "type": "integer",
+                  "description": "Number of children"
+                }
+              },
+              "required": ["roomTypeId", "ratePlanId", "startDate", "endDate", "guestName", "guestEmail", "adults"]
+            }
+          },
+          "server": {
+            "url": "{{EDGE_FUNCTION_URL}}/cloudbeds-api",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    "voice": {
+      "provider": "11labs",
+      "voiceId": "21m00Tcm4TlvDq8ikWAM"
+    },
+    "transcriber": {
+      "provider": "deepgram",
+      "model": "nova-2"
+    },
+    "firstMessage": "Hello! I'm your hotel booking assistant. I can help you find available rooms and make a reservation. When would you like to check in?",
+    "endCallMessage": "Thank you for booking with us! We look forward to hosting you."
+  },
+  "variables": {
+    "global": {
+      "{{reservation.startDate}}": "Check-in date",
+      "{{reservation.endDate}}": "Check-out date",
+      "{{reservation.rooms}}": "Number of rooms needed",
+      "{{reservation.adults}}": "Number of adult guests",
+      "{{reservation.children}}": "Number of children",
+      "{{room.roomTypeId}}": "Selected room type",
+      "{{ratePlan.ratePlanId}}": "Selected rate plan",
+      "{{guest.name}}": "Guest name",
+      "{{guest.email}}": "Guest email",
+      "{{guest.phone}}": "Guest phone number",
+      "{{guest.guestID}}": "Guest ID (after reservation created)",
+      "{{reservation.reservationID}}": "Reservation ID",
+      "{{reservation.totalAmount}}": "Total reservation amount"
+    },
+    "cloudbeds": {
+      "{{hotel.propertyID}}": "Hotel property ID",
+      "{{hotel.location}}": "Hotel location"
+    }
+  },
+  "tools": [
+    {
+      "name": "cloudbeds.getAvailabilityAndRates",
+      "endpoint": "/getAvailableRoomTypes",
+      "method": "GET",
+      "parameters": ["propertyIDs", "startDate", "endDate", "rooms", "adults", "children"]
+    },
+    {
+      "name": "getRatePlans",
+      "endpoint": "/getRatePlans",
+      "method": "GET",
+      "parameters": ["propertyID", "roomTypeId", "startDate", "endDate"]
+    },
+    {
+      "name": "createReservation",
+      "endpoint": "/createReservation",
+      "method": "POST",
+      "parameters": ["propertyID", "roomTypeId", "ratePlanId", "startDate", "endDate", "guestName", "guestEmail", "guestPhone", "adults", "children"]
+    }
+  ],
+  "workflow": [
+    {
+      "step": 1,
+      "name": "Collect Stay Details",
+      "task": "collectStayDetails",
+      "inputs": ["reservation.startDate", "reservation.endDate", "reservation.adults", "reservation.children"],
+      "outputs": ["reservation.startDate", "reservation.endDate", "reservation.adults", "reservation.children"]
+    },
+    {
+      "step": 2,
+      "name": "Search Available Room Types",
+      "task": "getAvailableRoomTypes",
+      "tool": "cloudbeds.getAvailabilityAndRates",
+      "inputs": ["reservation.startDate", "reservation.endDate", "reservation.rooms", "reservation.adults", "reservation.children"],
+      "outputs": ["rooms[]", "ratePlans[]"]
+    },
+    {
+      "step": 3,
+      "name": "Select Room and Rate Plan",
+      "task": "selectRoomAndPlan",
+      "inputs": ["rooms[]", "ratePlans[]"],
+      "outputs": ["reservation.roomTypeId", "reservation.ratePlanId"]
+    },
+    {
+      "step": 4,
+      "name": "Collect Guest Information",
+      "task": "collectGuestInfo",
+      "inputs": [],
+      "outputs": ["guest.name", "guest.email", "guest.phone"]
+    },
+    {
+      "step": 5,
+      "name": "Create Reservation",
+      "task": "createReservation",
+      "tool": "createReservation",
+      "inputs": ["reservation.roomTypeId", "reservation.ratePlanId", "reservation.startDate", "reservation.endDate", "guest.name", "guest.email", "guest.phone", "reservation.adults", "reservation.children"],
+      "outputs": ["reservation.reservationID", "guest.guestID", "reservation.totalAmount"]
+    }
+  ]
+}
+

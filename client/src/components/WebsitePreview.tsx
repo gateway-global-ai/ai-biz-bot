@@ -1,8 +1,10 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ShareButton from '@/components/ShareButton';
+import { useAuth } from '@/lib/auth';
 import { LiveVoiceClient } from '@/services/liveService';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
+import { HotelBookingBlock } from '@/components/HotelBookingBlock';
 
 interface PlaceData {
   name: string;
@@ -50,12 +52,18 @@ interface WebsitePreviewProps {
   heroImageUrl?: string | null;
   placeId?: string | null;
   siteConfigId?: string | null;
+  /** URL slug for constructing the public share URL (/biz/:slug). */
+  publicSlug?: string | null;
 }
 
 function getPhotoUrl(photo: any, maxWidth = 1200): string | null {
   if (!photo) return null;
   if (typeof photo.getURI === 'function') return photo.getURI({ maxWidth });
   if (typeof photo.getUrl === 'function') return photo.getUrl({ maxWidth });
+  // Server photo-proxy shape (e.g. from BusinessPage or stored placeData)
+  if (typeof photo.proxyUrl === 'string' && photo.proxyUrl) {
+    return photo.proxyUrl.replace(/maxWidth=\d+/, `maxWidth=${maxWidth}`);
+  }
   return null;
 }
 
@@ -95,7 +103,8 @@ interface ChatMessage {
   content: string;
 }
 
-export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageUrlProp, placeId: _placeId, siteConfigId: _siteConfigId }: WebsitePreviewProps) {
+export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageUrlProp, placeId: _placeId, siteConfigId, publicSlug }: WebsitePreviewProps) {
+  const { user } = useAuth();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isChatMenuOpen, setIsChatMenuOpen] = useState(false);
@@ -262,18 +271,14 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
   // Stable references — prevents ConciergePanel's useEffect from re-running on
   // every render just because these objects are recreated as inline literals.
   const conciergeBusinessContext = useMemo(() => ({
-    // `id` is intentionally empty — WebsitePreview is a demo/preview surface that
-    // works with Google Places data, not a stored site_configs record.
-    // ConciergePanel guards against undefined/empty IDs and skips the Handover
-    // Service fetch when id is '' (initialises directly from props instead).
-    id: '',
+    id: siteConfigId ?? '',
     placeId: place.place_id || '',
     name: place.name,
     address: place.formatted_address || '',
     hours: place.opening_hours?.weekday_text?.join(', '),
     services: place.types,
     primaryColor: '#3b82f6',
-  }), [place.place_id, place.name, place.formatted_address, place.opening_hours, place.types]);
+  }), [siteConfigId, place.place_id, place.name, place.formatted_address, place.opening_hours, place.types]);
 
   const conciergeAgentConfig = useMemo(() => ({
     role: agentRole,
@@ -321,6 +326,9 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
           <ShareButton
             shareTitle={`Check out ${place.name}`}
             shareText={`${place.name} - ${place.formatted_address}${place.rating ? ` | Rated ${place.rating}/5` : ''}`}
+            shareUrl={publicSlug ? `${window.location.origin}/biz/${publicSlug}` : undefined}
+            siteConfigId={siteConfigId ?? undefined}
+            referrerUserId={user?.id}
             variant="light"
             testIdPrefix="preview-share"
           />
@@ -393,6 +401,14 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
             </div>
           </div>
         </div>
+
+        {siteConfigId && (
+          <HotelBookingBlock
+            siteConfigId={siteConfigId}
+            placeTypes={place.types ?? []}
+            hotelName={place.name}
+          />
+        )}
 
         <div className="max-w-7xl mx-auto px-6 -mt-20 relative z-20 pb-20">
           <div className="grid grid-cols-1 md:grid-cols-4 md:grid-rows-2 gap-6 auto-rows-min">

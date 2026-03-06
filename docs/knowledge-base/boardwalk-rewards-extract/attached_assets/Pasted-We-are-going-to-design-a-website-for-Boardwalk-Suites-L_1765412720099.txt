@@ -1,0 +1,311 @@
+We are going to design a website for Boardwalk Suites Lafayette that integrates with the Cloudbeds API.
+The website will have the following features:
+
+Display hotel information, group bookings, room inventory, and make searching rates and availability easy.
+
+A full reservation flow for making reservations.
+
+Four agent interfaces (booking agent, front desk agent, check out agent, general manager agent) accessible via chat, but only after authentication.
+
+Staff authentication via an employee whitelist managed in an admin backend.
+
+Use of 123checkme.com for authentication workflows (verifications, digital signatures, login with OTP and magic links for guests).
+
+We are provided with a Cloudbeds API key and several API endpoints to use.
+
+Since we are building for a no-code developer, we will use a framework that allows for visual building and integration with APIs.
+However, note that the requirements are complex and might require custom code. We'll break down the structure and suggest a plan.
+
+Steps:
+
+Planning the Pages and User Roles
+
+Public pages (no login required):
+
+Home page (with hero section, search for rates and availability, hotel information, amenities, etc.)
+
+Group bookings page (information and form for group bookings)
+
+Promotion page for the 1-week free for local employees (with form to apply)
+
+Guest pages (require guest login via 123checkme.com):
+
+Reservation flow (search, select room, book, payment)
+
+My reservations (view upcoming and past reservations)
+
+Staff pages (require employee login via whitelist):
+
+Booking agent: interface to make reservations for guests
+
+Front desk agent: check-in, manage in-house guests
+
+Check out agent: check out guests and collect feedback and rating
+
+General manager: dashboard with hotel health, arrivals, departures, housekeeping status, etc.
+
+Authentication
+
+For guests: Use 123checkme.com for OTP and magic links. We'll need to integrate their recipe.
+
+For staff: We'll have an admin backend to manage whitelist (list of employees allowed to log in). We can use the Cloudbeds getUsers API to get employees, but note that it doesn't include phone numbers. We might need to store additional information in our own database.
+
+API Integration
+
+We are given an API key for Cloudbeds. We'll use the provided endpoints to fetch data.
+
+Note: For making reservations and payments, we need OAuth 2.0. We'll start with the API key for reading data and later switch to OAuth 2.0 for write operations.
+
+Technology Stack
+
+Since we want to use shadCN components and a mobile-friendly interface, we can use Next.js (React) with Tailwind CSS.
+
+For no-code development, we can use tools like Bubble, but given the custom integrations and the need for shadCN, we might need to code. However, we can use a no-code platform that allows custom code (like WeWeb) or use a low-code platform (like Retool for the admin part) but the main website might require custom development.
+
+Design and Layout
+
+Fixed header and footer.
+
+Hero sections with background images and videos.
+
+Use shadCN components for UI consistency.
+
+Chat Interface for Agents
+
+We can use a chat widget (like Crisp, Intercom) or build a custom one. The agents will be accessible via a chat interface, but note that the requirement is for four different agents. We might need to build a chat bot that can route to different agents based on the user's role and needs.
+
+Reservation Flow
+
+Step 1: Search for availability (dates, number of rooms, adults, children)
+
+Step 2: Display available room types with prices (using getAvailableRoomTypes with detailedRates=true)
+
+Step 3: Select room and rate
+
+Step 4: Guest information (if logged in, auto-fill)
+
+Step 5: Payment (using Cloudbeds pay-by-link, but note that requires OAuth 2.0)
+
+Step 6: Confirmation
+
+Admin Backend for Employee Whitelist
+
+We need a way to manage which employees can log in and what role they have (booking agent, front desk, check out, general manager).
+
+We can use the Cloudbeds getUsers to get the list of employees, but we need to store the role and whitelist status in our own database.
+
+Feedback and Rating for Check Out
+
+When checking out, the check out agent will ask for feedback and rating. We can store this in our own database or use Cloudbeds API if available.
+
+Promotion for Local Employees
+- We need a form for employees to apply for the 1-week free promotion. We can store the applications in our own database and then manually or automatically create a group in Cloudbeds.
+
+Given the complexity, I propose the following plan:
+
+Phase 1: Build the public website (home page, group bookings, promotion page) with search and display of hotel information and availability (read-only from Cloudbeds API).
+
+Phase 2: Implement guest authentication (using 123checkme.com) and the reservation flow (without payment, or with payment using a test payment gateway).
+
+Phase 3: Implement staff authentication and the four agent interfaces.
+
+Phase 4: Integrate OAuth 2.0 for Cloudbeds to enable booking and payment.
+
+Phase 5: Implement the admin backend for employee whitelist.
+
+Since we are starting with the provided API key, we can build the read-only parts first.
+
+Let's break down the pages and components:
+
+Public Pages:
+
+Home Page (/)
+
+Hero section (background video or image)
+
+Search form for availability (with dates, rooms, adults, children)
+
+Hotel information (from getHotelDetails)
+
+Amenities
+
+Call to action for group bookings and promotion
+
+Group Bookings Page (/group-bookings)
+
+Information about group bookings
+
+Form to inquire about group bookings (we can use the getGroups API to show existing groups for auto-complete, but note that the group code is for group bookings)
+
+Promotion Page (/promotion)
+
+Details about the 1-week free promotion for local employees
+
+Application form
+
+Guest Pages:
+
+Login/Signup (/auth)
+
+Using 123checkme.com
+
+Reservation Flow (/reserve)
+
+Step 1: Search (if not coming from home page)
+
+Step 2: Room selection
+
+Step 3: Guest information
+
+Step 4: Payment
+
+Step 5: Confirmation
+
+My Reservations (/my-reservations)
+
+List of reservations (we can use getGuestList with detailed info for the logged-in guest)
+
+Staff Pages:
+
+Staff Login (/staff/login)
+
+Custom login for staff (with whitelist)
+
+Booking Agent (/staff/booking)
+
+Search for availability and make reservations for guests.
+
+Front Desk Agent (/staff/front-desk)
+
+View expected arrivals and check-in guests.
+
+Check Out Agent (/staff/checkout)
+- View expected departures and check out guests, collect feedback and rating.
+
+General Manager (/staff/manager)
+- Dashboard with:
+
+Today's hotel health (from getDashboard)
+
+Housekeeping status (from getHousekeepingStatus)
+
+Admin Backend (/staff/admin)
+- Manage employee whitelist and roles.
+
+API Routes (Next.js API routes or serverless functions):
+
+We will create API routes to proxy the Cloudbeds API requests to avoid exposing the API key on the client.
+
+Example:
+
+/api/cloudbeds/getHotelDetails -> forwards to Cloudbeds API with the API key.
+
+Database:
+
+We need a database to store:
+
+Staff whitelist and roles (if not using Cloudbeds users as is, we might just use Cloudbeds users and assign roles in our own database)
+
+Guest feedback and ratings from check-out.
+
+We can use a simple SQL database (like PostgreSQL) or a NoSQL database (like MongoDB).
+
+Authentication:
+
+For guests: We'll use 123checkme.com. We need to follow their recipe for OTP and magic links.
+
+For staff: We'll have a custom login. We can use NextAuth.js or a simple session-based login.
+
+Chat Interface:
+
+We can use a chat widget that connects to a chatbot. The chatbot can be programmed to handle different agent tasks. However, the requirement is for four agents, so we might need to have a chat interface that routes to different human agents based on the user's role. Alternatively, we can build a chat interface that uses the Cloudbeds API to perform actions (like booking, check-in, etc.) and the chatbot can be an AI that uses the API.
+
+Given the complexity, we might start with a simple chat interface that connects to a human agent (via email or phone) and then build the AI chatbot later.
+
+No-Code Consideration:
+
+Since the requirement is for a no-code developer, we might use a no-code platform that allows custom code for the API integrations. However, given the complexity, it might be easier to code the entire application.
+
+Alternatively, we can use a no-code platform like Bubble for the frontend and use its API connector to connect to Cloudbeds. But the requirement for shadCN components and fixed header/footer might be challenging.
+
+Recommendation:
+
+Given the requirements, I recommend building the application with Next.js (React) and Tailwind CSS, and using shadCN components. We can use Next.js API routes to proxy the Cloudbeds API requests and handle authentication.
+
+For the no-code aspect, we can use a visual builder for the frontend (like Vercel's Visual Editing) but we might need to write code for the functionality.
+
+Let's create a scaffold:
+
+Create a Next.js project.
+
+Set up Tailwind CSS and shadCN.
+
+Create the layout with fixed header and footer.
+
+Create the pages as outlined above.
+
+Steps for development:
+
+Set up Next.js project with TypeScript and Tailwind CSS.
+
+Install and set up shadCN components.
+
+Create the layout (header, footer, main content).
+
+Create the public pages (home, group bookings, promotion).
+
+Set up API routes to proxy Cloudbeds API (with the provided API key).
+
+Implement the search and display of available rooms on the home page and reservation flow.
+
+Implement guest authentication (using 123checkme.com).
+
+Implement the reservation flow (without payment initially).
+
+Implement staff authentication and the agent interfaces.
+
+Implement the admin backend for employee whitelist.
+
+Integrate OAuth 2.0 for Cloudbeds for booking and payment.
+
+Implement the chat interface for the agents.
+
+Given the time, we might need to prioritize.
+
+Let's start with the public website and the search functionality.
+
+We'll create an API route to proxy the Cloudbeds API:
+
+Example: pages/api/cloudbeds/getHotelDetails.js
+
+javascript
+import axios from 'axios';
+
+export default async function handler(req, res) {
+  try {
+    const response = await axios.get('https://api.cloudbeds.com/api/v1.3/getHotelDetails?propertyID=315701', {
+      headers: {
+        'accept': 'application/json',
+        'x-api-key': process.env.CLOUDBEDS_API_KEY
+      }
+    });
+    res.status(200).json(response.data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+}
+We can then call this API route from our frontend.
+
+Similarly, we'll create API routes for the other Cloudbeds endpoints.
+
+For the search, we'll create a form that takes the search parameters and then calls the getAvailableRoomTypes endpoint (via our API route) and displays the results.
+
+We'll break down the reservation flow into steps and use state to manage the data.
+
+For the staff authentication, we can create a simple login page that checks against our database (which we will populate with a whitelist of employees).
+
+We'll use NextAuth.js for guest authentication (with 123checkme.com as a provider if they support, otherwise we might need to use a custom provider).
+
+This is a high-level plan and scaffold. We'll need to adjust as we go.
+
+Let me know if you have any questions or need more details on any part.

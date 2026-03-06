@@ -1,0 +1,436 @@
+{
+  "success": true,
+  "data": [
+    {
+      "propertyID": "315701",
+      "propertyCurrency": {
+        "currencyCode": "USD",
+        "currencySymbol": "$",
+        "currencyPosition": "before"
+      },
+      "propertyRooms": [
+        {
+          "roomTypeID": "629879",
+          "roomTypeName": "King Suite Level 1",
+          "roomTypeNameShort": "SK1",
+          "roomTypeDescription": "<span>Our Sofa Sleeper King comes with a king size bed, queen sofa, 58\" Smart TV, desk, fridge, and microwave. The room has a combination shower and bath tub.&nbsp;</span>",
+          "maxGuests": "2",
+          "adultsIncluded": "2",
+          "childrenIncluded": "1",
+          "roomTypePhotos": [
+            {
+              "thumb": "https://h-img1.cloudbeds.com/uploads/315701/king-suite-lafayetteweb_thumb~~66b12ef7ca695.jpg",
+              "image": "https://h-img2.cloudbeds.com/uploads/315701/king-suite-lafayetteweb_featured~~66b12ef78c733.jpg"
+            }
+          ],
+          "roomTypeFeatures": [
+            "Air-conditioning",
+            "110-120 volt circuits",
+            "Microwave",
+            "Wireless internet (WiFi) - fee",
+            "refrigerator",
+            "LED Mirror"
+          ],
+          "roomRateID": "2260273",
+          "roomRate": 69,
+          "ratePlanNamePublic": "default",
+          "ratePlanNamePrivate": "default",
+          "roomsAvailable": 7,
+          "roomRateDetailed": [
+            {
+              "date": "2025-12-15",
+              "rate": 69,
+              "adults": 0,
+              "kids": 0,
+              "base_rate": 69
+            }
+          ],
+          "individualRooms": [
+            {
+              "roomID": "629879-1",
+              "roomName": "101"
+            },
+            {
+              "roomID": "629879-11",
+              "roomName": "111"
+            },
+            {
+              "roomID": "629879-2",
+              "roomName": "102"
+            },
+            {
+              "roomID": "629879-3",
+              "roomName": "103"
+            },
+            {
+              "roomID": "629879-4",
+              "roomName": "104"
+            },
+            {
+              "roomID": "629879-5",
+              "roomName": "105"
+            },
+            {
+              "roomID": "629879-7",
+              "roomName": "107"
+            },
+            {
+              "roomID": "629879-9",
+              "roomName": "109"
+            }
+          ]
+        },
+        {
+          "roomTypeID": "630321",
+          "roomTypeName": "King Suite Level 2",
+          "roomTypeNameShort": "SK2",
+          "roomTypeDescription": "Our King Suite features a 50\" Smart TV, wireless internet, a refrigerator, microwave, and a work desk.&nbsp;",
+          "maxGuests": "2",
+          "adultsIncluded": "2",
+          "childrenIncluded": 0,
+          "roomTypePhotos": [
+            {
+              "thumb": "https://h-img2.cloudbeds.com/uploads/315701/img_3887_thumb~~67658267ad269.jpeg",
+              "image": "https://h-img2.cloudbeds.com/uploads/315701/img_3887_featured~~6765826759cc0.jpeg"
+            },
+            {
+              "thumb": "https://h-img3.cloudbeds.com/uploads/315701/img_3870_thumb~~6765830a73339.jpeg",
+              "image": "https://h-img2.cloudbeds.com/uploads/315701/img_3870_gallery~~6765830a1c8f9.jpeg"
+            },
+            {
+              "thumb": "https://h-img3.cloudbeds.com/uploads/315701/img_3889_thumb~~6765830e84917.jpeg",
+              "image": "https://h-img1.cloudbeds.com/uploads/315701/img_3889_gallery~~6765830e3078a.jpeg"
+            }
+          ],
+          "roomTypeFeatures": [
+            "Air-conditioning",
+            "Microwave",
+            "110-120 volt circuits",
+            "Wireless internet (WiFi)",
+            "Rerfrigerator",
+            "Smart TV"
+          ],
+          "roomRateID": "2265011",
+          "roomRate": 69,
+          "ratePlanNamePublic": "default",
+          "ratePlanNamePrivate": "default",
+          "roomsAvailable": 8,
+          "childrenExtraCharge": {
+            "1": 0
+          },
+          "roomRateDetailed": [
+            {
+              "date": "2025-12-15",
+              "rate": 69,
+              "adults": 0,
+              "kids": 0,
+              "base_rate": 69
+            }
+          ],
+          "individualRooms": [
+            {
+              "roomID": "630321-0",
+              "roomName": "200"
+            },
+            {
+              "roomID": "630321-1",
+              "roomName": "201"
+            },
+            {
+              "roomID": "630321-10",
+              "roomName": "210"
+            },
+            {
+              "roomID": "630321-11",
+              "roomName": "211"
+            },
+            {
+              "roomID": "630321-12",
+              "roomName": "207"
+            },
+            {
+              "roomID": "630321-2",
+              "roomName": "202"
+            },
+            {
+              "roomID": "630321-3",
+              "roomName": "203"
+            },
+            {
+              "roomID": "630321-6",
+              "roomName": "206"
+            }
+          ]
+        },
+        {
+          "roomTypeID": "630599",
+          "roomTypeName": "Double Suite Interior",
+          "roomTypeNameShort": "DSI",
+          "roomTypeDescription": "The Double Bed Suite at Boardwalk Suites Lafayette offers a spacious and comfortable retreat, perfect for families or groups. This 320-square-foot studio features two plush beds, accommodating up to four guests with ease. Enjoy entertainment on the 50\" Smart TV and make use of the microwave and mini fridge for convenient in-room dining. The suite includes a functional workspace with a desk and office chair, ideal for business travelers. With its relaxing bathtub and separate vanity area, this suite provides all the comforts of home in a stylish and modern setting.",
+          "maxGuests": "4",
+          "adultsIncluded": "2",
+          "childrenIncluded": 0,
+          "roomTypePhotos": [
+            {
+              "thumb": "https://h-img1.cloudbeds.com/uploads/315701/img_0897_thumb~~671b6e00e7117.jpeg",
+              "image": "https://h-img1.cloudbeds.com/uploads/315701/img_0897_featured~~671b6e00a64cb.jpeg"
+            },
+            {
+              "thumb": "https://h-img1.cloudbeds.com/uploads/315701/img_0896_thumb~~66ba7ca6ac19f.jpeg",
+              "image": "https://h-img2.cloudbeds.com/uploads/315701/img_0896_gallery~~66ba7ca6689aa.jpeg"
+            },
+            {
+              "thumb": "https://h-img2.cloudbeds.com/uploads/315701/img_0903_thumb~~66ba7ca5993d1.jpeg",
+              "image": "https://h-img2.cloudbeds.com/uploads/315701/img_0903_gallery~~66ba7ca5577ec.jpeg"
+            },
+            {
+              "thumb": "https://h-img2.cloudbeds.com/uploads/315701/img_0904_thumb~~66ba7cab4984a.jpeg",
+              "image": "https://h-img1.cloudbeds.com/uploads/315701/img_0904_gallery~~66ba7cab09b49.jpeg"
+            }
+          ],
+          "roomTypeFeatures": [
+            "Wireless internet (WiFi)",
+            "Air-conditioning",
+            "220-240 volt circuits",
+            "Microwave",
+            "Refrigerator",
+            "Smart TV"
+          ],
+          "roomRateID": "2268827",
+          "roomRate": 99,
+          "ratePlanNamePublic": "default",
+          "ratePlanNamePrivate": "default",
+          "roomsAvailable": 6,
+          "adultsExtraCharge": {
+            "3": 0,
+            "4": 0
+          },
+          "childrenExtraCharge": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          },
+          "roomRateDetailed": [
+            {
+              "date": "2025-12-15",
+              "rate": 99,
+              "adults": 0,
+              "kids": 0,
+              "base_rate": 99
+            }
+          ],
+          "individualRooms": [
+            {
+              "roomID": "630599-10",
+              "roomName": "217"
+            },
+            {
+              "roomID": "630599-5",
+              "roomName": "246"
+            },
+            {
+              "roomID": "630599-6",
+              "roomName": "244"
+            },
+            {
+              "roomID": "630599-7",
+              "roomName": "216"
+            },
+            {
+              "roomID": "630599-8",
+              "roomName": "141"
+            },
+            {
+              "roomID": "630599-9",
+              "roomName": "142"
+            }
+          ]
+        },
+        {
+          "roomTypeID": "631047",
+          "roomTypeName": "King Suite Interior",
+          "roomTypeNameShort": "SKI",
+          "roomTypeDescription": "The Interior King&nbsp;Suite at Boardwalk Suites Lafayette offers a spacious and comfortable retreat. This 320-square-foot studio features a King size bed, accommodating up to two guests with ease. Enjoy entertainment on the 50\" Smart TV and make use of the microwave and mini fridge for convenient in-room dining. The suite includes a functional workspace with a desk and office chair, ideal for business travelers. With its relaxing bathtub and separate vanity area, this suite provides all the comforts of home in a stylish and modern setting.",
+          "maxGuests": "2",
+          "adultsIncluded": "2",
+          "childrenIncluded": 0,
+          "roomTypePhotos": [
+            {
+              "thumb": "https://h-img2.cloudbeds.com/uploads/315701/img_0900_thumb~~671b6e819b7ad.jpeg",
+              "image": "https://h-img1.cloudbeds.com/uploads/315701/img_0900_featured~~671b6e8152ec1.jpeg"
+            },
+            {
+              "thumb": "https://h-img2.cloudbeds.com/uploads/315701/img_0900_thumb~~671b6ecc22009.jpeg",
+              "image": "https://h-img3.cloudbeds.com/uploads/315701/img_0900_gallery~~671b6ecbd2c64.jpeg"
+            },
+            {
+              "thumb": "https://h-img3.cloudbeds.com/uploads/315701/img_0902_thumb~~671b6ecb89b6b.jpeg",
+              "image": "https://h-img2.cloudbeds.com/uploads/315701/img_0902_gallery~~671b6ecb36964.jpeg"
+            },
+            {
+              "thumb": "https://h-img1.cloudbeds.com/uploads/315701/img_0895_thumb~~671b6ece6d1b8.jpeg",
+              "image": "https://h-img3.cloudbeds.com/uploads/315701/img_0895_gallery~~671b6ece23ca1.jpeg"
+            },
+            {
+              "thumb": "https://h-img3.cloudbeds.com/uploads/315701/img_0896_thumb~~671b6ecf2b801.jpeg",
+              "image": "https://h-img3.cloudbeds.com/uploads/315701/img_0896_gallery~~671b6ecee63aa.jpeg"
+            },
+            {
+              "thumb": "https://h-img2.cloudbeds.com/uploads/315701/img_0894_thumb~~671b6ed14b9e8.jpeg",
+              "image": "https://h-img1.cloudbeds.com/uploads/315701/img_0894_gallery~~671b6ed103944.jpeg"
+            },
+            {
+              "thumb": "https://h-img3.cloudbeds.com/uploads/315701/img_0893_thumb~~671b6ed1f2106.jpeg",
+              "image": "https://h-img3.cloudbeds.com/uploads/315701/img_0893_gallery~~671b6ed1b1748.jpeg"
+            },
+            {
+              "thumb": "https://h-img3.cloudbeds.com/uploads/315701/img_0904_thumb~~671b6ed46d798.jpeg",
+              "image": "https://h-img1.cloudbeds.com/uploads/315701/img_0904_gallery~~671b6ed41cf64.jpeg"
+            }
+          ],
+          "roomTypeFeatures": [
+            "110-120 volt circuits",
+            "220-240 volt circuits",
+            "Microwave",
+            "Wireless internet (WiFi)",
+            "Refrigerator"
+          ],
+          "roomRateID": "2274520",
+          "roomRate": 89,
+          "ratePlanNamePublic": "default",
+          "ratePlanNamePrivate": "default",
+          "roomsAvailable": 5,
+          "childrenExtraCharge": {
+            "1": 0
+          },
+          "roomRateDetailed": [
+            {
+              "date": "2025-12-15",
+              "rate": 89,
+              "adults": 0,
+              "kids": 0,
+              "base_rate": 89
+            }
+          ],
+          "individualRooms": [
+            {
+              "roomID": "631047-12",
+              "roomName": "247"
+            },
+            {
+              "roomID": "631047-2",
+              "roomName": "215"
+            },
+            {
+              "roomID": "631047-4",
+              "roomName": "245"
+            },
+            {
+              "roomID": "631047-6",
+              "roomName": "243"
+            },
+            {
+              "roomID": "631047-9",
+              "roomName": "248"
+            }
+          ]
+        },
+        {
+          "roomTypeID": "642569",
+          "roomTypeName": "VIP King Suite",
+          "roomTypeNameShort": "SKV",
+          "roomTypeDescription": "These suites have been fully renovated and they can be joined together to form a 3 bedroom family suite. These rooms also have access to our shared kitchen and laundry room.&nbsp;",
+          "maxGuests": "2",
+          "adultsIncluded": "1",
+          "childrenIncluded": 0,
+          "roomTypePhotos": [
+            {
+              "thumb": "https://h-img1.cloudbeds.com/uploads/315701/screenshot_2024-12-20_012016_thumb~~67651ace6d0f5.png",
+              "image": "https://h-img2.cloudbeds.com/uploads/315701/screenshot_2024-12-20_012016_featured~~67651acdbf019.png"
+            },
+            {
+              "thumb": "https://h-img1.cloudbeds.com/uploads/315701/screenshot_2024-12-20_012329_thumb~~67651b847bfc4.png",
+              "image": "https://h-img2.cloudbeds.com/uploads/315701/screenshot_2024-12-20_012329_gallery~~67651b83ad718.png"
+            },
+            {
+              "thumb": "https://h-img2.cloudbeds.com/uploads/315701/screenshot_2024-12-20_012234_thumb~~67651b855ac82.png",
+              "image": "https://h-img3.cloudbeds.com/uploads/315701/screenshot_2024-12-20_012234_gallery~~67651b849b28e.png"
+            }
+          ],
+          "roomTypeFeatures": [
+            "Wireless internet (WiFi)",
+            "Cable television",
+            "Microwave"
+          ],
+          "roomRateID": "2449376",
+          "roomRate": 89,
+          "ratePlanNamePublic": "default",
+          "ratePlanNamePrivate": "default",
+          "roomsAvailable": 3,
+          "adultsExtraCharge": {
+            "2": 0
+          },
+          "childrenExtraCharge": {
+            "1": 0
+          },
+          "roomRateDetailed": [
+            {
+              "date": "2025-12-15",
+              "rate": 89,
+              "adults": 0,
+              "kids": 0,
+              "base_rate": 89
+            }
+          ]
+        },
+        {
+          "roomTypeID": "649980",
+          "roomTypeName": "Double Suite Exterior",
+          "roomTypeNameShort": "DSI",
+          "roomTypeDescription": "Double bed room for up to 4 guests.",
+          "maxGuests": "4",
+          "adultsIncluded": "1",
+          "childrenIncluded": 0,
+          "roomTypePhotos": [
+            {
+              "thumb": "https://h-img3.cloudbeds.com/uploads/315701/img_1258_thumb~~6910d08201689.jpg",
+              "image": "https://h-img1.cloudbeds.com/uploads/315701/img_1258_featured~~6910d081908e8.jpg"
+            }
+          ],
+          "roomTypeFeatures": [
+            "Air-conditioning",
+            "Microwave",
+            "Wireless internet (WiFi)"
+          ],
+          "roomRateID": "2582704",
+          "roomRate": 79,
+          "ratePlanNamePublic": "default",
+          "ratePlanNamePrivate": "default",
+          "roomsAvailable": 9,
+          "adultsExtraCharge": {
+            "2": 0,
+            "3": 0,
+            "4": 0
+          },
+          "childrenExtraCharge": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          },
+          "roomRateDetailed": [
+            {
+              "date": "2025-12-15",
+              "rate": 79,
+              "adults": 0,
+              "kids": 0,
+              "base_rate": 79
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "roomCount": 6,
+  "count": 1,
+  "total": 1
+}

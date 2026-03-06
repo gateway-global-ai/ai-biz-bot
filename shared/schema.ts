@@ -344,9 +344,9 @@ export const agents = pgTable("agents", {
   // Agent-specific telephony
   phoneNumber: text("phone_number"),
   phoneSid: text("phone_sid"),
-  // AI Model Configuration
-  aiModelProvider: text("ai_model_provider").default("moonshot"), // moonshot, huggingface, openai, anthropic
-  aiModelId: text("ai_model_id").default("moonshot-v1-128k"),
+  // AI Model Configuration (Model Monoculture: runtime uses process.env.GEMINI_MODEL_ID)
+  aiModelProvider: text("ai_model_provider").default("gemini"), // gemini only; set in Doppler
+  aiModelId: text("ai_model_id").default(""), // empty = use process.env.GEMINI_MODEL_ID at runtime
   aiTemperature: integer("ai_temperature").default(60), // Stored as 0-100, divide by 100 for actual value
   aiMaxTokens: integer("ai_max_tokens").default(4096),
   hfToken: text("hf_token"), // User's HuggingFace token (encrypted)
@@ -552,6 +552,59 @@ export const insertAuthSessionSchema = createInsertSchema(authSessions).omit({
 export type InsertAuthSession = z.infer<typeof insertAuthSessionSchema>;
 export type AuthSession = typeof authSessions.$inferSelect;
 
+// Investor report access (migration 0019): view tracking + session for SMS-gated report
+export const investorReportViews = pgTable("investor_report_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phone: text("phone").notNull(),
+  viewedAt: timestamp("viewed_at").defaultNow().notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+});
+
+export const insertInvestorReportViewSchema = createInsertSchema(investorReportViews).omit({
+  id: true,
+  viewedAt: true,
+});
+
+export type InsertInvestorReportView = z.infer<typeof insertInvestorReportViewSchema>;
+export type InvestorReportView = typeof investorReportViews.$inferSelect;
+
+export const investorReportSessions = pgTable("investor_report_sessions", {
+  token: varchar("token").primaryKey(),
+  phone: text("phone").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertInvestorReportSessionSchema = createInsertSchema(investorReportSessions).omit({
+  createdAt: true,
+});
+
+export type InsertInvestorReportSession = z.infer<typeof insertInvestorReportSessionSchema>;
+export type InvestorReportSession = typeof investorReportSessions.$inferSelect;
+
+// Pitch decks — deep research / market-fit presentations (The Joint, etc.)
+export const pitchDecks = pgTable("pitch_decks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: varchar("slug").notNull().unique(),
+  title: text("title").notNull(),
+  businessName: text("business_name").notNull(),
+  category: text("category").notNull(),
+  industry: text("industry").notNull(),
+  content: jsonb("content").notNull().default({ slides: [] }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertPitchDeckSchema = createInsertSchema(pitchDecks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertPitchDeck = z.infer<typeof insertPitchDeckSchema>;
+export type PitchDeck = typeof pitchDecks.$inferSelect;
+
 // NOVA Sovereign IDV sessions — constitution: .system_design/nova_sovereign_ruleset_v1.yaml
 export const novaIdvSessions = pgTable("nova_idv_sessions", {
   sessionId: uuid("session_id").primaryKey(),
@@ -597,6 +650,24 @@ export const insertDemoLeadSchema = createInsertSchema(demoLeads).omit({
 
 export type InsertDemoLead = z.infer<typeof insertDemoLeadSchema>;
 export type DemoLead = typeof demoLeads.$inferSelect;
+
+// Affiliate / Reseller program signups (phone → registration link; name/email for checkout)
+export const affiliateSignups = pgTable("affiliate_signups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phone: text("phone").notNull(),
+  name: text("name"),
+  email: text("email"),
+  source: text("source").default("landing"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAffiliateSignupSchema = createInsertSchema(affiliateSignups).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAffiliateSignup = z.infer<typeof insertAffiliateSignupSchema>;
+export type AffiliateSignup = typeof affiliateSignups.$inferSelect;
 
 // Twilio Sub-Accounts for multi-tenant phone number management
 export const twilioSubAccounts = pgTable("twilio_sub_accounts", {
@@ -850,7 +921,7 @@ export const botTemplates = pgTable("bot_templates", {
   description: text("description"),
   category: text("category").default("custom"),
   defaultSystemPrompt: text("default_system_prompt").notNull(),
-  defaultModel: text("default_model").default("kimi"),
+  defaultModel: text("default_model").default("gemini"), // runtime uses process.env.GEMINI_MODEL_ID
   defaultTools: jsonb("default_tools").default({}),
   defaultUiConfig: jsonb("default_ui_config").default({}),
   icon: text("icon").default("Bot"),
@@ -1129,6 +1200,12 @@ export const siteConfigs = pgTable("site_configs", {
   claimStatus:              text("claim_status").notNull().default("unclaimed"),
   /** Stripe Checkout session ID used for the $49.99 activation payment. */
   claimCheckoutSessionId:   text("claim_checkout_session_id"),
+  /** Tenant and staff list for Receptionist "Employee Awareness" e.g. { tenant_id, staff: [{ name, role, agent_id }] }. */
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  /** URL-safe slug for the public business page (e.g. "mcdonalds-lafayette-a3f2"). */
+  slug: varchar("slug"),
+  /** Denormalized total shares — incremented on each share_events insert. */
+  shareCount: integer("share_count").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1141,6 +1218,45 @@ export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
 
 export type InsertSiteConfig = z.infer<typeof insertSiteConfigSchema>;
 export type SiteConfig = typeof siteConfigs.$inferSelect;
+
+// ── Per-site PMS integrations (Cloudbeds, etc.) — one row per site per PMS ─
+export const sitePmsIntegrations = pgTable("site_pms_integrations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  pmsType: text("pms_type").notNull(),
+  propertyId: text("property_id"),
+  apiKey: text("api_key"),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  bookingEngineUrl: text("booking_engine_url"),
+  config: jsonb("config").$type<Record<string, unknown>>().default({}).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSitePmsIntegrationSchema = createInsertSchema(sitePmsIntegrations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSitePmsIntegration = z.infer<typeof insertSitePmsIntegrationSchema>;
+export type SitePmsIntegration = typeof sitePmsIntegrations.$inferSelect;
+
+// ── Share Events — tracks every share action with optional referrer UUID ─────
+export const shareEvents = pgTable("share_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  /** UUID of the verified platform user who shared — NULL for anonymous shares. */
+  referrerUserId: varchar("referrer_user_id"),
+  /** Social platform or channel: 'facebook' | 'twitter' | 'linkedin' | 'whatsapp' | 'sms' | 'email' | 'copy' */
+  platform: varchar("platform").notNull(),
+  sharedAt: timestamp("shared_at").defaultNow().notNull(),
+});
+
+export type ShareEvent = typeof shareEvents.$inferSelect;
 
 // ── Voice Usage Logs – Energy Pool Billing ($0.10/min) ────────────────────────
 // One row per completed call. billedMinutes = ceil(rawDurationSeconds / 60).
@@ -2289,6 +2405,7 @@ export const INDUSTRY_GROUPS = [
   'retail',
   'real_estate',
   'automotive',
+  'investor_remodeling',
 ] as const;
 
 export type IndustryGroup = typeof INDUSTRY_GROUPS[number];

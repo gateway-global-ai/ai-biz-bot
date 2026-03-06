@@ -29,9 +29,15 @@ export function registerWebSocketRoute(path: string, wss: WebSocketServer, name:
 export function setupWebSocketRouter(server: Server): void {
   server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
     const url = request.url || '/';
-    
+
+    // 1. VIP BYPASS FOR VITE HMR — do not handle, do not destroy; let Vite's listener complete the handshake
+    if (url.startsWith('/vite-hmr') || url.includes('vite')) {
+      return;
+    }
+
+    // 2. SOVEREIGN ROUTER LOGIC
     console.log(`[WebSocketRouter] Upgrade request for: ${url}`);
-    
+
     // Find matching route
     const route = routes.find(r => url === r.path || url.startsWith(r.path + '?'));
     

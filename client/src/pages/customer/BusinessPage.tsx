@@ -7,7 +7,6 @@
  * Do not modify the Hero CSS or PTT logic without a full regression test.
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import gatewayLogo from '@assets/gatewaylogo_header_left_1770354860467.png';
 import WebsitePreview from '@/components/WebsitePreview';
 import { 
   Phone, Building2, Users, Globe, ShieldCheck, 
@@ -35,7 +34,13 @@ import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 import { ensureApiLoader, loadPlacesLibrary } from '@/utils/googleMapsLoader';
 
-import gatewaySquareLogo from "@assets/gatewayglobalai_logo_square.png";
+import headerLogo from "@assets/clear_voice_ai_dark_sm.png";
+import heroBgGateway from "@assets/hero_bg_gateway2.png";
+import howItWorksQr from "@assets/how-it-works-qr.png";
+import howItWorksWebsite from "@assets/how-it-works-website.png";
+import howItWorksVoice from "@assets/how-it-works-voice.png";
+import clearVoiceQrReceptionist from "@assets/clear-voice-qr-receptionist.png";
+import affiliateStickerHero from "@assets/affiliate-sticker-hero.png";
 
 type VoiceState = 'idle' | 'loading' | 'greeting' | 'greeting_paused' | 'conversation' | 'processing' | 'responding' | 'error';
 
@@ -224,15 +229,172 @@ const AgentTrainingAnimation = () => {
   );
 };
 
+// Reseller & Affiliate Program section — bottom of page: register form + Stripe $99 Affiliate Starter Kit
+function AffiliateResellerSection() {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCheckout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+    const trimmedPhone = phone.trim();
+    if (!trimmedName) {
+      setError('Please enter your name.');
+      return;
+    }
+    if (!trimmedEmail) {
+      setError('Please enter your email.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (!trimmedPhone || trimmedPhone.replace(/\D/g, '').length < 10) {
+      setError('Please enter a valid cell phone number.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/affiliate/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: trimmedName,
+          email: trimmedEmail,
+          phone: trimmedPhone,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error || 'Checkout failed. Please try again.');
+        return;
+      }
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+      setError('Invalid response. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <section className="relative py-16 px-6 overflow-hidden bg-slate-900/40 border-y border-white/5">
+      {/* Background image — cropped/cover for atmosphere */}
+      <div className="absolute inset-0 z-0">
+        <img
+          src={affiliateStickerHero}
+          alt=""
+          className="w-full h-full object-cover opacity-30"
+          aria-hidden
+        />
+        <div className="absolute inset-0 bg-slate-950/80" />
+      </div>
+
+      <div className="relative z-10 max-w-4xl mx-auto">
+        <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-2">
+          Reseller & Affiliate Program
+        </h2>
+        <p className="text-slate-400 text-center mb-8 text-base md:text-lg">
+          Join the network that places Clear Voice AI in local businesses.
+        </p>
+
+        <p className="text-slate-300 text-center max-w-2xl mx-auto mb-6 leading-relaxed text-base md:text-lg">
+          We are looking for small business owners and entrepreneurs to join our network of affiliates.
+          We are placing 32 million stickers on the windows of small business owners and we need your help.
+        </p>
+
+        <ol className="list-decimal list-inside text-slate-300 space-y-2 max-w-xl mx-auto mb-6 text-base md:text-lg">
+          <li>Visit local small businesses and meet the business owners and employees.</li>
+          <li>Get permission to place the sticker on their window or store front.</li>
+          <li>Enter their business name into our QR code generator.</li>
+          <li>Enter the customer cell phone number. We can take care of the rest.</li>
+        </ol>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          {[
+            { tier: 'Bronze (0–10 businesses)', rate: '8%', note: '$49/mo platform + $50/mo AI Voice' },
+            { tier: 'Silver (11–50)', rate: '10%', note: 'On all sales' },
+            { tier: 'Gold (51–100)', rate: '12%', note: 'On all sales' },
+            { tier: 'Platinum (101–500)', rate: '14%', note: 'On all sales' },
+            { tier: 'Diamond (501+)', rate: '16%', note: 'On all sales' },
+          ].map(({ tier, rate, note }) => (
+            <div key={tier} className="rounded-sui bg-slate-900/50 border border-indigo-500/15 p-4">
+              <p className="text-white font-medium text-sm md:text-base">{tier}</p>
+              <p className="text-indigo-400 font-bold text-base md:text-lg">{rate}</p>
+              <p className="text-slate-500 text-xs md:text-sm">{note}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-sui bg-slate-900/60 border border-indigo-500/20 backdrop-blur-xl p-6 md:p-8 max-w-md mx-auto">
+          <p className="text-white font-semibold mb-2 text-center text-lg md:text-xl">Affiliate Starter Kit — $99</p>
+          <p className="text-slate-400 text-sm md:text-base text-center mb-6">
+            Includes 100 stickers, marketing literature, and a company polo. Kits usually arrive within 7 days.
+          </p>
+          <p className="text-white font-semibold mb-3 text-center text-base md:text-lg">
+            Register as an affiliate & pay with card
+          </p>
+          <form onSubmit={handleCheckout} className="flex flex-col gap-3">
+            <Input
+              type="text"
+              placeholder="Full name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="bg-slate-800/80 border-slate-600 text-white placeholder:text-slate-500"
+              disabled={submitting}
+            />
+            <Input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="bg-slate-800/80 border-slate-600 text-white placeholder:text-slate-500"
+              disabled={submitting}
+            />
+            <Input
+              type="tel"
+              placeholder="Cell phone number"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="bg-slate-800/80 border-slate-600 text-white placeholder:text-slate-500"
+              disabled={submitting}
+            />
+            {error && <p className="text-amber-400 text-xs md:text-sm">{error}</p>}
+            <Button
+              type="submit"
+              className="bg-indigo-500 hover:bg-indigo-600 text-white rounded-sui text-base md:text-lg w-full"
+              disabled={submitting}
+            >
+              {submitting ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Redirecting to checkout…</>
+              ) : (
+                'Register & Pay $99 — Affiliate Starter Kit'
+              )}
+            </Button>
+          </form>
+        </div>
+
+        <p className="text-center mt-6">
+          <Link href="/reseller/apply">
+            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white text-xs md:text-sm">
+              Apply for reseller access →
+            </Button>
+          </Link>
+        </p>
+      </div>
+    </section>
+  );
+}
+
 export default function BusinessPage() {
-  const [formState, setFormState] = useState({
-    name: '',
-    email: '',
-    company: '',
-    useCase: 'customer-support',
-    volume: '<100'
-  });
-  const [isSubmitted, setIsSubmitted] = useState(false);
   const [mapsKey, setMapsKey] = useState<string | null>(null);
   const [selectedPlace, setSelectedPlace] = useState<SelectedPlace | null>(null);
   const [mapsError, setMapsError] = useState<string | null>(null);
@@ -272,6 +434,7 @@ export default function BusinessPage() {
   const [initialView, setInitialView] = useState<'chat' | 'voice'>('voice');
   // Resolved Business UUID (siteConfigId) for voice sessionContext — from URL or after create
   const [resolvedSiteConfigId, setResolvedSiteConfigId] = useState<string | null>(null);
+  const [resolvedSiteSlug, setResolvedSiteSlug] = useState<string | null>(null);
 
   // Voice configuration - default to Premium (Clear Voice) for demo
   const voiceConfig = VoiceClientFactory.getDefaultConfig('premium');
@@ -615,6 +778,7 @@ export default function BusinessPage() {
       const siteConfig = await createRes.json();
       const siteConfigId = siteConfig.id;
       setResolvedSiteConfigId(siteConfigId);
+      if (siteConfig.slug) setResolvedSiteSlug(siteConfig.slug);
       const provisionRes = await fetch('/api/intelligence/provision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -796,11 +960,6 @@ export default function BusinessPage() {
     setStage('full-access');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setTimeout(() => setIsSubmitted(true), 800);
-  };
-
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -820,7 +979,7 @@ export default function BusinessPage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <nav className="sticky top-0 z-50 bg-transparent border-b border-white/10 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
-        <img src={gatewayLogo} alt="Gateway Global AI" className="h-20 w-auto relative z-10" style={{ filter: 'drop-shadow(0 2px 8px rgba(19,70,160,0.15))' }} />
+        <img src={headerLogo} alt="Clear Voice AI" className="h-9 w-auto md:h-14 relative z-10 object-contain" style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.2))' }} />
         <div className="flex items-center gap-2 justify-end">
           <ShareButton
             shareTitle="Gateway Global AI - AI Business Router"
@@ -904,8 +1063,13 @@ export default function BusinessPage() {
         </div>
       )}
       {showOverlay && (
-        <div className="fixed inset-0 z-[60] bg-slate-950/95 backdrop-blur-sm flex items-center justify-center px-6">
-          <div className="max-w-lg w-full">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-6">
+          {/* Same hero background as landing — feels like same page, next step */}
+          <div className="absolute inset-0 z-0 pointer-events-none">
+            <img src={heroBgGateway} alt="" className="w-full h-full object-cover" aria-hidden />
+            <div className="absolute inset-0 bg-slate-950/60" aria-hidden />
+          </div>
+          <div className="relative z-10 max-w-lg w-full">
             {(stage === 'phone-gate' || stage === 'sending-link') && (
               <div className="text-center space-y-8">
                 <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-blue-500/20 to-violet-500/20 flex items-center justify-center">
@@ -1096,8 +1260,18 @@ export default function BusinessPage() {
       )}
       {/* Hero Section — exactly one viewport tall so Enterprise starts below the fold */}
       <section className="relative min-h-[100vh] min-h-[100svh] flex flex-col px-6 overflow-hidden bg-slate-900">
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none" />
+        {/* Hero background: gateway building facade (G AI logo, Boardwalk Suites QR) */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <img
+            src={heroBgGateway}
+            alt=""
+            className="w-full h-full object-cover"
+            aria-hidden
+          />
+          <div className="absolute inset-0 bg-slate-950/50" aria-hidden />
+        </div>
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none z-[1]" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none z-[1]" />
         <div className="flex-1 flex items-center relative z-10">
           <div className="w-full max-w-5xl mx-auto flex flex-col items-center gap-6 md:gap-8">
             <div 
@@ -1111,9 +1285,9 @@ export default function BusinessPage() {
               <VoiceVisualizer />
             </div>
             <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white text-center" data-testid="text-hero-heading">
-              AI Business Router<br />
+              Join The Clear Voice AI Network<br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-3xl md:text-[48px]">
-                AI Voice and Chat Enabled
+                Request Your QR Code
               </span>
             </h1>
             <div className="max-w-2xl w-full" data-testid="container-place-search">
@@ -1136,98 +1310,94 @@ export default function BusinessPage() {
               )}
               {!mapsError && <p className="text-xs text-slate-400 mt-3 text-center">Powered by Google Places</p>}
             </div>
-            <p className="text-xl text-slate-400 max-w-2xl text-center leading-relaxed font-light">
-              Fully Developed Web Site In 1 Hour!<br/>
-              <span className="text-white font-medium">No Credit Card Required.</span>
+            <p className="text-lg text-slate-400 max-w-2xl text-center leading-relaxed">
+              Gateway Global currently offers AI voice for businesses in the Google Places and Google Maps. We build you a web site, create a receptionist for your business, and you get to experience Clear Voice AI, the industry&apos;s highest quality and lowest cost AI voice streaming solution.
             </p>
           </div>
         </div>
         <div className="pb-8 md:pb-12" />
 
-        {/* Business Preview Overlay — appears on top of hero when a place is selected */}
+        {/* Business Preview Overlay — sovereign/chat style: dark header, white content, rounded-sui */}
         {selectedPlace && stage === 'landing' && (
           <div className="absolute inset-0 z-20 bg-slate-950/95 backdrop-blur-sm flex items-center justify-center px-6">
-            <div className="max-w-lg w-full">
-              <Card className="bg-slate-50/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
-                <CardContent className="p-6">
-                  <div className="flex flex-col gap-4">
-                    {selectedPlace.photos && selectedPlace.photos.length > 0 && (selectedPlace.photos[0] as any)?.proxyUrl ? (
-                      <div className="w-full h-32 rounded-lg overflow-hidden bg-slate-800">
-                        <img
-                          src={(selectedPlace.photos[0] as any).proxyUrl}
-                          alt={selectedPlace.name}
-                          className="w-full h-full object-cover"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-full h-32 rounded-lg bg-slate-800 flex items-center justify-center">
-                        <Building2 className="w-10 h-10 text-slate-600" />
-                      </div>
-                    )}
-                    <div>
-                      <div className="flex items-start justify-between gap-3 flex-wrap">
-                        <div className="min-w-0">
-                          <h3 className="text-xl font-bold text-white" data-testid="text-place-name">{selectedPlace.name}</h3>
-                          <p className="text-sm text-slate-400 flex items-center gap-1 mt-0.5">
-                            <MapPin className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{selectedPlace.formatted_address}</span>
-                          </p>
-                        </div>
-                        {selectedPlace.rating && (
-                          <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                            <span className="text-white font-bold">{selectedPlace.rating}</span>
-                            {selectedPlace.user_ratings_total && (
-                              <span className="text-slate-500 text-sm">({selectedPlace.user_ratings_total.toLocaleString()})</span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        {selectedPlace.formatted_phone_number && (
-                          <Badge variant="secondary" className="bg-slate-800 text-slate-300 text-xs">
-                            <Phone className="w-3 h-3 mr-1" /> {selectedPlace.formatted_phone_number}
-                          </Badge>
-                        )}
-                        {selectedPlace.types?.slice(0, 3).map(t => (
-                          <Badge key={t} variant="secondary" className="bg-slate-800 text-slate-300 text-xs capitalize">
-                            {t.replace(/_/g, ' ')}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-3 pt-3">
-                      <Button 
-                        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600" 
-                        data-testid="button-generate-site"
-                        onClick={handleGenerateWebsite}
-                      >
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Yes, This Is My Business
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        className="w-full border-violet-500/50 text-violet-300 hover:bg-violet-500/10" 
-                        onClick={() => setShowCreateTeamConfirm(true)} 
-                        data-testid="button-create-ai-team"
-                      >
-                        <Bot className="w-4 h-4 mr-2" />
-                        Create my AI team (6 agents)
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        className="w-full border-slate-700 text-slate-300" 
-                        onClick={() => setSelectedPlace(null)} 
-                        data-testid="button-clear-selection"
-                      >
-                        <Search className="w-4 h-4 mr-2" />
-                        Search Again
-                      </Button>
-                    </div>
+            <div className="max-w-lg w-full rounded-sui overflow-hidden border border-indigo-500/20 shadow-2xl bg-white">
+              {/* Dark header (matches chat header) */}
+              <div className="bg-[#0F172A] px-5 py-3 border-b border-slate-700/80">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400">Confirm your business</p>
+                <h3 className="text-lg font-bold text-white truncate" data-testid="text-place-name">{selectedPlace.name}</h3>
+              </div>
+              {/* White content area (matches chat content) */}
+              <div className="p-5 flex flex-col gap-4">
+                {selectedPlace.photos && selectedPlace.photos.length > 0 && (selectedPlace.photos[0] as any)?.proxyUrl ? (
+                  <div className="w-full h-36 rounded-sui overflow-hidden bg-slate-100 border border-slate-200">
+                    <img
+                      src={(selectedPlace.photos[0] as any).proxyUrl}
+                      alt={selectedPlace.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
                   </div>
-                </CardContent>
-              </Card>
+                ) : (
+                  <div className="w-full h-36 rounded-sui bg-slate-100 border border-slate-200 flex items-center justify-center">
+                    <Building2 className="w-10 h-10 text-slate-400" />
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm text-slate-600 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-500" />
+                    <span className="truncate">{selectedPlace.formatted_address}</span>
+                  </p>
+                  {selectedPlace.rating && (
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                      <span className="font-semibold text-slate-900">{selectedPlace.rating}</span>
+                      {selectedPlace.user_ratings_total && (
+                        <span className="text-slate-500 text-sm">({selectedPlace.user_ratings_total.toLocaleString()})</span>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {selectedPlace.formatted_phone_number && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium">
+                        <Phone className="w-3 h-3" /> {selectedPlace.formatted_phone_number}
+                      </span>
+                    )}
+                    {selectedPlace.types?.slice(0, 3).map(t => (
+                      <span key={t} className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 text-xs capitalize">
+                        {t.replace(/_/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-3 pt-2 border-t border-slate-200">
+                  <Button
+                    className="w-full bg-indigo-500 hover:bg-indigo-600 text-white rounded-sui font-semibold"
+                    data-testid="button-generate-site"
+                    onClick={handleGenerateWebsite}
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Yes, This Is My Business
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full border-slate-200 text-slate-700 hover:bg-slate-50 rounded-sui"
+                    onClick={() => setShowCreateTeamConfirm(true)}
+                    data-testid="button-create-ai-team"
+                  >
+                    <Bot className="w-4 h-4 mr-2" />
+                    Create my AI team (6 agents)
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-sui"
+                    onClick={() => setSelectedPlace(null)}
+                    data-testid="button-clear-selection"
+                  >
+                    <Search className="w-4 h-4 mr-2" />
+                    Search Again
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -1262,7 +1432,14 @@ export default function BusinessPage() {
         {/* Website Preview — renders the full website-builder template */}
         {(stage === 'preview' || stage === 'full-access') && selectedPlace && (
           <div className="fixed inset-0 z-[200] overflow-y-auto bg-slate-50">
-            <WebsitePreview place={selectedPlace} onBack={() => { setStage('landing'); setSelectedPlace(null); }} />
+            <WebsitePreview
+              place={selectedPlace}
+              onBack={() => { setStage('landing'); setSelectedPlace(null); }}
+              siteConfigId={resolvedSiteConfigId ?? undefined}
+              heroImageUrl={selectedPlace.place_id ? `/api/places/photo-proxy/${selectedPlace.place_id}?maxWidth=1200` : undefined}
+              placeId={selectedPlace.place_id}
+              publicSlug={resolvedSiteSlug ?? undefined}
+            />
           </div>
         )}
       </section>
@@ -1293,105 +1470,89 @@ export default function BusinessPage() {
         </div>
       </section>
       */}
-      {/* Enterprise Form */}
+      {/* How It Works — QR code → Website flow only */}
       <section className="py-16 px-6 bg-slate-900/20 border-y border-white/5">
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
-          <div className="space-y-6">
-            <h2 className="text-3xl font-bold text-white">Request Enterprise Access</h2>
-            <p className="text-slate-400">
-              Our enterprise team will review your requirements and set up a dedicated AI phone system tailored to your business needs.
-            </p>
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                Custom pricing
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-3xl font-bold text-white text-center mb-4">How It Works</h2>
+          <p className="text-slate-400 text-center max-w-2xl mx-auto mb-12">
+            Businesses display a Clear Voice AI QR code at their location. Customers scan it and land on the business website — then start a voice or chat conversation instantly.
+          </p>
+          <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-8">
+            <div className="flex flex-col items-center text-center w-full md:max-w-[280px]">
+              <div className="w-full rounded-sui overflow-hidden border border-indigo-500/20 bg-slate-900/40 shadow-xl mb-4">
+                <img src={howItWorksQr} alt="QR code sign — Boardwalk Suites Lafayette, Receptionist, powered by Clear Voice AI" className="w-full h-auto object-cover" />
               </div>
-              <div className="flex items-center gap-2 text-sm text-slate-500">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                Dedicated support
+              <h3 className="text-lg font-bold text-white mb-2">1. Scan the QR code</h3>
+              <p className="text-slate-400 text-sm">
+                At the door, front desk, or table — each location has a QR sign (e.g. &quot;Receptionist&quot; or &quot;Concierge&quot;) powered by Clear Voice AI.
+              </p>
+            </div>
+            <div className="flex-shrink-0 text-indigo-400" aria-hidden>
+              <ArrowRight className="w-10 h-10 md:w-12 md:h-12" />
+            </div>
+            <div className="flex flex-col items-center text-center w-full md:max-w-[280px]">
+              <div className="w-full rounded-sui overflow-hidden border border-indigo-500/20 bg-slate-900/40 shadow-xl mb-4">
+                <img src={howItWorksWebsite} alt="Business website on phone — Voice Concierge and Chat" className="w-full h-auto object-cover" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">2. Open the business website</h3>
+              <p className="text-slate-400 text-sm">
+                Your phone opens the business’s page — hours, location, and a clear way to reach the AI assistant.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Clear Voice AI — title full width, paragraph full width, then 50/50 split: image | bullets */}
+      <section className="py-16 px-6 bg-slate-900/40 border-y border-white/5">
+        <div className="max-w-5xl mx-auto">
+          <div className="rounded-sui bg-slate-900/60 border border-indigo-500/20 backdrop-blur-xl overflow-hidden shadow-2xl p-6 md:p-10">
+            <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 uppercase tracking-tight w-full">
+              Clear Voice AI will replace telephony for business by 2030
+            </h2>
+            <p className="text-slate-300 text-sm md:text-base leading-relaxed mb-8 w-full">
+              A quiet revolution is forming and it’s happening right in front of you — and you probably didn’t see it yet. Gateway Global AI made a bold promise to the world that its Clear Voice AI technology would replace telephony for business by 2030, and they appear to have good reason to believe that. The Clear Voice PTT interface outperforms and out-engineers traditional phone and the leading models and providers like Eleven Labs, Vapi, ChatGPT, and Gemini Live.
+            </p>
+            <div className="grid md:grid-cols-2 gap-8 md:gap-10 w-full">
+              <div className="rounded-sui overflow-hidden border border-indigo-500/20 w-full">
+                <img src={howItWorksVoice} alt="Clear Voice AI interface — Hold to Speak, Voice Concierge" className="w-full h-auto object-cover" />
+              </div>
+              <div className="flex flex-col justify-center">
+                <div className="rounded-sui overflow-hidden border border-indigo-500/20 max-w-[280px] mb-4">
+                  <img src={clearVoiceQrReceptionist} alt="Scan for Receptionist — Powered by Clear Voice AI" className="w-full h-auto object-cover" />
+                </div>
+                <h3 className="text-lg font-bold text-white mb-4">Why Clear Voice AI Works</h3>
+                <ul className="space-y-3 text-slate-300 text-sm md:text-base">
+                  <li className="flex items-start gap-2">
+                    <span className="text-indigo-400 mt-0.5">•</span>
+                    <span>Users scan the QR code and the Clear Voice PTT interface loads instantly — avoiding dial tones, phone trees, and voicemail.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-indigo-400 mt-0.5">•</span>
+                    <span>Phones equipped to scan QR codes so they do not need phone numbers.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-indigo-400 mt-0.5">•</span>
+                    <span>The Clear Voice interface is connected to Google Places and is an expert trained on the business and the customer’s needs.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-indigo-400 mt-0.5">•</span>
+                    <span>Clear Voice AI effortlessly handles turn-taking, background noise, and tool calls.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-indigo-400 mt-0.5">•</span>
+                    <span>Clear Voice AI utilizes proprietary DISC and ARCH communication protocols to produce AI agents that outperform 90% of humans on information calls.</span>
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
-
-          <Card className="bg-slate-50/5 backdrop-blur-xl border border-white/10 rounded-[2.5rem] shadow-2xl">
-            <CardContent className="p-8">
-              {!isSubmitted ? (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <Input
-                    type="text"
-                    placeholder="Full Name"
-                    value={formState.name}
-                    onChange={(e) => setFormState(prev => ({ ...prev, name: e.target.value }))}
-                    className="bg-slate-800 border-slate-700"
-                    data-testid="input-biz-name"
-                  />
-                  <Input
-                    type="email"
-                    placeholder="Work Email"
-                    value={formState.email}
-                    onChange={(e) => setFormState(prev => ({ ...prev, email: e.target.value }))}
-                    className="bg-slate-800 border-slate-700"
-                    data-testid="input-biz-email"
-                  />
-                  <Input
-                    type="text"
-                    placeholder="Company Name"
-                    value={formState.company}
-                    onChange={(e) => setFormState(prev => ({ ...prev, company: e.target.value }))}
-                    className="bg-slate-800 border-slate-700"
-                    data-testid="input-biz-company"
-                  />
-                  <Select 
-                    value={formState.useCase} 
-                    onValueChange={(value) => setFormState(prev => ({ ...prev, useCase: value }))}
-                  >
-                    <SelectTrigger className="bg-slate-800 border-slate-700" data-testid="select-usecase">
-                      <SelectValue placeholder="Select Use Case" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="customer-support">Customer Support</SelectItem>
-                      <SelectItem value="sales">Sales Calls</SelectItem>
-                      <SelectItem value="scheduling">Appointment Scheduling</SelectItem>
-                      <SelectItem value="general">General Inquiries</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select 
-                    value={formState.volume} 
-                    onValueChange={(value) => setFormState(prev => ({ ...prev, volume: value }))}
-                  >
-                    <SelectTrigger className="bg-slate-800 border-slate-700" data-testid="select-volume">
-                      <SelectValue placeholder="Number of Locations" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1 Location</SelectItem>
-                      <SelectItem value="2-5">2 - 5 Locations</SelectItem>
-                      <SelectItem value="6-20">6 - 20 Locations</SelectItem>
-                      <SelectItem value=">20">20+ Locations</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button 
-                    type="submit" 
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600"
-                    data-testid="button-biz-submit"
-                  >
-                    Request Access <ChevronRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </form>
-              ) : (
-                <div className="py-12 text-center">
-                  <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <CheckCircle2 className="w-10 h-10 text-blue-500" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-white mb-2">Request Received</h3>
-                  <p className="text-slate-400 max-w-sm mx-auto">
-                    Our enterprise team will review your requirements. Expect an email at <span className="text-white font-mono">{formState.email}</span> within 24 hours.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
       </section>
+
+      {/* Reseller & Affiliate Program — bottom of page: register + $99 Stripe checkout */}
+      <AffiliateResellerSection />
+
       <footer className="py-12 text-center text-sm border-t border-slate-900 space-y-4">
         <div className="flex items-center justify-center gap-4">
           <Link href="/sdk">
@@ -1502,10 +1663,9 @@ export default function BusinessPage() {
           const nextMode = modes[(currentIndex + 1) % modes.length];
           setChatLayout(nextMode);
         }}
-        onOpenSettings={() => {
-          console.log('[BusinessPage] Open voice settings');
-          // TODO: Open settings modal
-        }}
+        onOpenAdmin={() => setLocation('/aibizbot')}
+        onOpenBizBotChat={() => setLocation('/chat/owner')}
+        variant="sovereign"
         zIndex={60}
       />
     </div>

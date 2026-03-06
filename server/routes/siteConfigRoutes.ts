@@ -19,6 +19,21 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { storage } from '../storage';
 import { provisionAgentsForBusiness } from '../services/agentProvisioning';
+import { handleGetHotelInventory } from '../tools/hotelInventoryHandler';
+
+/** Converts a business name into a URL-safe slug with a 4-char random suffix. */
+function generateSlug(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 50)
+    .replace(/-$/, '');
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `${base || 'biz'}-${suffix}`;
+}
 
 const router = Router();
 
@@ -111,10 +126,12 @@ router.post('/', async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.message });
     }
-    const data = { ...parsed.data };
+    const data: any = { ...parsed.data };
     if (data.placeId && !data.heroImageUrl) {
       data.heroImageUrl = `/api/places/photo-proxy/${data.placeId}?maxWidth=1200`;
     }
+    // Generate a unique URL slug for the public business page
+    data.slug = generateSlug(data.name);
     const config = await storage.createSiteConfig(data as any);
     try {
       const placeTypes = (config.placeData as { types?: string[] } | null)?.types ?? ['establishment'];
@@ -164,6 +181,34 @@ router.delete('/:id', async (req, res) => {
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/hotel-availability
+ * Returns live room availability and rates for a site linked to GRN (platform_business_map + b2b_hotels).
+ * Query: checkIn (YYYY-MM-DD), checkOut (YYYY-MM-DD), guests (optional).
+ * Used by the hospitality booking block below the hero on WebsitePreview.
+ */
+router.get('/:id/hotel-availability', async (req, res) => {
+  try {
+    const siteConfigId = req.params.id;
+    const checkIn = (req.query.checkIn as string) || new Date().toISOString().slice(0, 10);
+    const checkOut = (req.query.checkOut as string) || (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().slice(0, 10);
+    })();
+    const guests = req.query.guests ? parseInt(req.query.guests as string, 10) : 2;
+    const result = await handleGetHotelInventory({
+      _sessionSiteConfigId: siteConfigId,
+      checkIn,
+      checkOut,
+      guests,
+    });
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message ?? 'Failed to fetch hotel availability.' });
   }
 });
 
@@ -246,6 +291,52 @@ router.delete('/:id/knowledge/:docId', async (req, res) => {
     const next = existing.filter((d: any) => d.id !== req.params.docId);
     await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: next } as any);
     res.json({ success: true, knowledgeLibrary: next });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/site-configs/by-slug/:slug
+ * Public endpoint — fetches a site config by its URL slug.
+ * No auth required (used by PublicBusinessPage).
+ */
+router.get('/by-slug/:slug', async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+
+  if (req.method === 'OPTIONS') return res.status(204).end();
+
+  try {
+    const config = await storage.getSiteConfigBySlug(req.params.slug);
+    if (!config) return res.status(404).json({ error: 'Business not found.' });
+    res.json(config);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/share
+ * Records a share event (platform + optional referrer UUID) and increments share_count.
+ * Body: { platform: string, referrerUserId?: string }
+ */
+router.post('/:id/share', async (req, res) => {
+  const shareSchema = z.object({
+    platform: z.enum(['facebook', 'twitter', 'linkedin', 'whatsapp', 'sms', 'email', 'copy']),
+    referrerUserId: z.string().optional(),
+  });
+  try {
+    const parsed = shareSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+    const updated = await storage.recordShareEvent(
+      req.params.id,
+      parsed.data.platform,
+      parsed.data.referrerUserId,
+    );
+    res.json({ success: true, shareCount: updated });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

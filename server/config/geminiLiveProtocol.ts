@@ -107,15 +107,15 @@ export function getGeminiLiveSetup(systemInstruction?: string, tools?: any[]) {
     };
   }
 
-  // Add tools if provided
+  // Add tools if provided. Live API expects one tool object with one functionDeclarations array.
   if (tools && tools.length > 0) {
-    setup.setup.tools = tools.map(tool => ({
-      functionDeclarations: [{
+    setup.setup.tools = [{
+      functionDeclarations: tools.map(tool => ({
         name: tool.name,
         description: tool.description,
         parameters: tool.parameters
-      }]
-    }));
+      }))
+    }];
   }
 
   return setup;

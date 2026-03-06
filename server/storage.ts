@@ -43,6 +43,8 @@ import {
   type InsertProjectTask,
   type DemoLead,
   type InsertDemoLead,
+  type AffiliateSignup,
+  type InsertAffiliateSignup,
   type BotTemplate,
   type InsertBotTemplate,
   type SiteConfig,
@@ -88,6 +90,7 @@ import {
   projects,
   projectTasks,
   demoLeads,
+  affiliateSignups,
   siteConfigs,
   chatLogs,
   customerAccounts,
@@ -99,11 +102,29 @@ import {
   inquiries,
   platformBusinessMap,
   resellers,
-  commissions,
+  resellerCommissions,
+  investorReportViews,
+  investorReportSessions,
+  pitchDecks,
+  type InvestorReportView,
+  type InsertInvestorReportView,
+  type InvestorReportSession,
+  type InsertInvestorReportSession,
+  type PitchDeck,
+  type InsertPitchDeck,
+  shareEvents,
+  analyticsLogs,
+  menus,
+  menuCategories,
+  menuItems,
+  orders,
+  orderItems,
+  smsLogs,
+  smsOptOuts,
 } from "@shared/schema";
 import type { Reseller } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, ilike, or, lte, isNull, and, gt, inArray } from "drizzle-orm";
+import { eq, desc, asc, ilike, or, lte, isNull, and, gt, inArray, sql } from "drizzle-orm";
 
 // Placeholder for a future validation service (UPA).
 const UPAValidator = {
@@ -140,6 +161,8 @@ const siteConfigsColumns = {
   voiceWebAiMinutes: siteConfigs.voiceWebAiMinutes,
   smsMessages: siteConfigs.smsMessages,
   chatBotMessages: siteConfigs.chatBotMessages,
+  slug: siteConfigs.slug,
+  shareCount: siteConfigs.shareCount,
   createdAt: siteConfigs.createdAt,
   updatedAt: siteConfigs.updatedAt,
 };
@@ -618,6 +641,55 @@ export class DatabaseStorage implements IStorage {
     await db.update(otpCodes).set({ used: true }).where(eq(otpCodes.id, id));
   }
 
+  // Investor report access (SMS-gated view tracking)
+  async createInvestorReportView(view: InsertInvestorReportView): Promise<InvestorReportView> {
+    const [row] = await db.insert(investorReportViews).values(view).returning();
+    return row;
+  }
+
+  async createInvestorReportSession(session: InsertInvestorReportSession): Promise<InvestorReportSession> {
+    const [row] = await db.insert(investorReportSessions).values(session).returning();
+    return row;
+  }
+
+  async getValidInvestorReportSession(token: string): Promise<InvestorReportSession | undefined> {
+    const now = new Date();
+    const [row] = await db
+      .select()
+      .from(investorReportSessions)
+      .where(and(eq(investorReportSessions.token, token), gt(investorReportSessions.expiresAt, now)));
+    return row;
+  }
+
+  async listInvestorReportViews(limit = 100): Promise<InvestorReportView[]> {
+    return db.select().from(investorReportViews).orderBy(desc(investorReportViews.viewedAt)).limit(limit);
+  }
+
+  async createPitchDeck(deck: InsertPitchDeck): Promise<PitchDeck> {
+    const [row] = await db.insert(pitchDecks).values({ ...deck, updatedAt: new Date() }).returning();
+    return row;
+  }
+
+  async getPitchDeckBySlug(slug: string): Promise<PitchDeck | undefined> {
+    const [row] = await db.select().from(pitchDecks).where(eq(pitchDecks.slug, slug));
+    return row;
+  }
+
+  async listPitchDecks(opts?: { category?: string; industry?: string }): Promise<PitchDeck[]> {
+    const conditions = [];
+    if (opts?.category) conditions.push(eq(pitchDecks.category, opts.category));
+    if (opts?.industry) conditions.push(eq(pitchDecks.industry, opts.industry));
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    return whereClause
+      ? db.select().from(pitchDecks).where(whereClause).orderBy(desc(pitchDecks.createdAt))
+      : db.select().from(pitchDecks).orderBy(desc(pitchDecks.createdAt));
+  }
+
+  async updatePitchDeck(id: string, updates: Partial<InsertPitchDeck>): Promise<PitchDeck | undefined> {
+    const [row] = await db.update(pitchDecks).set({ ...updates, updatedAt: new Date() }).where(eq(pitchDecks.id, id)).returning();
+    return row;
+  }
+
   // Auth Session operations
   async createAuthSession(session: InsertAuthSession): Promise<AuthSession> {
     const [created] = await db.insert(authSessions).values(session).returning();
@@ -979,6 +1051,11 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async createAffiliateSignup(signup: InsertAffiliateSignup): Promise<AffiliateSignup> {
+    const [created] = await db.insert(affiliateSignups).values(signup).returning();
+    return created;
+  }
+
   async getBotTemplates(): Promise<BotTemplate[]> {
     return db.select().from(botTemplates).orderBy(desc(botTemplates.createdAt));
   }
@@ -1069,8 +1146,53 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSiteConfig(id: string): Promise<boolean> {
+    // Pre-delete child rows that lack ON DELETE CASCADE to avoid FK violations.
+    // 1. orderItems → orders (orders.siteConfigId has no cascade)
+    const orderRows = await db.select({ id: orders.id }).from(orders).where(eq(orders.siteConfigId, id));
+    if (orderRows.length > 0) {
+      const orderIds = orderRows.map(o => o.id);
+      await db.delete(orderItems).where(inArray(orderItems.orderId, orderIds));
+    }
+    await db.delete(orders).where(eq(orders.siteConfigId, id));
+    // 2. menuItems + menuCategories → menus (menus.siteConfigId has no cascade)
+    const menuRows = await db.select({ id: menus.id }).from(menus).where(eq(menus.siteConfigId, id));
+    if (menuRows.length > 0) {
+      const menuIds = menuRows.map(m => m.id);
+      await db.delete(orderItems).where(inArray(orderItems.menuItemId,
+        db.select({ id: menuItems.id }).from(menuItems).where(inArray(menuItems.menuId, menuIds)) as any
+      ));
+      await db.delete(menuItems).where(inArray(menuItems.menuId, menuIds));
+      await db.delete(menuCategories).where(inArray(menuCategories.menuId, menuIds));
+    }
+    await db.delete(menus).where(eq(menus.siteConfigId, id));
+    // 3. analytics_logs, sms_logs, sms_opt_outs
+    await db.delete(analyticsLogs).where(eq(analyticsLogs.siteConfigId, id));
+    await db.delete(smsLogs).where(eq(smsLogs.siteConfigId, id));
+    await db.delete(smsOptOuts).where(eq(smsOptOuts.siteConfigId, id));
+    // 4. Finally delete the site config (share_events cascade automatically)
     await db.delete(siteConfigs).where(eq(siteConfigs.id, id));
     return true;
+  }
+
+  async getSiteConfigBySlug(slug: string): Promise<SiteConfig | undefined> {
+    const [config] = await db.select(siteConfigsColumns).from(siteConfigs)
+      .where(eq(siteConfigs.slug, slug))
+      .limit(1);
+    return config as SiteConfig | undefined;
+  }
+
+  async recordShareEvent(siteConfigId: string, platform: string, referrerUserId?: string): Promise<number> {
+    await db.insert(shareEvents).values({
+      siteConfigId,
+      platform,
+      referrerUserId: referrerUserId ?? null,
+    } as any);
+    const [updated] = await db
+      .update(siteConfigs)
+      .set({ shareCount: sql`${siteConfigs.shareCount} + 1` } as any)
+      .where(eq(siteConfigs.id, siteConfigId))
+      .returning({ shareCount: siteConfigs.shareCount });
+    return updated?.shareCount ?? 0;
   }
 
   async getChatLogs(siteConfigId: string, limit = 50): Promise<ChatLog[]> {

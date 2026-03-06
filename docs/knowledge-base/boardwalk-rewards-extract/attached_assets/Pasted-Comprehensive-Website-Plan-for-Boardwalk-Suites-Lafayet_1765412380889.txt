@@ -1,0 +1,179 @@
+Comprehensive Website Plan for Boardwalk Suites Lafayette
+Overview
+A responsive, full-featured hotel management website integrated with Cloudbeds API v1.3, featuring guest/staff portals and reservation management.
+
+Technology Stack
+Frontend: Next.js 14 (React) with TypeScript
+
+UI Components: shadcn/ui + Tailwind CSS
+
+Authentication: 123checkme.com integration + custom employee whitelist
+
+Backend: Next.js API routes (Server Actions)
+
+Database: PostgreSQL (for employee whitelist, feedback, promotions)
+
+Real-time: Socket.io for chat agents
+
+Deployment: Vercel
+
+Project Structure
+text
+boardwalk-suites/
+├── app/
+│   ├── (public)/
+│   │   ├── layout.tsx           # Public layout (header/footer)
+│   │   ├── page.tsx            # Homepage with hero
+│   │   ├── rooms/
+│   │   │   └── page.tsx        # Room display & availability
+│   │   ├── groups/
+│   │   │   └── page.tsx        # Group bookings
+│   │   ├── promotion/
+│   │   │   └── page.tsx        # 1-week free promotion
+│   │   └── booking/
+│   │       └── page.tsx        # Reservation flow
+│   ├── (guest)/
+│   │   ├── layout.tsx          # Guest portal layout
+│   │   ├── dashboard/
+│   │   │   └── page.tsx        # Guest dashboard
+│   │   ├── reservations/
+│   │   │   └── page.tsx        # Guest reservations
+│   │   └── feedback/
+│   │       └── page.tsx        # Check-out feedback
+│   ├── (staff)/
+│   │   ├── layout.tsx          # Staff portal layout
+│   │   ├── booking-agent/
+│   │   │   └── page.tsx        # Booking agent interface
+│   │   ├── front-desk/
+│   │   │   └── page.tsx        # Front desk interface
+│   │   ├── checkout-agent/
+│   │   │   └── page.tsx        # Checkout interface
+│   │   └── manager/
+│   │       ├── page.tsx        # GM dashboard
+│   │       └── chat/
+│   │           └── page.tsx    # Chat interface
+│   ├── admin/
+│   │   ├── layout.tsx          # Admin layout
+│   │   ├── page.tsx            # Employee whitelist
+│   │   └── promotions/
+│   │       └── page.tsx        # Promotion management
+│   ├── api/
+│   │   ├── cloudbeds/
+│   │   │   ├── route.ts        # Cloudbeds API proxy
+│   │   │   └── webhook/
+│   │   │       └── route.ts    # Webhook handler
+│   │   ├── auth/
+│   │   │   ├── 123checkme/
+│   │   │   │   └── route.ts    # 123checkme integration
+│   │   │   └── staff/
+│   │   │       └── route.ts    # Staff authentication
+│   │   └── chat/
+│   │       └── route.ts        # Chat API
+│   └── lib/
+│       ├── cloudbeds.ts        # Cloudbeds API client
+│       ├── auth.ts             # Authentication utilities
+│       └── db.ts               # Database client
+├── components/
+│   ├── ui/                     # shadcn components
+│   ├── layout/
+│   │   ├── Header.tsx          # Fixed header
+│   │   └── Footer.tsx          # Fixed footer
+│   ├── booking/
+│   │   ├── SearchWidget.tsx    # Availability search
+│   │   ├── RoomGrid.tsx        # Room display
+│   │   └── ReservationForm.tsx # Booking form
+│   ├── staff/
+│   │   ├── GuestLookup.tsx     # Guest search
+│   │   ├── HousekeepingGrid.tsx
+│   │   └── DashboardCards.tsx
+│   └── chat/
+│       └── AgentChat.tsx       # Chat interface
+└── public/
+    └── assets/
+        ├── videos/             # Hero background videos
+        └── images/             # Hotel photos
+Key Components & Features
+1. Public Website Features
+Hero Section: Background video + search availability widget
+
+Hotel Information: Dynamic display from getHotelDetails
+
+Room Inventory: Interactive room selector with filtering (floor, interior/exterior, beds)
+
+Group Booking: Auto-complete group search using getGroups
+
+Promotion Page: Form for Amazon employees to apply for 1-week free stay
+
+Reservation Flow: 5-step booking process
+
+2. Staff Portal Features
+Employee Whitelist: Admin-managed authentication system
+
+Booking Agent: Create/manage reservations, apply group codes
+
+Front Desk: Check-in/out, guest lookup, room assignment
+
+Checkout Agent: Checkout process with feedback collection
+
+General Manager: Dashboard with arrivals/departures, housekeeping status, chat interface
+
+3. Authentication System
+text
+Guest Authentication (123checkme.com):
+- OTP via SMS/Email
+- Magic links
+- Digital signatures for agreements
+
+Staff Authentication:
+- Email/password + 2FA
+- Whitelist validation
+- Role-based permissions (booking, front desk, checkout, manager, admin)
+4. API Integration Layer
+typescript
+// Example Cloudbeds API service
+class CloudbedsService {
+  private apiKey = process.env.CLOUDBEDS_API_KEY;
+  private propertyID = 315701;
+  
+  async getHotelDetails() {
+    return fetch(`https://api.cloudbeds.com/api/v1.3/getHotelDetails?propertyID=${this.propertyID}`, {
+      headers: { 'x-api-key': this.apiKey }
+    });
+  }
+  
+  async getAvailableRooms(params: SearchParams) {
+    // Implementation for getAvailableRoomTypes
+  }
+  
+  // ... other methods
+}
+5. Database Schema
+sql
+-- Employee whitelist
+CREATE TABLE employees (
+  id UUID PRIMARY KEY,
+  email VARCHAR(255) UNIQUE,
+  cloudbeds_user_id VARCHAR(100),
+  role VARCHAR(50),
+  is_active BOOLEAN,
+  created_at TIMESTAMP
+);
+
+-- Guest feedback
+CREATE TABLE feedback (
+  id UUID PRIMARY KEY,
+  reservation_id VARCHAR(100),
+  rating INTEGER,
+  comments TEXT,
+  created_at TIMESTAMP
+);
+
+-- Promotion applications
+CREATE TABLE promotion_applications (
+  id UUID PRIMARY KEY,
+  employer VARCHAR(255),
+  employee_name VARCHAR(255),
+  email VARCHAR(255),
+  status VARCHAR(50),
+  created_at TIMESTAMP
+);

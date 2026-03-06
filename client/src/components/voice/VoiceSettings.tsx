@@ -19,7 +19,9 @@ import {
   Zap,
   BarChart3,
   Download,
-  X
+  X,
+  Bot,
+  ExternalLink
 } from 'lucide-react';
 
 // --- Types ---
@@ -37,6 +39,8 @@ interface VoiceSettingsProps {
     };
   };
   onConfigChange: (newConfig: any) => void;
+  /** When set, show a CTA to open full AI Biz Bot settings (DiSC, ARCH, role, name). */
+  onOpenAgentSettings?: () => void;
 }
 
 type EngineType = 'stream' | 'ptt';
@@ -55,7 +59,8 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
   contained = false,
   currentMode,
   currentConfig,
-  onConfigChange
+  onConfigChange,
+  onOpenAgentSettings
 }) => {
   // --- State ---
   const [selectedEngine, setSelectedEngine] = useState<EngineType>('stream');
@@ -150,11 +155,11 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
 
   return (
     <div className={contained
-      ? "absolute inset-0 z-20 bg-white flex flex-col overflow-hidden"
+      ? "absolute inset-0 z-30 flex flex-col overflow-hidden bg-white"
       : "fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4"
     }>
       <div className={contained
-        ? "flex-1 flex flex-col overflow-hidden min-h-0"
+        ? "flex-1 flex flex-col overflow-hidden min-h-0 min-w-0"
         : "bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
       }>
         
@@ -174,6 +179,27 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
             <X className="w-6 h-6" />
           </button>
         </div>
+
+        {onOpenAgentSettings && (
+          <div className="mx-6 mt-4 p-4 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-indigo-100 rounded-lg">
+                <Bot className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Manage agent behavior</p>
+                <p className="text-xs text-gray-600">DiSC, ARCH, role, name, behavioral charts</p>
+              </div>
+            </div>
+            <button
+              onClick={() => { onOpenAgentSettings(); onClose(); }}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors"
+            >
+              Open AI Biz Bot settings
+              <ExternalLink className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Engine Selector */}
         <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
@@ -231,8 +257,8 @@ export const VoiceSettings: React.FC<VoiceSettingsProps> = ({
           ))}
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        {/* Content - min-h-0 so flex-1 scrolls correctly */}
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6">
           
           {/* SETTINGS TAB */}
           {activeTab === 'settings' && (

@@ -1,11 +1,12 @@
 /**
- * get_hotel_inventory — Live GRN room availability and rates for a platform-linked hotel.
- * Resolves platformId from session anchor, fetches GRN rates, overlays sovereign intelligence from siteConfigs.knowledgeLibrary.
+ * get_hotel_inventory — Live room availability and rates.
+ * If the site has a Cloudbeds PMS integration, uses Cloudbeds; otherwise GRN for platform-linked hotels.
  */
 
 import { db } from "../db";
-import { b2bHotels, platformBusinessMap, siteConfigs } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { b2bHotels, platformBusinessMap, siteConfigs, sitePmsIntegrations } from "@shared/schema";
+import { and, eq } from "drizzle-orm";
+import { fetchCloudbedsAvailability } from "../routes/cloudbedsRoutes";
 import { getGrnAvailability, toGrnApiCode } from "../mcp-hotels-logic";
 
 export async function handleGetHotelInventory(args: {
@@ -16,12 +17,50 @@ export async function handleGetHotelInventory(args: {
   roomFilter?: string;
   _sessionSiteConfigId?: string;
 }): Promise<unknown> {
+  const siteConfigId = args._sessionSiteConfigId;
+
+  // PMS fork: if this site has an active Cloudbeds integration, use it (no platformId required).
+  if (siteConfigId) {
+    const [pmsRow] = await db
+      .select()
+      .from(sitePmsIntegrations)
+      .where(
+        and(
+          eq(sitePmsIntegrations.siteConfigId, siteConfigId),
+          eq(sitePmsIntegrations.pmsType, "cloudbeds"),
+          eq(sitePmsIntegrations.isActive, true)
+        )
+      );
+    if (pmsRow) {
+      const result = await fetchCloudbedsAvailability(pmsRow, {
+        checkIn: args.checkIn,
+        checkOut: args.checkOut,
+        adults: args.guests ?? 2,
+        children: 0,
+        rooms: 1,
+      });
+      if (result.success && result.rooms && args.roomFilter) {
+        const roomFilterLower = args.roomFilter.toLowerCase();
+        result.rooms = result.rooms.map((r) => ({
+          ...r,
+          pinned: (r.roomType ?? "").toLowerCase().includes(roomFilterLower),
+        }));
+        result.rooms.sort(
+          (a, b) =>
+            (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.netPrice ?? 999) - (b.netPrice ?? 999)
+        );
+      }
+      return result;
+    }
+  }
+
+  // GRN path: resolve platformId and fetch via GRN.
   let platformId = args.platformId;
-  if (!platformId && args._sessionSiteConfigId) {
+  if (!platformId && siteConfigId) {
     const [map] = await db
       .select()
       .from(platformBusinessMap)
-      .where(eq(platformBusinessMap.siteConfigId, args._sessionSiteConfigId));
+      .where(eq(platformBusinessMap.siteConfigId, siteConfigId));
     platformId = map?.platformId ?? undefined;
   }
   if (!platformId) {

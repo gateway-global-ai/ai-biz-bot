@@ -31,6 +31,8 @@ import agentSystemRoutes from "./routes/agentSystemRoutes"; // DISC + Agents + O
 import chatRoutes from "./routes/chatRoutes";           // Website Chat + Chat + Conversations
 import investorDemoRoutes from "./routes/investorDemoRoutes"; // Investor report SMS gate + view tracking
 import aiStudioRoutes from "./routes/aiStudioRoutes"; // AI Studio OAuth/Webhook + PTT session initiation
+import affiliateRoutes from "./routes/affiliateRoutes"; // Reseller & Affiliate program signup (phone → registration link)
+import pitchDeckRoutes from "./routes/pitchDeckRoutes"; // Pitch decks — deep research / market-fit (The Joint, etc.) (phone → registration link)
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -144,6 +146,8 @@ export async function registerRoutes(
   app.use('/api/investor-demo', investorDemoRoutes);
 
   app.use('/api/ai-studio', aiStudioRoutes);
+  app.use('/api/affiliate', affiliateRoutes);
+  app.use('/api/pitch-decks', pitchDeckRoutes);
 
   // Agent System: DISC, Agents, Organizations, Projects, BotTemplates
   app.use(agentSystemRoutes);

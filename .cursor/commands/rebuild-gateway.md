@@ -1,0 +1,1 @@
+npm run kill-port && doppler run -- npm run dev

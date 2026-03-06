@@ -45,9 +45,11 @@ import SdkShowcase from "@/pages/showcase/SdkShowcase";
 import GooglePlacesSdk from "@/pages/integrations/GooglePlacesSdk";
 import MyAccount from "@/pages/account/MyAccount";
 import CustomerSiteManager from "@/pages/owner/CustomerSiteManager";
+import PublicBusinessPage from "@/pages/public/PublicBusinessPage";
 import VoiceLeadMachine from "@/pages/biz-dashboard/VoiceLeadMachine";
 import SitesAndLeads from "@/pages/owner/SitesAndLeads";
 import MixingBoard from "@/pages/reseller/MixingBoard";
+import ResellerApplyPage from "@/pages/ResellerApplyPage";
 import CommandChat from "@/pages/agents/CommandChat";
 import InquiryManagement from "@/pages/owner/InquiryManagement";
 import CallTracking from "@/pages/biz-dashboard/CallTracking";
@@ -64,6 +66,9 @@ import WidgetShowcasePage from "@/pages/showcase/WidgetShowcasePage";
 import TestB2b from "@/pages/showcase/TestB2b";
 import OlympicB2b from "@/pages/showcase/OlympicB2b";
 import AgentPortal from "@/pages/showcase/AgentPortal";
+import InvestorDemo from "@/pages/showcase/InvestorDemo";
+import PitchDeckViewer from "@/pages/showcase/PitchDeckViewer";
+import BrandAdminPage from "@/pages/brand-admin";
 import NotFound from "@/pages/admin/not-found";
 import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
@@ -400,9 +405,12 @@ function App() {
               <Route path="/login" component={Login} />
               <Route path="/contact" component={ContactForm} />
               <Route path="/v2" component={LandingV2} />
+              <Route path="/investor-demo" component={InvestorDemo} />
+              <Route path="/pitch-decks/:slug" component={PitchDeckViewer} />
               {/* voice-demo route — handled by Gemini Live on homepage */}
               <Route path="/sdk" component={SdkShowcase} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
+              <Route path="/reseller/apply" component={ResellerApplyPage} />
               <Route path="/chat/customer" component={CustomerChatInterface} />
               <Route path="/chat-showcase" component={ChatEmbedShowcase} />
               {/* 
@@ -414,11 +422,14 @@ function App() {
               <Route path="/interface/customer" component={CustomerChatInterface} />
               <Route path="/interface/owner" component={OwnerChatInterface} />
               <Route path="/interface/developer" component={DeveloperChatInterface} />
-              <Route path="/chat/:agentId" component={AgentChat} /> {/* Agent-specific chat - specialized UI */}
+              <Route path="/chat/owner" component={OwnerChatInterface} />
+              <Route path="/chat/:agentId" component={AgentChat} /> {/* Agent-specific chat - must be after /chat/owner */}
               {/* B2B Agent Portal – public for demo (GRN Connect) */}
               <Route path="/test-b2b" component={AgentPortal} />
               <Route path="/test-b2b-olympic" component={OlympicB2b} />
               <Route path="/test-b2b-wireframe" component={TestB2b} />
+              {/* Public business pages — shareable, no auth required */}
+              <Route path="/biz/:slug" component={PublicBusinessPage} />
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
               <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />

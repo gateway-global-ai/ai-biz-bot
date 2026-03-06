@@ -10,6 +10,7 @@ import { startTaskScheduler } from "./taskScheduler";
 import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
 import { setupBrowserAudioTempRoute } from "./browserVoice";
 import { setupGeminiLiveWebSocket } from "./geminiVoice";
+import { setupAIStudioPTTProxy } from "./aiStudioProxy";
 import { storage } from "./storage";
 import { validateGeminiConfig } from "./config/geminiLiveProtocol";
 
@@ -35,6 +36,93 @@ async function seedDefaultAdmin() {
     }
   } catch (error) {
     console.error("[Seed] Failed to create admin user:", error);
+  }
+}
+
+// Base URL for The Joint pitch deck background images (client public folder)
+const THE_JOINT_IMAGES = "/pitch-decks/the-joint";
+
+// Seed default pitch decks (deep research / market-fit — e.g. The Joint Chiropractic)
+async function seedPitchDecks() {
+  try {
+    const existing = await storage.getPitchDeckBySlug("the-joint-chiropractic");
+    const content = {
+      heroBackgroundImage: `${THE_JOINT_IMAGES}/hero.png`,
+      slides: [
+        {
+          sectionId: "market",
+          label: "Market",
+          title: "Scale: Many Locations, High Call Volume",
+          subtitle: "Ideal profile for platform growth — 30M businesses means targeting multi-location, call-heavy verticals.",
+          bullets: [
+            "900+ locations across the U.S.; franchise model drives consistent demand for scheduling and intake.",
+            "Walk-in and appointment-based care → phones ring constantly for same-day availability and plan questions.",
+            "Membership model increases repeat contact: renewals, plan changes, and visit frequency drive call volume.",
+            "Each location is a separate revenue event opportunity: missed calls = lost appointments and members.",
+          ],
+          highlight: "High locations + high call volume = strong product/market fit for Voice AI distribution.",
+          backgroundImage: `${THE_JOINT_IMAGES}/exterior-strip.png`,
+        },
+        {
+          sectionId: "product-fit",
+          label: "Product–Market Fit",
+          title: "Why The Joint Fits the Voice Expressway",
+          subtitle: "Businesses that benefit most from Clear Voice AI have predictable, high-intent call patterns.",
+          bullets: [
+            "Scheduling and intake are repetitive; AI can handle \"Is the doctor in?\", \"Do you take my insurance?\", and \"I need an adjustment today\" at scale.",
+            "After-hours and overflow: many locations can't staff the phone 24/7; PTT voice AI captures intent and books or qualifies leads.",
+            "Consistent brand voice across 900+ locations without hiring 900+ front-desk staff for peak call times.",
+            "Revenue events are clear: booked appointment, new membership signup, or transferred complex inquiry to staff.",
+          ],
+          highlight: "Every answered call can convert to a booked visit or membership — the unit economics align with our AI Minute model.",
+          backgroundImage: `${THE_JOINT_IMAGES}/exterior-street.png`,
+        },
+        {
+          sectionId: "platform",
+          label: "Why Gateway Global AI",
+          title: "Voice-Native AI That Converts",
+          subtitle: "Sub-150ms mouth-to-ear, PTT-only input, and DB-backed agent config so every location stays on-brand.",
+          bullets: [
+            "Push-to-Talk eliminates background noise and hallucination loops; only intentional speech is sent — critical for noisy clinics.",
+            "DiSC/ARCH profiling: each franchise can tune agent tone (e.g. high Steadiness for reassurance, clear Handoff for clinical questions).",
+            "Site config and knowledge base per location or brand: insurance FAQs, membership tiers, and referral scripts in one place.",
+            "Telecom-grade session tracking: every call is a sovereign session; overage and revenue events (bookings, signups) are measurable.",
+          ],
+          highlight: "We replace legacy communication stacks with a single Hardened AI Distribution — the Voice Expressway for local and enterprise.",
+          backgroundImage: `${THE_JOINT_IMAGES}/reception.png`,
+        },
+        {
+          sectionId: "next",
+          label: "Next Steps",
+          title: "Path to 30 Million Businesses",
+          subtitle: "The Joint is one template; the same playbook applies to other multi-location, high-call verticals.",
+          bullets: [
+            "Pilot: deploy Clear Voice AI at a subset of The Joint locations; measure answer rate, booking conversion, and AI Minute usage.",
+            "Roll out by region or franchise cohort; use category \"Chiropractic\" and industry \"Healthcare / Chiropractic\" for reporting and billing.",
+            "Replicate the deep-research → pitch deck → pilot flow for other industries: dental groups, urgent care, fitness franchises, home services.",
+            "Systematic process: run the deep-research agent on each vertical; generate a deck; store in pitch_decks; use for outreach and internal alignment.",
+          ],
+          highlight: "Store this deck and future ones via POST /api/pitch-decks. View at /pitch-decks/the-joint-chiropractic.",
+          backgroundImage: `${THE_JOINT_IMAGES}/interior-mission.png`,
+        },
+      ],
+    };
+    if (!existing) {
+      await storage.createPitchDeck({
+        slug: "the-joint-chiropractic",
+        title: "Clear Voice AI for The Joint Chiropractic",
+        businessName: "The Joint Chiropractic",
+        category: "Chiropractic",
+        industry: "Healthcare / Chiropractic",
+        content: content as { slides: unknown[] },
+      });
+      console.log("[Seed] Created pitch deck: The Joint Chiropractic");
+    } else if (!(existing.content as { heroBackgroundImage?: string })?.heroBackgroundImage) {
+      await storage.updatePitchDeck(existing.id, { content: content as { slides: unknown[] } });
+      console.log("[Seed] Updated pitch deck: The Joint Chiropractic (background images)");
+    }
+  } catch (error) {
+    console.error("[Seed] Failed to seed pitch decks:", error);
   }
 }
 
@@ -511,6 +599,9 @@ app.use((req, res, next) => {
   // WebSocket: Browser ↔ Gemini 2.5 Flash Live (unified: /ws/gemini-live and /ws/browser-voice)
   setupGeminiLiveWebSocket(httpServer);
 
+  // WebSocket: AI Studio PTT (/ws/ai-studio-ptt) — isolated proxy, env-only config
+  setupAIStudioPTTProxy(httpServer);
+
   // Initialize the WebSocket router (must be AFTER all routes are registered)
   const { setupWebSocketRouter } = await import("./websocketRouter");
   setupWebSocketRouter(httpServer);
@@ -592,8 +683,9 @@ app.use((req, res, next) => {
   // PORT is set by Doppler per environment (dev=3004, stg=3003, prd=3002). See npm run doppler:sync-ports.
   // Default 3004 for dev when PORT is not set. Serves both API and client.
   const port = parseInt(process.env.PORT || "3004", 10);
-  // Seed default admin and core agents before starting server
+  // Seed default admin, pitch decks, and core agents before starting server
   await seedDefaultAdmin();
+  await seedPitchDecks();
   await seedCoreAgents();
 
   // Validate Gemini Live API configuration

@@ -1,0 +1,42 @@
+---
+description: When asked to add a cool, dynamic, or Sovereign background, use these custom React Three Fiber components instead of Vanta.js or static CSS.
+globs: ["**/*.tsx", "**/*.jsx"]
+---
+# Sovereign Three.js Backgrounds
+
+Whenever a user requests a "cool background," an "animated background," or specifically asks for the "Sovereign Network" or "Core Brain" visuals, you MUST use the custom `react-three-fiber` components located in our project (e.g., `client/src/components/ThreeBackground.tsx`).
+
+Do NOT use Vanta.js. Do NOT use static CSS gradients as a replacement for 3D elements.
+
+## Available Components:
+
+### 1. `<NetworkScene />`
+Use this for hero sections, landing pages, and pitch decks to represent the distributed AI Business Router architecture.
+* **Visuals:** Floating spherical nodes connected by lines, volumetric fog, city environment lighting.
+* **Usage:** Place it absolutely behind the content.
+    ```tsx
+    import { NetworkScene } from '@/components/ThreeBackground';
+    
+    <div className="relative min-h-screen">
+       <NetworkScene />
+       <div className="relative z-10">...content...</div>
+    </div>
+    ```
+
+### 2. `<CoreScene />`
+Use this to represent the "Kernel," "Baseband," or "MCP Engine."
+* **Visuals:** A slowly rotating, wireframe Icosahedron inside a glowing solid Icosahedron, surrounded by stars.
+* **Usage:** Place it behind specific technical components or feature cards.
+    ```tsx
+    import { CoreScene } from '@/components/ThreeBackground';
+    
+    <div className="relative h-[400px]">
+       <CoreScene />
+       <div className="relative z-10">...content...</div>
+    </div>
+    ```
+
+## Implementation Rules:
+* Always ensure the canvas container has `absolute inset-0 z-0` (or similar) so it sits behind the actual UI content.
+* Ensure the foreground content has `relative z-10` to remain clickable.
+* Ensure `@react-three/fiber`, `@react-three/drei`, and `three` are installed.

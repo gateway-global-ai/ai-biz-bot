@@ -136,12 +136,16 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                   const filteredDeclarations = Object.values(TOOL_DECLARATIONS).filter(
                     t => allowedTools.includes(t.name)
                   );
-                  const filteredTools = filteredDeclarations.map(tool => ({
-                    functionDeclarations: [{ name: tool.name, description: tool.description, parameters: tool.parameters }]
-                  }));
-                  if (filteredTools.length > 0) {
-                    message.setup.tools = filteredTools;
-                    console.log(`[GeminiVoice] Tool isolation: ${filteredTools.length}/${Object.keys(TOOL_DECLARATIONS).length} tools active for agentId=${sessionAgentId}`);
+                  if (filteredDeclarations.length > 0) {
+                    // Live API expects a single tool object with one functionDeclarations array (all functions).
+                    message.setup.tools = [{
+                      functionDeclarations: filteredDeclarations.map(tool => ({
+                        name: tool.name,
+                        description: tool.description,
+                        parameters: tool.parameters
+                      }))
+                    }];
+                    console.log(`[GeminiVoice] Tool isolation: ${filteredDeclarations.length}/${Object.keys(TOOL_DECLARATIONS).length} tools active for agentId=${sessionAgentId}`);
                   }
                 }
               }
@@ -155,17 +159,16 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           // #endregion
 
           // Inject full tool set if not already set by Contextual Snap (no allowedTools filter)
+          // Live API expects tools: [ { functionDeclarations: [ ...all functions ] } ], not one object per function.
           if (!message.setup.tools || (Array.isArray(message.setup.tools) && message.setup.tools.length === 0) || !sessionAgentId) {
-            const tools = Object.values(TOOL_DECLARATIONS).map(tool => ({
-              functionDeclarations: [{
-                name: tool.name,
-                description: tool.description,
-                parameters: tool.parameters
-              }]
+            const declarations = Object.values(TOOL_DECLARATIONS).map(tool => ({
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.parameters
             }));
-            if (tools.length > 0) {
-              message.setup.tools = tools;
-              console.log(`📤 [PROXY -> GOOGLE] Injecting ${tools.length} tools into setup`);
+            if (declarations.length > 0) {
+              message.setup.tools = [{ functionDeclarations: declarations }];
+              console.log(`📤 [PROXY -> GOOGLE] Injecting ${declarations.length} tools into setup`);
             }
           }
           

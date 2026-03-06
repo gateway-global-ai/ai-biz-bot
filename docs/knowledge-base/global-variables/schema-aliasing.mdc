@@ -1,0 +1,55 @@
+---
+alwaysApply: true
+---
+# Schema-Based Aliasing System
+
+This rule file references the JSON-based rules at `schema-aliasing.json` for stable behavior.
+
+## Overview
+
+Schema-based aliasing allows industry-specific terminology in prompts while maintaining global parameters across industries. This enables:
+- **Global Parameters**: `{{customer.*}}`, `{{company.*}}` work across all industries
+- **Industry Aliases**: `customer` = `guest` (hotel), `company` = `hotel` (hotel), etc.
+- **Flexible Prompts**: Use industry-specific terminology (`{{guest.*}}`, `{{hotel.*}}`) in prompts
+- **Consistent Internals**: Map to standard namespaces (`{{customer.*}}`, `{{company.*}}`) internally
+
+## Quick Setup
+
+1. **Define Schema**: Create schema per industry (e.g., "hotel", "healthcare", "retail")
+2. **Set Aliases**: Define alias mappings (e.g., `customer=guest`, `company=hotel`)
+3. **Map Variables**: Provider data → Global Variables → Schema Aliases
+4. **Use in Prompts**: Use industry-specific terminology via aliases
+
+## Hotel Industry Schema
+
+**Aliases**:
+- `customer` = `guest`
+- `company` = `hotel`
+
+**Variable Mapping**:
+- `{{customer.guest.*}}` → `{{guest.*}}` (via schema alias)
+- `{{customer.reservation.*}}` → `{{guest.reservation.*}}` or `{{reservation.*}}` (via schema alias)
+- `{{company.property.*}}` → `{{hotel.property.*}}` or `{{property.*}}` (via schema alias)
+- `{{company.*}}` → `{{hotel.*}}` (via schema alias)
+
+**Provider Data Flow** (Cloudbeds):
+1. `{{CLOUDBEDS.guestPhone}}` or `{{CLOUDBEDS.guestCellPhone}}` → `{{customer.phone}}`
+2. `{{customer.phone}}` → `{{customer.guest.phone}}`
+3. `{{customer.guest.phone}}` → `{{guest.phone}}` (via schema alias)
+
+## Usage
+
+When working with schema aliasing:
+- **Define schemas** per industry with alias mappings
+- **Map provider data** to Global Variables first, then apply schema aliasing
+- **Use industry terminology** in prompts (e.g., `{{guest.*}}`, `{{hotel.*}}`)
+- **Maintain global parameters** internally (`{{customer.*}}`, `{{company.*}}`)
+
+## Benefits
+
+1. **Industry-Appropriate Language**: Use `guest` and `hotel` in hotel prompts
+2. **Cross-Industry Compatibility**: Same code works across industries
+3. **Flexible Mapping**: Easy to add new industries with their own terminology
+4. **Consistent Data Model**: Global parameters ensure data consistency
+
+Refer to the JSON file for detailed schema definitions, alias mappings, and industry examples.

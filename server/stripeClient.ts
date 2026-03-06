@@ -53,6 +53,9 @@ export const STRIPE_PRICE_IDS: Record<string, string> = {
   // One-time Price for new business owners to activate their assigned website.
   // Create a one-time Price at $49.99 in Stripe, then set in Doppler.
   claim_activation: process.env.STRIPE_PRICE_CLAIM_ACTIVATION ?? '',
+  // ── Affiliate Starter Kit ($99 one-time) ───────────────────────────────────
+  // Created programmatically in affiliate checkout (price_data/product_data); optional override:
+  affiliate_starter_kit: process.env.STRIPE_PRICE_AFFILIATE_STARTER_KIT ?? '',
 };
 
 /**

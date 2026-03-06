@@ -8,7 +8,7 @@ import {
   ListTodo, Zap, Eye, Coffee, Briefcase, FlaskConical, GraduationCap,
   ChevronDown, ChevronRight, MessageCircle,
 } from 'lucide-react';
-import gatewayLogoSm from '@assets/GatewayGlobalLogo_sm_1770154272626.png';
+import gatewaySquareLogo from '@assets/gatewayglobalai_logo_square.png';
 import type { Agent } from '@shared/schema';
 import {
   Sidebar,
@@ -132,7 +132,7 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-r border-slate-800 bg-slate-900">
       <div className="p-4 pb-6 border-b border-slate-800 flex justify-center">
-        <img src={gatewayLogoSm} alt="Gateway Global AI" className="h-24 w-auto" />
+        <img src={gatewaySquareLogo} alt="Gateway Global AI" className="h-24 w-auto" />
       </div>
       <SidebarContent className="bg-slate-900">
         <SidebarGroup>

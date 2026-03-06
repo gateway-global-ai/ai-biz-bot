@@ -38,7 +38,9 @@ import {
   Mic2,
   FileText,
   AlertCircle,
+  CreditCard,
 } from "lucide-react";
+import { BillingHistory } from "@/components/dashboard/BillingHistory";
 import {
   Dialog,
   DialogContent,
@@ -456,6 +458,18 @@ export default function MyAccount() {
     enabled: isAuthenticated && !!token,
   });
 
+  const currentBillQuery = useQuery({
+    queryKey: ["/api/customer/current-bill"],
+    queryFn: async () => {
+      const res = await fetch("/api/customer/current-bill", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed to load current bill");
+      return res.json();
+    },
+    enabled: isAuthenticated && !!token,
+  });
+
   const [showMsaModal, setShowMsaModal] = useState(false);
 
   const updateProfileMutation = useMutation({
@@ -827,6 +841,60 @@ export default function MyAccount() {
                 </div>
               </div>            </div>
           </div>
+        </Card>
+
+        <Card className="bg-slate-50/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
+          data-testid="card-billing">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-sui">
+              <CreditCard className="w-5 h-5 text-indigo-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Your bill</h2>
+              <p className="text-sm text-slate-400">Platform fee, voice by agent, and overages</p>
+            </div>
+          </div>
+          {currentBillQuery.isLoading ? (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+            </div>
+          ) : currentBillQuery.error ? (
+            <p className="text-sm text-amber-400 py-4">Could not load current bill. Try again later.</p>
+          ) : currentBillQuery.data ? (
+            <div className="space-y-4 mb-6">
+              <div className="rounded-sui bg-slate-800/40 border border-slate-700/50 p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">{currentBillQuery.data.platformFee?.label ?? "Platform fee"}</span>
+                  <span className="text-white font-medium">${Number(currentBillQuery.data.platformFee?.amount ?? 0).toFixed(2)}</span>
+                </div>
+                {(currentBillQuery.data.voiceByAgent ?? []).length > 0 && (
+                  <>
+                    {(currentBillQuery.data.voiceByAgent as Array<{ agentName: string; amount: number }>).map((v: any, i: number) => (
+                      <div key={i} className="flex justify-between text-sm">
+                        <span className="text-slate-400">Voice — {v.agentName}</span>
+                        <span className="text-white font-medium">${Number(v.amount ?? 0).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {(currentBillQuery.data.overages ?? []).length > 0 && (
+                  <>
+                    {(currentBillQuery.data.overages as Array<{ label: string; units: number; amount: number }>).map((o: any, i: number) => (
+                      <div key={i} className="flex justify-between text-sm">
+                        <span className="text-slate-400">{o.label} ({o.units} min)</span>
+                        <span className="text-white font-medium">${Number(o.amount ?? 0).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+                <div className="border-t border-slate-700/60 pt-2 flex justify-between text-sm font-semibold">
+                  <span className="text-slate-200">Total</span>
+                  <span className="text-white">${Number(currentBillQuery.data.total ?? 0).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
+          <BillingHistory />
         </Card>
 
         <Card className="bg-slate-50/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"

@@ -373,6 +373,7 @@ router.post("/api/claim/:token/verify-otp", async (req: Request, res: Response) 
         siteId:      site.id,
         customerId:  account.id,
         phone:       site.assignedToPhone,
+        category:    "platform",
       },
       client_reference_id: site.id,
     };

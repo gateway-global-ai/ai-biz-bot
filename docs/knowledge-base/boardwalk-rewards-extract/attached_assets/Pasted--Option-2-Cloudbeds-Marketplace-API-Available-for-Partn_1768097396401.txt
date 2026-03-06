@@ -1,0 +1,44 @@
+(Option 2) Cloudbeds Marketplace API (Available for Partners & Self-service API Users)
+
+Hotel and Room Details
+
+Call getHotelDetails to retrieve basic hotel details like address, contact details, type of property, description, etc
+Please also refer to this same endpoint to get amenities as well as policies that you may publish in your booking engine.
+
+You will need to pull a list of rooms to create or map them to the rooms in your system. For that purpose, you'll use getRoomTypes or getRooms. Rooms are nested under room types. (*)
+
+The roomTypeID identifies the room type (e.g. double room) and the roomID points out the specific physical room.
+
+The roomTypeUnits parameter in getRoomTypes shows the total number of units of each accommodation type (regardless of the occupancy status) and can be used to build the total property inventory on your side.
+
+Retrieve ARI
+
+To retrieve availability rates and restrictions from myfrontdesk, you can use one of the following endpoints: (*)
+You can retrieve ARI information with getRatePlans, including the startDate and endDate.
+Using the detailedRates boolean parameter returns daily rates, availability, and restrictions (CTA, CTD, minLOS, maxLOs…)
+roomsAvailable informs of the rooms available. Cloudbeds availability is at room level, so all the rates linked to a particular room type (roomTypeID) will return the same availability in the roomsAvailable parameter.
+All Cloudbeds properties have a base rate (BAR rate) per room type and, optionally, additional standalone or derived rate plans linked to all or some room types.
+The additional rate plans can be identified with some parameters that do not show for the base rates (ratePlanID, ratePlanNamePublic, and ratePlanNamePrivate).
+Based on the number of adults and children included in the request, roomRate shows the rate for the base occupancy, and totalRate includes the supplements for any extra guests.
+If no occupancy is passed in the request, roomRate and totalRate will both show the default occupancy rate.
+The rateID parameter is unique per room type/rate combination across all Cloudbeds properties. You need to save it and include it on any rate update requests.
+When derived:true, the derivedType, derivedValue, and baseRate parameters are displayed so you can work out the calculation.
+All rate plans are derived from the base rate for the corresponding room.
+If you only require information on base rates, you may use getRate with detailedRates:true instead of getRatePlans. Only the base rate of the roomTypeID included in the request will be returned.
+The rates returned in getRate or getRatePlans will be tax-inclusive or exclusive according to the property setup that can be retrieved via the getTaxesAndFees endpoint and in the currency you can get by calling getHotelDetails.
+
+Retrieve Payments Details
+
+If you wish to mirror payment methods configured in Cloudbeds in your booking engine, please call getPaymentMethods, this endpoint will be useful once the reservation is booked so you can send it to Cloudbeds informing the payment selected by the guest on your website. You can also call postCustomPaymentMethod if you need to create a method that hasn’t been configured in Cloudbeds yet.
+
+*****Transferring Credit Cards or processing payments are currently not supported.
+
+Retrieve Promotional codes
+
+If your booking engine offers a dedicated section to submit a promo code and get promotional deals, Cloudbeds offers an option to create customized rate plans with promotional rates, that rate will have a code attached that can be pulled using getRatePlans. If a guest uses this rate plan while booking, you can post the reservation in Cloudbeds indicating the promotional code's name for tracking purposes.
+
+Reservation Creation / Modification / Cancellation
+
+Once the reservation is booked in your booking engine please use postReservation to create a reservation in Cloudbeds, if you will generate an ID different from the one provided by Cloudbeds please use the parameter thirdPartyIdentifier when posting the reservation. If your system sends your confirmation email please set the parameter sendEmailConfirmation:false If you are interested in taking advantage of our confirmation emails please visit the email templates related article to learn how it works. (*)
+If your booking engine supports online modifications please use putReservationNote to modify existing reservation details such as stay dates, room types, number of guests, etc.
+If your booking engine supports online cancellations please use putReservation. To cancel an existing reservation updating the parameter status tocanceled.

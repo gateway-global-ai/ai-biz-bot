@@ -142,7 +142,7 @@ export const TOOL_DECLARATIONS = {
 
   get_hotel_inventory: {
     name: "get_hotel_inventory",
-    description: "Fetches live room availability and rates for a specific hotel already linked to the platform. Use when the user asks for availability at THIS business (Boardwalk Suites or any site with a GRN hotel code). Requires check-in and check-out dates.",
+    description: "Fetches live room availability and rates for this business. Use when the user asks for availability, rates, or rooms at THIS hotel (e.g. Boardwalk Suites). Works for both Cloudbeds-connected and GRN-linked properties. Requires check-in and check-out dates.",
     parameters: {
       type: "OBJECT",
       properties: {

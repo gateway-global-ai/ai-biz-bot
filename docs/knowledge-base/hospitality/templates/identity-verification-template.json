@@ -1,0 +1,180 @@
+{
+  "name": "Identity Verification Assistant",
+  "description": "Voice AI assistant for guest identity verification using Cloudbeds integration",
+  "industry": "hospitality",
+  "assistant": {
+    "model": {
+      "provider": "openai",
+      "model": "gpt-4",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are a helpful hotel concierge assistant. You help guests verify their identity and check their reservation status. Use the tools provided to look up guest information and reservations."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "getGuestByPhoneOrEmail",
+            "description": "Look up guest information by phone number or email address. Returns guest details including guest ID, name, email, phone, and associated reservation IDs.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "phone": {
+                  "type": "string",
+                  "description": "Guest phone number (checks both guestPhone and guestCellPhone)"
+                },
+                "email": {
+                  "type": "string",
+                  "description": "Guest email address"
+                }
+              },
+              "required": []
+            }
+          },
+          "server": {
+            "url": "{{EDGE_FUNCTION_URL}}/cloudbeds-api",
+            "method": "POST",
+            "headers": {
+              "Authorization": "Bearer {{SUPABASE_ANON_KEY}}"
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "getReservationDetails",
+            "description": "Get detailed reservation information including status, dates, rates, and guest details. If multiple reservations exist, returns the most recently modified one.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "reservationID": {
+                  "type": "string",
+                  "description": "Reservation ID (optional - if not provided, gets most recent reservation for guest)"
+                },
+                "guestID": {
+                  "type": "string",
+                  "description": "Guest ID (required if reservationID not provided)"
+                }
+              },
+              "required": []
+            }
+          },
+          "server": {
+            "url": "{{EDGE_FUNCTION_URL}}/cloudbeds-api",
+            "method": "POST"
+          }
+        }
+      ]
+    },
+    "voice": {
+      "provider": "11labs",
+      "voiceId": "21m00Tcm4TlvDq8ikWAM"
+    },
+    "transcriber": {
+      "provider": "deepgram",
+      "model": "nova-2"
+    },
+    "firstMessage": "Hello! I can help you check your reservation status. May I have your phone number or email address?",
+    "endCallMessage": "Thank you! Have a great stay."
+  },
+  "variables": {
+    "global": {
+      "{{customer.phone}}": "Caller's phone number (from Vapi)",
+      "{{customer.email}}": "Caller's email address (if provided)",
+      "{{customer.verified}}": "Identity verification status (yes/no)",
+      "{{guest.guestID}}": "Guest ID from Cloudbeds",
+      "{{guest.name}}": "Guest name",
+      "{{guest.email}}": "Guest email",
+      "{{guest.phone}}": "Guest phone",
+      "{{guest.cellPhone}}": "Guest cell phone",
+      "{{guest.status}}": "Guest status",
+      "{{reservation.reservationID}}": "Reservation ID (most recent if multiple exist)",
+      "{{reservation.status}}": "Reservation status (from most recent reservation)",
+      "{{reservation.arrivalDate}}": "Check-in date",
+      "{{reservation.departureDate}}": "Check-out date",
+      "{{reservation.totalAmount}}": "Total reservation amount"
+    }
+  },
+  "tools": [
+    {
+      "name": "cloudbeds.getGuestList",
+      "endpoint": "/getGuestList",
+      "method": "GET",
+      "parameters": ["propertyID", "includeGuestInfo", "guestPhone", "guestCellPhone", "guestEmail", "sortBy"],
+      "notes": "CRITICAL: includeGuestInfo=true, sortBy=modification (most recent first)"
+    },
+    {
+      "name": "cloudbeds.getReservationsWithRateDetails",
+      "endpoint": "/getReservationsWithRateDetails",
+      "method": "GET",
+      "parameters": ["propertyID", "includeGuestsDetails", "reservationID", "guestID", "sortByRecent"],
+      "notes": "CRITICAL: includeGuestsDetails=true, sortByRecent=true (most recent first if multiple reservations)"
+    }
+  ],
+  "workflow": [
+    {
+      "step": 1,
+      "name": "Identify Caller",
+      "task": "identifyCaller",
+      "inputs": ["customer.phone", "customer.email"],
+      "outputs": ["guest.guestID", "guest.name", "guest.email", "guest.phone"],
+      "tool": "cloudbeds.getGuestList",
+      "notes": "Match caller phone/email to guest record. Check both guestPhone and guestCellPhone fields."
+    },
+    {
+      "step": 2,
+      "name": "Verify Identity",
+      "task": "verifyIdentity",
+      "inputs": ["customer.phone", "customer.email", "guest.phone", "guest.cellPhone", "guest.email"],
+      "outputs": ["customer.verified"],
+      "notes": "If customer.phone matches guest.phone OR guest.cellPhone, set customer.verified=yes. If customer.email matches guest.email, send verification link."
+    },
+    {
+      "step": 3,
+      "name": "Get Current Reservation",
+      "task": "getCurrentReservation",
+      "inputs": ["guest.guestID", "reservation.reservationID"],
+      "outputs": ["reservation.reservationID", "reservation.status", "reservation.arrivalDate", "reservation.departureDate"],
+      "tool": "cloudbeds.getReservationsWithRateDetails",
+      "notes": "If reservationID provided, get that reservation. Else get most recent reservation (sortByRecent=true). Always use most recently modified reservation for status."
+    },
+    {
+      "step": 4,
+      "name": "Update Global Variables",
+      "task": "updateGlobalVariables",
+      "inputs": ["reservation.reservationID", "reservation.status"],
+      "outputs": ["reservation.reservationID", "reservation.status"],
+      "notes": "Set reservation.reservationID and reservation.status from most recent reservation. If multiple reservations exist, use the one with most recent modification date."
+    }
+  ],
+  "critical_parameters": {
+    "getGuestList": {
+      "includeGuestInfo": true,
+      "sortBy": "modification"
+    },
+    "getReservationsWithRateDetails": {
+      "includeGuestsDetails": true,
+      "sortByRecent": true
+    }
+  },
+  "matching_rules": {
+    "phone_matching": [
+      "customer.phone → guestPhone OR guestCellPhone",
+      "Must match exactly (with or without formatting)"
+    ],
+    "email_matching": [
+      "customer.email → guestEmail",
+      "Case-insensitive match"
+    ],
+    "multiple_reservations": [
+      "If multiple reservations exist for guest:",
+      "1. Sort by sortByRecent=true (most recently modified first)",
+      "2. Use first result for reservation.reservationID",
+      "3. Use first result for reservation.status",
+      "4. Always check most recent reservation for current status"
+    ]
+  }
+}
+

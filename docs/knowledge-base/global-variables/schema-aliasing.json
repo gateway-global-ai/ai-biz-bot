@@ -1,0 +1,187 @@
+{
+  "name": "Schema-Based Aliasing System",
+  "scope": {
+    "globs": [
+      "**/agents/**",
+      "**/virtual-assistants/**",
+      "**/schemas/**",
+      "**/*schema*.{ts,tsx,js,md,json}",
+      "**/*alias*.{ts,tsx,js,md,json}"
+    ],
+    "always": false
+  },
+  "style": {
+    "tone": "concise",
+    "code_comments": "explain schema aliasing and industry mappings only",
+    "commit_message": "imperative, <= 72 chars"
+  },
+  "say": "Use schema-based aliasing to enable industry-specific terminology (guest, hotel) in prompts while maintaining global parameters (customer, company) across industries. Map provider data to Global Variables first, then apply schema aliasing for industry-specific terminology.",
+  "instructions": [
+    "Define schemas per industry with alias mappings (e.g., hotel: customer=guest, company=hotel).",
+    "Map provider data to Global Variables first: {{CLOUDBEDS.guestPhone}} → {{customer.phone}} → {{customer.guest.phone}}.",
+    "Then apply schema aliasing: {{customer.guest.phone}} → {{guest.phone}} (via schema alias).",
+    "Use industry-specific terminology in prompts ({{guest.*}}, {{hotel.*}}) while maintaining global parameters internally.",
+    "Maintain global parameters ({{customer.*}}, {{company.*}}) for cross-industry compatibility.",
+    "Reservation data is tied to customer record: {{customer.reservation.*}} (not {{reservation.*}} standalone).",
+    "Property data is tied to company: {{company.property.*}} (not {{property.*}} standalone).",
+    "Provider data mapping: {{CLOUDBEDS.guestPhone}} or {{CLOUDBEDS.guestCellPhone}} = {{customer.phone}} → {{customer.guest.phone}} → {{guest.phone}} (via alias).",
+    "Provider data mapping: {{CLOUDBEDS.guestEmail}} = {{customer.email}} → {{customer.guest.email}} → {{guest.email}} (via alias).",
+    "Provider data mapping: {{CLOUDBEDS.propertyID}} → {{company.property.id}} → {{hotel.id}} (via alias)."
+  ],
+  "schema_definitions": {
+    "hotel": {
+      "name": "Hotel Industry Schema",
+      "aliases": {
+        "customer": "guest",
+        "company": "hotel"
+      },
+      "variable_mapping": {
+        "customer_guest": "{{customer.guest.*}} → {{guest.*}} (via schema alias)",
+        "customer_reservation": "{{customer.reservation.*}} → {{guest.reservation.*}} or {{reservation.*}} (via schema alias)",
+        "company_property": "{{company.property.*}} → {{hotel.property.*}} or {{property.*}} (via schema alias)",
+        "company": "{{company.*}} → {{hotel.*}} (via schema alias)"
+      },
+      "provider_mapping": {
+        "cloudbeds_phone": {
+          "source": "{{CLOUDBEDS.guestPhone}} or {{CLOUDBEDS.guestCellPhone}}",
+          "step_1": "{{customer.phone}}",
+          "step_2": "{{customer.guest.phone}}",
+          "step_3": "{{guest.phone}} (via schema alias: customer=guest)"
+        },
+        "cloudbeds_email": {
+          "source": "{{CLOUDBEDS.guestEmail}}",
+          "step_1": "{{customer.email}}",
+          "step_2": "{{customer.guest.email}}",
+          "step_3": "{{guest.email}} (via schema alias: customer=guest)"
+        },
+        "cloudbeds_property": {
+          "source": "{{CLOUDBEDS.propertyID}}",
+          "step_1": "{{company.property.id}}",
+          "step_2": "{{hotel.id}} (via schema alias: company=hotel)"
+        }
+      },
+      "usage_examples": {
+        "prompt_with_alias": "You are assisting {{guest.firstName}} with their reservation {{guest.reservation.id}} at {{hotel.name}}.",
+        "internal_mapping": "Maps to: {{customer.guest.firstName}}, {{customer.reservation.id}}, {{company.name}}",
+        "provider_data": "{{CLOUDBEDS.guestPhone}} → {{customer.phone}} → {{customer.guest.phone}} → {{guest.phone}} (via alias)"
+      }
+    },
+    "healthcare": {
+      "name": "Healthcare Industry Schema",
+      "aliases": {
+        "customer": "patient",
+        "company": "clinic"
+      },
+      "variable_mapping": {
+        "customer": "{{customer.*}} → {{patient.*}} (via schema alias)",
+        "company": "{{company.*}} → {{clinic.*}} (via schema alias)"
+      }
+    },
+    "retail": {
+      "name": "Retail Industry Schema",
+      "aliases": {
+        "customer": "customer",
+        "company": "business"
+      },
+      "variable_mapping": {
+        "customer": "{{customer.*}} (no alias needed)",
+        "company": "{{company.*}} → {{business.*}} (via schema alias)"
+      }
+    }
+  },
+  "global_parameters": {
+    "description": "Global parameters work across all industries - these are the standard namespaces",
+    "customer": {
+      "description": "Customer/guest/patient namespace - always use {{customer.*}} internally",
+      "fields": [
+        "{{customer.id}}",
+        "{{customer.firstName}}",
+        "{{customer.lastName}}",
+        "{{customer.phone}}",
+        "{{customer.email}}",
+        "{{customer.guest.*}} (nested data)",
+        "{{customer.reservation.*}} (tied to customer record)"
+      ]
+    },
+    "company": {
+      "description": "Company/hotel/clinic/business namespace - always use {{company.*}} internally",
+      "fields": [
+        "{{company.id}}",
+        "{{company.name}}",
+        "{{company.phone}}",
+        "{{company.email}}",
+        "{{company.address}}",
+        "{{company.property.*}} (property-specific data)"
+      ]
+    },
+    "reservation": {
+      "description": "Reservation data is tied to customer record - use {{customer.reservation.*}}",
+      "fields": [
+        "{{customer.reservation.id}}",
+        "{{customer.reservation.startDate}}",
+        "{{customer.reservation.endDate}}",
+        "{{customer.reservation.adults}}",
+        "{{customer.reservation.children}}",
+        "{{customer.reservation.status}}"
+      ],
+      "note": "Reservation data must be tied to customer record for session-scoped access across assistants"
+    },
+    "property": {
+      "description": "Property data is tied to company - use {{company.property.*}}",
+      "fields": [
+        "{{company.property.id}}",
+        "{{company.property.name}}",
+        "{{company.property.address}}",
+        "{{company.property.phone}}",
+        "{{company.property.email}}"
+      ],
+      "note": "Property data must be tied to company for consistency across industries"
+    }
+  },
+  "provider_data_mapping": {
+    "cloudbeds": {
+      "description": "Cloudbeds provider data mapping with schema aliasing",
+      "guest_phone": {
+        "source": "{{CLOUDBEDS.guestPhone}} or {{CLOUDBEDS.guestCellPhone}}",
+        "mapping": [
+          "{{CLOUDBEDS.guestPhone}} → {{customer.phone}}",
+          "{{customer.phone}} → {{customer.guest.phone}}",
+          "{{customer.guest.phone}} → {{guest.phone}} (via schema alias: customer=guest)"
+        ]
+      },
+      "guest_email": {
+        "source": "{{CLOUDBEDS.guestEmail}}",
+        "mapping": [
+          "{{CLOUDBEDS.guestEmail}} → {{customer.email}}",
+          "{{customer.email}} → {{customer.guest.email}}",
+          "{{customer.guest.email}} → {{guest.email}} (via schema alias: customer=guest)"
+        ]
+      },
+      "property_id": {
+        "source": "{{CLOUDBEDS.propertyID}}",
+        "mapping": [
+          "{{CLOUDBEDS.propertyID}} → {{company.property.id}}",
+          "{{company.property.id}} → {{hotel.id}} (via schema alias: company=hotel)"
+        ]
+      }
+    }
+  },
+  "mapping_workflow": {
+    "step_1": "Fetch provider data (Cloudbeds API returns guest/reservation data)",
+    "step_2": "Store with provider prefix: {{CLOUDBEDS.guestPhone}}, {{CLOUDBEDS.guestEmail}}, {{CLOUDBEDS.propertyID}}",
+    "step_3": "Map to standard Global Variables: {{CLOUDBEDS.guestPhone}} → {{customer.phone}} → {{customer.guest.phone}}",
+    "step_4": "Apply schema aliasing (if hotel industry): {{customer.guest.phone}} → {{guest.phone}} (via alias)",
+    "step_5": "Use in prompts: Can use industry-specific terminology ({{guest.*}}, {{hotel.*}}) or global parameters ({{customer.*}}, {{company.*}})"
+  },
+  "best_practices": [
+    "Always map provider data to Global Variables first, then apply schema aliasing",
+    "Use industry-specific terminology in prompts ({{guest.*}}, {{hotel.*}}) for better UX",
+    "Maintain global parameters ({{customer.*}}, {{company.*}}) internally for cross-industry compatibility",
+    "Tie reservation data to customer record: {{customer.reservation.*}} (not standalone {{reservation.*}})",
+    "Tie property data to company: {{company.property.*}} (not standalone {{property.*}})",
+    "Define schemas per industry with clear alias mappings",
+    "Document schema aliases in knowledge base and prompts",
+    "Test both global parameters and schema aliases in prompts"
+  ]
+}
+
