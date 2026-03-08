@@ -22,7 +22,8 @@
 import React, { useState, useEffect, useRef, startTransition } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  X, Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield, MessageSquare, Menu 
+  Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield, MessageSquare, Menu,
+  User, Activity, CreditCard, Building2, Users, ArrowLeft, Bot, ChevronRight, ChevronDown, Phone, Share2, QrCode, History
 } from 'lucide-react';
 import { VoiceClientFactory } from '../../services/voice/VoiceClientFactory';
 import { IVoiceClient } from '../../services/voice/IVoiceClient';
@@ -33,6 +34,9 @@ import { SuccessAnimation } from '../voice/animations/SuccessAnimation';
 import { useVoiceAnimations } from '../voice/animations/useVoiceAnimations';
 import headerLogo from '@assets/clear_voice_ai_dark_sm.png';
 import chatFooterCarbon from '@assets/chat-footer-carbon.png';
+import { ProfileContent } from '@/components/account/ProfileContent';
+import { BillingContentWithStripe } from '@/pages/account/BillingPage';
+import { MixingBoardContent } from '@/pages/reseller/MixingBoard';
 
 interface ConciergePanelProps {
   business: BusinessContext;
@@ -45,10 +49,28 @@ interface ConciergePanelProps {
   onClose: () => void;
   onCycleLayout?: () => void;
   onOpenSettings?: () => void;
-  /** When set, header shows "Admin Mode" button that opens admin (e.g. partner dashboard). */
-  onOpenAdmin?: () => void;
+  /** When set, header shows "Admin Mode" button that opens admin (e.g. partner dashboard). Pass optional tab id to open (e.g. 'identity-manager'). */
+  onOpenAdmin?: (tab?: string) => void;
   /** When set, header shows "AI Biz Bot Chat" — open the owner chat to talk to the platform and modify router/agents. */
   onOpenBizBotChat?: () => void;
+  /** When true, content shows Command Center (Profile, Governance, Bill, Businesses, Reseller, Configure AI) instead of voice transcript. */
+  ownerMode?: boolean;
+  /** Call when user exits Command Center back to conversation. */
+  onExitOwnerMode?: () => void;
+  /** Call when user taps a menu item to navigate (e.g. setLocation). */
+  onNavigate?: (path: string) => void;
+  /** When true, User items (Profile, Billing, etc.) open inside the panel inline instead of navigating. */
+  embedViewsInPanel?: boolean;
+  /** Optional: called when user chooses Share from the menu (header item moved into menu). */
+  onShareClick?: () => void;
+  /** Optional: called when user chooses My Account from the menu. */
+  onMyAccountClick?: () => void;
+  /** When true, bottom-left History button shows call history (or runs onHistoryClick); when false, shows SMS signup / login. */
+  isAuthenticated?: boolean;
+  /** Called when user taps History and is authenticated (e.g. open call history or telephony). */
+  onHistoryClick?: () => void;
+  /** Called when user taps History and not authenticated (e.g. open SMS consent or login). */
+  onSmsConsentClick?: () => void;
   /** UI style: 'sovereign' = Gateway Global AI / Nova Verify (default). 'default' = legacy blue/purple gradient. */
   variant?: 'default' | 'sovereign';
   className?: string;
@@ -75,6 +97,15 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   onCycleLayout,
   onOpenAdmin,
   onOpenBizBotChat,
+  ownerMode = false,
+  onExitOwnerMode,
+  onNavigate,
+  embedViewsInPanel = false,
+  onShareClick,
+  onMyAccountClick,
+  isAuthenticated = false,
+  onHistoryClick,
+  onSmsConsentClick,
   variant = 'sovereign',
   className = '',
   zIndex = 50
@@ -93,23 +124,92 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [currentVoiceConfig, setCurrentVoiceConfig] = useState(voiceConfig);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [successMessageId, setSuccessMessageId] = useState<string | null>(null);
-  const [showBizBotMenu, setShowBizBotMenu] = useState(false);
-  const bizBotMenuRef = useRef<HTMLDivElement>(null);
+  /** Single Menu icon opens overlay; first screen = Admin | User | Public Agents only. */
+  const [showMenuOverlay, setShowMenuOverlay] = useState(false);
+  /** First-level drill: null = home (Admin | User | Public Agents); then 'admin' | 'user' | 'public'. */
+  const [menuDrillDown, setMenuDrillDown] = useState<null | 'admin' | 'user' | 'public'>(null);
+  type EmbeddedViewId = 'profile' | 'billing' | 'my-businesses' | 'reseller';
+  const [embeddedView, setEmbeddedView] = useState<EmbeddedViewId | null>(null);
+  const [expandedAdminAccount, setExpandedAdminAccount] = useState(false);
+  const [expandedAdminAgents, setExpandedAdminAgents] = useState(false);
+  const [expandedAdminReferral, setExpandedAdminReferral] = useState(false);
+  const [expandedUserReferral, setExpandedUserReferral] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { triggerSuccess } = useVoiceAnimations();
+  const [animationTick, setAnimationTick] = useState(0);
+  const processingStartedAtRef = useRef<number>(0);
+  const processingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Close AI Biz Bot menu on outside click
+  const setProcessingOn = () => {
+    processingStartedAtRef.current = Date.now();
+    if (processingTimeoutRef.current) {
+      clearTimeout(processingTimeoutRef.current);
+      processingTimeoutRef.current = null;
+    }
+    setIsProcessing(true);
+  };
+
+  const setProcessingOff = () => {
+    if (processingTimeoutRef.current) {
+      clearTimeout(processingTimeoutRef.current);
+      processingTimeoutRef.current = null;
+    }
+    const elapsed = Date.now() - processingStartedAtRef.current;
+    const minDisplayMs = 1200;
+    const remaining = Math.max(0, minDisplayMs - elapsed);
+    if (remaining > 0) {
+      processingTimeoutRef.current = setTimeout(() => {
+        processingTimeoutRef.current = null;
+        setIsProcessing(false);
+      }, remaining);
+    } else {
+      setIsProcessing(false);
+    }
+  };
+
+  // Close menu overlay when navigating or opening a view (handled in onClick handlers).
+
+  // Animation tick for visualizer — fixed interval so bar heights don't flicker on every re-render (e.g. volume)
   useEffect(() => {
-    if (!showBizBotMenu) return;
-    const handleClick = (e: MouseEvent) => {
-      if (bizBotMenuRef.current && !bizBotMenuRef.current.contains(e.target as Node)) {
-        setShowBizBotMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showBizBotMenu]);
+    if (!isRecording && !isProcessing) return;
+    const id = setInterval(() => setAnimationTick((t) => t + 1), 80);
+    return () => clearInterval(id);
+  }, [isRecording, isProcessing]);
+
+  // Clear embedded view when leaving Command Center (owner mode)
+  useEffect(() => {
+    if (!ownerMode) setEmbeddedView(null);
+  }, [ownerMode]);
+
+  // Load saved voice config from API when panel opens for a real site (so Voice Settings shows DB-backed values)
+  useEffect(() => {
+    if (!isOpen || !siteConfigId) return;
+    const isPlatform = !siteConfigId || siteConfigId === 'platform-landing' || siteConfigId === 'platform_landing' || siteConfigId === 'platform' || siteConfigId === 'undefined';
+    if (isPlatform) return;
+    let cancelled = false;
+    fetch(`/api/site-configs/${siteConfigId}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: any) => {
+        if (cancelled || !data?.voiceConfig) return;
+        const vc = data.voiceConfig as { voiceName?: string; analysis?: { detectEmotion?: boolean; detectSentiment?: boolean; detectDISC?: boolean } };
+        const a = vc?.analysis;
+        setCurrentVoiceConfig((prev) => ({
+          ...prev,
+          voiceName: vc?.voiceName ?? prev.voiceName,
+          model: data.modelName ?? prev.model,
+          ...(a && {
+            enableAnalysis: {
+              emotion: a.detectEmotion ?? prev.enableAnalysis.emotion,
+              sentiment: a.detectSentiment ?? prev.enableAnalysis.sentiment,
+              disc: a.detectDISC ?? prev.enableAnalysis.disc,
+            },
+          }),
+        }));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isOpen, siteConfigId]);
 
   // --- Engine Initialization ---
   useEffect(() => {
@@ -142,12 +242,23 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           }
           dbSiteConfig = await response.json();
 
-          // 2. Merge the validated Model ID and voice name — Backend Config > Prop > Fallback
-          const dbVoiceConfig = dbSiteConfig!.voiceConfig as { voiceName?: string } | null | undefined;
+          // 2. Merge validated model, voice name, and analysis — Backend Config > Prop > Fallback
+          const dbVoiceConfig = dbSiteConfig!.voiceConfig as {
+            voiceName?: string;
+            analysis?: { detectEmotion?: boolean; detectSentiment?: boolean; detectDISC?: boolean };
+          } | null | undefined;
+          const dbAnalysis = dbVoiceConfig?.analysis;
           validatedVoiceConfig = {
             ...currentVoiceConfig,
             model: dbSiteConfig!.modelName || currentVoiceConfig.model || process.env.GEMINI_MODEL_ID,
             voiceName: dbVoiceConfig?.voiceName ?? currentVoiceConfig.voiceName,
+            ...(dbAnalysis && {
+              enableAnalysis: {
+                emotion: dbAnalysis.detectEmotion ?? currentVoiceConfig.enableAnalysis.emotion,
+                sentiment: dbAnalysis.detectSentiment ?? currentVoiceConfig.enableAnalysis.sentiment,
+                disc: dbAnalysis.detectDISC ?? currentVoiceConfig.enableAnalysis.disc,
+              },
+            }),
           };
         }
 
@@ -204,10 +315,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             });
             
             if (msg.isFinal) {
-              setIsProcessing(true);
+              setProcessingOn();
             }
           } else if (msg.type === 'response') {
-            setIsProcessing(false);
+            setProcessingOff();
             if (msg.text) {
               addMessage('assistant', msg.text, msg.metadata);
             } else if (msg.metadata?.tool_type) {
@@ -215,7 +326,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               addMessage('assistant', undefined, msg.metadata);
             }
           } else if (msg.type === 'error') {
-            setIsProcessing(false);
+            setProcessingOff();
             addMessage('system', msg.text || 'An error occurred with the voice engine.');
           }
         });
@@ -254,6 +365,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     initEngine();
 
     return () => {
+      if (processingTimeoutRef.current) {
+        clearTimeout(processingTimeoutRef.current);
+        processingTimeoutRef.current = null;
+      }
       if (clientRef.current) {
         clientRef.current.disconnect();
         clientRef.current = null;
@@ -343,13 +458,13 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     
     console.log('[ConciergePanel] Stopping PTT session');
     setIsRecording(false);
-    setIsProcessing(true);
+    setProcessingOn();
 
     try {
       clientRef.current.endSession();
     } catch (err) {
       console.error("[ConciergePanel] PTT stop error:", err);
-      setIsProcessing(false);
+      setProcessingOff();
       addMessage('system', 'Error processing audio.');
     }
   };
@@ -407,67 +522,53 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
         }`}
       >
-        {/* Left: hamburger only */}
+        {/* Left: owner mode back, or Menu (single entry to overlay) */}
         <div className="flex items-center shrink-0">
-          <div className="relative" ref={bizBotMenuRef}>
+          {ownerMode && onExitOwnerMode ? (
             <button
-              onClick={() => setShowBizBotMenu((v) => !v)}
-              className={isSovereign ? "p-2 hover:bg-white/10 rounded-xl text-white transition-colors" : "p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors"}
-              title="AI Biz Bot — settings, admin, chat"
+              onClick={onExitOwnerMode}
+              className={isSovereign ? "p-2 hover:bg-white/10 rounded-xl text-white transition-colors flex items-center gap-1.5 text-sm" : "p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors flex items-center gap-1.5 text-sm"}
+              title="Back to conversation"
             >
-              <Menu size={20} />
+              <ArrowLeft size={18} />
+              <span className="hidden sm:inline">Back</span>
             </button>
-            {showBizBotMenu && (
-              <div className={`absolute left-0 top-full mt-1 py-1 min-w-[180px] rounded-xl shadow-xl z-50 ${
-                isSovereign ? 'bg-slate-800 border border-slate-600' : 'bg-white border border-gray-200'
-              }`}>
-                <button
-                  onClick={() => { setShowSettings(true); setShowBizBotMenu(false); }}
-                  className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
-                    isSovereign ? 'text-slate-200 hover:bg-white/10' : 'text-gray-800 hover:bg-gray-100'
-                  }`}
-                >
-                  <Settings size={16} />
-                  Voice settings
-                </button>
-                {onOpenAdmin && (
-                  <button
-                    onClick={() => { onOpenAdmin(); setShowBizBotMenu(false); }}
-                    className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
-                      isSovereign ? 'text-slate-200 hover:bg-white/10' : 'text-gray-800 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Shield size={16} />
-                    Admin
-                  </button>
-                )}
-                {onOpenBizBotChat && (
-                  <button
-                    onClick={() => { onOpenBizBotChat(); setShowBizBotMenu(false); }}
-                    className={`w-full px-4 py-2.5 text-left text-sm flex items-center gap-2 transition-colors ${
-                      isSovereign ? 'text-slate-200 hover:bg-white/10' : 'text-gray-800 hover:bg-gray-100'
-                    }`}
-                  >
-                    <MessageSquare size={16} />
-                    Chat with AI Biz Bot
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowMenuOverlay((v) => !v)}
+              className={isSovereign ? "p-2 hover:bg-white/10 rounded-xl text-white transition-colors" : "p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors"}
+              title="Menu"
+              data-concierge-menu="overlay"
+              aria-expanded={showMenuOverlay}
+              aria-haspopup="dialog"
+              aria-controls="concierge-menu-overlay"
+            >
+              <Menu size={20} aria-hidden="true" />
+            </button>
+          )}
         </div>
-        {/* Center: Clear Voice logo + status */}
+        {/* Center: Command Center title when owner mode, else Clear Voice logo + status */}
         <div className="flex items-center justify-center gap-2 flex-1 min-w-0">
-          <img src={headerLogo} alt="Clear Voice AI" className={isSovereign ? 'h-10 w-auto object-contain' : 'h-11 w-auto object-contain'} />
-          <div className={`w-2 h-2 rounded-full shrink-0 ${
-            connectionStatus === 'connected'
-              ? (isSovereign ? 'bg-emerald-400 animate-pulse shadow-lg shadow-emerald-400/50' : 'bg-green-400 animate-pulse shadow-lg shadow-green-400/50')
-              : connectionStatus === 'connecting'
-              ? 'bg-yellow-400 animate-pulse'
-              : 'bg-red-400'
-          }`} />
+          {ownerMode ? (
+            <span className="text-white font-semibold flex items-center gap-2">
+              <Bot size={20} className="text-indigo-400" />
+              Command Center
+            </span>
+          ) : (
+            <>
+              <img src={headerLogo} alt="Clear Voice AI" className={isSovereign ? 'h-10 w-auto object-contain' : 'h-11 w-auto object-contain'} />
+              <div className={`w-2 h-2 rounded-full shrink-0 ${
+                connectionStatus === 'connected'
+                  ? (isSovereign ? 'bg-emerald-400 animate-pulse shadow-lg shadow-emerald-400/50' : 'bg-green-400 animate-pulse shadow-lg shadow-green-400/50')
+                  : connectionStatus === 'connecting'
+                  ? 'bg-yellow-400 animate-pulse'
+                  : 'bg-red-400'
+              }`} />
+            </>
+          )}
         </div>
-        {/* Right: resize + close */}
+        {/* Right: layout cycle only (no close X — use layout minimize to collapse) */}
         <div className="flex items-center gap-1.5 shrink-0">
           {onCycleLayout && (
             <button
@@ -478,13 +579,6 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               {layoutMode === 'fullscreen' ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
             </button>
           )}
-          <button
-            onClick={onClose}
-            className={isSovereign ? "p-2 hover:bg-white/10 rounded-xl text-white transition-colors" : "p-2 hover:bg-red-500/30 rounded-lg text-white transition-colors"}
-            title="Close"
-          >
-            <X size={20} />
-          </button>
         </div>
       </div>
 
@@ -508,9 +602,9 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                 className={`w-1 rounded-full transition-all duration-100 ${baseColor}`}
                 style={{
                   height: isRecording
-                    ? `${Math.max(4, volumeLevel * 200 * (1 + Math.sin((i + Date.now() / 100) / 2)))}px`
+                    ? `${Math.max(4, volumeLevel * 200 * (1 + Math.sin((i + animationTick) / 2)))}px`
                     : isProcessing
-                    ? `${20 + Math.sin((i + Date.now() / 200) * 0.5) * 16}px`
+                    ? `${20 + Math.sin((i + animationTick * 0.5) * 0.5) * 16}px`
                     : '8px',
                   opacity: isRecording || isProcessing ? 0.8 : 0.3
                 }}
@@ -542,15 +636,286 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         </div>
       </div>
 
-      {/* 3. CONTENT WINDOW: outer constrains height, inner is the only scroll container */}
-      <div className={`flex-1 min-h-0 flex flex-col border-t overflow-hidden ${
-        isSovereign ? 'bg-white border-slate-200' : 'bg-slate-50 border-gray-200'
-      }`}>
+      {/* 3. CONTENT WINDOW: outer constrains height so overlay never covers header/footer. Inner is the only scroll container. */}
+      <div
+        className={`flex-1 min-h-0 flex flex-col border-t overflow-hidden relative ${
+          isSovereign ? 'bg-white border-slate-200' : 'bg-slate-50 border-gray-200'
+        }`}
+        style={{ minHeight: 0 }}
+      >
         <div
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden concierge-content-scroll"
-          style={{ WebkitOverflowScrolling: 'touch' }}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden concierge-content-scroll relative"
+          style={{ WebkitOverflowScrolling: 'touch', minHeight: 0 }}
         >
-        {messages.length === 0 ? (
+        {/* Menu overlay: strictly inside this content box so panel header and footer stay visible. */}
+        {showMenuOverlay && (
+          <motion.div
+            id="concierge-menu-overlay"
+            role="dialog"
+            aria-label="Menu"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className={`absolute inset-0 z-40 flex flex-col overflow-hidden ${isSovereign ? 'bg-[#0F172A]' : 'bg-slate-900'} backdrop-blur-sm`}
+            style={{ top: 0, left: 0, right: 0, bottom: 0 }}
+          >
+            <div className="p-4 flex items-center justify-between border-b border-slate-500/60 shrink-0">
+              <span className="font-semibold text-white">Menu</span>
+              <button
+                type="button"
+                onClick={() => { setShowMenuOverlay(false); setMenuDrillDown(null); }}
+                className="px-3 py-1.5 rounded-xl text-sm text-slate-300 hover:text-white hover:bg-white/10"
+                aria-label="Close menu"
+              >
+                Close
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+              {menuDrillDown === null ? (
+                /* First screen: Admin | User | Public Agents only */
+                <>
+                  <button type="button" onClick={() => setMenuDrillDown('admin')} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-4 text-left text-white hover:bg-white/10">
+                    <Shield size={20} className="text-slate-300 shrink-0" /> <span className="font-medium">Admin</span> <ChevronRight size={18} className="ml-auto text-slate-400" />
+                  </button>
+                  <button type="button" onClick={() => setMenuDrillDown('user')} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-4 text-left text-white hover:bg-white/10">
+                    <User size={20} className="text-slate-300 shrink-0" /> <span className="font-medium">User</span> <ChevronRight size={18} className="ml-auto text-slate-400" />
+                  </button>
+                  <button type="button" onClick={() => setMenuDrillDown('public')} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-4 text-left text-white hover:bg-white/10">
+                    <Bot size={20} className="text-slate-300 shrink-0" /> <span className="font-medium">Public Agents</span> <ChevronRight size={18} className="ml-auto text-slate-400" />
+                  </button>
+                </>
+              ) : menuDrillDown === 'admin' ? (
+                <>
+                  <button type="button" onClick={() => setMenuDrillDown(null)} className="flex items-center gap-2 text-slate-300 hover:text-white mb-4">
+                    <ArrowLeft size={18} /> Back
+                  </button>
+                  <section>
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 mb-2 border-b border-slate-500/60 pb-1">Admin</h3>
+                    <div className="space-y-1">
+                      <button type="button" onClick={() => { setShowSettings(true); setShowMenuOverlay(false); }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                        <Settings size={18} className="text-slate-300" /> <span>Voice settings</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
+                      </button>
+                      {onOpenAdmin && (
+                        <>
+                          <button type="button" onClick={() => { onOpenAdmin(); setShowMenuOverlay(false); }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                            <Shield size={18} className="text-slate-300" /> <span>Admin</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
+                          </button>
+                          <button type="button" onClick={() => { onOpenAdmin('identity-manager'); setShowMenuOverlay(false); }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                            <Bot size={18} className="text-slate-300" /> <span>Identity Manager</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
+                          </button>
+                          <button type="button" onClick={() => { onOpenAdmin('identity-manager'); setShowMenuOverlay(false); }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                            <QrCode size={18} className="text-slate-300" /> <span>QR codes & decals</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
+                          </button>
+                          <button type="button" onClick={() => { onNavigate?.('/compliance-gateway'); setShowMenuOverlay(false); }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                            <Phone size={18} className="text-slate-300" /> <span>Agents — Telephony</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </section>
+                </>
+              ) : menuDrillDown === 'user' ? (
+                <>
+                  <button type="button" onClick={() => setMenuDrillDown(null)} className="flex items-center gap-2 text-slate-300 hover:text-white mb-4">
+                    <ArrowLeft size={18} /> Back
+                  </button>
+                  <section>
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 mb-2 border-b border-slate-500/60 pb-1">User</h3>
+                    <div className="space-y-1">
+                      {onShareClick && (
+                        <button type="button" onClick={() => { onShareClick(); setShowMenuOverlay(false); }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                          <Share2 size={18} className="text-slate-300" /> <span>Share</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
+                        </button>
+                      )}
+                      <button type="button" onClick={() => { onMyAccountClick?.(); setShowMenuOverlay(false); if (!onMyAccountClick) { setEmbeddedView(embedViewsInPanel ? 'profile' : null); if (!embedViewsInPanel && onNavigate) onNavigate('/my-account'); } }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                        <User size={18} className="text-slate-300" /> <span>Profile</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
+                      </button>
+                      <button type="button" onClick={() => { onNavigate?.('/compliance-gateway'); setShowMenuOverlay(false); }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                        <Shield size={18} className="text-slate-300" /> <span>Compliance</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
+                      </button>
+                      <button type="button" onClick={() => { setEmbeddedView(embedViewsInPanel ? 'my-businesses' : null); if (!embedViewsInPanel && onNavigate) onNavigate('/my-account'); setShowMenuOverlay(false); }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                        <Building2 size={18} className="text-slate-300" /> <span>My Businesses</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
+                      </button>
+                      <button type="button" onClick={() => { setEmbeddedView(embedViewsInPanel ? 'billing' : null); if (!embedViewsInPanel && onNavigate) onNavigate('/billing'); setShowMenuOverlay(false); }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                        <CreditCard size={18} className="text-slate-300" /> <span>Billing</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
+                      </button>
+                      <button type="button" onClick={() => { setEmbeddedView(embedViewsInPanel ? 'reseller' : null); if (!embedViewsInPanel && onNavigate) onNavigate('/mixing-board'); setShowMenuOverlay(false); }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                        <Users size={18} className="text-slate-300" /> <span>Referral Program</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
+                      </button>
+                    </div>
+                  </section>
+                </>
+              ) : (
+                /* Public Agents: list only — click to interact; no Telephony, no "Chat with AI Biz Bot" */
+                <>
+                  <button type="button" onClick={() => setMenuDrillDown(null)} className="flex items-center gap-2 text-slate-300 hover:text-white mb-4">
+                    <ArrowLeft size={18} /> Back
+                  </button>
+                  <section>
+                    <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 mb-2 border-b border-slate-500/60 pb-1">Public Agents</h3>
+                    <p className="text-xs text-slate-400 mb-3">Tap an agent to interact.</p>
+                    <div className="space-y-2">
+                      <button type="button" onClick={() => setShowMenuOverlay(false)} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                        <MessageSquare size={18} className="text-slate-300 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="font-medium">Manifesto</span>
+                          <p className="text-xs text-slate-400 mt-0.5">Voice concierge for this business</p>
+                        </div>
+                        <ChevronRight size={16} className="ml-auto text-slate-400 shrink-0" />
+                      </button>
+                      <button type="button" onClick={() => setShowMenuOverlay(false)} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
+                        <Bot size={18} className="text-slate-300 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="font-medium">AI Biz Bot</span>
+                          <p className="text-xs text-slate-400 mt-0.5">Platform assistant</p>
+                        </div>
+                        <ChevronRight size={16} className="ml-auto text-slate-400 shrink-0" />
+                      </button>
+                    </div>
+                  </section>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {!showMenuOverlay && ownerMode && (onNavigate || embedViewsInPanel) ? (
+          embeddedView ? (
+            <div className="flex flex-col h-full min-h-0">
+              <div className={`shrink-0 flex items-center gap-2 px-3 py-2 border-b ${isSovereign ? 'border-slate-200 bg-slate-50' : 'border-gray-200 bg-gray-50'}`}>
+                <button
+                  type="button"
+                  onClick={() => setEmbeddedView(null)}
+                  className={`flex items-center gap-1.5 text-sm font-medium ${isSovereign ? 'text-slate-700 hover:text-indigo-600' : 'text-gray-700 hover:text-indigo-600'}`}
+                  data-testid="button-back-command-center"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to Command Center
+                </button>
+              </div>
+              <div className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-b-sui ${embeddedView === 'billing' ? 'bg-white' : 'bg-slate-950'}`}>
+                {embeddedView === 'profile' && <ProfileContent section="profile" />}
+                {embeddedView === 'billing' && <BillingContentWithStripe />}
+                {embeddedView === 'my-businesses' && <ProfileContent section="my-businesses" />}
+                {embeddedView === 'reseller' && <MixingBoardContent />}
+              </div>
+            </div>
+          ) : (
+          <div className="p-4 space-y-4 overflow-y-auto">
+            <p className={`text-sm ${isSovereign ? 'text-slate-600' : 'text-slate-500'}`}>
+              One place for account, agents, and referral program.
+            </p>
+            {/* ——— Admin ——— */}
+            <section>
+              <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2 border-b border-slate-200 pb-1">Admin</h3>
+              <div className="space-y-1">
+                {/* Account */}
+                <div>
+                  <button type="button" onClick={() => setExpandedAdminAccount(!expandedAdminAccount)} className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${isSovereign ? 'bg-slate-50 border-slate-200 hover:bg-indigo-50/50' : 'bg-gray-50 border-gray-200 hover:bg-indigo-50/50'}`}>
+                    <User className="w-5 h-5 text-slate-600 shrink-0" />
+                    <span className="font-medium text-slate-900">Account</span>
+                    {expandedAdminAccount ? <ChevronDown className="w-4 h-4 ml-auto rotate-180" /> : <ChevronRight className="w-4 h-4 ml-auto text-slate-400" />}
+                  </button>
+                  {expandedAdminAccount && (
+                    <div className="ml-4 mt-1 space-y-1 border-l-2 border-slate-200 pl-3">
+                      <button type="button" onClick={() => { setEmbeddedView(embedViewsInPanel ? 'profile' : null); if (!embedViewsInPanel && onNavigate) onNavigate('/my-account'); }} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Profile</button>
+                      <button type="button" onClick={() => onNavigate?.('/compliance-gateway')} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">A2P Compliance</button>
+                      <button type="button" onClick={() => onNavigate?.('/aibizbot')} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Globals</button>
+                    </div>
+                  )}
+                </div>
+                {/* Agents */}
+                <div>
+                  <button type="button" onClick={() => setExpandedAdminAgents(!expandedAdminAgents)} className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${isSovereign ? 'bg-slate-50 border-slate-200 hover:bg-indigo-50/50' : 'bg-gray-50 border-gray-200 hover:bg-indigo-50/50'}`}>
+                    <Bot className="w-5 h-5 text-slate-600 shrink-0" />
+                    <span className="font-medium text-slate-900">Agents</span>
+                    {expandedAdminAgents ? <ChevronDown className="w-4 h-4 ml-auto rotate-180" /> : <ChevronRight className="w-4 h-4 ml-auto text-slate-400" />}
+                  </button>
+                  {expandedAdminAgents && (
+                    <div className="ml-4 mt-1 space-y-1 border-l-2 border-slate-200 pl-3">
+                      <div className="py-1"><span className="text-xs font-medium text-slate-500">Manifesto</span><button type="button" onClick={() => setEmbeddedView(null)} className="block text-sm text-slate-700 hover:text-indigo-600 flex items-center gap-1"><Phone className="w-3 h-3" /> Telephony</button></div>
+                      <div className="py-1"><span className="text-xs font-medium text-slate-500">AI BIZ BOT</span><button type="button" onClick={() => setEmbeddedView(null)} className="block text-sm text-slate-700 hover:text-indigo-600 flex items-center gap-1"><Phone className="w-3 h-3" /> Telephony</button></div>
+                    </div>
+                  )}
+                </div>
+                {/* Referral Program (Admin) */}
+                <div>
+                  <button type="button" onClick={() => setExpandedAdminReferral(!expandedAdminReferral)} className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${isSovereign ? 'bg-slate-50 border-slate-200 hover:bg-indigo-50/50' : 'bg-gray-50 border-gray-200 hover:bg-indigo-50/50'}`}>
+                    <Users className="w-5 h-5 text-slate-600 shrink-0" />
+                    <span className="font-medium text-slate-900">Referral Program</span>
+                    {expandedAdminReferral ? <ChevronDown className="w-4 h-4 ml-auto rotate-180" /> : <ChevronRight className="w-4 h-4 ml-auto text-slate-400" />}
+                  </button>
+                  {expandedAdminReferral && (
+                    <div className="ml-4 mt-1 space-y-1 border-l-2 border-slate-200 pl-3">
+                      <button type="button" onClick={() => { setEmbeddedView(embedViewsInPanel ? 'reseller' : null); if (!embedViewsInPanel && onNavigate) onNavigate('/mixing-board'); }} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Dashboard</button>
+                      <button type="button" onClick={() => onNavigate?.('/mixing-board')} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Affiliates</button>
+                      <button type="button" onClick={() => onNavigate?.('/mixing-board')} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Customers</button>
+                      <button type="button" onClick={() => onNavigate?.('/mixing-board')} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Commissions</button>
+                      <button type="button" onClick={() => onNavigate?.('/mixing-board')} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Invite Tool</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+            {/* ——— User ——— */}
+            <section>
+              <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2 border-b border-slate-200 pb-1">User</h3>
+              <div className="space-y-1">
+                {onShareClick && (
+                  <button type="button" onClick={onShareClick} className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${isSovereign ? 'bg-slate-50 border-slate-200 hover:bg-indigo-50/50' : 'bg-gray-50 border-gray-200 hover:bg-indigo-50/50'}`}>
+                    <Share2 className="w-5 h-5 text-slate-600 shrink-0" />
+                    <span className="font-medium text-slate-900">Share</span>
+                  </button>
+                )}
+                <button type="button" onClick={() => { onMyAccountClick?.(); if (!onMyAccountClick) { setEmbeddedView(embedViewsInPanel ? 'profile' : null); if (!embedViewsInPanel && onNavigate) onNavigate('/my-account'); } }} className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${isSovereign ? 'bg-slate-50 border-slate-200 hover:bg-indigo-50/50' : 'bg-gray-50 border-gray-200 hover:bg-indigo-50/50'}`}>
+                  <User className="w-5 h-5 text-slate-600 shrink-0" />
+                  <span className="font-medium text-slate-900">Profile</span>
+                  <ChevronRight className="w-4 h-4 ml-auto text-slate-400" />
+                </button>
+                <button type="button" onClick={() => { setEmbeddedView(null); onNavigate?.('/compliance-gateway'); }} className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${isSovereign ? 'bg-slate-50 border-slate-200 hover:bg-indigo-50/50' : 'bg-gray-50 border-gray-200 hover:bg-indigo-50/50'}`}>
+                  <Shield className="w-5 h-5 text-slate-600 shrink-0" />
+                  <span className="font-medium text-slate-900">Compliance</span>
+                  <ChevronRight className="w-4 h-4 ml-auto text-slate-400" />
+                </button>
+                <button type="button" onClick={() => setEmbeddedView(null)} className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${isSovereign ? 'bg-slate-50 border-slate-200 hover:bg-indigo-50/50' : 'bg-gray-50 border-gray-200 hover:bg-indigo-50/50'}`}>
+                  <Phone className="w-5 h-5 text-slate-600 shrink-0" />
+                  <span className="font-medium text-slate-900">Telephony</span>
+                  <ChevronRight className="w-4 h-4 ml-auto text-slate-400" />
+                </button>
+                <button type="button" onClick={() => { setEmbeddedView(embedViewsInPanel ? 'my-businesses' : null); if (!embedViewsInPanel && onNavigate) onNavigate('/my-account'); }} className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${isSovereign ? 'bg-slate-50 border-slate-200 hover:bg-indigo-50/50' : 'bg-gray-50 border-gray-200 hover:bg-indigo-50/50'}`}>
+                  <Building2 className="w-5 h-5 text-slate-600 shrink-0" />
+                  <span className="font-medium text-slate-900">My Businesses</span>
+                  <ChevronRight className="w-4 h-4 ml-auto text-slate-400" />
+                </button>
+                <button type="button" onClick={() => { setEmbeddedView(embedViewsInPanel ? 'billing' : null); if (!embedViewsInPanel && onNavigate) onNavigate('/billing'); }} className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${isSovereign ? 'bg-slate-50 border-slate-200 hover:bg-indigo-50/50' : 'bg-gray-50 border-gray-200 hover:bg-indigo-50/50'}`}>
+                  <CreditCard className="w-5 h-5 text-slate-600 shrink-0" />
+                  <span className="font-medium text-slate-900">Billing</span>
+                  <ChevronRight className="w-4 h-4 ml-auto text-slate-400" />
+                </button>
+                {/* Referral Program (User) */}
+                <div>
+                  <button type="button" onClick={() => setExpandedUserReferral(!expandedUserReferral)} className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${isSovereign ? 'bg-slate-50 border-slate-200 hover:bg-indigo-50/50' : 'bg-gray-50 border-gray-200 hover:bg-indigo-50/50'}`}>
+                    <Users className="w-5 h-5 text-slate-600 shrink-0" />
+                    <span className="font-medium text-slate-900">Referral Program</span>
+                    {expandedUserReferral ? <ChevronDown className="w-4 h-4 ml-auto rotate-180" /> : <ChevronRight className="w-4 h-4 ml-auto text-slate-400" />}
+                  </button>
+                  {expandedUserReferral && (
+                    <div className="ml-4 mt-1 space-y-1 border-l-2 border-slate-200 pl-3">
+                      <button type="button" onClick={() => { setEmbeddedView(embedViewsInPanel ? 'reseller' : null); if (!embedViewsInPanel && onNavigate) onNavigate('/mixing-board'); }} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Dashboard</button>
+                      <button type="button" onClick={() => onNavigate?.('/mixing-board')} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Referrals</button>
+                      <button type="button" onClick={() => onNavigate?.('/mixing-board')} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Team Members</button>
+                      <button type="button" onClick={() => onNavigate?.('/mixing-board')} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Invite Tool</button>
+                      <button type="button" onClick={() => onNavigate?.('/mixing-board')} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Commission Level</button>
+                      <button type="button" onClick={() => onNavigate?.('/mixing-board')} className="w-full text-left py-2 text-sm text-slate-700 hover:text-indigo-600">Payouts</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+          </div>
+          )
+        ) : messages.length === 0 ? (
           <div className={`min-h-full flex flex-col items-center justify-center text-center px-8 py-8 ${isSovereign ? 'text-slate-600' : 'text-slate-400'}`}>
             <Mic className={`w-12 h-12 mb-3 ${isSovereign ? 'text-slate-400' : 'text-slate-300'}`} />
             <p className={isSovereign ? 'text-sm font-medium text-slate-700' : 'text-sm font-medium text-slate-600'}>Hold the button below to speak</p>
@@ -657,13 +1022,21 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       >
         <div className="flex items-center justify-center gap-3 w-full">
           <button
+            type="button"
+            onClick={() => {
+              if (isAuthenticated) {
+                onHistoryClick?.() ?? onNavigate?.('/compliance-gateway');
+              } else {
+                onSmsConsentClick?.() ?? onNavigate?.('/login');
+              }
+            }}
             className={isSovereign
               ? 'w-[20%] h-12 flex items-center justify-center text-xs font-medium text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors'
               : 'w-[20%] h-12 flex items-center justify-center text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors border border-gray-200'
             }
-            title="Switch to Text Chat"
+            title={isAuthenticated ? 'Call history' : 'Sign in or register for SMS'}
           >
-            <Send size={16} />
+            <History size={16} />
           </button>
 
           <button
@@ -678,20 +1051,20 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   isRecording
                     ? 'bg-indigo-500 text-white shadow-[0_0_24px_rgba(99,102,241,0.5)] ring-2 ring-indigo-400/50'
                     : isProcessing
-                    ? 'bg-indigo-500/90 text-white animate-pulse shadow-[0_0_20px_rgba(99,102,241,0.35)]'
+                    ? 'bg-indigo-500/90 text-white shadow-[0_0_20px_rgba(99,102,241,0.35)]'
                     : 'bg-slate-800/80 text-slate-200 border border-slate-600/80 hover:bg-slate-700/80 hover:border-indigo-500/40 hover:shadow-[0_0_20px_rgba(99,102,241,0.2)] backdrop-blur-sm'
                 }`
               : `w-[50%] h-14 rounded-2xl font-semibold text-sm transition-all transform active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed select-none ${
                   isRecording
                     ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/50 ring-2 ring-blue-300/50'
                     : isProcessing
-                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white animate-pulse'
+                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white'
                     : 'bg-gradient-to-r from-gray-800 to-gray-900 text-white hover:from-blue-600 hover:to-blue-700'
                 }`
             }
           >
             <span className="flex items-center justify-center gap-2">
-              <Mic size={20} className={isRecording || isProcessing ? 'animate-pulse' : ''} />
+              <Mic size={20} className={isRecording ? 'animate-pulse' : ''} />
               <span className="hidden min-[380px]:inline">
                 {isRecording ? 'Listening…' : isProcessing ? 'Processing…' : 'Hold to speak'}
               </span>
@@ -745,13 +1118,35 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           }
         }}
         onConfigChange={(newConfig) => {
-          setCurrentVoiceConfig({
+          const next = {
             ...currentVoiceConfig,
-            ...newConfig
-          });
+            ...newConfig,
+            ...(newConfig.analysis && {
+              enableAnalysis: {
+                emotion: newConfig.analysis.detectEmotion ?? currentVoiceConfig.enableAnalysis.emotion,
+                sentiment: newConfig.analysis.detectSentiment ?? currentVoiceConfig.enableAnalysis.sentiment,
+                disc: newConfig.analysis.detectDISC ?? currentVoiceConfig.enableAnalysis.disc,
+              },
+            }),
+          };
+          setCurrentVoiceConfig(next);
           addMessage('system', 'Settings updated. Reconnecting...');
+          const canPersist = siteConfigId && siteConfigId !== 'platform-landing' && siteConfigId !== 'platform_landing' && siteConfigId !== 'platform' && siteConfigId !== '';
+          if (canPersist) {
+            fetch(`/api/site-configs/${siteConfigId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+              voiceConfig: {
+                voiceName: next.voiceName,
+                analysis: {
+                  detectEmotion: next.enableAnalysis.emotion,
+                  detectSentiment: next.enableAnalysis.sentiment,
+                  detectDISC: next.enableAnalysis.disc,
+                },
+              },
+            }) }).catch((err) => console.warn('[ConciergePanel] Failed to persist voice config:', err));
+          }
         }}
         onOpenAgentSettings={onOpenAdmin}
+        siteConfigId={siteConfigId}
       />
       )}
     </PanelWrapper>

@@ -13,14 +13,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { GatewayRouterPanel } from '@/components/admin/GatewayRouterPanel';
 import { AgentCreatorPanel } from '@/components/admin/AgentCreatorPanel';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import {
   Bot, Plus, Globe, MessageSquare, Settings, Trash2,
   Send, Loader2, ExternalLink, Code, Copy, Check, Network, Users,
   Sparkles, Clock, Star, MapPin, Phone, Zap,
-  ShoppingCart, Headphones, Palette, BookOpen, UserPlus, Image as ImageIcon, Building2
+  ShoppingCart, Headphones, Palette, BookOpen, UserPlus, Image as ImageIcon, Building2,
+  User, Activity, CreditCard, Shield, ChevronRight, QrCode, Share2
 } from 'lucide-react';
 import { GoogleWorkspacePanel } from '@/components/workspace/GoogleWorkspacePanel';
+import StandardizedChatInterface from '@/components/StandardizedChatInterface';
+import { QRRoutesManager } from '@/components/account/QRRoutesManager';
 import type { Agent, SiteConfig, BotTemplate } from '@shared/schema';
 
 interface ChatMessage {
@@ -320,22 +323,209 @@ const MODAL_COLORS: Record<string, string> = {
   'chat': 'text-violet-400 border-violet-400/30',
 };
 
+type SocialSharingFields = {
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  ogUrl?: string;
+  ogSiteName?: string;
+  ogType?: string;
+  twitterCard?: string;
+};
+
+function getSuggestedSocialSharing(site: SiteConfig): SocialSharingFields {
+  const placeData = site.placeData as { editorial_summary?: string | { overview?: string }; name?: string } | undefined;
+  const summary = placeData?.editorial_summary && typeof placeData.editorial_summary === 'object'
+    ? (placeData.editorial_summary as { overview?: string }).overview
+    : (placeData?.editorial_summary as string | undefined);
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const publicUrl = site.slug ? `${origin}/biz/${site.slug}` : '';
+  return {
+    ogTitle: site.name ?? '',
+    ogDescription: summary ?? `Visit ${site.name} — AI-powered voice and chat.`,
+    ogImage: (site as any).heroImageUrl ?? '',
+    ogUrl: publicUrl,
+    ogSiteName: site.name ?? '',
+    ogType: 'website',
+    twitterCard: 'summary_large_image',
+  };
+}
+
+function SocialSharingCard({ site, onUpdate }: { site: SiteConfig; onUpdate: (u: Partial<SiteConfig>) => void }) {
+  const { toast } = useToast();
+  const suggested = getSuggestedSocialSharing(site);
+  const stored = ((site as any).socialSharing as SocialSharingFields) || {};
+  const [form, setForm] = useState<SocialSharingFields>(() => ({ ...suggested, ...stored }));
+  const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const publicUrl = site.slug ? `${typeof window !== 'undefined' ? window.location.origin : ''}/biz/${site.slug}` : '';
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/site-configs/${site.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ socialSharing: form }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Save failed');
+      onUpdate({ socialSharing: form } as any);
+      toast({ title: 'Social sharing saved', description: 'Meta tags will be used when this page is shared.' });
+    } catch (err: any) {
+      toast({ title: 'Save failed', description: err.message, variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copyLink = () => {
+    if (!publicUrl) {
+      toast({ title: 'No public URL', description: 'Set a slug for this site to get a shareable link.', variant: 'destructive' });
+      return;
+    }
+    navigator.clipboard.writeText(publicUrl);
+    setCopied(true);
+    toast({ title: 'Link copied', description: publicUrl });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shareUrl = encodeURIComponent(publicUrl);
+  const shareTitle = encodeURIComponent(form.ogTitle || site.name || '');
+  const shareText = encodeURIComponent(form.ogDescription || '');
+
+  return (
+    <Card className="bg-slate-800/50 border-slate-700">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
+          <Share2 className="w-4 h-4 text-indigo-400" />
+          Social Sharing
+        </CardTitle>
+        <p className="text-[10px] text-slate-500 mt-0.5">
+          Open Graph and meta tags for when this page is shared on social media. All fields have defaults so you can leave them blank.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 gap-3">
+          <div>
+            <Label className="text-slate-400 text-xs mb-1 block">OG Title</Label>
+            <Input
+              value={form.ogTitle ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, ogTitle: e.target.value }))}
+              placeholder={suggested.ogTitle || 'Site name'}
+              className="bg-slate-900 border-slate-700 text-white text-sm"
+              data-testid="input-og-title"
+            />
+          </div>
+          <div>
+            <Label className="text-slate-400 text-xs mb-1 block">OG Description</Label>
+            <Textarea
+              value={form.ogDescription ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, ogDescription: e.target.value }))}
+              placeholder={suggested.ogDescription || 'Short description for link previews'}
+              className="bg-slate-900 border-slate-700 text-white text-sm resize-none"
+              rows={2}
+              data-testid="input-og-description"
+            />
+          </div>
+          <div>
+            <Label className="text-slate-400 text-xs mb-1 block">OG Image URL</Label>
+            <Input
+              value={form.ogImage ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, ogImage: e.target.value }))}
+              placeholder={suggested.ogImage || 'Hero image or 1200×630 image URL'}
+              className="bg-slate-900 border-slate-700 text-white text-sm"
+              data-testid="input-og-image"
+            />
+          </div>
+          <div>
+            <Label className="text-slate-400 text-xs mb-1 block">OG URL</Label>
+            <Input
+              value={form.ogUrl ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, ogUrl: e.target.value }))}
+              placeholder={suggested.ogUrl || publicUrl || 'Public page URL'}
+              className="bg-slate-900 border-slate-700 text-white text-sm"
+              data-testid="input-og-url"
+            />
+          </div>
+          <div>
+            <Label className="text-slate-400 text-xs mb-1 block">OG Site Name</Label>
+            <Input
+              value={form.ogSiteName ?? ''}
+              onChange={(e) => setForm((f) => ({ ...f, ogSiteName: e.target.value }))}
+              placeholder={suggested.ogSiteName || 'Site name'}
+              className="bg-slate-900 border-slate-700 text-white text-sm"
+              data-testid="input-og-site-name"
+            />
+          </div>
+          <div>
+            <Label className="text-slate-400 text-xs mb-1 block">Twitter Card</Label>
+            <Select
+              value={form.twitterCard ?? 'summary_large_image'}
+              onValueChange={(v) => setForm((f) => ({ ...f, twitterCard: v }))}
+            >
+              <SelectTrigger className="bg-slate-900 border-slate-700 text-white" data-testid="select-twitter-card">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="summary_large_image">Summary large image</SelectItem>
+                <SelectItem value="summary">Summary</SelectItem>
+                <SelectItem value="player">Player</SelectItem>
+                <SelectItem value="app">App</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700">
+          <Button size="sm" variant="outline" className="border-indigo-500/30 text-indigo-300" onClick={handleSave} disabled={saving} data-testid="button-save-social-sharing">
+            {saving ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Check className="w-3 h-3 mr-1" />}
+            {saving ? 'Saving…' : 'Save meta tags'}
+          </Button>
+          <span className="text-[10px] text-slate-500">Share page:</span>
+          <Button size="sm" variant="ghost" className="text-slate-400 h-7 px-2" onClick={copyLink} data-testid="button-copy-share-link">
+            {copied ? <Check className="w-3 h-3 mr-1" /> : <Copy className="w-3 h-3 mr-1" />}
+            Copy link
+          </Button>
+          {publicUrl && (
+            <>
+              <a href={`https://twitter.com/intent/tweet?url=${shareUrl}&text=${shareTitle}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-slate-400 hover:text-indigo-400">
+                Twitter
+              </a>
+              <a href={`https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-slate-400 hover:text-indigo-400">
+                Facebook
+              </a>
+              <a href={`https://www.linkedin.com/sharing/share-offsite/?url=${shareUrl}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-slate-400 hover:text-indigo-400">
+                LinkedIn
+              </a>
+            </>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function AdminPanel({
   site,
   agents,
   templates,
   onUpdate,
   isUpdating,
+  initialTab,
 }: {
   site: SiteConfig;
   agents: Agent[];
   templates: BotTemplate[];
   onUpdate: (updates: Partial<SiteConfig>) => void;
   isUpdating: boolean;
+  initialTab?: 'settings' | 'plan' | 'gateway' | 'agents' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'knowledge' | 'qr-network';
 }) {
   const placeData = site.placeData as any;
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'settings' | 'plan' | 'gateway' | 'agents' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'knowledge'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'plan' | 'gateway' | 'agents' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'knowledge' | 'qr-network'>(initialTab ?? 'settings');
+  useEffect(() => {
+    if (initialTab) setActiveTab(initialTab);
+  }, [initialTab]);
   const [upgradingPlan, setUpgradingPlan] = useState<string | null>(null);
   const [deployingTemplateId, setDeployingTemplateId] = useState<string | null>(null);
   const [savingAgentConfig, setSavingAgentConfig] = useState(false);
@@ -534,47 +724,51 @@ function AdminPanel({
     { id: 'chat' as const, label: 'Test Chat', icon: MessageSquare },
     { id: 'logs' as const, label: 'Logs', icon: Clock },
     { id: 'embed' as const, label: 'Embed', icon: Code },
+    { id: 'qr-network' as const, label: 'QR Network', icon: QrCode },
   ];
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 border-b border-slate-700 shrink-0">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center">
-            <Globe className="w-5 h-5 text-indigo-400" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-lg font-bold text-white truncate">{site.name}</h2>
-            {site.domain && (
-              <p className="text-xs text-slate-400 flex items-center gap-1">
-                <ExternalLink className="w-3 h-3" /> {site.domain}
-              </p>
-            )}
+    <div className="flex h-full min-h-0">
+      {/* Vertical menu list (Phase 4.1) */}
+      <div className="w-48 border-r border-slate-700 bg-slate-900/50 flex flex-col shrink-0">
+        <div className="p-4 border-b border-slate-700">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center shrink-0">
+              <Globe className="w-5 h-5 text-indigo-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-bold text-white truncate">{site.name}</h2>
+              {site.domain && (
+                <p className="text-xs text-slate-400 flex items-center gap-1 truncate">
+                  <ExternalLink className="w-3 h-3 shrink-0" /> <span className="truncate">{site.domain}</span>
+                </p>
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex gap-1 bg-slate-800 rounded-lg p-1">
+        <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === tab.id
                     ? 'bg-slate-700 text-white'
-                    : 'text-slate-400 hover:text-white'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                 }`}
                 data-testid={`tab-${tab.id}`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className="w-4 h-4 shrink-0" />
                 {tab.label}
               </button>
             );
           })}
-        </div>
+        </nav>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 min-w-0">
 
         {activeTab === 'plan' && (() => {
           const sitePlan = (site as any).plan || 'free';
@@ -674,6 +868,9 @@ function AdminPanel({
         {activeTab === 'workspace' && (
           <GoogleWorkspacePanel siteConfigId={site.id} />
         )}
+
+        {/* QR Network — shadow telecom routing table */}
+        {activeTab === 'qr-network' && <QRRoutesManager />}
 
         {/* Gateway Router — Dynamic Entry Point Engine switchboard */}
         {activeTab === 'gateway' && (
@@ -896,6 +1093,9 @@ function AdminPanel({
                 </Button>
               </CardContent>
             </Card>
+
+            {/* ── Social Sharing (OG / meta) ── */}
+            <SocialSharingCard site={site} onUpdate={onUpdate} />
           </div>
         )}
 
@@ -1499,14 +1699,34 @@ function CreateSiteDialog({
   );
 }
 
+type MainView = 'account' | 'config' | 'chat';
+
 export default function AiBizBotAdmin() {
   const { toast } = useToast();
+  const [location] = useLocation();
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  const [mainView, setMainView] = useState<MainView>('account');
   const [isCreating, setIsCreating] = useState(false);
 
   const { data: sites = [], isLoading: sitesLoading } = useQuery<SiteConfig[]>({
     queryKey: ['/api/site-configs'],
   });
+
+  // Deep link: /aibizbot?site=ID and ?tab=identity-manager — open with site selected and QR tab active (e.g. from chat menu "QR codes & decals")
+  useEffect(() => {
+    const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    const siteId = params.get('site');
+    const tab = params.get('tab');
+    if (siteId && sites.length > 0 && sites.some(s => s.id === siteId)) {
+      setSelectedSiteId(siteId);
+      setMainView('config');
+    }
+    if (tab === 'identity-manager' && sites.length > 0) {
+      setMainView('config');
+      if (siteId && sites.some(s => s.id === siteId)) setSelectedSiteId(siteId);
+      else if (!selectedSiteId && sites[0]) setSelectedSiteId(sites[0].id);
+    }
+  }, [location, sites]);
 
   const { data: agents = [] } = useQuery<Agent[]>({
     queryKey: ['/api/agents'],
@@ -1548,6 +1768,7 @@ export default function AiBizBotAdmin() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/site-configs'] });
       setSelectedSiteId(null);
+      setMainView('account');
       toast({ title: 'Site deleted' });
     },
     onError: (err: any) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
@@ -1567,17 +1788,6 @@ export default function AiBizBotAdmin() {
             AI Biz Bot
           </h2>
           <p className="text-xs text-slate-500 mt-1">Manage chatbots on customer websites</p>
-          <Link href="/chat/owner">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full mt-3 bg-indigo-500/10 border-indigo-400/30 text-indigo-300 hover:bg-indigo-500/20 hover:text-white"
-            >
-              <MessageSquare className="w-4 h-4 mr-2" />
-              Chat with AI Biz Bot
-            </Button>
-          </Link>
-          <p className="text-[10px] text-slate-500 mt-1.5">Ask questions, modify router & agents</p>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
           {sitesLoading ? (
@@ -1593,13 +1803,13 @@ export default function AiBizBotAdmin() {
             <>
               <DemoLeadsSidebar
                 leads={demoLeads}
-                onSelectSite={setSelectedSiteId}
+                onSelectSite={(id) => { setSelectedSiteId(id); setMainView('config'); }}
                 selectedSiteId={selectedSiteId}
               />
               <SiteList
                 sites={sites}
                 selectedId={selectedSiteId}
-                onSelect={setSelectedSiteId}
+                onSelect={(id) => { setSelectedSiteId(id); setMainView('config'); }}
                 onCreateNew={() => setIsCreating(true)}
               />
             </>
@@ -1607,8 +1817,24 @@ export default function AiBizBotAdmin() {
         </div>
       </div>
 
-      <div className="flex-1 relative">
-        {selectedSiteId && sites.find(s => s.id === selectedSiteId) ? (
+      <div className="flex-1 relative flex flex-col min-w-0">
+        {mainView === 'chat' ? (
+          <div className="h-full flex flex-col">
+            <div className="flex items-center gap-2 p-2 border-b border-slate-800 bg-slate-900/50 shrink-0">
+              <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white" onClick={() => setMainView(selectedSiteId ? 'config' : 'account')}>
+                ← Back
+              </Button>
+            </div>
+            <div className="flex-1 min-h-0">
+              <StandardizedChatInterface
+                mode="owner"
+                siteConfigId={selectedSiteId || 'owner-portal'}
+                botName="AI Biz Bot"
+                fullscreen={true}
+              />
+            </div>
+          </div>
+        ) : selectedSiteId && sites.find(s => s.id === selectedSiteId) ? (
           <>
             <AdminPanel
               site={sites.find(s => s.id === selectedSiteId)!}
@@ -1616,6 +1842,7 @@ export default function AiBizBotAdmin() {
               templates={templates}
               onUpdate={handleUpdate}
               isUpdating={updateMutation.isPending}
+              initialTab={typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tab') === 'identity-manager' ? 'qr-network' : undefined}
             />
             <div className="absolute top-4 right-4 z-20">
               <Button
@@ -1634,12 +1861,101 @@ export default function AiBizBotAdmin() {
             </div>
           </>
         ) : (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-center text-slate-500">
-              <Bot className="w-16 h-16 mx-auto mb-4 text-slate-700" />
-              <h3 className="text-lg font-medium text-slate-400 mb-1">AI Biz Bot Admin</h3>
-              <p className="text-sm">Select a site to manage its chatbot configuration</p>
-              <p className="text-xs text-slate-600 mt-2">or create a new site from the sidebar</p>
+          <div className="h-full overflow-y-auto p-6">
+            <h3 className="text-lg font-semibold text-white mb-1">Command Center</h3>
+            <p className="text-sm text-slate-400 mb-6">Account & governance — same as My Account</p>
+            <div className="space-y-6 max-w-2xl">
+              {(() => {
+                const appBase = location.startsWith('/app') ? '/app' : '';
+                return (
+            <>
+              <section>
+                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2 border-b border-slate-700 pb-1">
+                  Admin
+                </h4>
+                <div className="space-y-1">
+                  <Link href={appBase + '/aibizbot'}>
+                    <Card className="bg-slate-800/50 border-slate-700 hover:border-indigo-500/30 cursor-pointer transition-colors">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="p-2 bg-slate-500/10 border border-slate-600 rounded-sui shrink-0">
+                          <Shield className="w-5 h-5 text-slate-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-white">Sub Item 1</p>
+                          <p className="text-xs text-slate-400">Admin tools &amp; governance</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-slate-500 shrink-0" />
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </div>
+              </section>
+              <section>
+                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2 border-b border-slate-700 pb-1">
+                  User
+                </h4>
+                <div className="space-y-1">
+                  <Link href={appBase + '/my-account'}>
+                    <Card className="bg-slate-800/50 border-slate-700 hover:border-indigo-500/30 cursor-pointer transition-colors">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-sui shrink-0">
+                          <User className="w-5 h-5 text-blue-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-white">Profile</p>
+                          <p className="text-xs text-slate-400">Your account information</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-slate-500 shrink-0" />
+                      </CardContent>
+                    </Card>
+                  </Link>
+                  <Link href={appBase + '/billing'}>
+                    <Card className="bg-slate-800/50 border-slate-700 hover:border-indigo-500/30 cursor-pointer transition-colors">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-sui shrink-0">
+                          <CreditCard className="w-5 h-5 text-emerald-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-white">Billing</p>
+                          <p className="text-xs text-slate-400">Billing & subscription</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-slate-500 shrink-0" />
+                      </CardContent>
+                    </Card>
+                  </Link>
+                  <Link href={appBase + '/my-account'}>
+                    <Card className="bg-slate-800/50 border-slate-700 hover:border-indigo-500/30 cursor-pointer transition-colors">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="p-2 bg-violet-500/10 border border-violet-500/20 rounded-sui shrink-0">
+                          <Building2 className="w-5 h-5 text-violet-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-white">My Businesses</p>
+                          <p className="text-xs text-slate-400">Sites and chatbot config</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-slate-500 shrink-0" />
+                      </CardContent>
+                    </Card>
+                  </Link>
+                  <Link href={appBase + '/mixing-board'}>
+                    <Card className="bg-slate-800/50 border-slate-700 hover:border-indigo-500/30 cursor-pointer transition-colors">
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-sui shrink-0">
+                          <Users className="w-5 h-5 text-amber-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-white">Reseller Program</p>
+                          <p className="text-xs text-slate-400">Mixing board, commissions</p>
+                        </div>
+                        <ChevronRight className="w-5 h-5 text-slate-500 shrink-0" />
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </div>
+              </section>
+            </>
+                );
+              })()}
             </div>
           </div>
         )}

@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 
 async function seedPlatformLanding() {
   console.log("🌱 Seeding 'platform_landing' entry...");
+  // Digital-only profile: no Google Place ID. Used when users interact with the home page
+  // agent (Gateway Global AI / AI Biz Bot). Never call Places API with this id.
 
   const platformPrompt = `## IDENTITY
 You are the Gateway Global AI Concierge. You represent the bridge between cutting-edge AI and small business owners who need "AI that works."

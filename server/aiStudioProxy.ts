@@ -1,10 +1,15 @@
 /**
  * AI Studio PTT WebSocket Proxy
  * Dedicated /ws/ai-studio-ptt endpoint; does not modify sovereign voice pipeline.
- * All config from env: GEMINI_WS_URL, GEMINI_API_KEY, GEMINI_MODEL_ID, GEMINI_VOICE_NAME,
+ * All config from env: GEMINI_WS_URL (optional), GEMINI_API_KEY, GEMINI_MODEL_ID, GEMINI_VOICE_NAME,
  * GEMINI_INPUT_SAMPLE_RATE, GEMINI_OUTPUT_SAMPLE_RATE.
  */
 import { WebSocket, WebSocketServer } from "ws";
+
+/** Gemini Live WebSocket base URL; same default as geminiVoice.ts / voiceStream.ts. */
+const GEMINI_LIVE_WS_BASE =
+  process.env.GEMINI_WS_URL ||
+  "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
 import { Server } from "http";
 import type { IncomingMessage } from "http";
 import { registerWebSocketRoute } from "./websocketRouter";
@@ -69,14 +74,12 @@ export function setupAIStudioPTTProxy(server: Server): void {
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-    const wsBaseUrl = process.env.GEMINI_WS_URL;
-    if (!apiKey || !wsBaseUrl) {
-      console.error("[AIStudioPTT] GEMINI_API_KEY or GEMINI_WS_URL not set");
+    if (!apiKey) {
+      console.error("[AIStudioPTT] GEMINI_API_KEY not set");
       clientWs.close(1011, "Server configuration error");
       return;
     }
-
-    const googleUrl = `${wsBaseUrl}?key=${apiKey}`;
+    const googleUrl = `${GEMINI_LIVE_WS_BASE}${GEMINI_LIVE_WS_BASE.includes("?") ? "&" : "?"}key=${apiKey}`;
     const googleWs = new WebSocket(googleUrl);
     let messageQueue: Buffer[] = [];
     let isGoogleOpen = false;

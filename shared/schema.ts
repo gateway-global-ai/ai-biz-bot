@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index, pgEnum, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index, pgEnum, uuid, serial, bigserial, real, doublePrecision, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1037,7 +1037,7 @@ export const PLAN_LIMITS = {
   free: {
     label: "Free",
     price: 0,
-    maxBusinesses: 1,
+    maxBusinesses: 5,
     tagline: "Try it out",
     websiteTtsMinutes: 500,
     liveVoiceMinutes: 0,
@@ -1051,6 +1051,7 @@ export const PLAN_LIMITS = {
     projectManagement: false,
     features: [
       "Static AI-generated website",
+      "Up to 5 businesses",
       "Last 5 reviews displayed",
       "Shared SMS number",
       "500 website voice minutes",
@@ -1204,11 +1205,24 @@ export const siteConfigs = pgTable("site_configs", {
   metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   /** URL-safe slug for the public business page (e.g. "mcdonalds-lafayette-a3f2"). */
   slug: varchar("slug"),
+  /** Generated QR code image URL (e.g. /api/qr/image/:slug). Null until first generation. */
+  qrCodeUrl: text("qr_code_url"),
   /** Denormalized total shares — incremented on each share_events insert. */
   shareCount: integer("share_count").default(0).notNull(),
+  /** Open Graph / social sharing meta: ogTitle, ogDescription, ogImage, ogUrl, ogSiteName, ogType, twitterCard. Empty fields filled from site name/hero/URL at serve time. */
+  socialSharing: jsonb("social_sharing").$type<Record<string, string>>().default({}),
+  /** Storefront demo: static routes (call, text, email, website) — { call: { enabled, value }, text: { enabled, value }, email: { enabled, value }, website: { enabled, value } }. */
+  staticRoutes: jsonb("static_routes").$type<StaticRoutesConfig>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+export type StaticRoutesConfig = {
+  call?: { enabled: boolean; value?: string };
+  text?: { enabled: boolean; value?: string };
+  email?: { enabled: boolean; value?: string };
+  website?: { enabled: boolean; value?: string };
+};
 
 export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
   id: true,
@@ -1218,6 +1232,55 @@ export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
 
 export type InsertSiteConfig = z.infer<typeof insertSiteConfigSchema>;
 export type SiteConfig = typeof siteConfigs.$inferSelect;
+
+// ── QR Routes — shadow telecom routing table (QR code = virtual phone number) ─
+export const qrRoutes = pgTable("qr_routes", {
+  id: serial("id").primaryKey(),
+  variable: uuid("variable").notNull().default(sql`gen_random_uuid()`).unique(),
+  destination: text("destination"),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
+  label: text("label"),
+  qrCodePath: text("qr_code_path"),
+  isActive: boolean("is_active").default(true).notNull(),
+  scanCount: integer("scan_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertQrRouteSchema = createInsertSchema(qrRoutes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertQrRoute = z.infer<typeof insertQrRouteSchema>;
+export type QrRoute = typeof qrRoutes.$inferSelect;
+
+// ── QR Firewall — access control rules per route or global ─
+export const qrFirewall = pgTable("qr_firewall", {
+  id: serial("id").primaryKey(),
+  qrRouteId: integer("qr_route_id").references(() => qrRoutes.id, { onDelete: "cascade" }),
+  ruleType: text("rule_type").notNull(), // 'allow_ip' | 'deny_ip' | 'allow_ua' | 'deny_ua' | 'rate_limit'
+  value: text("value").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export type QrFirewallRule = typeof qrFirewall.$inferSelect;
+export type InsertQrFirewallRule = typeof qrFirewall.$inferInsert;
+
+// ── QR Access — log every scan or blocked attempt ─
+export const qrAccess = pgTable("qr_access", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  qrRouteId: integer("qr_route_id").references(() => qrRoutes.id, { onDelete: "cascade" }).notNull(),
+  accessedAt: timestamp("accessed_at").defaultNow(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  referrer: text("referrer"),
+  destination: text("destination"),
+  wasBlocked: boolean("was_blocked").default(false).notNull(),
+  responseMs: integer("response_ms"),
+});
+export type QrAccessLog = typeof qrAccess.$inferSelect;
+export type InsertQrAccessLog = typeof qrAccess.$inferInsert;
 
 // ── Per-site PMS integrations (Cloudbeds, etc.) — one row per site per PMS ─
 export const sitePmsIntegrations = pgTable("site_pms_integrations", {
@@ -1257,6 +1320,59 @@ export const shareEvents = pgTable("share_events", {
 });
 
 export type ShareEvent = typeof shareEvents.$inferSelect;
+
+// ── Storefront categories, reports, images, demo claims ───────────────────────
+export const storefrontCategories = pgTable("storefront_categories", {
+  slug: varchar("slug").primaryKey(),
+  displayName: varchar("display_name").notNull(),
+  location: varchar("location").notNull(),
+  searchQuery: varchar("search_query").notNull(),
+  industryGroup: varchar("industry_group"),
+  /** Optional reference/fallback hero image (path or URL). Used when no Flux images exist. */
+  heroImageUrl: varchar("hero_image_url"),
+  lat: doublePrecision("lat"),
+  lng: doublePrecision("lng"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const storefrontReports = pgTable("storefront_reports", {
+  categorySlug: varchar("category_slug").primaryKey().references(() => storefrontCategories.slug, { onDelete: "cascade" }),
+  summary: text("summary"),
+  whatsWorking: jsonb("whats_working").$type<string[]>().default([]),
+  whatsNotWorking: jsonb("whats_not_working").$type<string[]>().default([]),
+  rawPlaces: jsonb("raw_places"),
+  generatedAt: timestamp("generated_at").defaultNow(),
+});
+
+export const storefrontCategoryImages = pgTable(
+  "storefront_category_images",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    categorySlug: varchar("category_slug")
+      .notNull()
+      .references(() => storefrontCategories.slug, { onDelete: "cascade" }),
+    imageIndex: integer("image_index").notNull(),
+    imageUrl: text("image_url").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => [uniqueIndex("storefront_category_images_slug_idx").on(t.categorySlug, t.imageIndex)]
+);
+
+export const storefrontDemoClaims = pgTable("storefront_demo_claims", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phone: varchar("phone").notNull(),
+  siteConfigId: varchar("site_config_id")
+    .notNull()
+    .references(() => siteConfigs.id, { onDelete: "cascade" }),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type StorefrontCategory = typeof storefrontCategories.$inferSelect;
+export type StorefrontReport = typeof storefrontReports.$inferSelect;
+export type StorefrontCategoryImage = typeof storefrontCategoryImages.$inferSelect;
+export type StorefrontDemoClaim = typeof storefrontDemoClaims.$inferSelect;
 
 // ── Voice Usage Logs – Energy Pool Billing ($0.10/min) ────────────────────────
 // One row per completed call. billedMinutes = ceil(rawDurationSeconds / 60).

@@ -33,6 +33,9 @@ import investorDemoRoutes from "./routes/investorDemoRoutes"; // Investor report
 import aiStudioRoutes from "./routes/aiStudioRoutes"; // AI Studio OAuth/Webhook + PTT session initiation
 import affiliateRoutes from "./routes/affiliateRoutes"; // Reseller & Affiliate program signup (phone → registration link)
 import pitchDeckRoutes from "./routes/pitchDeckRoutes"; // Pitch decks — deep research / market-fit (The Joint, etc.) (phone → registration link)
+import qrCodeRoutes from "./routes/qrCodeRoutes"; // QR code generation (logo center), search businesses, serve image
+import { qrAdminRouter, qrRedirectRouter } from "./routes/qrManagementRoutes"; // QR Routes shadow telecom
+import storefrontRoutes from "./routes/storefrontRoutes"; // Storefronts: industry landing pages, reports, images, demo
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -81,15 +84,19 @@ import { getServerMapsApiKey } from "./config/mapsApiKey";
 
 const SOCIAL_CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|LinkedInBot|WhatsApp|Slackbot|TelegramBot|Pinterest|Googlebot|bingbot|Discordbot|vkShare/i;
 
-const DEFAULT_OG: Record<string, string> = {
-  ogTitle: "AI Business Router — AI Voice and Chat Enabled",
-  ogDescription: "AI-powered business websites with voice concierge and chat. Fully developed in about an hour. No credit card required.",
-  ogUrl: "http://aibizbot.gatewayglobal.ai",
-  ogImage: "http://aibizbot.gatewayglobal.ai/og-image.png",
-  ogType: "website",
-  ogSiteName: "AI Biz Bot by Gateway Global",
-  twitterCard: "summary_large_image",
-};
+function getDefaultOg(): Record<string, string> {
+  const baseUrl = process.env.APP_URL || "https://aibizbot-dev.gatewayglobal.ai";
+  return {
+    ogTitle: "CLAIM YOUR BUSINESS PROFILE — GET ACCESS TO YOUR AI AGENTS AND WEBSITE",
+    ogDescription: "AI-powered business websites with voice concierge and chat. Free 30 day trial, instant delivery.",
+    ogUrl: baseUrl,
+    ogImage: `${baseUrl}/og-preview.png`,
+    ogType: "website",
+    ogSiteName: "Gateway Global AI",
+    twitterCard: "summary_large_image",
+  };
+}
+const DEFAULT_OG = getDefaultOg();
 
 function buildOgHtml(og: Record<string, string>): string {
   return `<!DOCTYPE html>
@@ -148,6 +155,10 @@ export async function registerRoutes(
   app.use('/api/ai-studio', aiStudioRoutes);
   app.use('/api/affiliate', affiliateRoutes);
   app.use('/api/pitch-decks', pitchDeckRoutes);
+  app.use('/api/qr', qrCodeRoutes);
+  app.use("/api/qr-routes", qrAdminRouter);
+  app.use("/qr", qrRedirectRouter);
+  app.use("/api/storefronts", storefrontRoutes);
 
   // Agent System: DISC, Agents, Organizations, Projects, BotTemplates
   app.use(agentSystemRoutes);
@@ -162,6 +173,36 @@ export async function registerRoutes(
 
     try {
       const pagePath = req.path === "/" ? "/" : req.path.replace(/\/$/, "");
+      const host = req.headers.host || "localhost:5000";
+      const protocol = req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      const baseUrl = `${protocol}://${host}`;
+
+      // Per-site OG for public business pages: /biz/:slug
+      const bizMatch = pagePath.match(/^\/biz\/([^/]+)$/);
+      if (bizMatch) {
+        const slug = bizMatch[1];
+        const site = await storage.getSiteConfigBySlug(slug);
+        if (site) {
+          const placeData = (site as any).placeData as { editorial_summary?: string | { overview?: string }; name?: string } | undefined;
+          const summary = placeData?.editorial_summary && typeof placeData.editorial_summary === "object"
+            ? (placeData.editorial_summary as { overview?: string }).overview
+            : (placeData?.editorial_summary as string | undefined);
+          const stored = ((site as any).socialSharing as Record<string, string>) || {};
+          const heroUrl = (site as any).heroImageUrl as string | undefined;
+          const imageAbs = (url: string) => (url && url.startsWith("http") ? url : `${baseUrl}${url?.startsWith("/") ? "" : "/"}${url || ""}`);
+          const og = {
+            ogTitle: stored.ogTitle ?? site.name ?? DEFAULT_OG.ogTitle,
+            ogDescription: stored.ogDescription ?? summary ?? `Visit ${site.name} — AI-powered voice and chat.` ?? DEFAULT_OG.ogDescription,
+            ogUrl: stored.ogUrl ?? `${baseUrl}/biz/${slug}`,
+            ogImage: stored.ogImage ? imageAbs(stored.ogImage) : (heroUrl ? imageAbs(heroUrl) : DEFAULT_OG.ogImage),
+            ogType: (stored.ogType as "website" | "article") ?? DEFAULT_OG.ogType,
+            ogSiteName: stored.ogSiteName ?? site.name ?? DEFAULT_OG.ogSiteName,
+            twitterCard: stored.twitterCard ?? DEFAULT_OG.twitterCard,
+          };
+          return res.status(200).set({ "Content-Type": "text/html" }).end(buildOgHtml(og));
+        }
+      }
+
       const dbOg = await storage.getOgSettingsByPath(pagePath);
       const og = dbOg ? {
         ogTitle: dbOg.ogTitle,
@@ -969,7 +1010,7 @@ export async function registerRoutes(
   // ============ Google Places Details (comprehensive) ============
   app.get("/api/places/details/:placeId", async (req, res) => {
     try {
-      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      const apiKey = getServerMapsApiKey() || process.env.GOOGLE_CLOUD_API_KEY;
       if (!apiKey) {
         return res.status(500).json({ error: "Google API key not configured" });
       }
@@ -1093,10 +1134,10 @@ export async function registerRoutes(
     }
   });
 
-  // Google Places Search - for business discovery (with caching)
+  // Google Places Search - for business discovery (with caching). Uses platform key (Grounding Lite / Places).
   app.post("/api/places/search", async (req, res) => {
     try {
-      const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
+      const apiKey = getServerMapsApiKey() || process.env.GOOGLE_CLOUD_API_KEY;
       if (!apiKey) {
         return res.status(500).json({ error: "Google API key not configured" });
       }
@@ -1144,19 +1185,23 @@ export async function registerRoutes(
             throw new Error(data.error?.message || 'Search failed');
           }
 
-          // Transform the new API format to be more user-friendly
-          const places = (data.places || []).map((place: any) => ({
-            placeId: place.id,
-            name: place.displayName?.text || 'Unknown',
-            address: place.formattedAddress || '',
-            location: place.location,
-            rating: place.rating || 0,
-            userRatingCount: place.userRatingCount || 0,
-            types: place.types || [],
-            primaryType: place.primaryType,
-            businessStatus: place.businessStatus,
-            photos: place.photos?.map((p: any) => p.name) || []
-          }));
+          // Transform the new API format to match platform (placeId + place_id for home/storefront)
+          const places = (data.places || []).map((place: any) => {
+            const id = place.id?.replace(/^places\//i, '') || place.id;
+            return {
+              placeId: id,
+              place_id: id,
+              name: place.displayName?.text || 'Unknown',
+              address: place.formattedAddress || '',
+              location: place.location,
+              rating: place.rating || 0,
+              userRatingCount: place.userRatingCount || 0,
+              types: place.types || [],
+              primaryType: place.primaryType,
+              businessStatus: place.businessStatus,
+              photos: place.photos?.map((p: any) => p.name) || []
+            };
+          });
 
           return { places, count: places.length };
         },

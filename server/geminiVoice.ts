@@ -7,6 +7,11 @@ import { handleToolCall } from "./services/toolHandler";
 import { broadcastLiveEvent } from "./services/eventBridge";
 import { storage } from "./storage";
 
+/** Gemini Multimodal Live API WebSocket base URL (no key). Same fallback as voiceStream.ts. */
+const GEMINI_LIVE_WS_BASE =
+  process.env.GEMINI_WS_URL ||
+  "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
+
 /** Shape of the structured result returned by MCP tool handlers. */
 interface McpToolResult {
   ui_action?: 'SHOW_UPGRADE_MODAL' | 'SHOW_WORKSPACE_CONNECT';
@@ -43,14 +48,9 @@ export function setupGeminiLiveWebSocket(server: Server): void {
       return;
     }
 
-    if (!process.env.GEMINI_WS_URL) {
-      console.error("[GeminiVoice] GEMINI_WS_URL is not set in environment variables");
-      clientWs.close(1011, "Server configuration error: Missing WebSocket URL");
-      return;
-    }
-
-    // The URL for the Gemini Multimodal Live API
-    const googleUrl = `${process.env.GEMINI_WS_URL}?key=${apiKey}`;
+    // Base URL for Gemini Multimodal Live API (env override or default v1beta endpoint)
+    const wsBase = GEMINI_LIVE_WS_BASE;
+    const googleUrl = `${wsBase}${wsBase.includes("?") ? "&" : "?"}key=${apiKey}`;
 
     console.log("[GeminiVoice] Attempting to connect to Google Gemini API...");
     

@@ -211,6 +211,9 @@ export function buildBehavioralPrompt(
       bizBlock += `Key offerings: ${businessContext.keyOfferings.slice(0, 8).join(', ')}`;
     }
     sections.push(bizBlock);
+    sections.push(
+      `### GUARD RAIL (MVP)\nYou may only answer questions about this business using the information provided above (business details, hours, services, and reviews). Do not invent information or use external knowledge. For anything outside this scope, suggest the visitor call, text, or visit the website.`
+    );
   }
 
   // ── Fallback: bare-minimum identity if no memory structures ──────────────

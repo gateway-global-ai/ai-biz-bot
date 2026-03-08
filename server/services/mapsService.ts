@@ -9,12 +9,26 @@ import { getServerMapsApiKey } from "../config/mapsApiKey";
 const GOOGLE_MAPS_KEY = getServerMapsApiKey();
 const SERP_API_KEY = process.env.SERPAPI_KEY;
 
+/** Internal/sentinel IDs that must never be sent to the Places API (they are site_config ids, not Google Place IDs). */
+const INTERNAL_PLACE_IDS = new Set(['platform_landing', 'platform-landing', 'platform', '']);
+/** Google Place IDs start with ChIJ or "places/ChIJ" — reject anything that looks like an internal id. */
+function isInvalidPlaceIdForApi(placeId: string): boolean {
+  if (!placeId || typeof placeId !== 'string') return true;
+  const trimmed = placeId.trim().replace(/^places\//i, '');
+  if (INTERNAL_PLACE_IDS.has(trimmed)) return true;
+  if (trimmed.length < 20 || /^[a-z_-]+$/i.test(trimmed)) return true; // e.g. platform_landing, demo
+  return false;
+}
+
 /**
  * getBusinessDetails - Logic for "get_business_details" tool
  * Fetches core business data from Google Places API (New)
  */
 export async function getBusinessDetails(placeId: string) {
   if (!GOOGLE_MAPS_KEY) throw new Error("Missing Google Maps API Key");
+  if (isInvalidPlaceIdForApi(placeId)) {
+    throw new Error("No specific business place selected. Use a valid Google Place ID from a business search.");
+  }
 
   const url = `https://places.googleapis.com/v1/places/${placeId}`;
   
@@ -46,6 +60,9 @@ export async function getBusinessDetails(placeId: string) {
  */
 export async function getBusinessReviews(placeId: string, maxReviews: number = 5) {
   if (!SERP_API_KEY) throw new Error("Missing SerpApi Key");
+  if (isInvalidPlaceIdForApi(placeId)) {
+    throw new Error("No specific business place selected. Use a valid Google Place ID from a business search.");
+  }
 
   const params = new URLSearchParams({
     engine: "google_maps_reviews",

@@ -14,11 +14,24 @@ function normalizePlaceId(placeId: string): string {
   return placeId.replace(/^places\//i, '');
 }
 
+/** Internal/sentinel IDs that must never be sent to the Places API. */
+const INTERNAL_PLACE_IDS = new Set(['platform_landing', 'platform-landing', 'platform', '']);
+function isInvalidPlaceIdForApi(placeId: string): boolean {
+  if (!placeId || typeof placeId !== 'string') return true;
+  const trimmed = placeId.trim().replace(/^places\//i, '');
+  if (INTERNAL_PLACE_IDS.has(trimmed)) return true;
+  if (trimmed.length < 20 || /^[a-z_-]+$/i.test(trimmed)) return true;
+  return false;
+}
+
 /**
  * Fetch place details by Place ID (for get_business_details / get_place_ui_data tools).
  */
 export async function getPlaceDetails(placeId: string) {
   const normalizedId = normalizePlaceId(placeId);
+  if (isInvalidPlaceIdForApi(normalizedId)) {
+    throw new Error('No specific business place selected. Use a valid Google Place ID from a business search.');
+  }
   const { getServerMapsApiKey } = await import("../config/mapsApiKey");
   const API_KEY = getServerMapsApiKey();
   if (!API_KEY) throw new Error('Google Maps/Places API key not configured (set GOOGLE_MAPS_API_KEY, GOOGLE_MAPS_GROUNDING_LITE_API_KEY, or GOOGLE_PLACES_API_KEY)');

@@ -58,12 +58,27 @@ const voiceConfigSchema = z.object({
   voiceName: z.string().optional(),
   language: z.string().optional(),
   isPushToTalk: z.boolean().optional(),
+  analysis: z.object({
+    detectEmotion: z.boolean().optional(),
+    detectSentiment: z.boolean().optional(),
+    detectDISC: z.boolean().optional(),
+  }).optional(),
 }).nullable().optional();
 
 const themeConfigSchema = z.object({
   primaryColor: z.string().optional(),
   fontFamily: z.string().optional(),
   borderRadius: z.string().optional(),
+}).nullable().optional();
+
+const socialSharingSchema = z.object({
+  ogTitle: z.string().max(200).optional(),
+  ogDescription: z.string().max(500).optional(),
+  ogImage: z.string().max(2000).optional().nullable(),
+  ogUrl: z.string().max(2000).optional().nullable(),
+  ogSiteName: z.string().max(200).optional().nullable(),
+  ogType: z.enum(['website', 'article']).optional(),
+  twitterCard: z.enum(['summary', 'summary_large_image', 'player', 'app']).optional(),
 }).nullable().optional();
 
 const createSchema = z.object({
@@ -98,6 +113,7 @@ const patchSchema = createSchema.partial().extend({
   agentConfig: agentConfigSchema,
   voiceConfig: voiceConfigSchema,
   themeConfig: themeConfigSchema,
+  socialSharing: socialSharingSchema,
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────

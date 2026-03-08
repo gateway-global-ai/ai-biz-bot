@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
@@ -9,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { CreditCard, Plus, Trash2, Star, Loader2, ShieldCheck, AlertCircle } from 'lucide-react';
+import { CreditCard, Plus, Trash2, Star, Loader2, ShieldCheck, AlertCircle, ArrowLeft } from 'lucide-react';
 
 let stripePromise: Promise<Stripe | null> | null = null;
 
@@ -190,7 +191,7 @@ function PaymentMethodCard({ pm, customerId, onUpdate }: { pm: PaymentMethod; cu
   );
 }
 
-function BillingContent() {
+export function BillingContent() {
   const { toast } = useToast();
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [showAddCard, setShowAddCard] = useState(false);
@@ -216,13 +217,13 @@ function BillingContent() {
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
+    <div className="p-6 max-w-3xl mx-auto space-y-6 bg-white min-h-full">
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <CreditCard className="w-6 h-6 text-indigo-400" />
+        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <CreditCard className="w-6 h-6 text-indigo-600" />
           Billing & Payment Methods
         </h1>
-        <p className="text-muted-foreground mt-1">Manage saved payment methods for your customers. Powered by Stripe.</p>
+        <p className="text-slate-600 mt-1">Manage saved payment methods for your customers. Powered by Stripe.</p>
       </div>
 
       <Card className="p-6">
@@ -312,7 +313,8 @@ function BillingContent() {
   );
 }
 
-export default function BillingPage() {
+/** Wraps BillingContent in Stripe Elements; use in full page or in-panel. */
+export function BillingContentWithStripe() {
   const [stripeReady, setStripeReady] = useState(false);
   const [stripeInstance, setStripeInstance] = useState<Stripe | null>(null);
 
@@ -333,11 +335,12 @@ export default function BillingPage() {
 
   if (!stripeInstance) {
     return (
-      <div className="p-6 max-w-3xl mx-auto">
-        <Card className="p-8 text-center">
+      <div className="p-6 max-w-3xl mx-auto bg-white min-h-full">
+        <Card className="p-8 text-center bg-white border-slate-200">
           <AlertCircle className="w-10 h-10 mx-auto text-destructive mb-3" />
           <h2 className="text-lg font-semibold mb-2">Stripe Not Connected</h2>
-          <p className="text-sm text-muted-foreground">Payment processing is not configured. Connect Stripe in the integrations panel to enable billing.</p>
+          <p className="text-sm text-muted-foreground mb-2">Payment processing is not configured. Connect Stripe in the integrations panel to enable billing.</p>
+          <p className="text-xs text-muted-foreground">If you are the developer: set STRIPE_PUBLISHABLE_KEY (and optionally STRIPE_SECRET_KEY) in Doppler or env so the publishable-key API returns a valid key.</p>
         </Card>
       </div>
     );
@@ -347,5 +350,23 @@ export default function BillingPage() {
     <Elements stripe={stripeInstance}>
       <BillingContent />
     </Elements>
+  );
+}
+
+export default function BillingPage() {
+  const [pathname, setLocation] = useLocation();
+  const isAppStandalone = pathname.startsWith('/app');
+
+  return (
+    <div className="min-h-screen bg-white">
+      {isAppStandalone && (
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-2">
+          <Button variant="ghost" size="sm" onClick={() => setLocation('/')} data-testid="button-back-home">
+            <ArrowLeft className="w-4 h-4 mr-2" /> Back to home
+          </Button>
+        </div>
+      )}
+      <BillingContentWithStripe />
+    </div>
   );
 }

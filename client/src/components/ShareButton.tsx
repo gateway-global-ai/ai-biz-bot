@@ -173,7 +173,11 @@ export default function ShareButton({
 
   async function handleSendSms(e: React.FormEvent) {
     e.preventDefault();
-    if (!smsPhone.trim() || !siteConfigId) return;
+    if (!smsPhone.trim()) return;
+    if (!siteConfigId) {
+      setSmsError('Share a specific business page first (open your site from My Account or create one).');
+      return;
+    }
     setSmsError('');
     setSmsSending(true);
     try {

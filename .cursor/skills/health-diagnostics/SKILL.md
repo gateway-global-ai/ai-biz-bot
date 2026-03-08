@@ -24,8 +24,13 @@ Use this skill to verify the "100% Lockdown" status and that dev/stage/prod are 
 
 3. **List models**: The permit script and `/api/health` Gemini check use the REST `listModels` endpoint. Confirm `gemini-2.5-flash-native-audio-preview-12-2025` is in the list for your key (and in the health response `nativeAudioPreviewPermit: true`).
 
+## Voice / WebSocket (Code 1011)
+
+If the client shows **Connection closed, Code 1011, Reason: Missing WebSocket URL**, the backend was missing the Gemini Live WebSocket base URL. The server now uses a **default** (`wss://generativelanguage.googleapis.com/ws/...BidiGenerateContent`). You do **not** need to set `GEMINI_WS_URL` in Doppler unless you use a custom endpoint. Restart the app after any env change.
+
 ## Reference
 
 - Health route: `server/routes/healthRoutes.ts`
 - Permit script: `scripts/check-google-key-permissions.ts`
 - Post-deployment workflow: `server/post-deployment-health-check.yml`
+- Voice proxy: `server/geminiVoice.ts` (uses `GEMINI_WS_URL` or default)

@@ -549,7 +549,8 @@ function ThemePanel({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function MixingBoard() {
+/** Content-only export for use in ConciergePanel embedded view (no min-h-screen wrapper). */
+export function MixingBoardContent() {
   const [selectedSiteId, setSelectedSiteId] = useState<string>("");
 
   const { data: site, isLoading } = useQuery<SiteConfig>({
@@ -560,17 +561,12 @@ export default function MixingBoard() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
-      {/* Header */}
+    <>
       <div className="border-b border-gray-800/60 bg-gray-950/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-100 tracking-tight">
-              Mixing Board
-            </h1>
-            <p className="text-xs text-gray-500 mt-0.5">
-              Sovereign OS — Reseller Control Room
-            </p>
+            <h1 className="text-xl font-bold text-gray-100 tracking-tight">Mixing Board</h1>
+            <p className="text-xs text-gray-500 mt-0.5">Sovereign OS — Reseller Control Room</p>
           </div>
           <SiteSelector selectedId={selectedSiteId} onSelect={setSelectedSiteId} />
         </div>
@@ -583,9 +579,7 @@ export default function MixingBoard() {
               <Settings2 className="w-8 h-8 text-gray-600" />
             </div>
             <p className="text-gray-400 font-medium">Select a site to begin configuring</p>
-            <p className="text-gray-600 text-sm mt-1">
-              Choose from the dropdown above to load the Mixing Board
-            </p>
+            <p className="text-gray-600 text-sm mt-1">Choose from the dropdown above to load the Mixing Board</p>
           </div>
         ) : isLoading ? (
           <div className="flex items-center justify-center h-64">
@@ -594,54 +588,34 @@ export default function MixingBoard() {
         ) : (
           <Tabs defaultValue="agent" className="space-y-6">
             <TabsList className="bg-gray-900/60 border border-gray-800 p-1 rounded-xl">
-              <TabsTrigger
-                value="agent"
-                className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-gray-400 rounded-lg px-4 py-2 text-sm"
-              >
-                <Bot className="w-4 h-4 mr-2" />
-                Agent
+              <TabsTrigger value="agent" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-gray-400 rounded-lg px-4 py-2 text-sm">
+                <Bot className="w-4 h-4 mr-2" /> Agent
               </TabsTrigger>
-              <TabsTrigger
-                value="voice"
-                className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-gray-400 rounded-lg px-4 py-2 text-sm"
-              >
-                <Mic2 className="w-4 h-4 mr-2" />
-                Voice
+              <TabsTrigger value="voice" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-gray-400 rounded-lg px-4 py-2 text-sm">
+                <Mic2 className="w-4 h-4 mr-2" /> Voice
               </TabsTrigger>
-              <TabsTrigger
-                value="theme"
-                className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-gray-400 rounded-lg px-4 py-2 text-sm"
-              >
-                <Palette className="w-4 h-4 mr-2" />
-                Theme
+              <TabsTrigger value="theme" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-gray-400 rounded-lg px-4 py-2 text-sm">
+                <Palette className="w-4 h-4 mr-2" /> Theme
               </TabsTrigger>
-              <TabsTrigger
-                value="analytics"
-                className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-gray-400 rounded-lg px-4 py-2 text-sm"
-              >
-                <BarChart3 className="w-4 h-4 mr-2" />
-                Analytics
+              <TabsTrigger value="analytics" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white text-gray-400 rounded-lg px-4 py-2 text-sm">
+                <BarChart3 className="w-4 h-4 mr-2" /> Analytics
               </TabsTrigger>
             </TabsList>
-
             <TabsContent value="agent" className="mt-0">
               <div className="max-w-2xl">
                 <AgentPanel siteId={selectedSiteId} initial={site?.agentConfig ?? null} />
               </div>
             </TabsContent>
-
             <TabsContent value="voice" className="mt-0">
               <div className="max-w-2xl">
                 <VoicePanel siteId={selectedSiteId} initial={site?.voiceConfig ?? null} />
               </div>
             </TabsContent>
-
             <TabsContent value="theme" className="mt-0">
               <div className="max-w-2xl">
                 <ThemePanel siteId={selectedSiteId} initial={site?.themeConfig ?? null} />
               </div>
             </TabsContent>
-
             <TabsContent value="analytics" className="mt-0">
               <ResellerAnalytics siteId={selectedSiteId} siteName={site?.name ?? ""} />
             </TabsContent>
@@ -649,7 +623,6 @@ export default function MixingBoard() {
         )}
       </div>
 
-      {/* Save confirmation badge */}
       {site && (
         <div className="fixed bottom-6 right-6">
           <div className="flex items-center gap-2 bg-gray-900/90 border border-gray-700 rounded-full px-4 py-2 text-xs text-gray-400 backdrop-blur-sm shadow-xl">
@@ -658,6 +631,14 @@ export default function MixingBoard() {
           </div>
         </div>
       )}
+    </>
+  );
+}
+
+export default function MixingBoard() {
+  return (
+    <div className="min-h-screen bg-gray-950 text-gray-100">
+      <MixingBoardContent />
     </div>
   );
 }

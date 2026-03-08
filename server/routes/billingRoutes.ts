@@ -313,10 +313,10 @@ const router = Router();
   router.get("/api/billing/publishable-key", async (_req, res) => {
     try {
       const { getStripePublishableKey } = await import('./stripeClient');
-      const key = await getStripePublishableKey();
+      const key = getStripePublishableKey() ?? '';
       res.json({ publishableKey: key });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: error?.message ?? 'Stripe config unavailable' });
     }
   });
 

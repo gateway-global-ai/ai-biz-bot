@@ -1,0 +1,10 @@
+---
+description: Home page hero background must not be auto-compressed. Keep it high quality.
+globs: ["client/public/hero-bg-gateway.png", "client/public/HERO-IMAGE-README.md"]
+---
+
+# Hero image — no compression
+
+- **`client/public/hero-bg-gateway.png`** is the home page hero background. It is served as a static file with **no build-time or automated compression**.
+- Do **not** run this file through image optimization, WebP conversion, or "98% reduction" pipelines. The platform standard for asset economy does **not** apply to this asset; clarity is required.
+- When replacing the hero image, the user should place a high-quality PNG or JPEG at `client/public/hero-bg-gateway.png`; it will be served unchanged.

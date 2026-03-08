@@ -22,7 +22,7 @@ export default function Login() {
             title: "Welcome back!",
             description: `Logged in as ${data.user.name || data.user.phone}`,
           });
-          window.location.href = "/dashboard";
+          window.location.href = "/aibizbot";
         }}
         sendOtpEndpoint="/api/auth/send-otp"
         verifyOtpEndpoint="/api/auth/verify-otp"

@@ -4,6 +4,7 @@ import { db } from '../db';
 import { sql } from 'drizzle-orm';
 import { getTwilioClient } from '../twilio';
 import { checkSovereignEnv, checkDopplerTokenEnv } from '../config/sovereignEnvGuard';
+import { storefrontCategories } from '@shared/schema';
 
 const router = Router();
 
@@ -47,10 +48,15 @@ async function checkGemini() {
       nativeAudioPreviewPermit: hasNativeAudio,
     };
   } catch (error: any) {
+    const msg = error.response?.data?.error?.message || error.message || 'Failed to connect to Gemini API.';
+    const hint = /expired|renew/i.test(msg)
+      ? 'Update GEMINI_API_KEY in Doppler (dev config), then restart the app so it loads the new key (e.g. pm2 restart aibizbot-dev.gatewayglobal.ai).'
+      : undefined;
     return {
       service: 'gemini',
       status: 'error',
-      message: error.response?.data?.error?.message || error.message || 'Failed to connect to Gemini API.',
+      message: msg,
+      ...(hint && { hint }),
     };
   }
 }
@@ -89,6 +95,69 @@ router.get('/api/health', async (_req: Request, res: Response) => {
     status: overallStatus,
     timestamp: new Date().toISOString(),
     checks,
+  });
+});
+
+/** Actionable diagnostics for storefronts: DB categories, tables, and what to do when broken. */
+export type StorefrontHealthCheck = {
+  name: string;
+  status: 'ok' | 'warn' | 'error';
+  message: string;
+  detail?: Record<string, unknown>;
+  action?: string;
+};
+
+/**
+ * GET /api/health/storefronts
+ * Diagnoses storefront feature: DB table, category count. Returns actions to fix issues.
+ * Use this (or the check-storefront-health script) after deploy to verify storefronts work.
+ */
+router.get('/api/health/storefronts', async (_req: Request, res: Response) => {
+  const checks: StorefrontHealthCheck[] = [];
+  const actions: string[] = [];
+
+  try {
+    const rows = await db.select().from(storefrontCategories);
+    const count = rows.length;
+
+    if (count === 0) {
+      checks.push({
+        name: 'storefront_categories',
+        status: 'warn',
+        message: 'No storefront categories in database.',
+        detail: { count: 0 },
+        action: 'Run: npm run db:seed-storefronts (with Doppler so DATABASE_URL is set).',
+      });
+      actions.push('Seed categories: npm run db:seed-storefronts');
+    } else {
+      checks.push({
+        name: 'storefront_categories',
+        status: 'ok',
+        message: `${count} storefront categor${count === 1 ? 'y' : 'ies'} in database.`,
+        detail: { count },
+      });
+    }
+  } catch (error: any) {
+    const msg = error?.message ?? 'Unknown error';
+    checks.push({
+      name: 'storefront_categories',
+      status: 'error',
+      message: `Database error: ${msg}`,
+      action: 'Ensure migrations are applied (npm run db:migrate). If table is missing, run migration 0028_storefronts.sql.',
+    });
+    actions.push('Apply migrations: npm run db:migrate');
+  }
+
+  const hasError = checks.some((c) => c.status === 'error');
+  const hasWarn = checks.some((c) => c.status === 'warn');
+  const status = hasError ? 'error' : hasWarn ? 'warn' : 'ok';
+  const httpStatus = hasError ? 503 : 200;
+
+  res.status(httpStatus).json({
+    status,
+    timestamp: new Date().toISOString(),
+    checks,
+    ...(actions.length > 0 && { actions }),
   });
 });
 

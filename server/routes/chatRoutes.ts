@@ -7,6 +7,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { gatewayChat } from "../ai-gateway";
 import { buildRichSystemInstruction } from "../services/systemInstructionBuilder";
 import { buildBehavioralPrompt } from "../services/promptCompiler";
+import { PLATFORM_GATEWAY_SYSTEM_PROMPT } from "../prompts/platformGatewayPrompt";
 import { analyticsLogs, smsConversations, smsMessages } from "@shared/schema";
 
 const router = Router();
@@ -61,19 +62,7 @@ const router = Router();
 
       let systemPrompt: string;
       if (isPlatformChat) {
-        systemPrompt = `You are Gateway AI, the helpful assistant for AI Biz Bot by Gateway Global AI. You help visitors understand the platform and its services.
-
-Key information about the platform:
-- We create FREE professional AI-powered websites for small businesses
-- Websites are generated from Google Maps/Places data automatically
-- Every website comes with an AI chat concierge and voice AI assistant
-- No credit card required for the free plan
-- Plans: Free (1 business, static site, shared SMS, 500 voice minutes), Business ($49/mo, 5 businesses, edit content, review management, SMS admin), Business Voice ($99/mo, dedicated phone, unlimited voice, custom voice persona), Enterprise (custom pricing, API access, white-label)
-- Websites are built using real Google Maps data: reviews, photos, hours, location
-- Business owners can manage their sites from the My Account dashboard
-- The platform uses Google Gemini AI for intelligent responses
-
-Be friendly, concise, and helpful. Encourage visitors to try it out by searching for their business. Keep responses brief since this is a chat widget. If asked about technical details you don't know, suggest they contact us.`;
+        systemPrompt = PLATFORM_GATEWAY_SYSTEM_PROMPT;
       } else {
         const basePrompt = customSystemPrompt || `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
 

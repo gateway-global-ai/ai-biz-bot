@@ -14,7 +14,8 @@ import {
   Briefcase, Zap, PhoneCall, CreditCard, ChevronRight,
   Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server,
   Search, MapPin, Star, ExternalLink, Loader2, ArrowRight, Sparkles,
-  Clock, Bot, Wand2, X, Eye, Send, User, LogIn, LogOut, KeyRound
+  Clock, Bot, Wand2, X, Eye, Send, User, LogIn, LogOut, KeyRound,
+  QrCode, Sticker, Smartphone, Mic
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -35,108 +36,17 @@ import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 import { ensureApiLoader, loadPlacesLibrary } from '@/utils/googleMapsLoader';
 
 import headerLogo from "@assets/clear_voice_ai_dark_sm.png";
-import heroBgGateway from "@assets/hero_bg_gateway2.png";
+// Hero background: served from public/ so it is not processed or compressed. Replace client/public/hero-bg-gateway.png with your high-quality image.
+const HERO_BG_URL = "/hero-bg-gateway.png";
 import howItWorksQr from "@assets/how-it-works-qr.png";
 import howItWorksWebsite from "@assets/how-it-works-website.png";
 import howItWorksVoice from "@assets/how-it-works-voice.png";
 import clearVoiceQrReceptionist from "@assets/clear-voice-qr-receptionist.png";
 import affiliateStickerHero from "@assets/affiliate-sticker-hero.png";
+import affiliateProgramInfographic from "@assets/affiliate-program-infographic.png";
+import affiliate4StepsInfographic from "@assets/affiliate-4-steps-infographic.png";
 
 type VoiceState = 'idle' | 'loading' | 'greeting' | 'greeting_paused' | 'conversation' | 'processing' | 'responding' | 'error';
-
-type Sentiment = 'calm' | 'engaged' | 'helpful';
-
-const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label: string }> = {
-  calm: { primary: 'rgba(59, 130, 246, 0.8)', glow: 'rgba(59, 130, 246, 0.4)', label: "LET'S TALK" },
-  engaged: { primary: 'rgba(16, 185, 129, 0.8)', glow: 'rgba(16, 185, 129, 0.4)', label: 'LISTENING' },
-  helpful: { primary: 'rgba(139, 92, 246, 0.8)', glow: 'rgba(139, 92, 246, 0.4)', label: 'SPEAKING' },
-};
-
-// Simplified VoiceVisualizer - now just a visual element (click handler moved to parent div)
-const VoiceVisualizer = () => {
-  const [sentiment, setSentiment] = useState<Sentiment>('calm');
-  const [pulse, setPulse] = useState(0);
-
-  useEffect(() => {
-    const sentimentInterval = setInterval(() => {
-      const sentiments: Sentiment[] = ['calm', 'engaged', 'helpful'];
-      setSentiment(sentiments[Math.floor(Math.random() * sentiments.length)]);
-    }, 2500);
-    
-    const pulseInterval = setInterval(() => {
-      setPulse(prev => (prev + 1) % 100);
-    }, 50);
-    
-    return () => {
-      clearInterval(sentimentInterval);
-      clearInterval(pulseInterval);
-    };
-  }, []);
-
-  const sentimentConfig = SENTIMENT_COLORS[sentiment];
-  const waveIntensity = Math.sin(pulse / 10) * 0.3 + 0.7;
-  
-  return (
-    <div className="relative flex items-center justify-center mx-auto" style={{ marginTop: '-100px' }}>
-      
-      <div 
-        className="relative w-32 h-32 flex items-center justify-center"
-        data-testid="button-voice-visualizer"
-      >
-        <div 
-          className="absolute inset-0 border border-dashed rounded-full animate-spin"
-          style={{ 
-            borderColor: 'rgba(59, 130, 246, 0.3)', 
-            animationDuration: '20s'
-          }}
-        />
-        <div 
-          className="absolute inset-2 border border-dotted rounded-full animate-spin"
-          style={{ 
-            borderColor: 'rgba(99, 102, 241, 0.25)', 
-            animationDirection: 'reverse',
-            animationDuration: '15s'
-          }}
-        />
-        
-        <div 
-          className="absolute rounded-full blur-3xl transition-all duration-500 animate-pulse"
-          style={{ 
-            width: `${120 + waveIntensity * 40}%`,
-            height: `${120 + waveIntensity * 40}%`,
-            background: `radial-gradient(circle, ${sentimentConfig.primary} 0%, ${sentimentConfig.glow} 30%, transparent 70%)`,
-            opacity: 0.5
-          }}
-        />
-        
-        <div 
-          className="absolute w-16 h-16 rounded-sui flex items-center justify-center bg-slate-900 border-2 z-10 transition-all duration-500"
-          style={{
-            borderColor: sentimentConfig.primary,
-            boxShadow: `0 0 25px ${sentimentConfig.glow}, 0 0 12px ${sentimentConfig.glow}`,
-            transform: `scale(${0.95 + waveIntensity * 0.1})`
-          }}
-        >
-          <div className="relative z-20 flex flex-col items-center">
-            <Phone className="w-8 h-8 text-slate-200" />
-            <div className="flex gap-0.5 mt-1">
-              <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
-              <div className="w-1 h-1 rounded-full bg-indigo-500 animate-pulse" style={{ animationDelay: '0.2s' }} />
-              <div className="w-1 h-1 rounded-full bg-violet-500 animate-pulse" style={{ animationDelay: '0.4s' }} />
-            </div>
-          </div>
-        </div>
-
-        <div className="absolute -bottom-1 left-0 right-0 flex justify-center">
-          <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" 
-            style={{ color: sentimentConfig.primary, backgroundColor: `${sentimentConfig.glow}` }}>
-            {sentimentConfig.label}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 type OnboardingStage = 
   | 'landing'
@@ -300,41 +210,52 @@ function AffiliateResellerSection() {
 
       <div className="relative z-10 max-w-4xl mx-auto">
         <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white text-center mb-2">
-          Reseller & Affiliate Program
+          Earn Unlimited Income As An Affiliate!
         </h2>
-        <p className="text-slate-400 text-center mb-8 text-base md:text-lg">
-          Join the network that places Clear Voice AI in local businesses.
+        <p className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400 text-xl md:text-2xl font-semibold text-center mb-10">
+          Generate $10,000+ Monthly In Your Local Market!
         </p>
 
-        <p className="text-slate-300 text-center max-w-2xl mx-auto mb-6 leading-relaxed text-base md:text-lg">
-          We are looking for small business owners and entrepreneurs to join our network of affiliates.
-          We are placing 32 million stickers on the windows of small business owners and we need your help.
-        </p>
-
-        <ol className="list-decimal list-inside text-slate-300 space-y-2 max-w-xl mx-auto mb-6 text-base md:text-lg">
-          <li>Visit local small businesses and meet the business owners and employees.</li>
-          <li>Get permission to place the sticker on their window or store front.</li>
-          <li>Enter their business name into our QR code generator.</li>
-          <li>Enter the customer cell phone number. We can take care of the rest.</li>
-        </ol>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          {[
-            { tier: 'Bronze (0–10 businesses)', rate: '8%', note: '$49/mo platform + $50/mo AI Voice' },
-            { tier: 'Silver (11–50)', rate: '10%', note: 'On all sales' },
-            { tier: 'Gold (51–100)', rate: '12%', note: 'On all sales' },
-            { tier: 'Platinum (101–500)', rate: '14%', note: 'On all sales' },
-            { tier: 'Diamond (501+)', rate: '16%', note: 'On all sales' },
-          ].map(({ tier, rate, note }) => (
-            <div key={tier} className="rounded-sui bg-slate-900/50 border border-indigo-500/15 p-4">
-              <p className="text-white font-medium text-sm md:text-base">{tier}</p>
-              <p className="text-indigo-400 font-bold text-base md:text-lg">{rate}</p>
-              <p className="text-slate-500 text-xs md:text-sm">{note}</p>
-            </div>
-          ))}
+        {/* Earnings infographic */}
+        <div className="rounded-sui bg-slate-900/60 border border-indigo-500/20 backdrop-blur-xl p-6 md:p-8 mb-10">
+          <p className="text-slate-400 text-center text-sm font-medium uppercase tracking-wider mb-6">Your earning potential</p>
+          <div className="flex flex-wrap justify-center gap-4 md:gap-6">
+            {[
+              { businesses: '10', commission: '8%', example: '$80+', label: 'Starter' },
+              { businesses: '50', commission: '10%', example: '$500+', label: 'Growing' },
+              { businesses: '100', commission: '12%', example: '$1,200+', label: 'Pro' },
+              { businesses: '500+', commission: '14–16%', example: '$10,000+', label: 'Elite' },
+            ].map(({ businesses, commission, example, label }) => (
+              <div key={label} className="flex flex-col items-center rounded-sui bg-slate-800/50 border border-indigo-500/20 px-5 py-4 min-w-[120px]">
+                <span className="text-slate-500 text-xs font-medium uppercase tracking-wide">{label}</span>
+                <span className="text-white font-bold text-lg mt-1">{businesses} businesses</span>
+                <span className="text-indigo-400 font-semibold text-sm">{commission} commission</span>
+                <span className="text-emerald-400 font-bold text-xl mt-2">{example}/mo</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-slate-500 text-center text-xs mt-4">Based on $99/mo per business. Commission on all recurring revenue.</p>
         </div>
 
-        <div className="rounded-sui bg-slate-900/60 border border-indigo-500/20 backdrop-blur-xl p-6 md:p-8 max-w-md mx-auto">
+        <div className="grid md:grid-cols-2 gap-8 items-start mb-10">
+          <div className="rounded-sui overflow-hidden border border-indigo-500/20 shadow-xl">
+            <img
+              src={affiliate4StepsInfographic}
+              alt="Affiliate program: 4 easy steps — add business to platform, generate QR code, visit store with flyer, demo AI receptionist, place decal, send invite via SMS. Powered by Clear Voice AI."
+              className="w-full h-auto object-cover"
+            />
+          </div>
+          <div className="rounded-sui overflow-hidden border border-indigo-500/20 shadow-xl">
+            <img
+              src={affiliateProgramInfographic}
+              alt="Affiliate program: $99 starter package, 100 prospects, window decals, reseller dashboard, weekly payouts. Powered by Clear Voice AI."
+              className="w-full h-auto object-cover"
+            />
+          </div>
+        </div>
+
+        <div className="rounded-sui bg-slate-900/60 border border-indigo-500/20 backdrop-blur-xl p-6 md:p-8 w-full">
+          <div className="max-w-md mx-auto">
           <p className="text-white font-semibold mb-2 text-center text-lg md:text-xl">Affiliate Starter Kit — $99</p>
           <p className="text-slate-400 text-sm md:text-base text-center mb-6">
             Includes 100 stickers, marketing literature, and a company polo. Kits usually arrive within 7 days.
@@ -380,6 +301,7 @@ function AffiliateResellerSection() {
               )}
             </Button>
           </form>
+          </div>
         </div>
 
         <p className="text-center mt-6">
@@ -420,6 +342,13 @@ export default function BusinessPage() {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [showCreateTeamConfirm, setShowCreateTeamConfirm] = useState(false);
   const [provisioningTeam, setProvisioningTeam] = useState(false);
+  // Manual profile (no Google Place): for businesses without a Google listing (e.g. Gateway Global AI, digital-only)
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualName, setManualName] = useState('');
+  const [manualAddress, setManualAddress] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
+  const [manualWebsite, setManualWebsite] = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
 
   const { user, isAuthenticated, login: authLogin, logout: authLogout } = useAuth();
   const { user: customerUser, isAuthenticated: isCustomerAuth, login: customerLogin, logout: customerLogout } = useCustomerAuth();
@@ -431,6 +360,7 @@ export default function BusinessPage() {
   // --- NEW: ConciergePanel State ---
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatLayout, setChatLayout] = useState<'floating' | 'fixed' | 'fullscreen'>('floating');
+  const [conciergeOwnerMode, setConciergeOwnerMode] = useState(false);
   const [initialView, setInitialView] = useState<'chat' | 'voice'>('voice');
   // Resolved Business UUID (siteConfigId) for voice sessionContext — from URL or after create
   const [resolvedSiteConfigId, setResolvedSiteConfigId] = useState<string | null>(null);
@@ -439,9 +369,9 @@ export default function BusinessPage() {
   // Voice configuration - default to Premium (Clear Voice) for demo
   const voiceConfig = VoiceClientFactory.getDefaultConfig('premium');
 
-  // Platform Identity - fallback context when no business is selected
+  // Platform Identity - fallback when no business is selected (digital-only; no Google Place)
   const platformIdentity = {
-    placeId: 'platform_landing',
+    placeId: 'platform_landing', // site config id, not a Google Place ID — never sent to Places API
     name: 'Gateway Global AI',
     address: 'AI-Powered Business Platform',
     hours: '24/7 Support Available',
@@ -802,6 +732,43 @@ export default function BusinessPage() {
     }
   };
 
+  const handleManualProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = manualName.trim();
+    if (!name) {
+      toast({ title: 'Business name required', variant: 'destructive' });
+      return;
+    }
+    setManualSubmitting(true);
+    try {
+      const createRes = await fetch('/api/site-configs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          placeData: {
+            name,
+            formatted_address: manualAddress.trim() || undefined,
+            formatted_phone_number: manualPhone.trim() || undefined,
+            website: manualWebsite.trim() || undefined,
+            types: ['establishment'],
+          },
+        }),
+      });
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to create profile');
+      }
+      const siteConfig = await createRes.json();
+      toast({ title: 'Profile created', description: 'Your AI team is ready.' });
+      setLocation(`/agents?siteConfigId=${encodeURIComponent(siteConfig.id)}`);
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message || 'Could not create profile', variant: 'destructive' });
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
+
   const prevStageRef = useRef<OnboardingStage>(stage);
   useEffect(() => {
     if (prevStageRef.current !== 'phone-gate' && stage === 'phone-gate') {
@@ -978,40 +945,23 @@ export default function BusinessPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <nav className="sticky top-0 z-50 bg-transparent border-b border-white/10 px-6 py-3 flex items-center justify-between gap-4 overflow-visible">
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/20 backdrop-blur-md border-b border-white/10 px-6 py-3 flex items-center">
         <img src={headerLogo} alt="Clear Voice AI" className="h-9 w-auto md:h-14 relative z-10 object-contain" style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.2))' }} />
-        <div className="flex items-center gap-2 justify-end">
-          <ShareButton
-            shareTitle="Gateway Global AI - AI Business Router"
-            shareText="AI-powered business websites with voice concierge and chat. Fully developed in about an hour. No credit card required."
-            variant="dark"
-            testIdPrefix="main-share"
-          />
-          {isCustomerAuth ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white/80 hover:text-white hover:bg-slate-50/10 text-xs"
-              onClick={() => setLocation('/my-account')}
-              data-testid="button-my-account"
-            >
-              <User className="w-4 h-4 mr-1" />
-              My Account
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-white/80 hover:text-white hover:bg-slate-50/10 text-xs"
-              onClick={() => setShowCustomerLoginModal(true)}
-              data-testid="button-customer-login"
-            >
-              <LogIn className="w-4 h-4 mr-1" />
-              Sign In
-            </Button>
-          )}
-        </div>
       </nav>
+      <button
+        type="button"
+        onClick={() => { setInitialView('voice'); setIsChatOpen(true); }}
+        className="fixed bottom-6 right-6 z-50 w-20 h-20 md:w-24 md:h-24 rounded-full shadow-lg shadow-indigo-500/30 bg-transparent hover:bg-indigo-500/10 border border-indigo-400/30 p-1.5 overflow-visible flex-shrink-0"
+        data-testid="button-header-chat"
+        title="Chat & Voice — AI Biz Bot"
+        aria-label="Open chat"
+      >
+        <img
+          src="/chat-header-logo.png"
+          alt="Gateway Global AI — Chat & Voice"
+          className="w-full h-full object-contain scale-[1.81]"
+        />
+      </button>
       {stage === 'generating' && (
         <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col items-center justify-center">
           <div className="max-w-md mx-auto text-center space-y-8 px-6">
@@ -1066,7 +1016,7 @@ export default function BusinessPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center px-6">
           {/* Same hero background as landing — feels like same page, next step */}
           <div className="absolute inset-0 z-0 pointer-events-none">
-            <img src={heroBgGateway} alt="" className="w-full h-full object-cover" aria-hidden />
+            <img src={HERO_BG_URL} alt="" className="w-full h-full object-cover" aria-hidden />
             <div className="absolute inset-0 bg-slate-950/60" aria-hidden />
           </div>
           <div className="relative z-10 max-w-lg w-full">
@@ -1258,12 +1208,12 @@ export default function BusinessPage() {
           </div>
         </div>
       )}
-      {/* Hero Section — exactly one viewport tall so Enterprise starts below the fold */}
-      <section className="relative min-h-[100vh] min-h-[100svh] flex flex-col px-6 overflow-hidden bg-slate-900">
+      {/* Hero Section — min one viewport; overflow-auto so "No Google listing" link is never clipped */}
+      <section className="relative min-h-[100vh] min-h-[100svh] flex flex-col pt-24 px-6 overflow-y-auto overflow-x-hidden bg-slate-900">
         {/* Hero background: gateway building facade (G AI logo, Boardwalk Suites QR) */}
         <div className="absolute inset-0 z-0 pointer-events-none">
           <img
-            src={heroBgGateway}
+            src={HERO_BG_URL}
             alt=""
             className="w-full h-full object-cover"
             aria-hidden
@@ -1274,45 +1224,153 @@ export default function BusinessPage() {
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none z-[1]" />
         <div className="flex-1 flex items-center relative z-10">
           <div className="w-full max-w-5xl mx-auto flex flex-col items-center gap-6 md:gap-8">
-            <div 
-              style={{ marginBottom: '10px', cursor: 'pointer' }}
-              onClick={() => {
-                setInitialView('voice');
-                setIsChatOpen(true);
-              }}
-              title="Click to start voice conversation"
-            >
-              <VoiceVisualizer />
-            </div>
             <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white text-center" data-testid="text-hero-heading">
-              Join The Clear Voice AI Network<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 text-3xl md:text-[48px]">
-                Request Your QR Code
-              </span>
+              AI VOICE NETWORK
             </h1>
             <div className="max-w-2xl w-full" data-testid="container-place-search">
-              <div className="relative group">
-                <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-                <form className="relative bg-slate-50/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
-                  <div ref={pickerContainerRef} className="flex-1 min-w-0" />
-                  {!mapsKey && (
-                    <div className="pr-3">
-                      <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+              {showManualForm ? (
+                <div className="relative rounded-2xl border border-white/10 bg-slate-50/5 backdrop-blur-xl p-6 shadow-2xl">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400 mb-3">Create profile without Google listing</p>
+                  <form onSubmit={handleManualProfileSubmit} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1.5">Business name *</label>
+                      <Input
+                        value={manualName}
+                        onChange={(e) => setManualName(e.target.value)}
+                        placeholder="e.g. Gateway Global AI"
+                        className="bg-slate-900/60 border-slate-600 text-white placeholder:text-slate-500 rounded-sui"
+                        required
+                        autoFocus
+                      />
                     </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1.5">Address (optional)</label>
+                      <Input
+                        value={manualAddress}
+                        onChange={(e) => setManualAddress(e.target.value)}
+                        placeholder="Street, city, state"
+                        className="bg-slate-900/60 border-slate-600 text-white placeholder:text-slate-500 rounded-sui"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Phone (optional)</label>
+                        <Input
+                          value={manualPhone}
+                          onChange={(e) => setManualPhone(e.target.value)}
+                          placeholder="+1 234 567 8900"
+                          className="bg-slate-900/60 border-slate-600 text-white placeholder:text-slate-500 rounded-sui"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Website (optional)</label>
+                        <Input
+                          value={manualWebsite}
+                          onChange={(e) => setManualWebsite(e.target.value)}
+                          placeholder="https://..."
+                          type="url"
+                          className="bg-slate-900/60 border-slate-600 text-white placeholder:text-slate-500 rounded-sui"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      <Button
+                        type="submit"
+                        disabled={manualSubmitting || !manualName.trim()}
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-sui font-semibold"
+                        data-testid="button-create-manual-profile"
+                      >
+                        {manualSubmitting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            Create my profile
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="text-slate-400 hover:text-white border border-slate-600 hover:border-slate-500 rounded-sui"
+                        onClick={() => setShowManualForm(false)}
+                        disabled={manualSubmitting}
+                      >
+                        <Search className="w-4 h-4 mr-2" />
+                        Back to search
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              ) : (
+                <>
+                  <div className="relative group">
+                    <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
+                    <form className="relative bg-slate-50/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
+                      <div ref={pickerContainerRef} className="flex-1 min-w-0" />
+                      {!mapsKey && (
+                        <div className="pr-3">
+                          <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
+                        </div>
+                      )}
+                    </form>
+                  </div>
+                  {mapsError && (
+                    <p className="text-xs text-amber-400 mt-3 flex items-center gap-1" data-testid="text-maps-error">
+                      <ShieldCheck className="w-3 h-3 flex-shrink-0" />
+                      {mapsError}
+                    </p>
                   )}
-                </form>
-              </div>
-              {mapsError && (
-                <p className="text-xs text-amber-400 mt-3 flex items-center gap-1" data-testid="text-maps-error">
-                  <ShieldCheck className="w-3 h-3 flex-shrink-0" />
-                  {mapsError}
-                </p>
+                  {!mapsError && <p className="text-xs text-slate-400 mt-3 text-center">Powered by Google Places</p>}
+                  <p className="text-center mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowManualForm(true)}
+                      className="text-sm font-semibold text-indigo-300 hover:text-white underline underline-offset-2"
+                      data-testid="link-manual-profile"
+                    >
+                      No Google listing? Create your profile manually
+                    </button>
+                  </p>
+                </>
               )}
-              {!mapsError && <p className="text-xs text-slate-400 mt-3 text-center">Powered by Google Places</p>}
             </div>
-            <p className="text-lg text-slate-400 max-w-2xl text-center leading-relaxed">
-              Gateway Global currently offers AI voice for businesses in the Google Places and Google Maps. We build you a web site, create a receptionist for your business, and you get to experience Clear Voice AI, the industry&apos;s highest quality and lowest cost AI voice streaming solution.
+            <p className="text-white text-xl md:text-2xl font-bold text-center mt-4" style={{ WebkitTextStroke: '1px #1e3a8a', paintOrder: 'stroke fill' }} data-testid="text-claim-profile">
+              CLAIM YOUR FREE PROFILE
             </p>
+            <div className="flex flex-wrap justify-center gap-3 mt-4">
+              <Button
+                variant="ghost"
+                className="text-white font-semibold rounded-sui px-6 py-3 border border-indigo-400/40 bg-cover bg-center hover:border-indigo-400/70 hover:shadow-[0_0_20px_6px_rgba(99,102,241,0.25)] transition-all duration-200 flex flex-col items-center gap-1"
+                style={{ backgroundImage: 'url(/button-texture.png)', backgroundColor: 'transparent', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.4), 0 0 12px 2px rgba(99,102,241,0.15)', textShadow: '0 0 12px rgba(99,102,241,0.5), 0 1px 2px rgba(0,0,0,0.5)' }}
+                onClick={() => { setInitialView('voice'); setIsChatOpen(true); }}
+                data-testid="button-manifesto"
+                title="Listen to the Manifesto — Voice"
+              >
+                <span className="flex items-center gap-2">
+                  <Mic className="w-4 h-4 shrink-0" aria-hidden />
+                  MANIFESTO
+                </span>
+                <span className="text-[10px] font-normal uppercase tracking-wider text-white/90">Voice</span>
+              </Button>
+              <Button
+                variant="ghost"
+                className="text-white font-semibold rounded-sui px-6 py-3 border border-indigo-400/40 bg-cover bg-center hover:border-indigo-400/70 hover:shadow-[0_0_20px_6px_rgba(99,102,241,0.25)] transition-all duration-200 flex flex-col items-center gap-1"
+                style={{ backgroundImage: 'url(/button-texture.png)', backgroundColor: 'transparent', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.4), 0 0 12px 2px rgba(99,102,241,0.15)', textShadow: '0 0 12px rgba(99,102,241,0.5), 0 1px 2px rgba(0,0,0,0.5)' }}
+                onClick={() => { setInitialView('voice'); setIsChatOpen(true); }}
+                data-testid="button-ai-biz-bot"
+                title="Talk to AI Biz Bot — Voice"
+              >
+                <span className="flex items-center gap-2">
+                  <Mic className="w-4 h-4 shrink-0" aria-hidden />
+                  AI BIZ BOT
+                </span>
+                <span className="text-[10px] font-normal uppercase tracking-wider text-white/90">Voice</span>
+              </Button>
+            </div>
           </div>
         </div>
         <div className="pb-8 md:pb-12" />
@@ -1443,6 +1501,26 @@ export default function BusinessPage() {
           </div>
         )}
       </section>
+      {/* Sovereign Network — shadow telecom summary */}
+      <section className="py-16 px-6 bg-slate-900/20 border-y border-white/5">
+        <div className="max-w-5xl mx-auto text-center">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-sui bg-indigo-500/10 border border-indigo-500/20 mb-6">
+            <QrCode className="w-6 h-6 text-indigo-400" />
+          </div>
+          <h2 className="text-3xl font-bold text-white mb-4">
+            We didn&apos;t build an AI wrapper — we built a shadow telecom.
+          </h2>
+          <p className="text-slate-400 max-w-2xl mx-auto mb-8 leading-relaxed">
+            The QR code is the new phone number. We bypass the legacy Public Switched Telephone Network, carriers, and SIP trunk providers — and replace them with the open web. Customers scan, land on your site, and talk to your AI over a direct WebSocket with sub-150ms latency. No per-minute carrier fees, no 10DLC compliance, infinite scalability.
+          </p>
+          <Link href="/network">
+            <Button className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-sui font-semibold" data-testid="button-sovereign-network">
+              See how we bypass the legacy grid
+              <ChevronRight className="w-4 h-4 ml-2" />
+            </Button>
+          </Link>
+        </div>
+      </section>
       {/* Features - commented out for now
       <section className="py-16 px-6">
         <div className="max-w-6xl mx-auto">
@@ -1569,29 +1647,10 @@ export default function BusinessPage() {
           </Link>
         </div>
         <p className="text-slate-600">&copy; 2025 Gateway Global AI. Enterprise Division.</p>
-        {isAuthenticated ? (
-          <div className="flex items-center justify-center gap-3">
-            <Link href="/dashboard">
-              <Button variant="ghost" size="sm" className="text-slate-600 text-xs" data-testid="button-admin-dashboard">
-                <ShieldCheck className="w-3 h-3 mr-1" />
-                Admin Dashboard
-              </Button>
-            </Link>
-            <Button variant="ghost" size="sm" className="text-slate-600 text-xs" onClick={() => authLogout()} data-testid="button-logout">
-              <LogOut className="w-3 h-3 mr-1" />
-              Logout
-            </Button>
-          </div>
-        ) : (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-slate-600 text-xs"
-            onClick={() => setShowLoginModal(true)}
-            data-testid="button-admin-login"
-          >
-            <LogIn className="w-3 h-3 mr-1" />
-            Admin Login
+        {isAuthenticated && (
+          <Button variant="ghost" size="sm" className="text-slate-600 text-xs" onClick={() => authLogout()} data-testid="button-logout">
+            <LogOut className="w-3 h-3 mr-1" />
+            Logout
           </Button>
         )}
       </footer>
@@ -1629,7 +1688,7 @@ export default function BusinessPage() {
         testIdPrefix="customer"
       />
 
-      {/* --- NEW: ConciergePanel Integration --- */}
+      {/* PTT ConciergePanel: voice, chat, Command Center (Profile, Governance, Bill, Businesses, Reseller, Configure AI), expand layout */}
       <ConciergePanel
         business={currentBusiness}
         agent={{
@@ -1654,7 +1713,7 @@ export default function BusinessPage() {
         voiceConfig={voiceConfig}
         agentName={selectedPlace ? 'Ava' : 'Gateway AI Assistant'}
         isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
+        onClose={() => { setIsChatOpen(false); setConciergeOwnerMode(false); }}
         initialView={initialView}
         layoutMode={chatLayout}
         onCycleLayout={() => {
@@ -1663,8 +1722,29 @@ export default function BusinessPage() {
           const nextMode = modes[(currentIndex + 1) % modes.length];
           setChatLayout(nextMode);
         }}
-        onOpenAdmin={() => setLocation('/aibizbot')}
-        onOpenBizBotChat={() => setLocation('/chat/owner')}
+        onOpenAdmin={(tab) => {
+          const path = tab ? `/app/aibizbot?tab=${tab}${resolvedSiteConfigId ? `&site=${resolvedSiteConfigId}` : ''}` : '/app/aibizbot';
+          const url = `${typeof window !== 'undefined' ? window.location.origin : ''}${path}`;
+          window.open(url, '_blank', 'noopener,noreferrer');
+        }}
+        onOpenBizBotChat={() => setConciergeOwnerMode(true)}
+        ownerMode={conciergeOwnerMode}
+        onExitOwnerMode={() => setConciergeOwnerMode(false)}
+        embedViewsInPanel={true}
+        onNavigate={(path) => setLocation(path.startsWith('/app') ? path : `/app${path}`)}
+        onShareClick={() => {
+          const url = typeof window !== 'undefined'
+            ? (resolvedSiteSlug ? `${window.location.origin}/biz/${resolvedSiteSlug}` : `${window.location.origin}/business`)
+            : '';
+          if (url && navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(url).then(() => toast({ title: 'Link copied to clipboard' })).catch(() => toast({ title: 'Could not copy link', variant: 'destructive' }));
+          } else {
+            toast({ title: 'Share', description: url || 'Copy this link to share', variant: 'default' });
+          }
+        }}
+        isAuthenticated={isAuthenticated || isCustomerAuth}
+        onHistoryClick={() => setLocation('/app/compliance-gateway')}
+        onSmsConsentClick={() => setLocation('/login')}
         variant="sovereign"
         zIndex={60}
       />

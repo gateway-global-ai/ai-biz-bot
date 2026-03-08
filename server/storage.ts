@@ -121,10 +121,19 @@ import {
   orderItems,
   smsLogs,
   smsOptOuts,
+  qrRoutes,
+  qrFirewall,
+  qrAccess,
+  type QrRoute,
+  type InsertQrRoute,
+  type QrFirewallRule,
+  type InsertQrFirewallRule,
+  type QrAccessLog,
+  type InsertQrAccessLog,
 } from "@shared/schema";
 import type { Reseller } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, ilike, or, lte, isNull, and, gt, inArray, sql } from "drizzle-orm";
+import { eq, desc, asc, ilike, or, lte, isNull, isNotNull, and, gt, inArray, sql } from "drizzle-orm";
 
 // Placeholder for a future validation service (UPA).
 const UPAValidator = {
@@ -162,7 +171,9 @@ const siteConfigsColumns = {
   smsMessages: siteConfigs.smsMessages,
   chatBotMessages: siteConfigs.chatBotMessages,
   slug: siteConfigs.slug,
+  qrCodeUrl: siteConfigs.qrCodeUrl,
   shareCount: siteConfigs.shareCount,
+  socialSharing: siteConfigs.socialSharing,
   createdAt: siteConfigs.createdAt,
   updatedAt: siteConfigs.updatedAt,
 };
@@ -302,6 +313,8 @@ export interface IStorage {
 
   // Site Config by owner
   getSiteConfigsByOwner(ownerId: string): Promise<SiteConfig[]>;
+  getSiteConfigBySlug(slug: string): Promise<SiteConfig | undefined>;
+  searchSiteConfigsWithSlug(query: string, limit?: number): Promise<SiteConfig[]>;
   claimUnlinkedSitesByPhone(phone: string, customerAccountId: string): Promise<number>;
 
   // VLM Prospect operations
@@ -339,6 +352,19 @@ export interface IStorage {
   // Voice Usage Log operations
   createVoiceUsageLog(log: InsertVoiceUsageLog): Promise<VoiceUsageLog>;
   getVoiceUsageLogs(siteConfigId: string, limit?: number): Promise<VoiceUsageLog[]>;
+
+  // QR Routes (shadow telecom)
+  getQrRoutes(page?: number, limit?: number, search?: string): Promise<{ routes: QrRoute[]; total: number }>;
+  getQrRoute(id: number): Promise<QrRoute | undefined>;
+  createQrRoute(data: Partial<InsertQrRoute>): Promise<QrRoute>;
+  updateQrRoute(id: number, updates: Partial<InsertQrRoute>): Promise<QrRoute | undefined>;
+  deleteQrRoute(id: number): Promise<boolean>;
+  getQrFirewallRules(routeId?: number): Promise<QrFirewallRule[]>;
+  createQrFirewallRule(data: InsertQrFirewallRule): Promise<QrFirewallRule>;
+  deleteQrFirewallRule(id: number): Promise<boolean>;
+  getQrAccessLog(routeId: number, page?: number, limit?: number): Promise<{ logs: QrAccessLog[]; total: number }>;
+  logQrAccess(data: InsertQrAccessLog): Promise<QrAccessLog>;
+  incrementQrScanCount(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1181,6 +1207,26 @@ export class DatabaseStorage implements IStorage {
     return config as SiteConfig | undefined;
   }
 
+  /** Search businesses by name or slug (for QR code lookup). Returns only configs that have a slug. */
+  async searchSiteConfigsWithSlug(query: string, limit = 50): Promise<SiteConfig[]> {
+    if (!query || query.trim().length === 0) {
+      return db.select().from(siteConfigs)
+        .where(isNotNull(siteConfigs.slug))
+        .orderBy(desc(siteConfigs.updatedAt))
+        .limit(limit);
+    }
+    const pattern = `%${query.trim().replace(/%/g, "\\%")}%`;
+    return db.select().from(siteConfigs)
+      .where(
+        and(
+          isNotNull(siteConfigs.slug),
+          or(ilike(siteConfigs.name, pattern), ilike(siteConfigs.slug, pattern))
+        )
+      )
+      .orderBy(desc(siteConfigs.updatedAt))
+      .limit(limit);
+  }
+
   async recordShareEvent(siteConfigId: string, platform: string, referrerUserId?: string): Promise<number> {
     await db.insert(shareEvents).values({
       siteConfigId,
@@ -1548,10 +1594,99 @@ export class DatabaseStorage implements IStorage {
       .where(eq(voiceUsageLogs.siteConfigId, siteConfigId))
       .orderBy(desc(voiceUsageLogs.createdAt))
       .limit(limit);
-
   }
 
+  // QR Routes (shadow telecom); optional search filters by label, destination, variable (URL/id)
+  async getQrRoutes(page = 1, limit = 50, search?: string): Promise<{ routes: QrRoute[]; total: number }> {
+    const offset = (page - 1) * limit;
+    const pattern = search?.trim() ? `%${search.trim().replace(/%/g, "\\%")}%` : null;
+    const conditions = pattern
+      ? or(
+          ilike(qrRoutes.label, pattern),
+          ilike(qrRoutes.destination, pattern),
+          ilike(sql`${qrRoutes.variable}::text`, pattern),
+          sql`${qrRoutes.id}::text = ${search.trim()}`
+        )
+      : undefined;
+    const countQuery = conditions
+      ? db.select({ count: sql<number>`count(*)::int` }).from(qrRoutes).where(conditions)
+      : db.select({ count: sql<number>`count(*)::int` }).from(qrRoutes);
+    const [countRow] = await countQuery;
+    const total = countRow?.count ?? 0;
+    const q = db.select().from(qrRoutes).orderBy(asc(qrRoutes.id)).limit(limit).offset(offset);
+    const routes = conditions ? await q.where(conditions) : await q;
+    return { routes, total };
+  }
 
+  async getQrRoute(id: number): Promise<QrRoute | undefined> {
+    const [row] = await db.select().from(qrRoutes).where(eq(qrRoutes.id, id)).limit(1);
+    return row;
+  }
+
+  async createQrRoute(data: Partial<InsertQrRoute>): Promise<QrRoute> {
+    const [created] = await db.insert(qrRoutes).values(data as InsertQrRoute).returning();
+    return created;
+  }
+
+  async updateQrRoute(id: number, updates: Partial<InsertQrRoute>): Promise<QrRoute | undefined> {
+    const [updated] = await db
+      .update(qrRoutes)
+      .set({ ...updates, updatedAt: new Date() } as Partial<InsertQrRoute>)
+      .where(eq(qrRoutes.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteQrRoute(id: number): Promise<boolean> {
+    await db.delete(qrRoutes).where(eq(qrRoutes.id, id));
+    return true;
+  }
+
+  async getQrFirewallRules(routeId?: number): Promise<QrFirewallRule[]> {
+    if (routeId != null) {
+      return db.select().from(qrFirewall).where(eq(qrFirewall.qrRouteId, routeId)).orderBy(asc(qrFirewall.id));
+    }
+    return db.select().from(qrFirewall).orderBy(asc(qrFirewall.id));
+  }
+
+  async createQrFirewallRule(data: InsertQrFirewallRule): Promise<QrFirewallRule> {
+    const [created] = await db.insert(qrFirewall).values(data).returning();
+    return created;
+  }
+
+  async deleteQrFirewallRule(id: number): Promise<boolean> {
+    await db.delete(qrFirewall).where(eq(qrFirewall.id, id));
+    return true;
+  }
+
+  async getQrAccessLog(routeId: number, page = 1, limit = 50): Promise<{ logs: QrAccessLog[]; total: number }> {
+    const offset = (page - 1) * limit;
+    const [countRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(qrAccess)
+      .where(eq(qrAccess.qrRouteId, routeId));
+    const total = countRow?.count ?? 0;
+    const logs = await db
+      .select()
+      .from(qrAccess)
+      .where(eq(qrAccess.qrRouteId, routeId))
+      .orderBy(desc(qrAccess.accessedAt))
+      .limit(limit)
+      .offset(offset);
+    return { logs, total };
+  }
+
+  async logQrAccess(data: InsertQrAccessLog): Promise<QrAccessLog> {
+    const [created] = await db.insert(qrAccess).values(data).returning();
+    return created;
+  }
+
+  async incrementQrScanCount(id: number): Promise<void> {
+    await db
+      .update(qrRoutes)
+      .set({ scanCount: sql`${qrRoutes.scanCount} + 1`, updatedAt: new Date() })
+      .where(eq(qrRoutes.id, id));
+  }
 }
 
 export const storage = new DatabaseStorage();

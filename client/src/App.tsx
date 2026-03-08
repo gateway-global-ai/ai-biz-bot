@@ -46,6 +46,8 @@ import GooglePlacesSdk from "@/pages/integrations/GooglePlacesSdk";
 import MyAccount from "@/pages/account/MyAccount";
 import CustomerSiteManager from "@/pages/owner/CustomerSiteManager";
 import PublicBusinessPage from "@/pages/public/PublicBusinessPage";
+import SovereignNetworkPage from "@/pages/public/SovereignNetworkPage";
+import PhonePage from "@/pages/public/PhonePage";
 import VoiceLeadMachine from "@/pages/biz-dashboard/VoiceLeadMachine";
 import SitesAndLeads from "@/pages/owner/SitesAndLeads";
 import MixingBoard from "@/pages/reseller/MixingBoard";
@@ -68,6 +70,8 @@ import OlympicB2b from "@/pages/showcase/OlympicB2b";
 import AgentPortal from "@/pages/showcase/AgentPortal";
 import InvestorDemo from "@/pages/showcase/InvestorDemo";
 import PitchDeckViewer from "@/pages/showcase/PitchDeckViewer";
+import StorefrontsIndex from "@/pages/storefronts/StorefrontsIndex";
+import StorefrontCategoryPage from "@/pages/storefronts/StorefrontCategoryPage";
 import BrandAdminPage from "@/pages/brand-admin";
 import NotFound from "@/pages/admin/not-found";
 import { Loader2 } from "lucide-react";
@@ -406,7 +410,10 @@ function App() {
               <Route path="/contact" component={ContactForm} />
               <Route path="/v2" component={LandingV2} />
               <Route path="/investor-demo" component={InvestorDemo} />
+              <Route path="/network" component={SovereignNetworkPage} />
               <Route path="/pitch-decks/:slug" component={PitchDeckViewer} />
+              <Route path="/storefronts" component={StorefrontsIndex} />
+              <Route path="/storefronts/:categorySlug" component={StorefrontCategoryPage} />
               {/* voice-demo route — handled by Gemini Live on homepage */}
               <Route path="/sdk" component={SdkShowcase} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
@@ -430,9 +437,18 @@ function App() {
               <Route path="/test-b2b-wireframe" component={TestB2b} />
               {/* Public business pages — shareable, no auth required */}
               <Route path="/biz/:slug" component={PublicBusinessPage} />
+              {/* Standalone Clear Voice phone UI — QR-codeable, no app shell. Params: ?siteConfigId=uuid | ?slug=url-slug */}
+              <Route path="/phone" component={PhonePage} />
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
               <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />
+              {/* Command Center / OS routes — same content, no sidebar (from chat) */}
+              <Route path="/app/my-account" component={MyAccount} />
+              <Route path="/app/my-account/site/:siteId" component={CustomerSiteManager} />
+              <Route path="/app/billing" component={BillingPage} />
+              <Route path="/app/mixing-board" component={MixingBoard} />
+              <Route path="/app/aibizbot" component={AiBizBotAdmin} />
+              <Route path="/app/compliance-gateway" component={OnboardingGateway} />
               {/* Protected admin routes with sidebar */}
               <Route component={AppWithSidebar} />
             </Switch>
