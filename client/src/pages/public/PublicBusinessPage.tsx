@@ -30,14 +30,22 @@ export default function PublicBusinessPage() {
 
   useEffect(() => {
     if (!slug) return;
-    const fromQr = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('from') === 'qr';
+    const params = new URLSearchParams(window.location.search);
+    const fromQr = params.get('from') === 'qr';
+    // ?mode= lets the QR router pre-supply workspaceState to skip a redundant DB call
+    const modeFromQr = params.get('mode') as any | null;
     const url = `/api/site-configs/by-slug/${encodeURIComponent(slug)}${fromQr ? '?from=qr' : ''}`;
     fetch(url)
       .then(r => {
         if (!r.ok) throw new Error('Business not found');
         return r.json();
       })
-      .then(data => { setSiteData(data); setLoading(false); })
+      .then(data => {
+        // If QR router pre-supplied the workspace state, trust it (avoids round-trip)
+        if (modeFromQr && !data.workspaceState) data.workspaceState = modeFromQr;
+        setSiteData(data);
+        setLoading(false);
+      })
       .catch(err => { setError(err.message); setLoading(false); });
   }, [slug]);
 
@@ -75,6 +83,8 @@ export default function PublicBusinessPage() {
       placeId={siteData.placeId || placeData.place_id}
       heroImageUrl={heroImageUrl}
       publicSlug={slug ?? undefined}
+      workspaceState={siteData.workspaceState ?? 'demo'}
+      ownerId={siteData.ownerId ?? null}
       onBack={() => setLocation('/')}
     />
   );

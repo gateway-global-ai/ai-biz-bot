@@ -27,7 +27,8 @@ import {
   Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield, MessageSquare, Menu,
   User, Activity, CreditCard, Building2, Users, ArrowLeft, Bot, ChevronRight, ChevronDown, Phone, Share2, QrCode, History,
   LayoutDashboard, Globe, Sliders, FileText, BookOpen, Search, Upload, Lock, X, Check,
-  Zap, Map, Link2, Cpu, Network, Radio, MessageCircle, ChevronUp, Copy, Download, ExternalLink, Sparkles
+  Zap, Map, Link2, Cpu, Network, Radio, MessageCircle, ChevronUp, Copy, Download, ExternalLink, Sparkles,
+  Loader2
 } from 'lucide-react';
 import { VoiceClientFactory } from '../../services/voice/VoiceClientFactory';
 import { IVoiceClient } from '../../services/voice/IVoiceClient';
@@ -50,6 +51,7 @@ import { QRRoutesManager } from '../account/QRRoutesManager';
 import TelephonyPanelFull from '../../pages/developer/TelephonyPanel';
 import { DiscRadar, ArchBreakdown } from '@/components/agent-charts/AgentProfileCharts';
 import VoiceSelector from '../voice/VoiceSelector';
+import { NovaGate } from '../nova/NovaGate';
 
 interface ConciergePanelProps {
   business: BusinessContext;
@@ -264,7 +266,7 @@ const KnowledgeOverlay: React.FC<{
 };
 
 /** Collapsible owner menu sections — Identity, Behavior, Intelligence, etc. */
-type MenuSubViewOut = 'identity' | 'id_name_voice' | 'id_business' | 'id_role' | 'id_tasks' | 'id_skills' | 'disc' | 'system_prompt' | 'knowledge' | 'task_order' | 'voice' | 'integrations' | 'routing' | 'communication' | null;
+type MenuSubViewOut = 'identity' | 'id_name_voice' | 'id_business' | 'id_role' | 'id_tasks' | 'id_skills' | 'disc' | 'system_prompt' | 'knowledge' | 'documents' | 'task_order' | 'voice' | 'integrations' | 'routing' | 'communication' | null;
 
 function OwnerMenuSections({ expandedSection, toggleSection, setMenuSubView }: {
   expandedSection: string | null;
@@ -290,8 +292,12 @@ function OwnerMenuSections({ expandedSection, toggleSection, setMenuSubView }: {
       ],
     },
     {
-      id: 'intelligence', label: 'Intelligence', color: 'emerald', singleView: 'knowledge' as MenuSubViewOut,
-      items: [{ label: 'Knowledge Library', view: 'knowledge' as MenuSubViewOut }],
+      id: 'intelligence', label: 'Intelligence', color: 'emerald', singleView: null as MenuSubViewOut | null,
+      items: [
+        { label: 'Knowledge Library', view: 'knowledge'   as MenuSubViewOut },
+        { label: 'Documents',         view: 'documents'   as MenuSubViewOut },
+        { label: 'Task Order',        view: 'task_order'  as MenuSubViewOut },
+      ],
     },
     {
       id: 'integrations', label: 'Integrations', color: 'amber', singleView: 'integrations' as MenuSubViewOut,
@@ -435,6 +441,84 @@ function BusinessMapEmbed({ lat, lng, name, address }: { lat?: number; lng?: num
   );
 }
 
+/** Documents panel — fetches industry-specific document templates via Nova document service */
+function DocumentsPanel({ siteConfigId, onBack }: { siteConfigId?: string; onBack: () => void }) {
+  const [profile, setProfile] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!siteConfigId) { setLoading(false); return; }
+    fetch(`/api/nova/documents/${siteConfigId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { setProfile(data); setLoading(false); })
+      .catch(() => { setError('Failed to load document templates'); setLoading(false); });
+  }, [siteConfigId]);
+
+  if (loading) return (
+    <div className="flex-1 flex items-center justify-center">
+      <Loader2 size={20} className="animate-spin text-emerald-400" />
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-full overflow-y-auto">
+      <div className="px-4 pt-4 pb-3 border-b border-slate-700/50 flex items-center gap-3 shrink-0">
+        <button type="button" onClick={onBack} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10">
+          <ArrowLeft size={15} />
+        </button>
+        <FileText size={16} className="text-emerald-400" />
+        <span className="text-white font-semibold text-sm">Industry Documents</span>
+        {profile && (
+          <span className="ml-auto text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5">
+            Level {profile.protocolLevel}
+          </span>
+        )}
+      </div>
+      <div className="flex-1 p-4 flex flex-col gap-4">
+        {error && <p className="text-xs text-red-400">{error}</p>}
+        {profile && (
+          <>
+            <div className="rounded-sui bg-slate-800/60 border border-slate-700/60 p-3">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1">{profile.protocolName} Protocol</p>
+              <p className="text-xs text-slate-400">{profile.protocolDescription}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-2">Required Documents</p>
+              <div className="flex flex-col gap-2">
+                {profile.documents?.map((doc: any) => (
+                  <div key={doc.id} className="flex items-center justify-between rounded-xl bg-slate-800/40 border border-slate-700/40 px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <FileText size={13} className="text-emerald-400 shrink-0" />
+                      <span className="text-sm text-white">{doc.label}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded px-2 py-0.5">Available</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {profile.invoiceItems?.length > 0 && (
+              <div>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-2">Invoice Line Items</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {profile.invoiceItems.map((item: string) => (
+                    <span key={item} className="text-[11px] text-slate-400 bg-slate-800/60 border border-slate-700/40 rounded-full px-2 py-0.5">
+                      {item.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        {!profile && !error && (
+          <p className="text-sm text-slate-500 text-center mt-8">No document profile found.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TelephonyInlinePanel({ siteConfigId }: { siteConfigId?: string | null }) {
   const [config, setConfig] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
@@ -574,7 +658,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     // Behavior group
     'disc' | 'system_prompt' |
     // Intelligence group
-    'knowledge' | 'task_order' |
+    'knowledge' | 'documents' | 'task_order' |
     // Voice (legacy direct)
     'voice' |
     // Integrations
@@ -627,7 +711,33 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   type OwnerAgentRole = 'concierge' | 'biz-bot' | 'bot-builder';
   const [ownerAgentRole, setOwnerAgentRole] = useState<OwnerAgentRole>('concierge');
 
-  // ── Canvas context injection ──────────────────────────────────────────────
+  // ── Shell mode derivation ─────────────────────────────────────────────────
+  // Determines which experience to render based on auth state + workspace lifecycle.
+  // 'owner'          → full management controls (showOwnerControls=true from parent)
+  // 'customer'       → voice concierge only — the default public experience
+  // 'demo_claimable' → customer + slim "Is this your business?" claim banner
+  // 'locked'         → customer + Nova IDV gate triggers when owner menu is attempted
+  type ShellMode = 'owner' | 'customer' | 'demo_claimable' | 'locked';
+  const shellMode: ShellMode = (() => {
+    if (showOwnerControls) return 'owner';
+    const ws = business.workspaceState;
+    if (ws === 'demo' || ws === 'provisioned') return 'demo_claimable';
+    if (ws === 'claimed' || ws === 'active') return 'locked';
+    return 'customer';
+  })();
+
+  // Nova Gate: shown inline when a non-owner taps to claim or sign in
+  const [showNovaGate, setShowNovaGate] = useState(false);
+  const [novaGateMode, setNovaGateMode] = useState<'claim' | 'signin'>('claim');
+  const [claimBannerDismissed, setClaimBannerDismissed] = useState(false);
+
+  // On successful Nova verification — store token and signal parent to re-evaluate ownership
+  const handleNovaVerified = (token: string, _userId: string) => {
+    localStorage.setItem('gateway_auth_token', token);
+    setShowNovaGate(false);
+    // Reload the page so AgentPage re-evaluates isOwner with the new token
+    window.location.reload();
+  };
   // When the owner navigates to a panel, inject a silent realtime_input text
   // event so the connected Gemini agent knows what's on the screen.
   // This mirrors the Gemini Live API's RealtimeInput event pattern — discrete
@@ -1253,15 +1363,23 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           ) : (
             <button
               type="button"
-              onClick={() => setShowMenuOverlay((v) => !v)}
+              onClick={() => {
+                if (shellMode === 'locked') {
+                  // Not authenticated on a claimed site — show Nova sign-in gate
+                  setNovaGateMode('signin');
+                  setShowNovaGate(true);
+                } else {
+                  setShowMenuOverlay((v) => !v);
+                }
+              }}
               className={isSovereign ? "p-2 hover:bg-white/10 rounded-xl text-white transition-colors" : "p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors"}
-              title="Menu"
+              title={shellMode === 'locked' ? 'Sign In' : 'Menu'}
               data-concierge-menu="overlay"
               aria-expanded={showMenuOverlay}
               aria-haspopup="dialog"
               aria-controls="concierge-menu-overlay"
             >
-              <Menu size={20} aria-hidden="true" />
+              {shellMode === 'locked' ? <Lock size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
             </button>
           )}
         </div>
@@ -1362,6 +1480,34 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         </div>
       </div>
 
+      {/* Demo "Is this your business?" claim banner — only for demo/provisioned sites when not dismissed */}
+      {(shellMode === 'demo_claimable') && !claimBannerDismissed && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 1.5 }}
+          className="shrink-0 flex items-center justify-between gap-2 px-4 py-2 bg-indigo-600/10 border-b border-indigo-500/20"
+        >
+          <span className="text-xs text-indigo-300">
+            Is this your business? <span className="text-indigo-200 font-medium">Claim it and activate your AI agent.</span>
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => { setNovaGateMode('claim'); setShowNovaGate(true); setShowMenuOverlay(false); }}
+              className="px-3 py-1 text-xs font-medium bg-indigo-500 hover:bg-indigo-400 text-white rounded-full transition-colors"
+            >
+              Claim →
+            </button>
+            <button
+              onClick={() => setClaimBannerDismissed(true)}
+              className="text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
       {/* 3. CONTENT WINDOW: outer constrains height so overlay never covers header/footer. Inner is the only scroll container. */}
       <div
         className={`flex-1 min-h-0 flex flex-col border-t overflow-hidden relative ${
@@ -1373,6 +1519,25 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden concierge-content-scroll relative"
           style={{ WebkitOverflowScrolling: 'touch', minHeight: 0 }}
         >
+        {/* Nova Gate overlay: claim or sign-in IDV flow */}
+        {showNovaGate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 z-50 flex flex-col overflow-hidden bg-[#0F172A]"
+          >
+            <NovaGate
+              siteConfigId={business.id}
+              businessName={business.name}
+              placeTypes={business.types ?? []}
+              mode={novaGateMode}
+              onVerified={handleNovaVerified}
+              onCancel={() => setShowNovaGate(false)}
+            />
+          </motion.div>
+        )}
+
         {/* Menu overlay: strictly inside this content box so panel header and footer stay visible. */}
         {showMenuOverlay && (
           <motion.div
@@ -2024,6 +2189,14 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   />
                 )}
 
+                {/* Documents sub-panel — industry document templates from Nova Sovereign ruleset */}
+                {menuSubView === 'documents' && (
+                  <DocumentsPanel
+                    siteConfigId={siteConfigId}
+                    onBack={() => setMenuSubView(null)}
+                  />
+                )}
+
                 {/* Task Order sub-panel */}
                 {menuSubView === 'task_order' && siteConfigId && (
                   <TaskOrderEditor
@@ -2161,6 +2334,45 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   ))}
                 </div>
               </section>
+              {/* ── CUSTOMER WORKFLOW MENU (from useOSMenu) ─── Only when not in owner mode */}
+              {!showOwnerControls && osMenuItems.length > 0 && (
+                <section>
+                  <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 mb-2 border-b border-slate-500/60 pb-1">
+                    {shellMode === 'locked' ? 'Services' : 'Quick Access'}
+                  </h3>
+                  <div className="space-y-1">
+                    {osMenuItems.map((item) => (
+                      <div key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => item.action === 'switch_view' && item.viewId ? handleMenuAction(item.viewId) : undefined}
+                          className="w-full flex items-center gap-3 rounded-sui border border-slate-600/50 p-3 text-left text-white hover:bg-white/10 transition-colors"
+                        >
+                          <item.icon className="w-4 h-4 text-slate-400 shrink-0" />
+                          <span className="text-sm font-medium">{item.label}</span>
+                          {item.children ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" /> : <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500" />}
+                        </button>
+                        {item.children && (
+                          <div className="ml-4 mt-0.5 space-y-0.5 border-l border-slate-700/60 pl-3">
+                            {item.children.map((child) => (
+                              <button
+                                key={child.id}
+                                type="button"
+                                onClick={() => child.action === 'switch_view' && child.viewId ? handleMenuAction(child.viewId) : undefined}
+                                className="w-full text-left py-2 text-sm text-slate-400 hover:text-white flex items-center gap-2 transition-colors"
+                              >
+                                <child.icon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                {child.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {/* KNOWLEDGE BASE — single auth-gated menu item */}
               <section>
                 <button

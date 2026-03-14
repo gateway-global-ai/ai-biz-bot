@@ -7,15 +7,17 @@
  *  - Any QR code pointing to the platform (not a specific business)
  *
  * Actions: Demo | Create Account | Sign In
+ * Sign In and Create Account open NovaGate inline (OTP).
  */
 
 import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Sparkles, ArrowRight, Phone, MessageSquare, Zap, Shield, Building2, QrCode } from 'lucide-react';
+import { Bot, Sparkles, ArrowRight, Phone, MessageSquare, Zap, Shield, Building2, QrCode, X } from 'lucide-react';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 import AIOSMark from '@/components/public/AIOSMark';
+import { NovaGate } from '@/components/nova/NovaGate';
 
 const DEMO_BUSINESS = {
   id: 'platform_landing',
@@ -43,6 +45,15 @@ type View = 'landing' | 'demo';
 export default function AgentsLandingPage() {
   const [, setLocation] = useLocation();
   const [view, setView] = useState<View>('landing');
+  const [novaGateMode, setNovaGateMode] = useState<'claim' | 'signin'>('claim');
+  const [showNovaGate, setShowNovaGate] = useState(false);
+
+  const handleNovaVerified = (token: string, userId: string) => {
+    localStorage.setItem('gateway_auth_token', token);
+    setShowNovaGate(false);
+    // Navigate to platform — they may need to select a site or will be shown their agent
+    setLocation('/platform');
+  };
 
   const features = [
     { icon: <Phone size={18} />, label: 'Voice AI Concierge', desc: 'Answers calls 24/7 with a human-like voice agent' },
@@ -85,20 +96,49 @@ export default function AgentsLandingPage() {
 
   return (
     <div className="min-h-screen bg-[#0F172A] flex flex-col overflow-auto">
+      {/* Nova Gate inline overlay */}
+      <AnimatePresence>
+        {showNovaGate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
+              className="w-full max-w-md max-h-[90vh] rounded-sui overflow-hidden shadow-2xl"
+            >
+              <NovaGate
+                siteConfigId="platform_landing"
+                businessName="Gateway Global AI"
+                placeTypes={[]}
+                mode={novaGateMode}
+                onVerified={handleNovaVerified}
+                onCancel={() => setShowNovaGate(false)}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <header className="shrink-0 px-6 py-4 flex items-center justify-between border-b border-slate-800/60">
         <AIOSMark />
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setLocation('/login')}
+            onClick={() => { setNovaGateMode('signin'); setShowNovaGate(true); }}
             className="px-4 py-2 rounded-xl text-sm text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
           >
             Sign In
           </button>
           <button
             type="button"
-            onClick={() => setLocation('/register')}
+            onClick={() => { setNovaGateMode('claim'); setShowNovaGate(true); }}
             className="px-4 py-2 rounded-xl bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-400 transition-colors"
           >
             Get Started
@@ -152,7 +192,7 @@ export default function AgentsLandingPage() {
               type="button"
               whileHover={{ scale: 1.02, y: -1 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => setLocation('/register')}
+              onClick={() => { setNovaGateMode('claim'); setShowNovaGate(true); }}
               className="flex items-center justify-center gap-3 px-8 py-4 rounded-sui bg-indigo-500 text-white font-bold text-base hover:bg-indigo-400 transition-all shadow-[0_0_30px_rgba(99,102,241,0.25)]"
             >
               <Sparkles size={18} />
@@ -165,7 +205,7 @@ export default function AgentsLandingPage() {
             Already have an account?{' '}
             <button
               type="button"
-              onClick={() => setLocation('/login')}
+              onClick={() => { setNovaGateMode('signin'); setShowNovaGate(true); }}
               className="text-indigo-400 hover:text-indigo-300 font-medium underline underline-offset-2 transition-colors"
             >
               Sign in
