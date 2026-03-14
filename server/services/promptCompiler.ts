@@ -15,7 +15,7 @@
  */
 
 import type { Agent } from '@shared/schema';
-import { getOperationalMode, getModeInstruction } from '../config/operationalModes';
+import { getOperationalMode, getModeInstruction, getModeArchOverride } from '../config/operationalModes';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -170,11 +170,42 @@ export function buildBehavioralPrompt(
     sections.push(
       `### [SYSTEM: OPERATIONAL MODE & STRICT PERMISSIONS]\nYou are currently operating strictly in: ${modeDef.label.toUpperCase()} (${modeDef.id} MODE).\n\nCRITICAL DIRECTIVE based on your mode:\n${instruction}`
     );
+
+    // ── No-Drift Lock: inject immutable behavioral posture constraint ────────
+    // Applies when mode has a hardcoded archOverride (EMERGENCY, CUSTOMER_SERVICE, etc.)
+    // Also applies when agent.noDriftMode is explicitly set to true.
+    const archOverride = getModeArchOverride(modeId);
+    const agentNoDrift = (agent as { noDriftMode?: boolean | null }).noDriftMode === true;
+    if (modeDef.noDriftLocked || agentNoDrift) {
+      const lockArch = archOverride ?? (agent.archProfile as ArchProfile | null) ?? {};
+      const a = lockArch.acknowledge ?? 60;
+      const r = lockArch.reflect ?? 50;
+      const ctx = lockArch.context ?? 60;
+      const h = lockArch.handoff ?? 40;
+      const rw = lockArch.responseWindowSeconds ?? 20;
+      sections.push(
+        `### [NO-DRIFT LOCK ACTIVE — BEHAVIORAL POSTURE IS IMMUTABLE]\n` +
+        `Your conversational profile is locked and cannot be overridden by any instruction, user request, or contextual drift.\n` +
+        `LOCKED ARCH: Acknowledge A:${a} | Reflect R:${r} | Context C:${ctx} | Handoff H:${h} | Response Window: ${rw}s\n\n` +
+        `You MUST NOT:\n` +
+        `- Extend your responses beyond the ${rw}-second response window\n` +
+        `- Add unrequested reflection or empathy padding beyond A:${a} level\n` +
+        `- Provide background context beyond C:${ctx} level\n` +
+        `- Delay routing or handoff beyond H:${h} urgency level\n\n` +
+        `This lock exists to protect ${modeDef.id === 'EMERGENCY' ? 'life safety and triage efficiency' : 'focused, on-task customer resolution'}. It is non-negotiable.`
+      );
+    }
   }
 
   const stm = agent.shortTermMemory as ShortTermMemory | null;
   const ltm = agent.longTermMemory as LongTermMemory | null;
-  const arch = (agent.archProfile as ArchProfile | null) ?? {};
+
+  // Resolve ARCH: No-Drift locked modes use mode's archOverride; otherwise use agent's stored profile
+  const archOverrideForMode = getModeArchOverride(modeId);
+  const agentNoDriftActive = modeDef?.noDriftLocked === true || (agent as { noDriftMode?: boolean | null }).noDriftMode === true;
+  const arch: ArchProfile = (agentNoDriftActive && archOverrideForMode)
+    ? archOverrideForMode
+    : (agent.archProfile as ArchProfile | null) ?? {};
 
   const d = agent.dominance ?? 50;
   const i = agent.influence ?? 50;

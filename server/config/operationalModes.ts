@@ -14,7 +14,17 @@ export type OperationalModeId =
   | "MANAGER"
   | "RESEARCH"
   | "CODING"
-  | "REVIEW";
+  | "REVIEW"
+  | "EMERGENCY"
+  | "CUSTOMER_SERVICE";
+
+export interface ArchOverride {
+  acknowledge: number;
+  reflect: number;
+  context: number;
+  handoff: number;
+  responseWindowSeconds: number;
+}
 
 export interface OperationalModeDef {
   id: OperationalModeId;
@@ -25,6 +35,17 @@ export interface OperationalModeDef {
   instruction: string;
   /** Tool names allowed for this mode. Empty = no tools. Backend must not pass any tool not in this set. */
   allowedToolNames: string[];
+  /**
+   * When set, this mode's ARCH profile is hardcoded and cannot be overridden by the agent's stored arch_profile.
+   * The promptCompiler uses this value instead of the agent's DB row when noDriftLocked is true.
+   */
+  archOverride?: ArchOverride;
+  /**
+   * When true, the agent is locked into this mode's archOverride.
+   * The No-Drift lock directive is injected as an immutable constraint in the system prompt.
+   * ARCH sliders in the UI become read-only when this mode is active.
+   */
+  noDriftLocked?: boolean;
 }
 
 export const OPERATIONAL_MODES: OperationalModeDef[] = [
@@ -164,6 +185,46 @@ export const OPERATIONAL_MODES: OperationalModeDef[] = [
       "You are in REVIEW MODE. You may review and comment on work previously done. You MUST NOT modify, delete, or commit any code or data changes.",
     allowedToolNames: [],
   },
+  // ── No-Drift Locked Modes ──────────────────────────────────────────────────
+  // These modes have hardcoded ARCH profiles the agent cannot deviate from.
+  // The promptCompiler injects a NO-DRIFT LOCK directive when these are active.
+  {
+    id: "EMERGENCY",
+    label: "Emergency Response",
+    permissions: "Triage Only.",
+    constraint:
+      "Triage-only. No reflection, no context padding. Immediate handoff. One question at a time.",
+    instruction:
+      "You are in EMERGENCY MODE. You must be radically brief. Ask one question at a time. " +
+      "Your triage priority is: 1) What is happening, 2) Who is involved, 3) Are there injuries or safety risks. " +
+      "Immediately route to emergency services, a human operator, or the appropriate escalation path. " +
+      "Do not offer context, do not reflect, do not pad responses. Every second counts.",
+    allowedToolNames: ["show_canvas", "intake_form", "request_manual_input"],
+    archOverride: { acknowledge: 2, reflect: 0, context: 0, handoff: 3, responseWindowSeconds: 7 },
+    noDriftLocked: true,
+  },
+  {
+    id: "CUSTOMER_SERVICE",
+    label: "Customer Service",
+    permissions: "Task-Focused Resolution.",
+    constraint:
+      "Task-focused. Acknowledge briefly (max 1 sentence), resolve or route. No drift into open-ended conversation.",
+    instruction:
+      "You are in CUSTOMER SERVICE MODE. Acknowledge the customer's issue in one sentence, then immediately resolve it or route them to the right resource. " +
+      "Do not reflect extensively or add unnecessary context. Stay on task. " +
+      "If you cannot resolve the issue directly, escalate efficiently without excessive explanation.",
+    allowedToolNames: [
+      "show_canvas",
+      "intake_form",
+      "request_manual_input",
+      "query_knowledge_library",
+      "get_business_details",
+      "get_booking_and_pricing_info",
+      "suggest_integration",
+    ],
+    archOverride: { acknowledge: 3, reflect: 1, context: 2, handoff: 2, responseWindowSeconds: 15 },
+    noDriftLocked: true,
+  },
 ];
 
 const modeById = new Map<OperationalModeId, OperationalModeDef>(
@@ -195,4 +256,14 @@ export function getModeInstruction(
 export function getToolsAllowedForMode(modeId: string | null | undefined): string[] {
   const mode = getOperationalMode(modeId);
   return mode?.allowedToolNames ?? [];
+}
+
+/** Returns true if this mode has a hardcoded No-Drift ARCH lock. */
+export function isModeNoDriftLocked(modeId: string | null | undefined): boolean {
+  return getOperationalMode(modeId)?.noDriftLocked === true;
+}
+
+/** Returns the hardcoded ARCH override for a No-Drift locked mode, or null for standard modes. */
+export function getModeArchOverride(modeId: string | null | undefined): ArchOverride | null {
+  return getOperationalMode(modeId)?.archOverride ?? null;
 }

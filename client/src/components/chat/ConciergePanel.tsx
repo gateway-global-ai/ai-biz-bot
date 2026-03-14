@@ -677,6 +677,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [menuAgentArch, setMenuAgentArch] = useState({ acknowledge: 75, reflect: 60, context: 50, handoff: 30, responseWindowSeconds: 20 });
   const [menuAgentVoiceName, setMenuAgentVoiceName] = useState<string>('Kore');
   const [menuSysPrompt, setMenuSysPrompt] = useState({ ownerIdentity: '', loyaltyStatement: '', ownerPriorities: '', operationalMode: 'SAFE' });
+  const [menuNoDriftMode, setMenuNoDriftMode] = useState(false);
   const [menuSaving, setMenuSaving] = useState(false);
   const [menuSaved, setMenuSaved] = useState(false);
   /** First-level drill: null = home (Admin | User | Public Agents); then 'admin' | 'user' | 'public'. */
@@ -833,6 +834,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               ownerPriorities: agent.ownerPriorities ?? '',
               operationalMode: agent.operationalMode ?? 'CONCIERGE',
             });
+            setMenuNoDriftMode(agent.noDriftMode ?? false);
           }
         })
         .catch(() => {});
@@ -1698,7 +1700,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                         if (!menuAgent) return;
                         setMenuSaving(true);
                         try {
-                          await fetch(`/api/agents/${menuAgent.id}`, { method: 'PATCH', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ systemPrompt: menuSysPrompt.ownerIdentity, operationalMode: menuSysPrompt.operationalMode }) });
+                          await fetch(`/api/agents/${menuAgent.id}`, { method: 'PATCH', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ systemPrompt: menuSysPrompt.ownerIdentity, operationalMode: menuSysPrompt.operationalMode, noDriftMode: menuNoDriftMode }) });
                           setMenuSaved(true); setTimeout(() => setMenuSaved(false), 2000);
                         } finally { setMenuSaving(false); }
                       }} className={`px-3 py-1.5 rounded-sui text-xs font-medium transition-colors ${menuSaved ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-300' : 'bg-indigo-500 text-white hover:bg-indigo-400 disabled:opacity-40'}`}>
@@ -1707,36 +1709,137 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                       {!menuAgent && <div className="flex items-center justify-center py-10"><div className="w-8 h-8 rounded-full border-2 border-indigo-500/40 border-t-indigo-500 animate-spin" /></div>}
-                      {menuAgent && (
-                        <>
-                          <div>
-                            <label className="text-xs text-slate-400 mb-1.5 block font-medium">Role Type</label>
-                            <select value={menuSysPrompt.operationalMode} onChange={e => setMenuSysPrompt(p => ({ ...p, operationalMode: e.target.value }))}
-                              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50">
-                              {['CONCIERGE','SALES','SUPPORT','INTAKE','RECEPTION','CUSTOM'].map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-xs text-slate-400 mb-1.5 block font-medium">Agent Identity &amp; Purpose</label>
-                            <p className="text-[11px] text-slate-500 mb-2">Describe who this agent is, who they represent, and their primary job.</p>
-                            <textarea value={menuSysPrompt.ownerIdentity} onChange={e => setMenuSysPrompt(p => ({ ...p, ownerIdentity: e.target.value }))} rows={5}
-                              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
-                              placeholder={`e.g. You are Aria, the AI Concierge for ${business.name}. You represent the airport and assist travelers with gates, delays, lounges, and amenities.`} />
-                          </div>
-                          <div>
-                            <label className="text-xs text-slate-400 mb-1.5 block font-medium">Loyalty Statement</label>
-                            <textarea value={menuSysPrompt.loyaltyStatement} onChange={e => setMenuSysPrompt(p => ({ ...p, loyaltyStatement: e.target.value }))} rows={3}
-                              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
-                              placeholder="What makes this business special and worth recommending?" />
-                          </div>
-                          <div>
-                            <label className="text-xs text-slate-400 mb-1.5 block font-medium">Owner Priorities</label>
-                            <textarea value={menuSysPrompt.ownerPriorities} onChange={e => setMenuSysPrompt(p => ({ ...p, ownerPriorities: e.target.value }))} rows={3}
-                              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
-                              placeholder="Top 3 things this agent must always accomplish in every conversation." />
-                          </div>
-                        </>
-                      )}
+                      {menuAgent && (() => {
+                        // No-Drift locked modes have hardcoded ARCH profiles
+                        const NO_DRIFT_MODES = new Set(['EMERGENCY', 'CUSTOMER_SERVICE']);
+                        const ARCH_OVERRIDES: Record<string, { acknowledge: number; reflect: number; context: number; handoff: number; responseWindowSeconds: number }> = {
+                          EMERGENCY:        { acknowledge: 2,  reflect: 0, context: 0, handoff: 3, responseWindowSeconds: 7  },
+                          CUSTOMER_SERVICE: { acknowledge: 3,  reflect: 1, context: 2, handoff: 2, responseWindowSeconds: 15 },
+                        };
+                        const selectedMode = menuSysPrompt.operationalMode;
+                        const isNoDriftMode = NO_DRIFT_MODES.has(selectedMode);
+                        const lockedArch = ARCH_OVERRIDES[selectedMode];
+                        const MODE_OPTIONS = [
+                          { value: 'SAFE',             label: 'Safe Mode',           desc: 'Discussion only. No tasks, no PII.' },
+                          { value: 'CONCIERGE',        label: 'Concierge',           desc: 'Assess intent and route customers.' },
+                          { value: 'RECEPTIONIST',     label: 'Receptionist',        desc: 'Intake & data collection.' },
+                          { value: 'SALES',            label: 'Sales',               desc: 'Catalog, quotes, shopping cart.' },
+                          { value: 'CASHIER',          label: 'Cashier',             desc: 'Payment capture & secure links.' },
+                          { value: 'CUSTOMER_SUPPORT', label: 'Customer Support',    desc: 'Account access — requires OTP.' },
+                          { value: 'MANAGER',          label: 'Manager',             desc: 'Oversight & cross-agent approval.' },
+                          { value: 'RESEARCH',         label: 'Research',            desc: 'Read-only discovery.' },
+                          { value: 'CODING',           label: 'Coding',              desc: 'Write/execute in designated folders.' },
+                          { value: 'REVIEW',           label: 'Review',              desc: 'Read/annotate — no commits.' },
+                          { value: 'EMERGENCY',        label: '🚨 Emergency Response', desc: 'No-Drift locked. A:2 R:0 C:0 H:3 · 7s window.' },
+                          { value: 'CUSTOMER_SERVICE', label: '🎯 Customer Service', desc: 'No-Drift locked. A:3 R:1 C:2 H:2 · 15s window.' },
+                        ];
+                        return (
+                          <>
+                            {/* Mode selector */}
+                            <div>
+                              <label className="text-xs text-slate-400 mb-1.5 block font-medium">Operational Mode</label>
+                              <select
+                                value={selectedMode}
+                                onChange={e => {
+                                  const v = e.target.value;
+                                  setMenuSysPrompt(p => ({ ...p, operationalMode: v }));
+                                  // Auto-enable No-Drift when a locked mode is selected
+                                  if (NO_DRIFT_MODES.has(v)) setMenuNoDriftMode(true);
+                                }}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                              >
+                                {MODE_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                              </select>
+                              {/* Mode description */}
+                              {(() => {
+                                const m = MODE_OPTIONS.find(x => x.value === selectedMode);
+                                return m ? <p className="text-[11px] text-slate-500 mt-1">{m.desc}</p> : null;
+                              })()}
+                            </div>
+
+                            {/* No-Drift Lock section */}
+                            <div className={`rounded-sui border p-3 transition-colors ${isNoDriftMode ? 'bg-red-500/10 border-red-500/30' : 'bg-slate-800/40 border-slate-700/60'}`}>
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                  <Lock size={13} className={isNoDriftMode ? 'text-red-400' : 'text-slate-500'} />
+                                  <span className={`text-xs font-semibold ${isNoDriftMode ? 'text-red-300' : 'text-slate-300'}`}>
+                                    No-Drift Mode
+                                  </span>
+                                  {isNoDriftMode && (
+                                    <span className="text-[10px] font-mono bg-red-500/20 text-red-300 border border-red-500/30 rounded px-1.5 py-0.5">LOCKED BY MODE</span>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={isNoDriftMode}
+                                  onClick={() => setMenuNoDriftMode(v => !v)}
+                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${menuNoDriftMode ? 'bg-red-500' : 'bg-slate-600'} ${isNoDriftMode ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${menuNoDriftMode ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                                </button>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                                {isNoDriftMode
+                                  ? 'This mode always locks the ARCH profile. The agent cannot drift from the settings below.'
+                                  : 'When enabled, locks this agent to its current ARCH profile. Prevents behavioral drift from contextual or conversational pressure.'}
+                              </p>
+
+                              {/* Locked ARCH preview — shown for No-Drift locked modes */}
+                              {isNoDriftMode && lockedArch && (
+                                <div className="mt-3 pt-3 border-t border-red-500/20">
+                                  <p className="text-[10px] font-black text-red-400/70 uppercase tracking-[0.3em] mb-2">Locked ARCH Profile</p>
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    {([
+                                      { key: 'acknowledge', label: 'A — Acknowledge', val: lockedArch.acknowledge, color: 'bg-indigo-500' },
+                                      { key: 'reflect',     label: 'R — Reflect',     val: lockedArch.reflect,     color: 'bg-violet-500' },
+                                      { key: 'context',     label: 'C — Context',     val: lockedArch.context,     color: 'bg-emerald-500' },
+                                      { key: 'handoff',     label: 'H — Handoff',     val: lockedArch.handoff,     color: 'bg-amber-500' },
+                                    ] as const).map(({ key, label, val, color }) => (
+                                      <div key={key} className="flex flex-col gap-1">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[10px] text-slate-500">{label}</span>
+                                          <span className="font-mono text-[10px] text-slate-400">{val}</span>
+                                        </div>
+                                        <div className="h-1 rounded-full bg-slate-700 overflow-hidden">
+                                          <div className={`h-full ${color} rounded-full opacity-70`} style={{ width: `${val}%` }} />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="mt-2 flex items-center gap-2">
+                                    <span className="text-[10px] text-slate-500">Response Window</span>
+                                    <span className="font-mono text-[11px] font-bold text-red-300">{lockedArch.responseWindowSeconds}s</span>
+                                    {selectedMode === 'EMERGENCY' && (
+                                      <span className="text-[10px] text-red-400/80 italic">— triage speed</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Identity fields */}
+                            <div>
+                              <label className="text-xs text-slate-400 mb-1.5 block font-medium">Agent Identity &amp; Purpose</label>
+                              <p className="text-[11px] text-slate-500 mb-2">Describe who this agent is, who they represent, and their primary job.</p>
+                              <textarea value={menuSysPrompt.ownerIdentity} onChange={e => setMenuSysPrompt(p => ({ ...p, ownerIdentity: e.target.value }))} rows={5}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
+                                placeholder={`e.g. You are Aria, the AI Concierge for ${business.name}. You represent the airport and assist travelers with gates, delays, lounges, and amenities.`} />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-400 mb-1.5 block font-medium">Loyalty Statement</label>
+                              <textarea value={menuSysPrompt.loyaltyStatement} onChange={e => setMenuSysPrompt(p => ({ ...p, loyaltyStatement: e.target.value }))} rows={3}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
+                                placeholder="What makes this business special and worth recommending?" />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-400 mb-1.5 block font-medium">Owner Priorities</label>
+                              <textarea value={menuSysPrompt.ownerPriorities} onChange={e => setMenuSysPrompt(p => ({ ...p, ownerPriorities: e.target.value }))} rows={3}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
+                                placeholder="Top 3 things this agent must always accomplish in every conversation." />
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}

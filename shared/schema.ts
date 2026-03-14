@@ -383,10 +383,13 @@ export const agents = pgTable("agents", {
   archProfile: jsonb("arch_profile"),          // { acknowledge, reflect, context, handoff } — 0-100 each
   /** Structured controls: mirroring (enabled, intensity 0–100) and guardrails (always, never, believe). */
   structuredControls: jsonb("structured_controls").$type<StructuredControls>().default({}),
-  /** Operational mode: SAFE | CONCIERGE | RECEPTIONIST | SALES | CASHIER | CUSTOMER_SUPPORT | MANAGER | RESEARCH | CODING | REVIEW. Drives prompt directive and tool allowlist. */
+  /** Operational mode: SAFE | CONCIERGE | RECEPTIONIST | SALES | CASHIER | CUSTOMER_SUPPORT | MANAGER | RESEARCH | CODING | REVIEW | EMERGENCY | CUSTOMER_SERVICE. Drives prompt directive and tool allowlist. */
   operationalMode: text("operational_mode").default("SAFE"),
   /** For CUSTOMER_SUPPORT mode: required verification level (e.g. OTP, magic_link). */
   verificationLevel: text("verification_level"),
+  /** When true, ARCH sliders are overridden server-side by the mode's hardcoded archOverride.
+   *  Enforced in promptCompiler — the agent cannot drift from its configured behavioral posture. */
+  noDriftMode: boolean("no_drift_mode").default(false),
   /** Visibility: public (customers), internal (employees), private (owner only). */
   visibility: text("visibility").default("private"),
   // Startup Script
