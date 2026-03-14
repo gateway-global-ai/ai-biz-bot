@@ -14,6 +14,7 @@ import AgentChat from "@/pages/agents/AgentChat";
 import DiscVisualizer from "@/pages/showcase/DiscVisualizer";
 import DeveloperPage from "@/pages/developer/DeveloperPage";
 import BusinessPage from "@/pages/customer/BusinessPage";
+import PlatformHomePage from "@/pages/public/PlatformHomePage";
 import GoogleApiAnalyst from "@/pages/integrations/GoogleApiAnalyst";
 import OnboardingFlow from "@/pages/agents/OnboardingFlow";
 import DiscAssessment from "@/pages/showcase/DiscAssessment";
@@ -407,7 +408,7 @@ function App() {
           <CustomerAuthProvider>
             <Switch>
               {/* Public routes */}
-              <Route path="/" component={BusinessPage} />
+              <Route path="/" component={PlatformHomePage} />
               <Route path="/business" component={BusinessPage} />
               <Route path="/demo" component={BusinessPage} />
               <Route path="/buy" component={PlatformBuyPage} />
