@@ -205,148 +205,31 @@ export function registerAgentRoutes(app: Express) {
   });
 
   // ==========================================
-  // Agent Swarms
+  // Agent Swarms (MVP: stubbed — not available)
   // ==========================================
 
-  /**
-   * Create a new agent swarm
-   */
-  app.post("/api/swarms", async (req: Request, res: Response) => {
-    try {
-      const schema = z.object({
-        businessId: z.string(),
-        name: z.string(),
-        description: z.string().optional(),
-        managerAgentId: z.string(),
-      });
-
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-
-      const swarm = agentSwarmManager.createSwarm(parsed.data);
-      res.json(swarm);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
+  app.post("/api/swarms", (_req: Request, res: Response) => {
+    res.status(410).json({ error: "Swarm API is not available in this MVP." });
   });
 
-  /**
-   * Get all swarms for a business
-   */
-  app.get("/api/swarms/business/:businessId", async (req: Request, res: Response) => {
-    try {
-      const swarms = agentSwarmManager.getBusinessSwarms(req.params.businessId);
-      res.json(swarms);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
+  app.get("/api/swarms/business/:businessId", (_req: Request, res: Response) => {
+    res.json([]);
   });
 
-  /**
-   * Get a specific swarm
-   */
-  app.get("/api/swarms/:id", async (req: Request, res: Response) => {
-    try {
-      const swarm = agentSwarmManager.getSwarm(req.params.id);
-      if (!swarm) {
-        return res.status(404).json({ error: "Swarm not found" });
-      }
-      res.json(swarm);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
+  app.get("/api/swarms/:id", (_req: Request, res: Response) => {
+    res.status(404).json({ error: "Swarm not found" });
   });
 
-  /**
-   * Add an agent to a swarm
-   */
-  app.post("/api/swarms/:id/agents", async (req: Request, res: Response) => {
-    try {
-      const schema = z.object({
-        agentId: z.string(),
-        priority: z.number(),
-        roles: z.array(z.string()),
-      });
-
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-
-      agentSwarmManager.addAgentToSwarm(
-        req.params.id,
-        parsed.data.agentId,
-        parsed.data.priority,
-        parsed.data.roles
-      );
-
-      const updatedSwarm = agentSwarmManager.getSwarm(req.params.id);
-      res.json(updatedSwarm);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
+  app.post("/api/swarms/:id/agents", (_req: Request, res: Response) => {
+    res.status(410).json({ error: "Swarm API is not available in this MVP." });
   });
 
-  /**
-   * Add a routing rule to a swarm
-   */
-  app.post("/api/swarms/:id/routing-rules", async (req: Request, res: Response) => {
-    try {
-      const schema = z.object({
-        condition: z.string(),
-        targetAgentId: z.string(),
-        priority: z.number(),
-      });
-
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-
-      agentSwarmManager.addRoutingRule(req.params.id, parsed.data);
-      const updatedSwarm = agentSwarmManager.getSwarm(req.params.id);
-      res.json(updatedSwarm);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
+  app.post("/api/swarms/:id/routing-rules", (_req: Request, res: Response) => {
+    res.status(410).json({ error: "Swarm API is not available in this MVP." });
   });
 
-  /**
-   * Route a message to the appropriate agent
-   */
-  app.post("/api/swarms/:id/route", async (req: Request, res: Response) => {
-    try {
-      const schema = z.object({
-        messageType: z.enum(['voice-inbound', 'voice-outbound', 'sms', 'chat']),
-        context: z.object({
-          customerIntent: z.string().optional(),
-          urgency: z.enum(['low', 'medium', 'high']).optional(),
-          topic: z.string().optional(),
-          metadata: z.any().optional(),
-        }).optional(),
-      });
-
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-
-      const agent = agentSwarmManager.routeMessage({
-        swarmId: req.params.id,
-        messageType: parsed.data.messageType,
-        context: parsed.data.context || {},
-      });
-
-      if (!agent) {
-        return res.status(404).json({ error: "No suitable agent found" });
-      }
-
-      res.json(agent);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
+  app.post("/api/swarms/:id/route", (_req: Request, res: Response) => {
+    res.status(410).json({ error: "Swarm API is not available in this MVP." });
   });
 
   // ==========================================
@@ -460,22 +343,8 @@ export function registerAgentRoutes(app: Express) {
         name: `${businessName} - SMS Agent`,
       });
 
-      // Create a swarm with AI Biz Bot as manager
-      const swarm = agentSwarmManager.createSwarm({
-        businessId,
-        name: `${businessName} - Main Agent Swarm`,
-        description: 'Primary agent swarm managed by AI Biz Bot',
-        managerAgentId: 'ai-biz-bot', // This would be the actual AI Biz Bot instance ID
-      });
-
-      // Add agents to swarm
-      agentSwarmManager.addAgentToSwarm(swarm.id, chatAgent.id, 10, ['customer-support', 'lead-capture']);
-      agentSwarmManager.addAgentToSwarm(swarm.id, inboundAgent.id, 9, ['customer-support', 'phone-support']);
-      agentSwarmManager.addAgentToSwarm(swarm.id, outboundAgent.id, 8, ['sales', 'lead-qualification']);
-      agentSwarmManager.addAgentToSwarm(swarm.id, smsAgent.id, 7, ['customer-support', 'quick-responses']);
-
+      // MVP: no swarm; return agents only
       res.json({
-        swarm,
         agents: {
           chat: chatAgent,
           voiceInbound: inboundAgent,

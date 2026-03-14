@@ -1,0 +1,7 @@
+version: v1
+modes:
+  - id: menu
+  - id: view
+  - id: confirmation
+  - id: refusal
+  - id: ptt_first

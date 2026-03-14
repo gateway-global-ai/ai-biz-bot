@@ -1,0 +1,113 @@
+version: 1
+routes:
+  - routeId: os.home
+    domain: os
+    mode: ptt_first
+    requiredContextKeys: []
+    requiredRoleScope: [location, organization, platform]
+    requiredVerificationState: pending
+    policyGate: os_boot_ready
+    linkedViewId: os-home-view
+    allowedActions: []
+    optionalBrowserPath: /
+  - routeId: admin.home
+    domain: admin
+    mode: menu
+    requiredContextKeys: []
+    requiredRoleScope: platform
+    requiredVerificationState: verified
+    policyGate: admin_access
+    linkedViewId: admin-home-view
+    allowedActions: [admin.onboarding.read, admin.onboarding.write]
+    optionalBrowserPath: /admin
+  - routeId: admin.onboarding
+    domain: admin
+    mode: view
+    requiredContextKeys: []
+    requiredRoleScope: platform
+    requiredVerificationState: verified
+    policyGate: admin_access
+    linkedViewId: admin-onboarding-view
+    allowedActions: [stage_business_onboarding]
+    optionalBrowserPath: /admin/onboarding
+  - routeId: admin.candidate_selection
+    domain: admin
+    mode: view
+    requiredContextKeys: []
+    requiredRoleScope: platform
+    requiredVerificationState: verified
+    policyGate: admin_access
+    linkedViewId: admin-candidate-selection-view
+    allowedActions: [ground_business_candidates]
+    optionalBrowserPath: /admin/onboarding/candidates
+  - routeId: workspace.detail
+    domain: workspace
+    mode: view
+    requiredContextKeys:
+      - siteConfigId
+    requiredRoleScope: location
+    requiredVerificationState: verified
+    policyGate: workspace_access
+    linkedViewId: workspace-router-view
+    allowedActions: [session.joinAssist, session.endAssist, session.resolveOutcome]
+    optionalBrowserPath: /workspace/:siteId
+  - routeId: agent.config
+    domain: agents
+    mode: view
+    requiredContextKeys:
+      - siteConfigId
+      - agentId
+    requiredRoleScope: location
+    requiredVerificationState: verified
+    policyGate: agent_config_access
+    linkedViewId: agent-config-view
+    allowedActions:
+      - agent.updateBehavior
+      - mutate_agent_behavior
+      - focus_behavior_control
+    optionalBrowserPath: /workspace/:siteId/agent/:agentId
+  - routeId: agent.behavior
+    domain: agents
+    mode: confirmation
+    requiredContextKeys:
+      - siteConfigId
+      - agentId
+    requiredRoleScope: location
+    requiredVerificationState: verified
+    policyGate: agent_behavior_control
+    linkedViewId: behavior-controller-view
+    allowedActions:
+      - agent.proposeDominanceChange
+      - agent.applySafeModeProfile
+      - agent.applyGroundingImportance
+    optionalBrowserPath: /workspace/:siteId/agent/:agentId/behavior
+  - routeId: support.entry
+    domain: support
+    mode: menu
+    requiredContextKeys: []
+    requiredRoleScope: personal
+    requiredVerificationState: pending
+    policyGate: support_public
+    linkedViewId: support-entry-view
+    allowedActions: [request_human_assistance, draft_support_ticket]
+    optionalBrowserPath: /support
+  - routeId: system.support
+    domain: system
+    mode: view
+    requiredContextKeys: []
+    requiredRoleScope: personal
+    requiredVerificationState: pending
+    policyGate: support_public
+    linkedViewId: system-support-view
+    allowedActions: [request_human_assistance, draft_support_ticket]
+    optionalBrowserPath: /system/support
+  - routeId: system.telemetry
+    domain: system
+    mode: view
+    requiredContextKeys: []
+    requiredRoleScope: platform
+    requiredVerificationState: verified
+    policyGate: os_boot_ready
+    linkedViewId: system-telemetry-view
+    allowedActions: [mutate_chaos_settings]
+    optionalBrowserPath: /system/telemetry

@@ -19,6 +19,7 @@ import {
   updateCallerIdName,
   getTwilioFromPhoneNumber,
   getTwilioClient,
+  getAccountSid,
   createSubAccountAndProvisionNumber,
 } from "../twilio";
 import {
@@ -80,8 +81,10 @@ const webhooksUpdateSchema = z.object({
   voiceUrl: z.string().url().optional().or(z.literal('')),
   voiceFallbackUrl: z.string().url().optional().or(z.literal('')),
   statusCallback: z.string().url().optional().or(z.literal('')),
+  smsStatusCallback: z.string().url().optional().or(z.literal('')),
   smsUrl: z.string().url().optional().or(z.literal('')),
   smsFallbackUrl: z.string().url().optional().or(z.literal('')),
+  errorUrl: z.string().url().optional().or(z.literal('')),
 });
 
 // ── Telephony Config & Number Management ─────────────────────────────────────
@@ -281,6 +284,8 @@ const webhooksUpdateSchema = z.object({
       const voiceUrl = `${baseUrl}/webhook/voice`;
       const smsUrl = `${baseUrl}/webhook/sms`;
       const statusCallback = `${baseUrl}/webhook/voice/status`;
+      const smsStatusCallback = `${baseUrl}/webhook/sms/status`;
+      const errorUrl = `${baseUrl}/webhook/error`;
 
       // If we have credentials and phoneSid, configure webhooks on Twilio
       if (twilioClient && phoneSid) {
@@ -292,6 +297,11 @@ const webhooksUpdateSchema = z.object({
             smsMethod: 'POST',
             statusCallback: statusCallback,
             statusCallbackMethod: 'POST',
+            smsStatusCallback,
+            voiceFallbackUrl: errorUrl,
+            voiceFallbackMethod: 'POST',
+            smsFallbackUrl: errorUrl,
+            smsFallbackMethod: 'POST',
           });
           console.log(`Configured webhooks for ${phoneNumber} on Twilio`);
         } catch (webhookError: any) {
@@ -313,6 +323,7 @@ const webhooksUpdateSchema = z.object({
         voiceUrl,
         smsUrl,
         statusCallbackUrl: statusCallback,
+        errorUrl,
       };
       
       if (config) {
@@ -455,7 +466,16 @@ const webhooksUpdateSchema = z.object({
         return res.status(400).json({ error: parsed.error.message });
       }
       
-      const { phoneSid, voiceUrl, voiceFallbackUrl, statusCallback, smsUrl, smsFallbackUrl } = parsed.data;
+      const {
+        phoneSid,
+        voiceUrl,
+        voiceFallbackUrl,
+        statusCallback,
+        smsStatusCallback,
+        smsUrl,
+        smsFallbackUrl,
+        errorUrl,
+      } = parsed.data;
       
       await updatePhoneNumberWebhooks(phoneSid, {
         voiceUrl: voiceUrl || undefined,
@@ -463,6 +483,20 @@ const webhooksUpdateSchema = z.object({
         statusCallback: statusCallback || undefined,
         smsUrl: smsUrl || undefined,
         smsFallbackUrl: smsFallbackUrl || undefined,
+      });
+
+      // Twilio helper does not include smsStatusCallback/error fallback fields.
+      const twilioClient = await getTwilioClient();
+      await twilioClient.incomingPhoneNumbers(phoneSid).update({
+        ...(smsStatusCallback ? { smsStatusCallback } : {}),
+        ...(errorUrl
+          ? {
+              voiceFallbackUrl: errorUrl,
+              voiceFallbackMethod: 'POST',
+              smsFallbackUrl: errorUrl,
+              smsFallbackMethod: 'POST',
+            }
+          : {}),
       });
       
       let config = await storage.getTelephonyConfig();
@@ -473,6 +507,7 @@ const webhooksUpdateSchema = z.object({
           statusCallbackUrl: statusCallback || null,
           smsUrl: smsUrl || null,
           smsFallbackUrl: smsFallbackUrl || null,
+          errorUrl: errorUrl || null,
         });
       }
       
@@ -588,6 +623,20 @@ const webhooksUpdateSchema = z.object({
           smsUrl: n.smsUrl || null,
           smsFallbackUrl: n.smsFallbackUrl || null,
           statusCallback: n.statusCallback || null,
+          smsStatusCallback: n.smsStatusCallback || null,
+          callerNameLookup: Boolean(n.voiceCallerIdLookup),
+          routing: {
+            voice: {
+              requestUrl: n.voiceUrl || null,
+              fallbackUrl: n.voiceFallbackUrl || null,
+              statusCallback: n.statusCallback || null,
+            },
+            sms: {
+              requestUrl: n.smsUrl || null,
+              fallbackUrl: n.smsFallbackUrl || null,
+              statusCallback: n.smsStatusCallback || null,
+            },
+          },
           capabilities: {
             voice: n.capabilities?.voice ?? true,
             sms: n.capabilities?.sms ?? true,
@@ -609,7 +658,7 @@ const webhooksUpdateSchema = z.object({
         return res.status(403).json({ error: subCheck.error, requiresSubscription: true });
       }
 
-      const { phoneNumber, friendlyName, messagingServiceSid } = req.body;
+      const { phoneNumber, friendlyName, messagingServiceSid, callerNameLookup = true } = req.body;
       
       if (!phoneNumber) {
         return res.status(400).json({ error: "phoneNumber is required" });
@@ -636,15 +685,16 @@ const webhooksUpdateSchema = z.object({
       await client.incomingPhoneNumbers(result.sid).update({
         voiceUrl: `${baseUrl}/webhook/voice/stream`,
         voiceMethod: 'POST',
-        voiceFallbackUrl: `${baseUrl}/webhook/voice`,
+        voiceFallbackUrl: `${baseUrl}/webhook/error`,
         voiceFallbackMethod: 'POST',
         smsUrl: `${baseUrl}/webhook/sms`,
         smsMethod: 'POST',
-        smsFallbackUrl: `${baseUrl}/webhook/sms`,
+        smsFallbackUrl: `${baseUrl}/webhook/error`,
         smsFallbackMethod: 'POST',
         statusCallback: `${baseUrl}/webhook/voice/status`,
         statusCallbackMethod: 'POST',
-        smsStatusCallback: `${baseUrl}/webhook/sms/status`
+        smsStatusCallback: `${baseUrl}/webhook/sms/status`,
+        voiceCallerIdLookup: Boolean(callerNameLookup),
       });
       
       // Update with friendlyName if provided
@@ -682,7 +732,16 @@ const webhooksUpdateSchema = z.object({
   router.patch("/api/twilio/numbers/:phoneSid", async (req, res) => {
     try {
       const { phoneSid } = req.params;
-      const { voiceUrl, voiceFallbackUrl, smsUrl, smsFallbackUrl, statusCallback, friendlyName } = req.body;
+      const {
+        voiceUrl,
+        voiceFallbackUrl,
+        smsUrl,
+        smsFallbackUrl,
+        statusCallback,
+        smsStatusCallback,
+        friendlyName,
+        callerNameLookup,
+      } = req.body;
       
       // Update webhooks
       await updatePhoneNumberWebhooks(phoneSid, {
@@ -690,7 +749,10 @@ const webhooksUpdateSchema = z.object({
         voiceFallbackUrl: voiceFallbackUrl || undefined,
         smsUrl: smsUrl || undefined,
         smsFallbackUrl: smsFallbackUrl || undefined,
-        statusCallback: statusCallback || undefined
+        statusCallback: statusCallback || undefined,
+        smsStatusCallback: smsStatusCallback || undefined,
+        voiceCallerIdLookup:
+          typeof callerNameLookup === "boolean" ? callerNameLookup : undefined,
       });
       
       // Update friendly name if provided
@@ -714,7 +776,9 @@ const webhooksUpdateSchema = z.object({
         voiceFallbackUrl: updated.voiceFallbackUrl || null,
         smsUrl: updated.smsUrl || null,
         smsFallbackUrl: updated.smsFallbackUrl || null,
-        statusCallback: updated.statusCallback || null
+        statusCallback: updated.statusCallback || null,
+        smsStatusCallback: updated.smsStatusCallback || null,
+        callerNameLookup: Boolean(updated.voiceCallerIdLookup),
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -732,6 +796,74 @@ const webhooksUpdateSchema = z.object({
     }
   });
 
+  // Governance overview for telephony readiness and separation by channel.
+  router.get("/api/telephony/governance/overview", async (req, res) => {
+    try {
+      const accountSid = await getAccountSid();
+      const numbers = await getIncomingPhoneNumbers();
+      const expectedBaseUrl = `https://${process.env.REPLIT_DEV_DOMAIN || req.get('host')}`;
+      const expected = {
+        voiceUrl: `${expectedBaseUrl}/webhook/voice/stream`,
+        voiceFallbackUrl: `${expectedBaseUrl}/webhook/error`,
+        voiceStatusCallback: `${expectedBaseUrl}/webhook/voice/status`,
+        smsUrl: `${expectedBaseUrl}/webhook/sms`,
+        smsFallbackUrl: `${expectedBaseUrl}/webhook/error`,
+        smsStatusCallback: `${expectedBaseUrl}/webhook/sms/status`,
+      };
+
+      const inventory = numbers.map((n) => {
+        const checks = {
+          voiceUrlOk: n.voiceUrl === expected.voiceUrl,
+          voiceFallbackOk: n.voiceFallbackUrl === expected.voiceFallbackUrl,
+          voiceStatusOk: n.statusCallback === expected.voiceStatusCallback,
+          smsUrlOk: n.smsUrl === expected.smsUrl,
+          smsFallbackOk: n.smsFallbackUrl === expected.smsFallbackUrl,
+          smsStatusOk: n.smsStatusCallback === expected.smsStatusCallback,
+          callerLookupEnabled: Boolean(n.voiceCallerIdLookup),
+        };
+        return {
+          sid: n.sid,
+          phoneNumber: n.phoneNumber,
+          friendlyName: n.friendlyName,
+          callerNameLookup: Boolean(n.voiceCallerIdLookup),
+          routing: {
+            voice: {
+              requestUrl: n.voiceUrl || null,
+              fallbackUrl: n.voiceFallbackUrl || null,
+              statusCallback: n.statusCallback || null,
+            },
+            sms: {
+              requestUrl: n.smsUrl || null,
+              fallbackUrl: n.smsFallbackUrl || null,
+              statusCallback: n.smsStatusCallback || null,
+            },
+          },
+          checks,
+          ready:
+            checks.voiceUrlOk &&
+            checks.voiceFallbackOk &&
+            checks.voiceStatusOk &&
+            checks.smsUrlOk &&
+            checks.smsFallbackOk &&
+            checks.smsStatusOk,
+        };
+      });
+
+      res.json({
+        accountSid,
+        expected,
+        totals: {
+          numbers: inventory.length,
+          ready: inventory.filter((n) => n.ready).length,
+          callerLookupEnabled: inventory.filter((n) => n.callerNameLookup).length,
+        },
+        inventory,
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // ===========================================
   // Twilio Account Management API
   // ===========================================
@@ -740,7 +872,8 @@ const webhooksUpdateSchema = z.object({
   router.get("/api/twilio/account", async (req, res) => {
     try {
       const client = await getTwilioClient();
-      const account = await client.api.accounts(process.env.TWILIO_ACCOUNT_SID).fetch();
+      const accountSid = await getAccountSid();
+      const account = await client.api.accounts(accountSid).fetch();
       res.json({
         sid: account.sid,
         friendlyName: account.friendlyName,
@@ -1101,7 +1234,7 @@ const webhooksUpdateSchema = z.object({
       const smsWebhookUrl = `${baseUrl}/webhook/sms`;
       const smsStatusCallbackUrl = `${baseUrl}/webhook/sms/status`;
       const voiceWebhookUrl = `${baseUrl}/webhook/voice/stream`;
-      const voiceFallbackUrl = `${baseUrl}/webhook/voice`;
+      const errorWebhookUrl = `${baseUrl}/webhook/error`;
       const voiceStatusCallbackUrl = `${baseUrl}/webhook/voice/status`;
       
       const results: any = {
@@ -1149,11 +1282,11 @@ const webhooksUpdateSchema = z.object({
           const updated = await client.applications(app.sid).update({
             voiceUrl: voiceWebhookUrl,
             voiceMethod: 'POST',
-            voiceFallbackUrl: voiceFallbackUrl,
+            voiceFallbackUrl: errorWebhookUrl,
             voiceFallbackMethod: 'POST',
             smsUrl: smsWebhookUrl,
             smsMethod: 'POST',
-            smsFallbackUrl: smsWebhookUrl,
+            smsFallbackUrl: errorWebhookUrl,
             smsFallbackMethod: 'POST'
           });
           results.twimlApps.push({
@@ -1181,14 +1314,15 @@ const webhooksUpdateSchema = z.object({
           const updated = await client.incomingPhoneNumbers(num.sid).update({
             voiceUrl: voiceWebhookUrl,
             voiceMethod: 'POST',
-            voiceFallbackUrl: voiceFallbackUrl,
+            voiceFallbackUrl: errorWebhookUrl,
             voiceFallbackMethod: 'POST',
             statusCallback: voiceStatusCallbackUrl,
             statusCallbackMethod: 'POST',
             smsUrl: smsWebhookUrl,
             smsMethod: 'POST',
-            smsFallbackUrl: smsWebhookUrl,
-            smsFallbackMethod: 'POST'
+            smsFallbackUrl: errorWebhookUrl,
+            smsFallbackMethod: 'POST',
+            smsStatusCallback: smsStatusCallbackUrl,
           });
           results.phoneNumbers.push({
             sid: num.sid,
@@ -2564,6 +2698,62 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     }
   });
 
+  async function resolveCustomerProfileByPhone(phone: string | undefined) {
+    if (!phone) return null;
+    const customer = await storage.getCustomerByPhone(phone);
+    if (!customer) return null;
+    return {
+      customerName: customer.name || null,
+      customerEmail: customer.email || null,
+    };
+  }
+
+  function buildTwilioCallerContext(payload: Record<string, unknown>) {
+    const callerName = typeof payload.CallerName === "string" ? payload.CallerName.trim() : "";
+    const city = typeof payload.FromCity === "string" ? payload.FromCity.trim() : "";
+    const state = typeof payload.FromState === "string" ? payload.FromState.trim() : "";
+    const country = typeof payload.FromCountry === "string" ? payload.FromCountry.trim() : "";
+    const zip = typeof payload.FromZip === "string" ? payload.FromZip.trim() : "";
+    const locationParts = [city, state, country].filter(Boolean);
+    const location = locationParts.length ? locationParts.join(", ") : "";
+    const locationWithZip = [location, zip].filter(Boolean).join(" ");
+    return {
+      callerName: callerName || null,
+      callerLocation: locationWithZip || null,
+      note:
+        callerName || locationWithZip
+          ? `[Twilio Caller] name=${callerName || "unknown"} location=${locationWithZip || "unknown"}`
+          : null,
+    };
+  }
+
+  function resolvePublicVoiceStreamUrl(req: any): string {
+    const appUrl = process.env.APP_URL;
+    const appHost = appUrl
+      ? (() => {
+          try {
+            const parsed = new URL(appUrl);
+            return parsed.host;
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+
+    const replitDevHost = process.env.REPLIT_DEV_DOMAIN || null;
+    const replitHost = process.env.REPL_SLUG && process.env.REPL_OWNER
+      ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+      : null;
+    const requestHost = req.get("host") || null;
+    const host = appHost || replitDevHost || replitHost || requestHost;
+
+    if (!host || host.includes("localhost")) {
+      throw new Error("Public voice stream host is not configured. Set APP_URL to your public HTTPS domain.");
+    }
+
+    return `wss://${host}/ws/voice-stream`;
+  }
+
   // Sovereign Voice webhook — Gemini Native Audio via Twilio Media Streams
   router.post("/webhook/voice/stream", validateTwilioSignature, async (req, res) => {
     try {
@@ -2575,6 +2765,8 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       const config = await storage.getTelephonyConfig();
       // Resolve siteConfigId: prefer the link stored on the telephony config, then fall back to config.id
       const siteConfigId: string | null = (config as any)?.siteConfigId ?? null;
+      const customerProfile = await resolveCustomerProfileByPhone(From);
+      const callerContext = buildTwilioCallerContext(req.body || {});
       await storage.createCallLog({
         configId: config?.id || null,
         direction: 'inbound',
@@ -2583,6 +2775,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         callSid: CallSid,
         duration: 0,
         siteConfigId,
+        customerName: customerProfile?.customerName || null,
+        customerEmail: customerProfile?.customerEmail || null,
+        notes: callerContext.note,
       });
       
       // Check firewall
@@ -2603,25 +2798,27 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         }
       }
       
-      // Build WebSocket URL for Media Streams
-      const host = process.env.REPLIT_DEV_DOMAIN || 
-        (process.env.REPL_SLUG ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'localhost:5000');
-      const wsProtocol = host.includes('localhost') ? 'ws' : 'wss';
-      const streamUrl = `${wsProtocol}://${host}/ws/voice-stream`;
+      // Twilio must receive a public WSS endpoint (never localhost).
+      const streamUrl = resolvePublicVoiceStreamUrl(req);
       
       console.log(`[Voice] Stream URL: ${streamUrl}, siteConfigId: ${siteConfigId ?? 'none'}`);
       
       // Build character-first system prompt for this call
-      let voiceSystemPrompt = 'You are a helpful AI assistant for Gateway Global AI.';
+      let brandName = "this business";
+      let voiceSystemPrompt = "You are the phone assistant for this business. On your first response, briefly introduce the business and ask how you can help. Then continue naturally and concisely.";
       let agentName = 'AI Assistant';
       try {
         if (siteConfigId) {
           const siteConfig = await storage.getSiteConfigById(siteConfigId);
+          if (siteConfig?.name) {
+            brandName = siteConfig.name;
+            voiceSystemPrompt = `You are the phone assistant for ${siteConfig.name}. On your first response, briefly introduce ${siteConfig.name} and ask how you can help. Then continue naturally and concisely.`;
+          }
           if (siteConfig?.agentId) {
             const agent = await storage.getAgent(siteConfig.agentId);
             if (agent) {
               agentName = agent.name;
-              voiceSystemPrompt = buildBehavioralPrompt(agent);
+              voiceSystemPrompt = `${buildBehavioralPrompt(agent)}\n\nBrand rule: On your first spoken response, identify as ${brandName}.`;
             }
           }
         }
@@ -2629,19 +2826,22 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         console.warn('[Voice] Character prompt build failed, using default:', e.message);
       }
 
+      // Hard rule for PSTN streaming: do not speak until caller talks first.
+      const runtimeNoAutoGreetingRule =
+        "\n\nRUNTIME RULE: Do not greet first and do not speak on connect. Wait silently for the caller's first utterance, then respond.";
+      const effectiveVoicePrompt = `${voiceSystemPrompt}${runtimeNoAutoGreetingRule}`;
+
       // Return TwiML with Media Streams (voice pipeline uses Gemini Clear Voice)
       res.set('Content-Type', 'text/xml');
       res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Google.en-US-Neural2-F">Connecting you now.</Say>
   <Connect>
     <Stream url="${streamUrl}">
       <Parameter name="agentName" value="${escapeXml(agentName)}"/>
-      <Parameter name="systemPrompt" value="${escapeXml(voiceSystemPrompt)}"/>
+      <Parameter name="systemPrompt" value="${escapeXml(effectiveVoicePrompt)}"/>
       ${siteConfigId ? `<Parameter name="siteConfigId" value="${escapeXml(siteConfigId)}"/>` : ''}
     </Stream>
   </Connect>
-  <Say voice="Google.en-US-Neural2-F">The conversation has ended. Goodbye!</Say>
 </Response>`);
       
     } catch (error: any) {
@@ -2666,6 +2866,8 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       const config = await storage.getTelephonyConfig();
       // Resolve siteConfigId from the telephony config's link (set during number provisioning)
       const siteConfigId: string | null = (config as any)?.siteConfigId ?? null;
+      const customerProfile = await resolveCustomerProfileByPhone(From);
+      const callerContext = buildTwilioCallerContext(req.body || {});
       await storage.createCallLog({
         configId: config?.id || null,
         direction: 'inbound',
@@ -2674,6 +2876,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         callSid: CallSid,
         duration: 0,
         siteConfigId,
+        customerName: customerProfile?.customerName || null,
+        customerEmail: customerProfile?.customerEmail || null,
+        notes: callerContext.note,
       });
 
       // Energy balance guard – if the site has exhausted its prepaid minutes, play the
@@ -2825,10 +3030,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         }
       }
 
-      const host = process.env.REPLIT_DEV_DOMAIN ||
-        (process.env.REPL_SLUG ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : req.get("host") || "localhost:5000");
-      const wsProtocol = host.includes("localhost") ? "ws" : "wss";
-      const streamUrl  = `${wsProtocol}://${host}/ws/voice-stream`;
+      const streamUrl = resolvePublicVoiceStreamUrl(req);
 
       // Bail-specific system prompt injected via custom parameter so voiceStream.ts
       // can use it in the Gemini setup message.
@@ -2877,7 +3079,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   // Voice status callback - tracks call completion
   router.post("/webhook/voice/status", validateTwilioSignature, async (req, res) => {
     try {
-      const { CallSid, CallStatus, CallDuration, To } = req.body;
+      const { CallSid, CallStatus, CallDuration, To, From } = req.body;
       
       console.log(`[Voice Status] CallSid: ${CallSid}, Status: ${CallStatus}, Duration: ${CallDuration}`);
       
@@ -2919,6 +3121,29 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         } catch (usageErr: any) {
           console.error('[Energy] Failed to log voice usage:', usageErr.message);
         }
+      }
+
+      // Update existing call history rows by CallSid with final status + duration
+      // and attach caller profile metadata when available.
+      if (CallSid) {
+        const customerProfile = await resolveCustomerProfileByPhone(From);
+        const callerContext = buildTwilioCallerContext(req.body || {});
+        const phoneNumber = From || To;
+        const updates: Record<string, unknown> = {
+          status:
+            CallStatus === 'completed'
+              ? 'completed'
+              : CallStatus === 'no-answer' || CallStatus === 'busy'
+                ? 'missed'
+                : 'failed',
+          duration: parseInt(CallDuration ?? '0', 10) || 0,
+          customerName: customerProfile?.customerName || null,
+          customerEmail: customerProfile?.customerEmail || null,
+          callEnd: new Date(),
+          ...(callerContext.note ? { notes: callerContext.note } : {}),
+        };
+        if (phoneNumber) updates.phoneNumber = phoneNumber;
+        await storage.updateCallLogBySid(CallSid, updates as any);
       }
       
       res.sendStatus(200);
@@ -2993,6 +3218,57 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     } catch (error: any) {
       console.error('[SMS Status] Error:', error);
       res.sendStatus(500);
+    }
+  });
+
+  // Dedicated Twilio fallback error webhook for voice+sms webhook failures.
+  router.post("/webhook/error", validateTwilioSignature, async (req, res) => {
+    try {
+      const {
+        CallSid,
+        CallStatus,
+        MessageSid,
+        MessageStatus,
+        From,
+        To,
+        ErrorCode,
+        ErrorMessage,
+      } = req.body ?? {};
+
+      console.error(
+        `[Twilio Error Webhook] CallSid=${CallSid ?? "n/a"} MessageSid=${MessageSid ?? "n/a"} ` +
+          `CallStatus=${CallStatus ?? "n/a"} MessageStatus=${MessageStatus ?? "n/a"} ` +
+          `From=${From ?? "n/a"} To=${To ?? "n/a"} ErrorCode=${ErrorCode ?? "n/a"} ` +
+          `ErrorMessage=${ErrorMessage ?? "n/a"}`
+      );
+
+      // Persist SMS delivery failures with explicit error metadata.
+      if (MessageSid) {
+        const existing = await storage.getSmsDeliveryStatus(MessageSid);
+        const payload = {
+          status: MessageStatus || "failed",
+          errorCode: ErrorCode || null,
+          errorMessage: ErrorMessage || "Twilio fallback error webhook invoked",
+          fromNumber: From || null,
+          toNumber: To || null,
+        };
+        if (existing) {
+          await storage.updateSmsDeliveryStatus(MessageSid, payload);
+        } else {
+          await storage.createSmsDeliveryStatus({
+            messageSid: MessageSid,
+            ...payload,
+          });
+        }
+      }
+
+      // Return generic TwiML so Twilio closes fallback cleanly.
+      res.set("Content-Type", "text/xml");
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response/>`);
+    } catch (error: any) {
+      console.error("[Twilio Error Webhook] Handler error:", error?.message || error);
+      res.set("Content-Type", "text/xml");
+      res.send(`<?xml version="1.0" encoding="UTF-8"?><Response/>`);
     }
   });
 

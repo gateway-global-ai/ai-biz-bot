@@ -1,4 +1,21 @@
 export const TOOL_DECLARATIONS = {
+  manage_pricing_plans: {
+    name: "manage_pricing_plans",
+    description: "Displays an interactive interface for the business owner to view, add, or edit their service plans and pricing. Use this when the user wants to manage their business offerings, prices, or packages.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        action: {
+          type: "STRING",
+          enum: ["view", "edit"],
+          description: "Whether to start in view or edit mode.",
+          default: "view"
+        }
+      },
+      required: []
+    }
+  },
+
   search_local_business: {
     name: "search_local_business",
     description: "Searches for local businesses or places based on user criteria. Use this tool whenever a user asks to see locations, find a business, or view a map.",
@@ -30,7 +47,7 @@ export const TOOL_DECLARATIONS = {
       properties: {
         field_type: {
           type: "STRING",
-          enum: ["address", "business_name", "email", "phone"],
+          enum: ["address", "business_name", "email", "phone", "otp"],
           description: "The specific type of information the user needs to correct."
         },
         label: {
@@ -236,6 +253,40 @@ export const TOOL_DECLARATIONS = {
         }
       },
       required: ["place_id"]
+    }
+  },
+
+  get_booking_and_pricing_info: {
+    name: "get_booking_and_pricing_info",
+    description: "Returns the business website URL for current pricing and to book an appointment. Call this when the user asks for service prices, menu prices, or appointment booking and you do not have specific prices in your knowledge. The server will return the website URL; then direct the customer there clearly.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        siteConfigId: {
+          type: "STRING",
+          description: "The site/business UUID (injected by server if omitted)."
+        }
+      },
+      required: []
+    }
+  },
+
+  query_knowledge_library: {
+    name: "query_knowledge_library",
+    description: "Searches the business's knowledge library for information relevant to the user's question. Call this when the user asks something that might be answered by uploaded documents, FAQs, policies, or other indexed content. Use the returned snippets to answer accurately.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        question: {
+          type: "STRING",
+          description: "The user's question or search query to find relevant knowledge."
+        },
+        siteConfigId: {
+          type: "STRING",
+          description: "The site/business UUID (injected by server if omitted)."
+        }
+      },
+      required: ["question"]
     }
   },
 
@@ -534,6 +585,58 @@ export const TOOL_DECLARATIONS = {
         }
       },
       required: ["data_id", "business_name", "site_config_id"]
+    }
+  },
+
+  show_canvas: {
+    name: "show_canvas",
+    description: "Display rich structured content in the shared canvas window so the user can read it while you speak. Use proactively whenever presenting multi-item information: service menus, appointment schedules, pricing tables, FAQ lists, intake checklists, or business summaries. The canvas stays visible until the user dismisses it.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        canvas_type: {
+          type: "STRING",
+          enum: ["service_menu", "schedule", "pricing_table", "faq_list", "intake_checklist", "business_summary", "custom_card"],
+          description: "The type of content layout to render."
+        },
+        title: {
+          type: "STRING",
+          description: "Heading shown at the top of the canvas card."
+        },
+        subtitle: {
+          type: "STRING",
+          description: "Optional secondary line under the title."
+        },
+        items: {
+          type: "ARRAY",
+          items: {
+            type: "OBJECT",
+            properties: {
+              label: { type: "STRING", description: "Item name or question" },
+              value: { type: "STRING", description: "Item value, answer, or time slot" },
+              description: { type: "STRING", description: "Supporting detail" },
+              price: { type: "STRING", description: "Price string e.g. '$49/mo'" },
+              duration: { type: "STRING", description: "Duration e.g. '30 min'" }
+            }
+          },
+          description: "Array of items to display. Each item has label, value, description, price, duration (all optional except label)."
+        },
+        cta_label: {
+          type: "STRING",
+          description: "Optional call-to-action button text shown at the bottom."
+        },
+        cta_action: {
+          type: "STRING",
+          enum: ["book", "call", "form", "link"],
+          description: "What happens when the CTA is tapped."
+        },
+        accent_color: {
+          type: "STRING",
+          enum: ["indigo", "emerald", "amber", "rose"],
+          description: "Color accent for the card. Defaults to indigo."
+        }
+      },
+      required: ["canvas_type", "title", "items"]
     }
   }
 };

@@ -22,7 +22,7 @@ flowchart TD
         A2[Customer Phone Camera] -->|"Scans QR Code"| B2["Mobile Browser /biz/:slug"]
         B2 -->|Bypasses Telecom| C2[Direct WebSocket Connection]
         C2 -->|"16kHz Lossless Audio"| D2[Your Node.js Server / Router]
-        D2 -->|"Sub-150ms Stream"| E2[Gemini Voice AI Swarm]
+        D2 -->|"Sub-150ms Stream"| E2[Gemini Voice AI]
     end
 `.trim();
 

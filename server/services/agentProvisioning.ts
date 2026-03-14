@@ -133,6 +133,7 @@ export async function provisionAgentsForBusiness(
       const agent = await storage.createAgent({
         siteConfigId,
         name: template.defaultName,
+        roleType: template.roleType,
         voiceId: template.voiceId || 'Kore',
         voiceName: template.voiceName || 'Kore - Calm & Professional',
         status: 'active',
@@ -196,7 +197,7 @@ export async function provisionAgentsForBusiness(
     try {
       const conciergeIdx = archetypesProvisioned.indexOf('concierge');
       const primaryAgentId = conciergeIdx >= 0 ? agentIds[conciergeIdx] : agentIds[0];
-      await storage.updateSiteConfig(siteConfigId, { assignedAgentId: primaryAgentId });
+      await storage.updateSiteConfig(siteConfigId, { assignedAgentId: primaryAgentId } as any);
       console.log(`[Provisioning] Assigned primary agent (concierge) to siteConfigId=${siteConfigId}`);
     } catch (err: any) {
       console.warn('[Provisioning] Failed to assign primary agent:', err.message);

@@ -121,6 +121,11 @@ import {
   orderItems,
   smsLogs,
   smsOptOuts,
+  knowledgeArtifacts,
+  artifactSessionActivations,
+  type KnowledgeArtifact,
+  type ArtifactSessionActivation,
+  type InsertKnowledgeArtifact,
   qrRoutes,
   qrFirewall,
   qrAccess,
@@ -130,10 +135,26 @@ import {
   type InsertQrFirewallRule,
   type QrAccessLog,
   type InsertQrAccessLog,
+  slugLandings,
+  type InsertSlugLanding,
+  conversationEvents,
+  type InsertConversationEvent,
 } from "@shared/schema";
 import type { Reseller } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, ilike, or, lte, isNull, isNotNull, and, gt, inArray, sql } from "drizzle-orm";
+import {
+  redactSensitiveMetadata,
+  redactSensitiveText,
+} from "./services/sensitiveInputGuard";
+import {
+  type FrontDeskSession,
+  frontDeskAssistModeSchema,
+  frontDeskEntrySourceSchema,
+  frontDeskOutcomeTypeSchema,
+  frontDeskVerificationStateSchema,
+  frontDeskWorkflowStateSchema,
+} from "./contracts/frontDeskSessionContract";
 
 // Placeholder for a future validation service (UPA).
 const UPAValidator = {
@@ -188,6 +209,7 @@ export interface IStorage {
   
   getCallLogs(configId?: string, limit?: number): Promise<CallLog[]>;
   createCallLog(log: InsertCallLog): Promise<CallLog>;
+  updateCallLogBySid(callSid: string, updates: Partial<InsertCallLog>): Promise<number>;
   
   // Agent operations
   getAgents(): Promise<Agent[]>;
@@ -294,10 +316,22 @@ export interface IStorage {
   createSiteConfig(config: InsertSiteConfig): Promise<SiteConfig>;
   updateSiteConfig(id: string, updates: Partial<InsertSiteConfig>): Promise<SiteConfig | undefined>;
   deleteSiteConfig(id: string): Promise<boolean>;
+  /** Search a site's knowledge library by query; returns ranked docs with snippets (category, topic, documentDate indexed). */
+  searchKnowledgeLibrary(siteConfigId: string, query: string, limit?: number): Promise<{ title: string; contentSnippet: string; category?: string; topic?: string; documentDate?: string }[]>;
   
   // Chat Log operations
   getChatLogs(siteConfigId: string, limit?: number): Promise<ChatLog[]>;
   createChatLog(log: InsertChatLog): Promise<ChatLog>;
+
+  // Knowledge Artifacts (RBAC + session activation)
+  listKnowledgeArtifactsForContext(options: { siteConfigId?: string; ownerId?: string; visibility?: "public" | "private" }): Promise<KnowledgeArtifact[]>;
+  getKnowledgeArtifactByKey(agentAccessKey: string): Promise<KnowledgeArtifact | undefined>;
+  getKnowledgeArtifactById(id: string): Promise<KnowledgeArtifact | undefined>;
+  createKnowledgeArtifact(data: InsertKnowledgeArtifact): Promise<KnowledgeArtifact>;
+  deleteKnowledgeArtifact(id: string): Promise<void>;
+  activateArtifactForSession(sessionId: string, agentAccessKey: string, siteConfigId?: string): Promise<void>;
+  deactivateArtifactForSession(sessionId: string, agentAccessKey: string): Promise<void>;
+  getActiveArtifactKeysForSession(sessionId: string): Promise<string[]>;
 
   // Customer Account operations
   getCustomerAccountByPhone(phone: string): Promise<CustomerAccount | undefined>;
@@ -353,8 +387,8 @@ export interface IStorage {
   createVoiceUsageLog(log: InsertVoiceUsageLog): Promise<VoiceUsageLog>;
   getVoiceUsageLogs(siteConfigId: string, limit?: number): Promise<VoiceUsageLog[]>;
 
-  // QR Routes (shadow telecom)
-  getQrRoutes(page?: number, limit?: number, search?: string): Promise<{ routes: QrRoute[]; total: number }>;
+  // QR Routes (shadow telecom); optional siteConfigId filters to routes for that site
+  getQrRoutes(page?: number, limit?: number, search?: string, siteConfigId?: string | null): Promise<{ routes: QrRoute[]; total: number }>;
   getQrRoute(id: number): Promise<QrRoute | undefined>;
   createQrRoute(data: Partial<InsertQrRoute>): Promise<QrRoute>;
   updateQrRoute(id: number, updates: Partial<InsertQrRoute>): Promise<QrRoute | undefined>;
@@ -365,9 +399,54 @@ export interface IStorage {
   getQrAccessLog(routeId: number, page?: number, limit?: number): Promise<{ logs: QrAccessLog[]; total: number }>;
   logQrAccess(data: InsertQrAccessLog): Promise<QrAccessLog>;
   incrementQrScanCount(id: number): Promise<void>;
+  getQrScanStatsBySite(siteConfigId: string): Promise<{ totalScans: number; byRoute: { routeId: number; label: string | null; scans: number }[]; last7Days: number; last30Days: number }>;
+  recordSlugLanding(siteConfigId: string, source: string): Promise<void>;
+  logConversationEvent(data: { siteConfigId: string; callSid?: string | null; sessionId?: string | null; eventType: string; metadata?: Record<string, unknown> }): Promise<void>;
+  getSessionEventSiteConfigId(sessionId: string): Promise<string | null>;
+  getFrontDeskSessions(
+    siteConfigId: string,
+    opts?: { includeResolved?: boolean; limit?: number }
+  ): Promise<{
+    sessions: FrontDeskSession[];
+    updatedAt: string;
+    projectionVersion: number;
+  }>;
+  getConversationEvents(siteConfigId: string, opts?: { page?: number; limit?: number; from?: Date; to?: Date; eventType?: string }): Promise<{ events: { id: number; siteConfigId: string; callSid: string | null; sessionId: string | null; eventType: string; occurredAt: Date; metadata: Record<string, unknown> | null }[]; total: number }>;
+  getConversationEventsSummary(siteConfigId: string, opts?: { from?: Date; to?: Date }): Promise<{ byEventType: { eventType: string; count: number }[] }>;
+  getOutcomeSummary(siteConfigId: string, opts?: { from?: Date; to?: Date }): Promise<{
+    totalResolved: number;
+    bookings: number;
+    leads: number;
+    tasks: number;
+    escalations: number;
+    resolvedNoAction: number;
+    operatorJoinedCount: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
+  private extractTranscriptSnippet(metadata: Record<string, unknown>): string | null {
+    const candidates = [
+      metadata.transcriptPreview,
+      metadata.summary,
+      metadata.message,
+      metadata.content,
+      metadata.lastUtterance,
+    ];
+    for (const candidate of candidates) {
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim().replace(/\s+/g, " ");
+      }
+    }
+    return null;
+  }
+
+  private formatTranscriptPreview(snippets: string[]): string | undefined {
+    if (!snippets.length) return undefined;
+    const merged = snippets.slice(-2).join(" | ");
+    return merged.length > 140 ? `${merged.slice(0, 137)}...` : merged;
+  }
+
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
@@ -421,6 +500,15 @@ export class DatabaseStorage implements IStorage {
   async createCallLog(log: InsertCallLog): Promise<CallLog> {
     const [created] = await db.insert(callLogs).values(log).returning();
     return created;
+  }
+
+  async updateCallLogBySid(callSid: string, updates: Partial<InsertCallLog>): Promise<number> {
+    if (!callSid) return 0;
+    const result = await db
+      .update(callLogs)
+      .set(updates)
+      .where(eq(callLogs.callSid, callSid));
+    return result.rowCount ?? 0;
   }
 
   async getCallLog(id: string): Promise<CallLog | undefined> {
@@ -1171,6 +1259,64 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async searchKnowledgeLibrary(
+    siteConfigId: string,
+    query: string,
+    limit = 5
+  ): Promise<{ title: string; contentSnippet: string; category?: string; topic?: string; documentDate?: string }[]> {
+    const site = await this.getSiteConfigById(siteConfigId);
+    if (!site) return [];
+    const lib = (site as any).knowledgeLibrary;
+    const docs = Array.isArray(lib) ? lib as Array<{ id?: string; title?: string; content?: string; category?: string; topic?: string; documentDate?: string }> : [];
+    if (docs.length === 0 || !query?.trim()) return [];
+    const words = query
+      .toLowerCase()
+      .replace(/[^\w\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 1);
+    if (words.length === 0) return docs.slice(0, limit).map((d) => ({
+      title: d.title ?? "Untitled",
+      contentSnippet: (d.content ?? "").slice(0, 400),
+      category: d.category,
+      topic: d.topic,
+      documentDate: d.documentDate,
+    }));
+    const scored = docs.map((d) => {
+      const title = (d.title ?? "").toLowerCase();
+      const content = (d.content ?? "").toLowerCase();
+      const category = (d.category ?? "").toLowerCase();
+      const topic = (d.topic ?? "").toLowerCase();
+      let score = 0;
+      for (const w of words) {
+        if (title.includes(w)) score += 3;
+        if (content.includes(w)) score += 2;
+        if (category.includes(w) || topic.includes(w)) score += 2;
+      }
+      return { doc: d, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored.filter((s) => s.score > 0).slice(0, limit);
+    if (top.length === 0) return docs.slice(0, limit).map((d) => ({
+      title: d.title ?? "Untitled",
+      contentSnippet: (d.content ?? "").slice(0, 400),
+      category: d.category,
+      topic: d.topic,
+      documentDate: d.documentDate,
+    }));
+    const SNIPPET_LEN = 400;
+    return top.map(({ doc }) => {
+      const content = doc.content ?? "";
+      const snippet = content.length <= SNIPPET_LEN ? content : content.slice(0, SNIPPET_LEN) + "…";
+      return {
+        title: doc.title ?? "Untitled",
+        contentSnippet: snippet,
+        category: doc.category,
+        topic: doc.topic,
+        documentDate: doc.documentDate,
+      };
+    });
+  }
+
   async deleteSiteConfig(id: string): Promise<boolean> {
     // Pre-delete child rows that lack ON DELETE CASCADE to avoid FK violations.
     // 1. orderItems → orders (orders.siteConfigId has no cascade)
@@ -1249,8 +1395,71 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createChatLog(log: InsertChatLog): Promise<ChatLog> {
-    const [created] = await db.insert(chatLogs).values(log).returning();
+    const [created] = await db
+      .insert(chatLogs)
+      .values({
+        ...log,
+        content: redactSensitiveText(String(log.content ?? "")),
+      })
+      .returning();
     return created;
+  }
+
+  async listKnowledgeArtifactsForContext(options: { siteConfigId?: string; ownerId?: string; visibility?: "public" | "private" }): Promise<KnowledgeArtifact[]> {
+    const conditions = [];
+    if (options.siteConfigId) conditions.push(eq(knowledgeArtifacts.siteConfigId, options.siteConfigId));
+    if (options.ownerId) conditions.push(eq(knowledgeArtifacts.ownerId, options.ownerId));
+    if (options.visibility) conditions.push(eq(knowledgeArtifacts.visibility, options.visibility));
+    if (conditions.length === 0) {
+      return db.select().from(knowledgeArtifacts).orderBy(asc(knowledgeArtifacts.title));
+    }
+    return db.select().from(knowledgeArtifacts).where(and(...conditions)).orderBy(asc(knowledgeArtifacts.title));
+  }
+
+  async getKnowledgeArtifactByKey(agentAccessKey: string): Promise<KnowledgeArtifact | undefined> {
+    const [row] = await db.select().from(knowledgeArtifacts).where(eq(knowledgeArtifacts.agentAccessKey, agentAccessKey));
+    return row;
+  }
+
+  async getKnowledgeArtifactById(id: string): Promise<KnowledgeArtifact | undefined> {
+    const [row] = await db.select().from(knowledgeArtifacts).where(eq(knowledgeArtifacts.id, id));
+    return row;
+  }
+
+  async createKnowledgeArtifact(data: InsertKnowledgeArtifact): Promise<KnowledgeArtifact> {
+    const [row] = await db.insert(knowledgeArtifacts).values(data).returning();
+    return row;
+  }
+
+  async deleteKnowledgeArtifact(id: string): Promise<void> {
+    await db.delete(knowledgeArtifacts).where(eq(knowledgeArtifacts.id, id));
+  }
+
+  async activateArtifactForSession(sessionId: string, agentAccessKey: string, siteConfigId?: string): Promise<void> {
+    await db.insert(artifactSessionActivations).values({
+      sessionId,
+      agentAccessKey,
+      siteConfigId: siteConfigId ?? null,
+    }).onConflictDoUpdate({
+      target: [artifactSessionActivations.sessionId, artifactSessionActivations.agentAccessKey],
+      set: { activatedAt: new Date(), siteConfigId: siteConfigId ?? undefined },
+    });
+  }
+
+  async deactivateArtifactForSession(sessionId: string, agentAccessKey: string): Promise<void> {
+    await db.delete(artifactSessionActivations).where(
+      and(
+        eq(artifactSessionActivations.sessionId, sessionId),
+        eq(artifactSessionActivations.agentAccessKey, agentAccessKey)
+      )
+    );
+  }
+
+  async getActiveArtifactKeysForSession(sessionId: string): Promise<string[]> {
+    const rows = await db.select({ agentAccessKey: artifactSessionActivations.agentAccessKey })
+      .from(artifactSessionActivations)
+      .where(eq(artifactSessionActivations.sessionId, sessionId));
+    return rows.map((r) => r.agentAccessKey);
   }
 
   async getCustomerAccountByPhone(phone: string): Promise<CustomerAccount | undefined> {
@@ -1596,11 +1805,11 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
-  // QR Routes (shadow telecom); optional search filters by label, destination, variable (URL/id)
-  async getQrRoutes(page = 1, limit = 50, search?: string): Promise<{ routes: QrRoute[]; total: number }> {
+  // QR Routes (shadow telecom); optional search filters by label, destination, variable (URL/id); siteConfigId filters to that site
+  async getQrRoutes(page = 1, limit = 50, search?: string, siteConfigId?: string | null): Promise<{ routes: QrRoute[]; total: number }> {
     const offset = (page - 1) * limit;
     const pattern = search?.trim() ? `%${search.trim().replace(/%/g, "\\%")}%` : null;
-    const conditions = pattern
+    const searchCond = pattern
       ? or(
           ilike(qrRoutes.label, pattern),
           ilike(qrRoutes.destination, pattern),
@@ -1608,6 +1817,13 @@ export class DatabaseStorage implements IStorage {
           sql`${qrRoutes.id}::text = ${search.trim()}`
         )
       : undefined;
+    const siteCond = siteConfigId ? eq(qrRoutes.siteConfigId, siteConfigId) : undefined;
+    const conditions =
+      searchCond && siteCond
+        ? and(searchCond, siteCond)
+        : searchCond
+          ? searchCond
+          : siteCond ?? undefined;
     const countQuery = conditions
       ? db.select({ count: sql<number>`count(*)::int` }).from(qrRoutes).where(conditions)
       : db.select({ count: sql<number>`count(*)::int` }).from(qrRoutes);
@@ -1686,6 +1902,322 @@ export class DatabaseStorage implements IStorage {
       .update(qrRoutes)
       .set({ scanCount: sql`${qrRoutes.scanCount} + 1`, updatedAt: new Date() })
       .where(eq(qrRoutes.id, id));
+  }
+
+  async getQrScanStatsBySite(siteConfigId: string): Promise<{ totalScans: number; byRoute: { routeId: number; label: string | null; scans: number }[]; last7Days: number; last30Days: number }> {
+    const routes = await db.select({ id: qrRoutes.id, label: qrRoutes.label }).from(qrRoutes).where(eq(qrRoutes.siteConfigId, siteConfigId));
+    const byRoute: { routeId: number; label: string | null; scans: number }[] = [];
+    let totalScans = 0;
+    let last7Days = 0;
+    let last30Days = 0;
+    for (const r of routes) {
+      const [tot] = await db.select({ c: sql<number>`count(*)::int` }).from(qrAccess).where(eq(qrAccess.qrRouteId, r.id));
+      const [d7] = await db.select({ c: sql<number>`count(*)::int` }).from(qrAccess).where(and(eq(qrAccess.qrRouteId, r.id), sql`${qrAccess.accessedAt} >= now() - interval '7 days'`));
+      const [d30] = await db.select({ c: sql<number>`count(*)::int` }).from(qrAccess).where(and(eq(qrAccess.qrRouteId, r.id), sql`${qrAccess.accessedAt} >= now() - interval '30 days'`));
+      const scans = tot?.c ?? 0;
+      totalScans += scans;
+      last7Days += d7?.c ?? 0;
+      last30Days += d30?.c ?? 0;
+      byRoute.push({ routeId: r.id, label: r.label, scans });
+    }
+    return { totalScans, byRoute, last7Days, last30Days };
+  }
+
+  async recordSlugLanding(siteConfigId: string, source: string): Promise<void> {
+    await db.insert(slugLandings).values({ siteConfigId, source });
+  }
+
+  async logConversationEvent(data: { siteConfigId: string; callSid?: string | null; sessionId?: string | null; eventType: string; metadata?: Record<string, unknown> }): Promise<void> {
+    await db.insert(conversationEvents).values({
+      siteConfigId: data.siteConfigId,
+      callSid: data.callSid ?? null,
+      sessionId: data.sessionId ?? null,
+      eventType: data.eventType,
+      metadata: redactSensitiveMetadata(data.metadata) as Record<string, unknown>,
+    });
+  }
+
+  async getSessionEventSiteConfigId(sessionId: string): Promise<string | null> {
+    const [row] = await db
+      .select({ siteConfigId: conversationEvents.siteConfigId })
+      .from(conversationEvents)
+      .where(eq(conversationEvents.sessionId, sessionId))
+      .orderBy(desc(conversationEvents.occurredAt))
+      .limit(1);
+    return row?.siteConfigId ?? null;
+  }
+
+  async getFrontDeskSessions(
+    siteConfigId: string,
+    opts?: { includeResolved?: boolean; limit?: number }
+  ): Promise<{
+    sessions: FrontDeskSession[];
+    updatedAt: string;
+    projectionVersion: number;
+  }> {
+    const includeResolved = opts?.includeResolved ?? true;
+    const limit = Math.min(Math.max(opts?.limit ?? 300, 1), 1000);
+
+    const [meta] = await db
+      .select({
+        projectionVersion: sql<number>`coalesce(max(${conversationEvents.id}), 0)::int`,
+        latestOccurredAt: sql<Date | null>`max(${conversationEvents.occurredAt})`,
+      })
+      .from(conversationEvents)
+      .where(
+        and(
+          eq(conversationEvents.siteConfigId, siteConfigId),
+          isNotNull(conversationEvents.sessionId)
+        )
+      );
+
+    const rowsDesc = await db
+      .select({
+        sessionId: conversationEvents.sessionId,
+        eventType: conversationEvents.eventType,
+        occurredAt: conversationEvents.occurredAt,
+        metadata: conversationEvents.metadata,
+      })
+      .from(conversationEvents)
+      .where(
+        and(
+          eq(conversationEvents.siteConfigId, siteConfigId),
+          isNotNull(conversationEvents.sessionId)
+        )
+      )
+      .orderBy(desc(conversationEvents.occurredAt))
+      .limit(limit);
+    const rows = [...rowsDesc].reverse();
+
+    const bySession = new Map<string, FrontDeskSession>();
+    const transcriptBySession = new Map<string, string[]>();
+
+    for (const row of rows) {
+      const sessionId = row.sessionId?.trim();
+      if (!sessionId) continue;
+      const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+      const occurredAtIso = new Date(row.occurredAt).toISOString();
+      const existing = bySession.get(sessionId);
+      const snippet = this.extractTranscriptSnippet(metadata);
+      if (snippet) {
+        const snippets = transcriptBySession.get(sessionId) ?? [];
+        snippets.push(snippet);
+        transcriptBySession.set(sessionId, snippets.slice(-2));
+      }
+
+      const next: FrontDeskSession = existing ?? {
+        sessionId,
+        siteConfigId,
+        entrySource: "web_chat",
+        verificationState: "unknown",
+        workflowState: "NEW",
+        escalationState: "none",
+        operatorJoined: false,
+        assistMode: "none",
+        lastActivityAt: occurredAtIso,
+        workflowFlags: {},
+      };
+
+      const entrySource = frontDeskEntrySourceSchema.safeParse(metadata.entrySource);
+      if (entrySource.success) next.entrySource = entrySource.data;
+
+      const verificationState = frontDeskVerificationStateSchema.safeParse(metadata.verificationState);
+      if (verificationState.success) {
+        next.verificationState = verificationState.data;
+      } else if (typeof metadata.customerVerified === "boolean") {
+        next.verificationState = metadata.customerVerified ? "verified" : "unverified";
+      }
+
+      const workflowState = frontDeskWorkflowStateSchema.safeParse(metadata.workflowState);
+      if (workflowState.success) next.workflowState = workflowState.data;
+
+      const assistMode = frontDeskAssistModeSchema.safeParse(metadata.assistMode);
+      if (assistMode.success) next.assistMode = assistMode.data;
+
+      if (typeof metadata.escalationState === "string" && metadata.escalationState.trim()) {
+        next.escalationState = metadata.escalationState;
+      }
+
+      if (row.eventType === "frontdesk.assist_joined") {
+        next.operatorJoined = true;
+        if (next.assistMode === "none") next.assistMode = "observe";
+        if (next.workflowState !== "RESOLVED") next.workflowState = "OPERATOR_JOINED";
+      } else if (row.eventType === "frontdesk.assist_ended") {
+        next.operatorJoined = false;
+        next.assistMode = "none";
+        if (next.workflowState !== "RESOLVED") next.workflowState = "AI_ACTIVE";
+      } else if (row.eventType === "frontdesk.outcome_captured") {
+        const outcome = frontDeskOutcomeTypeSchema.safeParse(metadata.outcomeType);
+        next.outcomeType = outcome.success ? outcome.data : "resolved_no_action";
+        next.workflowState = "RESOLVED";
+        next.resolvedAt =
+          typeof metadata.resolvedAt === "string" && metadata.resolvedAt
+            ? metadata.resolvedAt
+            : occurredAtIso;
+        if (typeof metadata.resolvedBy === "string" && metadata.resolvedBy) {
+          next.resolvedBy = metadata.resolvedBy;
+        }
+      } else if (row.eventType === "intake.secure_status_updated") {
+        const flags = next.workflowFlags ?? {};
+        const flagKeys = [
+          "identityVerified",
+          "insuranceCaptured",
+          "attorneyCaptured",
+          "consentSigned",
+          "secureInputCompleted",
+        ] as const;
+        for (const flagKey of flagKeys) {
+          if (typeof metadata[flagKey] === "boolean") {
+            (flags as Record<string, boolean>)[flagKey] = metadata[flagKey] as boolean;
+          }
+        }
+        next.workflowFlags = flags;
+      } else if (row.eventType === "intake.module_status") {
+        const flags = next.workflowFlags ?? {};
+        const statusKey = typeof metadata.statusKey === "string" ? metadata.statusKey : undefined;
+        const statusValue = typeof metadata.statusValue === "boolean" ? metadata.statusValue : undefined;
+        if (statusKey && statusValue !== undefined) {
+          (flags as Record<string, boolean>)[statusKey] = statusValue;
+          next.workflowFlags = flags;
+        }
+      } else if (row.eventType.startsWith("verification.")) {
+        const stateFromType = row.eventType.replace("verification.", "");
+        const state =
+          frontDeskVerificationStateSchema.safeParse(metadata.verificationState).success
+            ? (metadata.verificationState as string)
+            : stateFromType;
+        if (
+          state === "required" ||
+          state === "otp_sent" ||
+          state === "verified" ||
+          state === "failed" ||
+          state === "bypass_allowed"
+        ) {
+          next.verificationState = state;
+          const flags = next.workflowFlags ?? {};
+          flags.verificationRequired = state === "required";
+          flags.otpSent = state === "otp_sent";
+          flags.verificationVerified = state === "verified";
+          flags.verificationFailed = state === "failed";
+          flags.verificationBypassAllowed = state === "bypass_allowed";
+          flags.identityVerified = state === "verified";
+          if (typeof metadata.idDocumentVerified === "boolean") {
+            flags.idDocumentVerified = metadata.idDocumentVerified;
+          }
+          if (typeof metadata.selfiePhotoMatchVerified === "boolean") {
+            flags.selfiePhotoMatchVerified = metadata.selfiePhotoMatchVerified;
+          }
+          if (typeof metadata.insuranceCardVerified === "boolean") {
+            flags.insuranceCardVerified = metadata.insuranceCardVerified;
+          }
+          next.workflowFlags = flags;
+        }
+      }
+
+      next.lastActivityAt = occurredAtIso;
+      next.transcriptPreview = this.formatTranscriptPreview(
+        transcriptBySession.get(sessionId) ?? []
+      );
+      bySession.set(sessionId, next);
+    }
+
+    const sessions = Array.from(bySession.values())
+      .filter((session) => includeResolved || session.workflowState !== "RESOLVED")
+      .sort((a, b) => {
+        const aResolved = a.workflowState === "RESOLVED";
+        const bResolved = b.workflowState === "RESOLVED";
+        if (aResolved !== bResolved) return aResolved ? 1 : -1;
+        return new Date(b.lastActivityAt).getTime() - new Date(a.lastActivityAt).getTime();
+      });
+
+    return {
+      sessions,
+      updatedAt: meta?.latestOccurredAt
+        ? new Date(meta.latestOccurredAt).toISOString()
+        : new Date().toISOString(),
+      projectionVersion: meta?.projectionVersion ?? 0,
+    };
+  }
+
+  async getConversationEvents(siteConfigId: string, opts?: { page?: number; limit?: number; from?: Date; to?: Date; eventType?: string }): Promise<{ events: { id: number; siteConfigId: string; callSid: string | null; sessionId: string | null; eventType: string; occurredAt: Date; metadata: Record<string, unknown> | null }[]; total: number }> {
+    const page = opts?.page ?? 1;
+    const limit = Math.min(opts?.limit ?? 50, 100);
+    const offset = (page - 1) * limit;
+    const conditions = [eq(conversationEvents.siteConfigId, siteConfigId)];
+    if (opts?.from) conditions.push(sql`${conversationEvents.occurredAt} >= ${opts.from}`);
+    if (opts?.to) conditions.push(sql`${conversationEvents.occurredAt} <= ${opts.to}`);
+    if (opts?.eventType) conditions.push(eq(conversationEvents.eventType, opts.eventType));
+    const whereClause = conditions.length > 1 ? and(...conditions) : conditions[0];
+    const [countRow] = await db.select({ count: sql<number>`count(*)::int` }).from(conversationEvents).where(whereClause);
+    const total = countRow?.count ?? 0;
+    const events = await db.select().from(conversationEvents).where(whereClause).orderBy(desc(conversationEvents.occurredAt)).limit(limit).offset(offset);
+    return { events: events as { id: number; siteConfigId: string; callSid: string | null; sessionId: string | null; eventType: string; occurredAt: Date; metadata: Record<string, unknown> | null }[], total };
+  }
+
+  async getConversationEventsSummary(siteConfigId: string, opts?: { from?: Date; to?: Date }): Promise<{ byEventType: { eventType: string; count: number }[] }> {
+    const conditions = [eq(conversationEvents.siteConfigId, siteConfigId)];
+    if (opts?.from) conditions.push(sql`${conversationEvents.occurredAt} >= ${opts.from}`);
+    if (opts?.to) conditions.push(sql`${conversationEvents.occurredAt} <= ${opts.to}`);
+    const whereClause = conditions.length > 1 ? and(...conditions) : conditions[0];
+    const rows = await db
+      .select({ eventType: conversationEvents.eventType, count: sql<number>`count(*)::int` })
+      .from(conversationEvents)
+      .where(whereClause)
+      .groupBy(conversationEvents.eventType);
+    return { byEventType: rows.map((r) => ({ eventType: r.eventType, count: r.count })) };
+  }
+
+  async getOutcomeSummary(
+    siteConfigId: string,
+    opts?: { from?: Date; to?: Date }
+  ): Promise<{
+    totalResolved: number;
+    bookings: number;
+    leads: number;
+    tasks: number;
+    escalations: number;
+    resolvedNoAction: number;
+    operatorJoinedCount: number;
+  }> {
+    const conditions = [eq(conversationEvents.siteConfigId, siteConfigId)];
+    if (opts?.from) conditions.push(sql`${conversationEvents.occurredAt} >= ${opts.from}`);
+    if (opts?.to) conditions.push(sql`${conversationEvents.occurredAt} <= ${opts.to}`);
+    const whereClause = conditions.length > 1 ? and(...conditions) : conditions[0];
+
+    const rows = await db
+      .select({
+        eventType: conversationEvents.eventType,
+        metadata: conversationEvents.metadata,
+      })
+      .from(conversationEvents)
+      .where(whereClause);
+
+    const summary = {
+      totalResolved: 0,
+      bookings: 0,
+      leads: 0,
+      tasks: 0,
+      escalations: 0,
+      resolvedNoAction: 0,
+      operatorJoinedCount: 0,
+    };
+
+    for (const row of rows) {
+      if (row.eventType === "frontdesk.assist_joined") {
+        summary.operatorJoinedCount += 1;
+      }
+      if (row.eventType === "frontdesk.outcome_captured") {
+        summary.totalResolved += 1;
+        const outcomeType = String((row.metadata as Record<string, unknown> | null)?.outcomeType ?? "");
+        if (outcomeType === "booking") summary.bookings += 1;
+        else if (outcomeType === "lead") summary.leads += 1;
+        else if (outcomeType === "task") summary.tasks += 1;
+        else if (outcomeType === "escalated") summary.escalations += 1;
+        else summary.resolvedNoAction += 1;
+      }
+    }
+
+    return summary;
   }
 }
 

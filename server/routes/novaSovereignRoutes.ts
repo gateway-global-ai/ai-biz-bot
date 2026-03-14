@@ -8,6 +8,7 @@ import { Router, type Request, type Response } from "express";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
+import { randomUUID } from "crypto";
 import { db } from "../db";
 import { novaIdvSessions } from "@shared/schema";
 import { eq } from "drizzle-orm";

@@ -15,11 +15,41 @@
  */
 
 import { Router } from 'express';
+import multer from 'multer';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
+import { createHash } from 'crypto';
 import { storage } from '../storage';
+import { requireAuth } from '../auth';
+import { assertSiteScopedAccess, type SitePolicyKey } from '../utils/siteScopedAccess';
 import { provisionAgentsForBusiness } from '../services/agentProvisioning';
+import { preloadBusinessAndReviews } from '../services/preloadBusinessKnowledge';
 import { handleGetHotelInventory } from '../tools/hotelInventoryHandler';
+import { classifyKnowledgeDocument } from '../services/knowledgeClassificationService';
+import { frontDeskOutcomeEventRequestSchema } from '../contracts/frontDeskSessionContract';
+import { db } from '../db';
+import {
+  consentRecords,
+  intakeChangeRequests,
+  patientVendorRelationships,
+  vendors,
+  siteConfigs, 
+  users, 
+  agents
+} from '@shared/schema';
+import { and, desc, eq } from 'drizzle-orm';
+import { getSensitiveInputPolicyById } from '../config/sensitiveInputPolicy';
+import { getIntakeIndustryPack } from '../config/intakeTemplateLibrary';
+import {
+  DEFAULT_INTAKE_POLICY,
+  intakePolicySchema,
+  resolveFieldWriteMode,
+  resolveIntakePolicyConfig,
+} from '../services/intakePolicyService';
+import {
+  verificationPolicySchema,
+  resolveVerificationPolicyConfig,
+} from '../services/verificationPolicyService';
 
 /** Converts a business name into a URL-safe slug with a 4-char random suffix. */
 function generateSlug(name: string): string {
@@ -35,7 +65,28 @@ function generateSlug(name: string): string {
   return `${base || 'biz'}-${suffix}`;
 }
 
+/** Normalize user input to a URL-safe slug (lowercase, hyphens, no leading/trailing dash). */
+function normalizeSlugInput(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 100)
+    .replace(/^-|-$/g, '') || '';
+}
+
 const router = Router();
+
+const OUTCOME_EVENT_POLICIES: Record<
+  'frontdesk.assist_joined' | 'frontdesk.assist_ended' | 'frontdesk.outcome_captured',
+  SitePolicyKey
+> = {
+  'frontdesk.assist_joined': 'frontdesk.assist.write',
+  'frontdesk.assist_ended': 'frontdesk.assist.write',
+  'frontdesk.outcome_captured': 'frontdesk.outcome.write',
+};
 
 // ─── Shared Zod Schemas ──────────────────────────────────────────────────────
 
@@ -44,6 +95,9 @@ const knowledgeDocSchema = z.object({
   title: z.string(),
   content: z.string(),
   addedAt: z.string(),
+  category: z.string().optional(),
+  topic: z.string().optional(),
+  documentDate: z.string().optional(),
 });
 
 // Mixing Board config schemas (migration 0012)
@@ -81,6 +135,23 @@ const socialSharingSchema = z.object({
   twitterCard: z.enum(['summary', 'summary_large_image', 'player', 'app']).optional(),
 }).nullable().optional();
 
+const serviceMenuSchema = z.array(z.object({
+  name: z.string(),
+  price: z.string().optional(),
+  duration: z.number().optional(),
+  description: z.string().optional()
+})).nullable().optional();
+
+const faqsSchema = z.array(z.object({
+  question: z.string(),
+  answer: z.string()
+})).nullable().optional();
+
+const crmConfigSchema = z.object({
+  statuses: z.array(z.string()).optional(),
+  defaultStatus: z.string().optional()
+}).nullable().optional();
+
 const createSchema = z.object({
   name: z.string().min(1).max(200),
   domain: z.string().optional(),
@@ -105,15 +176,24 @@ const createSchema = z.object({
   voiceWebAiMinutes: z.number().int().min(0).optional(),
   smsMessages: z.number().int().min(0).optional(),
   chatBotMessages: z.number().int().min(0).optional(),
+  // Non-Google-Maps / custom business support (migration 0046)
+  businessType: z.enum(['google_maps', 'custom']).optional().default('google_maps'),
+  businessDescription: z.string().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
+  website: z.string().nullable().optional(),
 });
 
 const patchSchema = createSchema.partial().extend({
+  slug: z.union([z.string().min(1).max(100), z.literal('')]).optional(),
   knowledgeLibrary: z.array(knowledgeDocSchema).nullable().optional(),
   // Mixing Board JSONB fields (migration 0012)
   agentConfig: agentConfigSchema,
   voiceConfig: voiceConfigSchema,
   themeConfig: themeConfigSchema,
   socialSharing: socialSharingSchema,
+  serviceMenu: serviceMenuSchema,
+  faqs: faqsSchema,
+  crmConfig: crmConfigSchema,
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -150,10 +230,19 @@ router.post('/', async (req, res) => {
     data.slug = generateSlug(data.name);
     const config = await storage.createSiteConfig(data as any);
     try {
-      const placeTypes = (config.placeData as { types?: string[] } | null)?.types ?? ['establishment'];
+      // For custom (non-Google-Maps) businesses, use empty placeTypes so provisioning
+      // defaults to the 'professional_services' industry pack.
+      const placeTypes = data.businessType === 'custom'
+        ? []
+        : (config.placeData as { types?: string[] } | null)?.types ?? ['establishment'];
       await provisionAgentsForBusiness(config.id, placeTypes, config.name);
     } catch (provisionErr: any) {
-      console.error('[SiteConfig] Agent swarm provisioning failed (site created):', provisionErr?.message ?? provisionErr);
+      console.error('[SiteConfig] Agent provisioning failed (site created):', provisionErr?.message ?? provisionErr);
+    }
+    if (config.placeId || config.placeData) {
+      preloadBusinessAndReviews(config.id).catch((err) =>
+        console.warn('[SiteConfig] Preload business/reviews failed (async):', err?.message ?? err)
+      );
     }
     res.status(201).json(config);
   } catch (error: any) {
@@ -178,11 +267,118 @@ router.patch('/:id', async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.message });
     }
-    const updated = await storage.updateSiteConfig(req.params.id, parsed.data as any);
+    const data: any = { ...parsed.data };
+    if ('slug' in data) {
+      data.slug = (data.slug && normalizeSlugInput(String(data.slug))) || null;
+    }
+    const updated = await storage.updateSiteConfig(req.params.id, data);
     if (!updated) {
       return res.status(404).json({ error: 'Site config not found' });
     }
+    const hasPlace = parsed.data && ('placeId' in parsed.data || 'placeData' in parsed.data);
+    if (hasPlace && (parsed.data.placeId || parsed.data.placeData)) {
+      preloadBusinessAndReviews(req.params.id).catch((err) =>
+        console.warn('[SiteConfig] Preload business/reviews failed (async):', err?.message ?? err)
+      );
+    }
     res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/domain/verify-ownership
+ * Proxies to Hostinger API to verify domain ownership. Body: { domain: string }.
+ * On success (is_accessible: true), updates site_configs.domain and domain_verified_at.
+ * Requires HOSTINGER_API_TOKEN in env.
+ */
+const verifyOwnershipSchema = z.object({ domain: z.string().min(1).max(253) });
+router.post('/:id/domain/verify-ownership', async (req, res) => {
+  try {
+    const parsed = verifyOwnershipSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.message });
+    }
+    const siteId = req.params.id;
+    const site = await storage.getSiteConfigById(siteId);
+    if (!site) {
+      return res.status(404).json({ error: 'Site config not found' });
+    }
+    const token = process.env.HOSTINGER_API_TOKEN;
+    if (!token) {
+      return res.status(503).json({ error: 'Domain verification not configured (HOSTINGER_API_TOKEN)' });
+    }
+    const domain = parsed.data.domain.replace(/^www\./i, '').trim();
+    const hostingerRes = await fetch('https://developers.hostinger.com/api/hosting/v1/domains/verify-ownership', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ domain }),
+    });
+    const data = await hostingerRes.json().catch(() => ({}));
+    if (!hostingerRes.ok) {
+      return res.status(hostingerRes.status >= 500 ? 502 : hostingerRes.status).json({
+        error: data?.error ?? 'Hostinger verification failed',
+        hostinger: data,
+      });
+    }
+    const isAccessible = data?.is_accessible === true;
+    if (isAccessible) {
+      await storage.updateSiteConfig(siteId, {
+        domain: domain || undefined,
+        domainVerifiedAt: new Date(),
+      } as any);
+    }
+    res.json({
+      domain: data?.domain ?? domain,
+      is_accessible: isAccessible,
+      txt_to_verify: data?.txt_to_verify ?? null,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-configs/refresh-all-hero-images
+ * Sets heroImageUrl to the Google Places photo proxy URL for every site that has a placeId.
+ * Use this to pull images from Google Maps again so list and profiles show the correct business photo.
+ */
+router.post('/refresh-all-hero-images', async (_req, res) => {
+  try {
+    const configs = await storage.getSiteConfigs();
+    let updated = 0;
+    for (const site of configs) {
+      const placeId = (site as { placeId?: string | null }).placeId;
+      if (!placeId || placeId.length < 20) continue;
+      const proxyUrl = `/api/places/photo-proxy/${encodeURIComponent(placeId)}?maxWidth=1200`;
+      await storage.updateSiteConfig(site.id, { heroImageUrl: proxyUrl } as any);
+      updated++;
+    }
+    res.json({ updated, total: configs.length });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/refresh-hero-image
+ * Sets heroImageUrl to the Google Places photo proxy URL for this site when it has a placeId.
+ */
+router.post('/:id/refresh-hero-image', async (req, res) => {
+  try {
+    const site = await storage.getSiteConfigById(req.params.id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+    const placeId = (site as { placeId?: string | null }).placeId;
+    if (!placeId || placeId.length < 20) {
+      return res.status(400).json({ error: 'Site has no Google Place ID; cannot refresh hero image' });
+    }
+    const proxyUrl = `/api/places/photo-proxy/${encodeURIComponent(placeId)}?maxWidth=1200`;
+    await storage.updateSiteConfig(req.params.id, { heroImageUrl: proxyUrl } as any);
+    res.json({ heroImageUrl: proxyUrl });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -232,10 +428,19 @@ router.get('/:id/hotel-availability', async (req, res) => {
  * GET /api/site-configs/:id/chat-logs
  * Returns paginated chat log history for a site config.
  */
-router.get('/:id/chat-logs', async (req, res) => {
+router.get('/:id/chat-logs', requireAuth, async (req: any, res) => {
   try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'frontdesk.transcript.read',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
     const limit = parseInt(req.query.limit as string) || 50;
-    const logs = await storage.getChatLogs(req.params.id, limit);
+    const logs = await storage.getChatLogs(id, limit);
     res.json(logs);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -259,13 +464,12 @@ router.get('/:id/knowledge', async (req, res) => {
 
 /**
  * POST /api/site-configs/:id/knowledge
- * Appends a document to the knowledge library.
+ * Appends a document to the knowledge library. Content only; LLM classifies as api_docs | hotel | platform_economics and sets title/topic.
  */
 router.post('/:id/knowledge', async (req, res) => {
   try {
     const schema = z.object({
-      title: z.string().min(1).max(200),
-      content: z.string().max(500000),
+      content: z.string().min(1).max(500000),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) {
@@ -277,16 +481,92 @@ router.post('/:id/knowledge', async (req, res) => {
     const existing = Array.isArray((site as any).knowledgeLibrary)
       ? (site as any).knowledgeLibrary
       : [];
+    const now = new Date().toISOString();
+    const documentDate = now.slice(0, 10);
+    const classified = await classifyKnowledgeDocument('Pasted content', parsed.data.content);
     const doc = {
       id: randomUUID(),
-      title: parsed.data.title,
+      title: classified.title,
       content: parsed.data.content,
-      addedAt: new Date().toISOString(),
+      addedAt: now,
+      category: classified.category,
+      topic: classified.topic,
+      documentDate,
     };
-    const updated = await storage.updateSiteConfig(req.params.id, {
-      knowledgeLibrary: [...existing, doc],
-    } as any);
-    res.json(updated?.knowledgeLibrary ?? [...existing, doc]);
+    const next = [...existing, doc];
+    await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: next } as any);
+    res.json(next);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/knowledge/upload
+ * Upload one or more documents; extract text, then LLM classifies each as api_docs | hotel | platform_economics (no manual tags).
+ */
+const knowledgeUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } }); // 15MB per file
+router.post('/:id/knowledge/upload', knowledgeUpload.array('files', 20), async (req, res) => {
+  try {
+    const site = await storage.getSiteConfigById(req.params.id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+    const documentDate = new Date().toISOString().slice(0, 10);
+    const files = (req.files as Express.Multer.File[]) ?? [];
+    if (files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
+
+    const existing = Array.isArray((site as any).knowledgeLibrary) ? (site as any).knowledgeLibrary : [];
+    const added: any[] = [];
+
+    for (const file of files) {
+      const ext = (file.originalname || '').split('.').pop()?.toLowerCase() ?? '';
+      let text = '';
+      if (ext === 'txt' || ext === 'md' || ext === 'yaml' || ext === 'yml' || ext === 'csv' || file.mimetype === 'text/plain' || file.mimetype === 'text/markdown') {
+        text = file.buffer.toString('utf8');
+      } else if (ext === 'pdf' || file.mimetype === 'application/pdf') {
+        try {
+          const pdfParse = (await import('pdf-parse')).default;
+          const data = await pdfParse(file.buffer);
+          text = data?.text ?? '';
+        } catch (e) {
+          console.warn('[Knowledge upload] PDF parse failed:', (e as Error).message);
+          text = `[PDF: ${file.originalname} — text extraction failed.]`;
+        }
+      } else {
+        text = file.buffer.toString('utf8');
+      }
+      const classified = await classifyKnowledgeDocument(file.originalname || 'document', text);
+      const doc = {
+        id: randomUUID(),
+        title: classified.title,
+        content: text,
+        addedAt: new Date().toISOString(),
+        category: classified.category,
+        topic: classified.topic,
+        documentDate,
+      };
+      existing.push(doc);
+      added.push(doc);
+    }
+
+    await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: existing } as any);
+    res.json({ added: added.length, knowledgeLibrary: existing });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/knowledge/search?q=...&limit=5
+ * Searches the knowledge library by query; returns ranked results with snippets (category, topic, date indexed).
+ */
+router.get('/:id/knowledge/search', async (req, res) => {
+  try {
+    const site = await storage.getSiteConfigById(req.params.id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const limit = Math.min(20, Math.max(1, parseInt(String(req.query.limit), 10) || 5));
+    const results = await storage.searchKnowledgeLibrary(req.params.id, q, limit);
+    res.json({ results });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -327,6 +607,11 @@ router.get('/by-slug/:slug', async (req, res) => {
   try {
     const config = await storage.getSiteConfigBySlug(req.params.slug);
     if (!config) return res.status(404).json({ error: 'Business not found.' });
+    if (req.query.from === 'qr') {
+      storage.recordSlugLanding(config.id, 'qr').catch((err) =>
+        console.warn('[SiteConfig] Slug landing record failed:', err?.message ?? err)
+      );
+    }
     res.json(config);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -354,6 +639,1022 @@ router.post('/:id/share', async (req, res) => {
     );
     res.json({ success: true, shareCount: updated });
   } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/agents
+ * Returns agents for this site (site_config_id). Used by Agent Dashboard when opened with ?siteConfigId=...
+ */
+router.get('/:id/agents', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') {
+      return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    }
+    const agents = await storage.getAgentsBySiteConfigId(id);
+    res.json({ agents });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to load agents for site.' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/qr-stats
+ * Returns QR scan stats for this site (routes with this site_config_id).
+ * Used by owner dashboard QR widget.
+ */
+router.get('/:id/qr-stats', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') {
+      return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    }
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+    const stats = await storage.getQrScanStatsBySite(id);
+    res.json(stats);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to load QR scan stats.' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/conversation-events/summary
+ * Cash Board: counts by event type for this site. Query: from, to (ISO dates).
+ */
+router.get('/:id/conversation-events/summary', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'frontdesk.session.read',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+    const from = req.query.from ? new Date(String(req.query.from)) : undefined;
+    const to = req.query.to ? new Date(String(req.query.to)) : undefined;
+    const summary = await storage.getConversationEventsSummary(id, { from, to });
+    res.json(summary);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to load conversation events summary.' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/conversation-events
+ * Cash Board: paginated conversation events for this site.
+ * Query: page, limit, from (ISO date), to (ISO date), eventType.
+ */
+router.get('/:id/conversation-events', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'frontdesk.session.read',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+    const page = Math.max(1, parseInt(String(req.query.page), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit), 10) || 50));
+    const from = req.query.from ? new Date(String(req.query.from)) : undefined;
+    const to = req.query.to ? new Date(String(req.query.to)) : undefined;
+    const eventType = typeof req.query.eventType === 'string' ? req.query.eventType : undefined;
+    const { events, total } = await storage.getConversationEvents(id, { page, limit, from, to, eventType });
+    res.json({ events, total });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to load conversation events.' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/frontdesk/sessions
+ * Materialized front desk session projection derived from conversation events.
+ * Query: includeResolved=true|false, limit=1..1000
+ */
+router.get('/:id/frontdesk/sessions', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'frontdesk.session.read',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const includeResolved =
+      typeof req.query.includeResolved === 'string'
+        ? req.query.includeResolved.toLowerCase() === 'true'
+        : false;
+    const limit = Math.min(1000, Math.max(1, parseInt(String(req.query.limit), 10) || 300));
+
+    const projection = await storage.getFrontDeskSessions(id, {
+      includeResolved,
+      limit,
+    });
+
+    res.json({
+      sessions: projection.sessions,
+      total: projection.sessions.length,
+      includeResolved,
+      updatedAt: projection.updatedAt,
+      projectionVersion: projection.projectionVersion,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to load front desk sessions.' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/intake-policy
+ * Returns owner-selectable intake write policy matrix.
+ */
+router.get('/:id/intake-policy', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'intake.policy.read',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const policy = resolveIntakePolicyConfig(access.context.siteConfig);
+    res.json({ policy });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to load intake policy.' });
+  }
+});
+
+/**
+ * PATCH /api/site-configs/:id/intake-policy
+ * Updates owner-selectable intake write policy matrix.
+ */
+router.patch('/:id/intake-policy', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'intake.policy.write',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const parsed = intakePolicySchema.safeParse(req.body?.policy ?? req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+    const existingAgentConfig =
+      access.context.siteConfig && typeof (access.context.siteConfig as any).agentConfig === 'object'
+        ? ((access.context.siteConfig as any).agentConfig as Record<string, unknown>)
+        : {};
+
+    const nextAgentConfig = {
+      ...existingAgentConfig,
+      intakePolicy: parsed.data,
+    };
+
+    const updated = await storage.updateSiteConfig(id, {
+      agentConfig: nextAgentConfig as any,
+    } as any);
+    if (!updated) return res.status(404).json({ error: 'Site config not found' });
+
+    const resolved = resolveIntakePolicyConfig(updated);
+    res.json({ policy: resolved ?? DEFAULT_INTAKE_POLICY });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to update intake policy.' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/verification-policy
+ */
+router.get('/:id/verification-policy', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'verification.policy.read',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const policy = resolveVerificationPolicyConfig(access.context.siteConfig);
+    res.json({ policy });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to load verification policy.' });
+  }
+});
+
+/**
+ * PATCH /api/site-configs/:id/verification-policy
+ */
+router.patch('/:id/verification-policy', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'verification.policy.write',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const parsed = verificationPolicySchema.safeParse(req.body?.policy ?? req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+    const existingAgentConfig =
+      access.context.siteConfig && typeof (access.context.siteConfig as any).agentConfig === 'object'
+        ? ((access.context.siteConfig as any).agentConfig as Record<string, unknown>)
+        : {};
+
+    const nextAgentConfig = {
+      ...existingAgentConfig,
+      verificationPolicy: parsed.data,
+    };
+
+    const updated = await storage.updateSiteConfig(id, { agentConfig: nextAgentConfig as any } as any);
+    if (!updated) return res.status(404).json({ error: 'Site config not found' });
+
+    const policy = resolveVerificationPolicyConfig(updated);
+    res.json({ policy });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to update verification policy.' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/intake/library?industry=chiropractic
+ * Returns governed workflow modules for the selected industry intake pack.
+ */
+router.get('/:id/intake/library', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'intake.policy.read',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const siteName = String((access.context.siteConfig as any)?.name ?? '').toLowerCase();
+    const industry =
+      (typeof req.query.industry === 'string' && req.query.industry) ||
+      (siteName.includes('dental') || siteName.includes('dentist')
+        ? 'dental'
+        : siteName.includes('chiropractic')
+        ? 'chiropractic'
+        : 'chiropractic');
+    const pack = getIntakeIndustryPack(industry);
+    if (!pack) return res.status(404).json({ error: `No intake pack found for industry: ${industry}` });
+
+    res.json({
+      industryPackId: pack.industryPackId,
+      industry: pack.industry,
+      version: pack.version,
+      modules: pack.modules.map((module) => ({
+        workflowId: module.workflowId,
+        title: module.title,
+        description: module.description,
+        secureFields: module.secureFields,
+        reviewQueueFields: module.reviewQueueFields,
+        requiredConsents: module.requiredConsents,
+      })),
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to load intake template library.' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/intake/library/:workflowId
+ * Returns one full governed intake workflow module.
+ */
+router.get('/:id/intake/library/:workflowId', requireAuth, async (req: any, res) => {
+  try {
+    const { id, workflowId } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'intake.policy.read',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const siteName = String((access.context.siteConfig as any)?.name ?? '').toLowerCase();
+    const industry =
+      (typeof req.query.industry === 'string' && req.query.industry) ||
+      (siteName.includes('dental') || siteName.includes('dentist')
+        ? 'dental'
+        : siteName.includes('chiropractic')
+        ? 'chiropractic'
+        : 'chiropractic');
+    const pack = getIntakeIndustryPack(industry);
+    if (!pack) return res.status(404).json({ error: `No intake pack found for industry: ${industry}` });
+
+    const module = pack.modules.find((entry) => entry.workflowId === workflowId);
+    if (!module) return res.status(404).json({ error: `Workflow module not found: ${workflowId}` });
+
+    res.json({
+      industryPackId: pack.industryPackId,
+      industry: pack.industry,
+      version: pack.version,
+      module,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to load intake workflow module.' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/intake/secure-form/:policyId
+ * Returns governed secure form schema contract for a sensitive policy.
+ */
+router.get('/:id/intake/secure-form/:policyId', requireAuth, async (req: any, res) => {
+  try {
+    const { id, policyId } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'intake.submit.write',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const policy = getSensitiveInputPolicyById(String(policyId));
+    if (!policy) return res.status(404).json({ error: 'Sensitive input policy not found.' });
+
+    return res.json({
+      policyId: policy.policyId,
+      fieldName: policy.fieldName,
+      classification: policy.classification,
+      allowedChannels: policy.allowedChannels,
+      redactInTranscript: policy.redactInTranscript,
+      storeMode: policy.storeMode,
+      displayMode: policy.displayMode,
+      fields: policy.secureFormFields,
+      submitEndpoint: `/api/site-configs/${id}/intake/secure-submit`,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message ?? 'Failed to load secure form schema.' });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/intake/secure-submit
+ * Secure intake channel for optional vendor relationships + consent-aware data handling.
+ */
+router.post('/:id/intake/secure-submit', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'intake.submit.write',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const parsed = z
+      .object({
+        patientId: z.string().min(1),
+        fieldName: z.string().min(1),
+        policyId: z.string().optional(),
+        sessionId: z.string().optional(),
+        value: z.record(z.unknown()).or(z.string().min(1)),
+        channel: z.enum(['secure_form', 'staff_assisted']).default('secure_form'),
+        vendor: z
+          .object({
+            vendorType: z.enum(['INSURANCE', 'ATTORNEY', 'REFERRING_PROVIDER']),
+            name: z.string().min(1),
+            relationshipType: z.string().min(1),
+          })
+          .optional(),
+        consent: z
+          .object({
+            consentType: z.string().min(1),
+            signature: z.string().min(1),
+            documentId: z.string().optional(),
+            expirationDate: z.string().optional(),
+          })
+          .optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    const sensitivePolicy = parsed.data.policyId
+      ? getSensitiveInputPolicyById(parsed.data.policyId)
+      : undefined;
+    if (parsed.data.policyId && !sensitivePolicy) {
+      return res.status(400).json({ error: 'Unknown secure-input policyId.' });
+    }
+    if (
+      sensitivePolicy &&
+      parsed.data.fieldName &&
+      parsed.data.fieldName !== sensitivePolicy.fieldName
+    ) {
+      return res.status(400).json({
+        error:
+          'secure-submit rejected: fieldName does not match the governed field for provided policyId.',
+      });
+    }
+
+    const intakePolicy = resolveIntakePolicyConfig(access.context.siteConfig);
+    const writeMode = resolveFieldWriteMode(intakePolicy, parsed.data.fieldName);
+
+    if (writeMode === 'denied') {
+      return res.status(403).json({
+        error: 'This intake field is denied for customer/staff write in this workflow.',
+      });
+    }
+
+    let vendorId: string | undefined;
+    if (parsed.data.vendor) {
+      const normalizedKey = `${parsed.data.vendor.vendorType}:${parsed.data.vendor.name}`.toLowerCase().trim();
+      const [existingVendor] = await db
+        .select()
+        .from(vendors)
+        .where(
+          and(eq(vendors.siteConfigId, id), eq(vendors.normalizedKey, normalizedKey))
+        )
+        .limit(1);
+      const vendorRow =
+        existingVendor ??
+        (
+          await db
+            .insert(vendors)
+            .values({
+              siteConfigId: id,
+              vendorType: parsed.data.vendor.vendorType,
+              name: parsed.data.vendor.name,
+              normalizedKey,
+              metadata: {},
+            })
+            .returning()
+        )[0];
+      vendorId = vendorRow.id;
+    }
+
+    let consentId: string | undefined;
+    if (parsed.data.consent) {
+      const signatureHash = createHash('sha256').update(parsed.data.consent.signature).digest('hex');
+      const [consent] = await db
+        .insert(consentRecords)
+        .values({
+          siteConfigId: id,
+          patientId: parsed.data.patientId,
+          vendorId: vendorId ?? null,
+          consentType: parsed.data.consent.consentType,
+          signatureHash,
+          documentId: parsed.data.consent.documentId ?? null,
+          expirationDate: parsed.data.consent.expirationDate
+            ? new Date(parsed.data.consent.expirationDate)
+            : null,
+          metadata: {
+            collectedVia: parsed.data.channel,
+          },
+        })
+        .returning();
+      consentId = consent.id;
+    }
+
+    if (vendorId && parsed.data.vendor) {
+      await db.insert(patientVendorRelationships).values({
+        siteConfigId: id,
+        patientId: parsed.data.patientId,
+        vendorId,
+        vendorType: parsed.data.vendor.vendorType,
+        relationshipType: parsed.data.vendor.relationshipType,
+        consentGranted: Boolean(consentId),
+        consentDocumentId: consentId ?? null,
+      });
+    }
+
+    const requestedValue =
+      typeof parsed.data.value === 'string'
+        ? { maskedValue: '[SECURE_CAPTURED]', valueProvided: true }
+        : {
+            ...parsed.data.value,
+            rawValueCaptured: '[SECURE_CAPTURED]',
+          };
+
+    const status = writeMode === 'direct' ? 'applied' : 'pending';
+    const reviewerRole =
+      intakePolicy.fields[parsed.data.fieldName]?.reviewerRole ??
+      (writeMode === 'review' ? 'receptionist' : null);
+
+    const [request] = await db
+      .insert(intakeChangeRequests)
+      .values({
+        siteConfigId: id,
+        patientId: parsed.data.patientId,
+        fieldName: parsed.data.fieldName,
+        requestedValue,
+        writeMode,
+        status,
+        reviewerRole,
+        reviewedBy: status === 'applied' ? access.context.adminUserId : null,
+        reviewedAt: status === 'applied' ? new Date() : null,
+      })
+      .returning();
+
+    const tokenizedResult = createHash('sha256')
+      .update(`${id}:${parsed.data.patientId}:${parsed.data.fieldName}:${request.id}`)
+      .digest('hex')
+      .slice(0, 24);
+
+    const statusState: Record<string, unknown> = {
+      rawValueStoredInConversation: false,
+      secureInputCompleted: true,
+    };
+    if (
+      parsed.data.fieldName.toLowerCase().includes('ssn') ||
+      parsed.data.fieldName.toLowerCase().includes('identity')
+    ) {
+      statusState.identityVerified = true;
+    }
+    if (parsed.data.vendor?.vendorType === 'INSURANCE') statusState.insuranceCaptured = true;
+    if (parsed.data.vendor?.vendorType === 'ATTORNEY') statusState.attorneyCaptured = true;
+    if (consentId) statusState.consentSigned = true;
+
+    await storage.logConversationEvent({
+      siteConfigId: id,
+      sessionId: parsed.data.sessionId ?? null,
+      eventType: 'intake.secure_submission',
+      metadata: {
+        fieldName: parsed.data.fieldName,
+        writeMode,
+        status,
+        patientId: parsed.data.patientId,
+        policyId: sensitivePolicy?.policyId ?? null,
+        vendorLinked: Boolean(vendorId),
+        consentSigned: Boolean(consentId),
+        tokenizedResult,
+        ...statusState,
+      },
+    });
+
+    await storage.logConversationEvent({
+      siteConfigId: id,
+      sessionId: parsed.data.sessionId ?? null,
+      eventType: 'intake.secure_status_updated',
+      metadata: {
+        fieldName: parsed.data.fieldName,
+        tokenizedResult,
+        ...statusState,
+      },
+    });
+
+    return res.json({
+      success: true,
+      writeMode,
+      status,
+      requestId: request.id,
+      vendorId,
+      consentId,
+      tokenizedResult,
+      resultState: {
+        ...statusState,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: error.message ?? 'Failed to submit secure intake payload.' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/intake/review-queue
+ * Returns queued intake change requests pending human approval.
+ */
+router.get('/:id/intake/review-queue', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'intake.review.read',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const requests = await db
+      .select()
+      .from(intakeChangeRequests)
+      .where(and(eq(intakeChangeRequests.siteConfigId, id), eq(intakeChangeRequests.status, 'pending')))
+      .orderBy(desc(intakeChangeRequests.createdAt))
+      .limit(200);
+
+    res.json({ requests });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to load intake review queue.' });
+  }
+});
+
+/**
+ * PATCH /api/site-configs/:id/intake/review-queue/:requestId
+ * Approve or reject queued intake requests.
+ */
+router.patch('/:id/intake/review-queue/:requestId', requireAuth, async (req: any, res) => {
+  try {
+    const { id, requestId } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'intake.review.write',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const parsed = z
+      .object({
+        decision: z.enum(['approved', 'rejected']),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+    const [updated] = await db
+      .update(intakeChangeRequests)
+      .set({
+        status: parsed.data.decision,
+        reviewedBy: access.context.adminUserId,
+        reviewedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(intakeChangeRequests.id, requestId),
+          eq(intakeChangeRequests.siteConfigId, id)
+        )
+      )
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: 'Intake change request not found.' });
+
+    await storage.logConversationEvent({
+      siteConfigId: id,
+      sessionId: null,
+      eventType: 'intake.review_decision',
+      metadata: {
+        requestId,
+        decision: parsed.data.decision,
+        reviewedBy: access.context.adminUserId,
+        fieldName: updated.fieldName,
+      },
+    });
+
+    res.json({ request: updated });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to review intake request.' });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/intake/module-status
+ * Emits a session-safe intake module status signal for front desk projection visibility.
+ */
+router.post('/:id/intake/module-status', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'intake.submit.write',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const parsed = z
+      .object({
+        sessionId: z.string().min(1),
+        workflowId: z.string().min(1),
+        statusKey: z.string().min(1),
+        statusValue: z.boolean(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+    await storage.logConversationEvent({
+      siteConfigId: id,
+      sessionId: parsed.data.sessionId,
+      eventType: 'intake.module_status',
+      metadata: {
+        workflowId: parsed.data.workflowId,
+        statusKey: parsed.data.statusKey,
+        statusValue: parsed.data.statusValue,
+      },
+    });
+
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to emit intake module status.' });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/verification/status
+ * Emits state-safe verification transitions for front desk projection.
+ */
+router.post('/:id/verification/status', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'verification.write',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const parsed = z
+      .object({
+        sessionId: z.string().min(1),
+        verificationState: z.enum([
+          'required',
+          'otp_sent',
+          'verified',
+          'failed',
+          'bypass_allowed',
+        ]),
+        source: z.enum(['ai', 'operator', 'system']).default('operator'),
+        checkpoints: z
+          .object({
+            idDocumentVerified: z.boolean().optional(),
+            selfiePhotoMatchVerified: z.boolean().optional(),
+            insuranceCardVerified: z.boolean().optional(),
+          })
+          .optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+    const eventType = `verification.${parsed.data.verificationState}`;
+    await storage.logConversationEvent({
+      siteConfigId: id,
+      sessionId: parsed.data.sessionId,
+      eventType,
+      metadata: {
+        verificationState: parsed.data.verificationState,
+        source: parsed.data.source,
+        actorRole: access.context.actorRole,
+        ...(parsed.data.checkpoints ?? {}),
+      },
+    });
+
+    res.json({ success: true, eventType });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to emit verification status.' });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/telephony/activate
+ * Links the existing Twilio number to this paid site and marks provisionedPhoneNumber.
+ */
+router.post('/:id/telephony/activate', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'telephony.paid_activation.write',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const plan = String((access.context.siteConfig as any)?.plan ?? 'free').toLowerCase();
+    if (plan === 'free') {
+      return res.status(403).json({
+        error: 'Phone activation requires a paid subscription plan.',
+      });
+    }
+
+    const telephonyConfig = await storage.getTelephonyConfig();
+    if (!telephonyConfig?.phoneNumber) {
+      return res.status(409).json({
+        error: 'No provisioned Twilio number found. Provision a number in Telephony first.',
+      });
+    }
+
+    await storage.updateTelephonyConfig(telephonyConfig.id, {
+      siteConfigId: id,
+    } as any);
+    const updatedSite = await storage.updateSiteConfig(id, {
+      provisionedPhoneNumber: telephonyConfig.phoneNumber,
+    } as any);
+    if (!updatedSite) return res.status(404).json({ error: 'Site config not found' });
+
+    await storage.logConversationEvent({
+      siteConfigId: id,
+      sessionId: null,
+      eventType: 'telephony.number_assigned',
+      metadata: {
+        phoneAssigned: true,
+        phoneNumberMasked: `${telephonyConfig.phoneNumber.slice(0, 2)}***${telephonyConfig.phoneNumber.slice(-2)}`,
+        actorRole: access.context.actorRole,
+      },
+    });
+
+    res.json({
+      success: true,
+      phoneNumber: telephonyConfig.phoneNumber,
+      siteConfigId: id,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to activate site telephony.' });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/outcomes/event
+ * Persists normalized outcome ledger events emitted by governed front desk actions.
+ */
+router.post('/:id/outcomes/event', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+
+    const parsed = frontDeskOutcomeEventRequestSchema.safeParse(req.body);
+
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    const existingSessionSiteConfigId = await storage.getSessionEventSiteConfigId(parsed.data.sessionId);
+    if (existingSessionSiteConfigId && existingSessionSiteConfigId !== id) {
+      return res.status(409).json({
+        error: 'Session ownership mismatch: sessionId belongs to a different site scope.',
+      });
+    }
+    const requiredPolicy = OUTCOME_EVENT_POLICIES[parsed.data.eventType];
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy,
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const incomingMetadata = parsed.data.metadata ?? {};
+    const normalizedMetadata: Record<string, unknown> = {
+      recordedAt: new Date().toISOString(),
+      recordedBy: access.context.adminUserId,
+      accessClass: access.context.accessClass,
+      actorRole: access.context.actorRole,
+      requiredPolicy,
+    };
+    if (parsed.data.eventType === 'frontdesk.outcome_captured') {
+      const outcomeType = String(incomingMetadata.outcomeType ?? 'resolved_no_action');
+      normalizedMetadata.outcomeType = outcomeType;
+      if (incomingMetadata.resolvedAt) normalizedMetadata.resolvedAt = incomingMetadata.resolvedAt;
+      if (incomingMetadata.resolvedBy) normalizedMetadata.resolvedBy = incomingMetadata.resolvedBy;
+    }
+
+    await storage.logConversationEvent({
+      siteConfigId: id,
+      sessionId: parsed.data.sessionId,
+      eventType: parsed.data.eventType,
+      metadata: normalizedMetadata,
+    });
+
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to persist outcome event.' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/outcomes/summary
+ * Durable outcomes summary from persisted ledger events.
+ * Query: range=today | from=ISO | to=ISO
+ */
+router.get('/:id/outcomes/summary', requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: 'frontdesk.summary.read',
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const range = typeof req.query.range === 'string' ? req.query.range : undefined;
+    let from = req.query.from ? new Date(String(req.query.from)) : undefined;
+    const to = req.query.to ? new Date(String(req.query.to)) : undefined;
+    if (range === 'today' && !from) {
+      from = new Date();
+      from.setHours(0, 0, 0, 0);
+    }
+
+    const summary = await storage.getOutcomeSummary(id, { from, to });
+    res.json(summary);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message ?? 'Failed to load outcomes summary.' });
+  }
+});
+
+/**
+ * POST /api/site-configs/admin/ensure-joint-site
+ * Temporary admin route to ensure "The Joint Chiropractic" site exists.
+ */
+router.post('/admin/ensure-joint-site', async (_req, res) => {
+  try {
+    console.log("Checking for 'The Joint Chiropractic' site config...");
+    const slug = "the-joint-chiropractic";
+    const existingSite = await db.query.siteConfigs.findFirst({
+      where: eq(siteConfigs.domain, slug),
+    });
+
+    if (existingSite) {
+      console.log(`Site found: ${existingSite.name} (${existingSite.id})`);
+      if (!existingSite.ownerId) {
+        console.log("Site has no owner. Assigning default owner...");
+        const defaultUser = await db.query.users.findFirst();
+        if (defaultUser) {
+          await db.update(siteConfigs)
+            .set({ ownerId: defaultUser.id })
+            .where(eq(siteConfigs.id, existingSite.id));
+          console.log(`Assigned owner: ${defaultUser.username} (${defaultUser.id})`);
+        }
+      }
+      return res.json({ success: true, message: "Site already exists", siteId: existingSite.id });
+    }
+
+    console.log("Site not found. Creating...");
+    let ownerId = null;
+    const defaultUser = await db.query.users.findFirst();
+    if (defaultUser) ownerId = defaultUser.id;
+
+    const newSiteId = "4e1f25ba-09f0-4a69-9914-ec29b073fb75";
+
+    await db.insert(siteConfigs).values({
+      id: newSiteId,
+      name: "The Joint Chiropractic",
+      domain: slug,
+      ownerId: ownerId,
+      chatbotEnabled: true,
+      voiceConciergeEnabled: true,
+      modelProvider: "gemini",
+      greetingMessage: "Welcome to The Joint Chiropractic. How can I help you today?",
+      placeholderText: "Ask about our wellness plans...",
+      voiceConfig: {
+        provider: "gemini",
+        voiceName: "Puck",
+        mode: "clear_voice",
+        analysis: {
+          detectEmotion: true,
+          detectSentiment: true,
+          detectDISC: true
+        }
+      },
+      agentConfig: {
+        name: "The Joint Receptionist",
+        role: "Front Desk Receptionist",
+        basePrompt: "You are the receptionist for The Joint Chiropractic. You help patients check in, verify their identity, and manage appointments.",
+        objectives: ["Verify patient identity", "Check in patients", "Answer questions about plans"],
+        constraints: ["Be polite and professional", "Verify identity before sharing account details"]
+      },
+      placeData: {
+        name: "The Joint Chiropractic",
+        formatted_address: "123 Wellness Way, Health City, CA 90210",
+        formatted_phone_number: "(555) 123-4567",
+        opening_hours: {
+          weekday_text: [
+            "Monday: 10:00 AM – 7:00 PM",
+            "Tuesday: 10:00 AM – 7:00 PM",
+            "Wednesday: 10:00 AM – 7:00 PM",
+            "Thursday: 10:00 AM – 7:00 PM",
+            "Friday: 10:00 AM – 7:00 PM",
+            "Saturday: 10:00 AM – 4:00 PM",
+            "Sunday: Closed"
+          ]
+        },
+        types: ["chiropractor", "health", "point_of_interest"]
+      }
+    });
+
+    // Create the agent as well
+    await db.insert(agents).values({
+      id: randomUUID(),
+      siteConfigId: newSiteId,
+      name: "The Joint Receptionist",
+      roleType: "receptionist",
+      voiceId: "Puck",
+      voiceName: "Puck",
+      isActive: true,
+      systemPrompt: "You are the receptionist for The Joint Chiropractic.",
+      operationalMode: "RECEPTIONIST",
+      structuredControls: {
+        allowed_tools: ["kiosk_onboarding", "check_appointment"],
+        escalation_path: "manager",
+        refusal_behavior: "polite_decline"
+      }
+    });
+
+    res.json({ success: true, message: "Site created", siteId: newSiteId });
+  } catch (error: any) {
+    console.error("Error creating site:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -426,6 +1727,30 @@ router.get('/:id', async (req, res) => {
   } catch (error: any) {
     console.error(`[SiteConfigRoutes] Failed to fetch site config for ID ${id}:`, error);
     res.status(500).json({ error: 'An internal server error occurred while fetching site configuration.' });
+  }
+});
+
+/**
+ * PATCH /api/site-configs/:id/task-order
+ * Save the ordered interaction task list for a site config.
+ * Body: { tasks: [{ id, label, description?, required }] }
+ */
+router.patch('/:id/task-order', async (req: any, res: Response) => {
+  const { id } = req.params;
+  const { tasks } = req.body;
+
+  if (!id) return res.status(400).json({ error: 'Site config id required' });
+  if (!Array.isArray(tasks)) return res.status(400).json({ error: 'tasks must be an array' });
+
+  try {
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+
+    const updated = await storage.updateSiteConfig(id, { taskOrder: tasks } as any);
+    res.json({ taskOrder: (updated as any).taskOrder ?? tasks });
+  } catch (error: any) {
+    console.error('[SiteConfigRoutes] task-order patch error:', error);
+    res.status(500).json({ error: error.message ?? 'Failed to update task order' });
   }
 });
 

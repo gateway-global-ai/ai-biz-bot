@@ -1,0 +1,30 @@
+---
+description: QR code systems (website/slug and route shadow telecom). Behavior from site_configs; no new routes in routes.ts.
+globs: server/routes/qrCodeRoutes.ts, server/routes/qrManagementRoutes.ts, server/services/qrCodeService.ts, server/services/qrRoutingService.ts, client/src/pages/public/PublicBusinessPage.tsx, client/src/components/account/QRRoutesManager.tsx, client/src/pages/admin/PlatformQRCodeManager.tsx
+alwaysApply: false
+---
+# QR System
+
+## Two QR Systems
+
+1. **Website (slug)** — QR encodes `{origin}/biz/{slug}`. Served at `GET /api/qr/image/:slug`. No scan log; user lands directly on public page. Behavior from `site_configs` (slug, qrCodeUrl).
+2. **Route (shadow telecom)** — QR encodes `{QR_BASE_URL}/qr/{id}`. `GET /qr/:id` runs firewall, logs to `qr_access`, increments `qr_routes.scan_count`, 302 to `destination` (often `/biz/slug`). Behavior after redirect is same as (1) via `site_configs`.
+
+## Directives
+
+- **No new routes in routes.ts:** QR endpoints live in `server/routes/qrCodeRoutes.ts` (slug/website) and `server/routes/qrManagementRoutes.ts` (admin + redirect). Mount only in routes.ts.
+- **Behavior source of truth:** Chat and voice on `/biz/:slug` are driven by `site_configs` for the site resolved by slug. ConciergePanel fetches `GET /api/site-configs/:id`; do not derive prompts from UI state.
+- **Tracking:** Route-based scans are logged in `qr_access` and `qr_routes.scan_count`. Website (slug) QR has no built-in scan log unless optional landing tracking is used.
+
+## Protected Surface
+
+- `server/routes/qrCodeRoutes.ts` — website QR search, image serve, generate
+- `server/routes/qrManagementRoutes.ts` — qrAdminRouter + qrRedirectRouter
+- `server/services/qrCodeService.ts` — business QR image generation
+- `server/services/qrRoutingService.ts` — route URL, firewall, log, redirect
+- Public page: `client/src/pages/public/PublicBusinessPage.tsx` → WebsitePreview + ConciergePanel
+
+## Reference
+
+- Schema: `shared/schema.ts` — site_configs (slug, qr_code_url), qr_routes, qr_firewall, qr_access
+- Storage: `server/storage.ts` — getSiteConfigBySlug, getQrRoutes, getQrAccessLog, logQrAccess, incrementQrScanCount, getQrScanStatsBySite

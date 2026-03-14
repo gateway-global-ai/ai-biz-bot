@@ -5,10 +5,11 @@ import {
   Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Phone,
   Terminal, Building2, Sparkles, ClipboardCheck, AudioLines, Bot, Users,
   LayoutDashboard, Globe, Stethoscope, CreditCard, HardDrive, Calendar,
-  ListTodo, Zap, Eye, Coffee, Briefcase, FlaskConical, GraduationCap,
-  ChevronDown, ChevronRight, MessageCircle,
+  ListTodo, Zap, Eye,
+  ChevronDown, ChevronRight, MessageCircle, Archive, LayoutGrid,
 } from 'lucide-react';
-import gatewaySquareLogo from '@assets/gatewayglobalai_logo_square.png';
+/** Clear Voice AI logo (POWERED BY CLEAR VOICE AI — globe + G). */
+const SIDEBAR_LOGO = '/clear_voice_ai_logo.png';
 import type { Agent } from '@shared/schema';
 import {
   Sidebar,
@@ -33,11 +34,11 @@ const AGENT_ITEMS = [
 ];
 
 const AGENT_TOOLS = [
-  { id: 'vibe', label: 'The Vibe', icon: Coffee, color: 'text-purple-400' },
-  { id: 'office', label: 'The Office', icon: Briefcase, color: 'text-blue-400' },
-  { id: 'lab', label: 'The Lab', icon: FlaskConical, color: 'text-emerald-400' },
-  { id: 'classroom', label: 'The Classroom', icon: GraduationCap, color: 'text-amber-400' },
   { id: 'telephony', label: 'Telephony', icon: Phone, color: 'text-cyan-400' },
+];
+
+const PLATFORM_ITEMS = [
+  { id: 'platform', label: 'Platform', path: '/platform', icon: LayoutGrid },
 ];
 
 const OPERATIONS_ITEMS = [
@@ -51,18 +52,18 @@ const OPERATIONS_ITEMS = [
   { id: 'billing', label: 'Billing', path: '/billing', icon: CreditCard },
   { id: 'twilio-health', label: 'SMS Health Check', path: '/twilio-health', icon: Stethoscope },
   { id: 'system-health', label: 'System Health', path: '/system-health', icon: Activity },
-  { id: 'google-drive', label: 'Google Drive', path: '/google-drive', icon: HardDrive },
-  { id: 'google-calendar', label: 'Google Calendar', path: '/google-calendar', icon: Calendar },
-  { id: 'google-tasks', label: 'Google Tasks', path: '/google-tasks', icon: ListTodo },
   { id: 'lead-machine', label: 'Lead Machine', path: '/lead-machine', icon: Zap },
   { id: 'sites-leads', label: 'Sites & Leads', path: '/sites-leads', icon: Eye },
 ];
 
-const SYSTEM_ITEMS = [
+const ARCHIVE_ITEMS = [
   { id: 'servers', label: 'Server Control', path: '/servers', icon: Server },
   { id: 'global_config', label: 'Global Config', path: '/config', icon: Settings },
   { id: 'tests', label: 'Orchestrator', path: '/tests', icon: Play },
   { id: 'security', label: 'Security Audit', path: '/security', icon: ShieldAlert },
+  { id: 'google-drive', label: 'Google Drive', path: '/google-drive', icon: HardDrive },
+  { id: 'google-calendar', label: 'Google Calendar', path: '/google-calendar', icon: Calendar },
+  { id: 'google-tasks', label: 'Google Tasks', path: '/google-tasks', icon: ListTodo },
 ];
 
 const ACCESS_ITEMS = [
@@ -86,7 +87,7 @@ function AgentToolsSubmenu({ location }: { location: string }) {
     <div>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase text-slate-500 hover:text-slate-300 transition-colors"
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase text-slate-400 hover:text-slate-200 transition-colors"
         data-testid="button-expand-agent-tools"
       >
         {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
@@ -110,8 +111,8 @@ function AgentToolsSubmenu({ location }: { location: string }) {
                     <SidebarMenuItem key={`${agent.id}-${tool.id}`}>
                       <SidebarMenuButton asChild isActive={isActive}>
                         <Link href={toolPath} data-testid={`nav-agent-${agent.id}-${tool.id}`}>
-                          <Icon className={`w-4 h-4 ${isActive ? tool.color : 'text-slate-600'}`} />
-                          <span className="text-xs">{tool.label}</span>
+                          <Icon className={`w-4 h-4 shrink-0 ${isActive ? tool.color : 'text-slate-500'}`} />
+                          <span className={`text-xs ${isActive ? 'text-white' : 'text-slate-300'}`}>{tool.label}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -126,17 +127,77 @@ function AgentToolsSubmenu({ location }: { location: string }) {
   );
 }
 
+function ArchiveSubmenu({ location }: { location: string }) {
+  const [expanded, setExpanded] = useState(
+    ARCHIVE_ITEMS.some((item) => location === item.path)
+  );
+
+  return (
+    <div>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase text-slate-400 hover:text-slate-200 transition-colors"
+        data-testid="button-expand-archive"
+      >
+        {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+        <Archive className="w-3 h-3" />
+        Archive
+      </button>
+      {expanded && (
+        <div className="space-y-0.5 pl-2">
+            {ARCHIVE_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const isActive = location === item.path;
+            return (
+              <SidebarMenuItem key={item.id}>
+                <SidebarMenuButton asChild isActive={isActive}>
+                  <Link href={item.path} data-testid={`nav-archive-${item.id}`}>
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
+                    <span className={`text-xs ${isActive ? 'text-white' : 'text-slate-400'}`}>{item.label}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AppSidebar() {
   const [location] = useLocation();
 
   return (
-    <Sidebar className="border-r border-slate-800 bg-slate-900">
-      <div className="p-4 pb-6 border-b border-slate-800 flex justify-center">
-        <img src={gatewaySquareLogo} alt="Gateway Global AI" className="h-24 w-auto" />
+    <Sidebar className="border-r border-indigo-500/20 bg-[#0F172A] text-slate-200">
+      {/* Logo area: sovereign-deep background so no grey; Clear Voice AI logo for dark theme. */}
+      <div className="p-4 pb-6 border-b border-indigo-500/20 flex justify-center items-center bg-[#0F172A] min-h-[12rem]">
+        <img src={SIDEBAR_LOGO} alt="Clear Voice AI" className="h-48 w-auto max-w-[540px] object-contain" />
       </div>
-      <SidebarContent className="bg-slate-900">
+      <SidebarContent className="bg-[#0F172A] text-slate-200 scrollbar-hide overflow-y-auto">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-slate-500 text-xs font-bold uppercase">Agent Dashboard</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-slate-400 text-xs font-bold uppercase">Platform</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {PLATFORM_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isActive = location === item.path || location.startsWith(item.path + '/');
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton asChild isActive={isActive}>
+                      <Link href={item.path} data-testid={`nav-${item.id}`}>
+                        <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-400'}`} />
+                        <span className={isActive ? 'text-white' : 'text-slate-300'}>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-slate-400 text-xs font-bold uppercase">Agent Dashboard</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {AGENT_ITEMS.map((item) => {
@@ -145,9 +206,9 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.path} data-testid={`nav-${item.id}`}>
-                        <Icon className={`w-5 h-5 ${isActive ? 'text-indigo-400' : 'text-slate-500'}`} />
-                        <span>{item.label}</span>
+                        <Link href={item.path} data-testid={`nav-${item.id}`}>
+                        <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-400'}`} />
+                        <span className={isActive ? 'text-white' : 'text-slate-300'}>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -158,7 +219,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-slate-500 text-xs font-bold uppercase">Operations</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-slate-400 text-xs font-bold uppercase">Operations</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {OPERATIONS_ITEMS.map((item) => {
@@ -168,8 +229,8 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton asChild isActive={isActive}>
                       <Link href={item.path} data-testid={`nav-${item.id}`}>
-                        <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`} />
-                        <span>{item.label}</span>
+                        <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-400'}`} />
+                        <span className={isActive ? 'text-white' : 'text-slate-300'}>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -179,28 +240,13 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-slate-500 text-xs font-bold uppercase">System</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-slate-400 text-xs font-bold uppercase">Archive</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {SYSTEM_ITEMS.map((item) => {
-                const Icon = item.icon;
-                const isActive = location === item.path;
-                return (
-                  <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.path} data-testid={`nav-${item.id}`}>
-                        <Icon className={`w-5 h-5 ${isActive ? 'text-purple-400' : 'text-slate-500'}`} />
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
+            <ArchiveSubmenu location={location} />
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-slate-500 text-xs font-bold uppercase">Access Portals</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-slate-400 text-xs font-bold uppercase">Access Portals</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {ACCESS_ITEMS.map((item) => {
@@ -210,8 +256,8 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton asChild isActive={isActive}>
                       <Link href={item.path} data-testid={`nav-${item.id}`}>
-                        <Icon className={`w-5 h-5 ${isActive ? 'text-violet-400' : 'text-slate-500'}`} />
-                        <span>{item.label}</span>
+                        <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-indigo-400' : 'text-slate-400'}`} />
+                        <span className={isActive ? 'text-white' : 'text-slate-300'}>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -221,12 +267,12 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-slate-800 bg-slate-900 p-4">
+      <SidebarFooter className="border-t border-indigo-500/20 bg-[#0F172A] p-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500" />
-          <div>
-            <p className="text-xs font-bold text-white">Admin User</p>
-            <p className="text-[10px] text-slate-500">admin@nexus.test</p>
+          <div className="w-8 h-8 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-sm shrink-0" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-white truncate">Admin User</p>
+            <p className="text-[10px] text-slate-400 truncate">admin@nexus.test</p>
           </div>
         </div>
       </SidebarFooter>

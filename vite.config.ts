@@ -26,6 +26,7 @@ export default defineConfig(async ({ mode }) => {
       "@": path.resolve(import.meta.dirname, "client", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "client", "src", "assets"),
+      "@os-core": path.resolve(import.meta.dirname, "os-core", "src"),
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
@@ -49,6 +50,7 @@ export default defineConfig(async ({ mode }) => {
     fs: {
       strict: true,
       deny: ["**/.*"],
+      allow: [".."],
     },
     // When running Vite standalone (e.g. client-only dev), proxy /api to backend
     proxy: process.env.VITE_API_PROXY !== "false" ? {

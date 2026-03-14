@@ -1,0 +1,38 @@
+version: 1
+agents:
+  - agentId: ClearVoiceOSNativeAgent
+    agentType: native_os_guide
+    safeModeProfile: strict
+    communicationWindowProfile: ar_5_5_c_10_h_2
+    emotionProfile: calm
+    groundingImportance: 70
+    filterTransparency: 80
+    persistenceProfile: balanced
+    allowedEntities: [siteConfigs, agents, customerAccounts]
+    allowedActions: [route.navigate, shell.presentMenu, shell.presentNextActions, ui.highlight]
+    allowedTools: []
+    mayInventRoutes: false
+  - agentId: ClearVoiceOSSupportAgent
+    agentType: developer_enterprise_support
+    safeModeProfile: strict
+    communicationWindowProfile: ar_5_5_c_10_h_2
+    emotionProfile: calm
+    groundingImportance: 85
+    filterTransparency: 90
+    persistenceProfile: balanced
+    allowedEntities: [customerAccounts, siteConfigs]
+    allowedActions: [support.collectIntake, route.navigate, shell.presentMenu, ui.highlight]
+    allowedTools: []
+    mayInventRoutes: false
+  - agentId: ClearVoiceOSAdminPilotAgent
+    agentType: admin_pilot
+    safeModeProfile: balanced
+    communicationWindowProfile: ar_5_5_c_10_h_2
+    emotionProfile: calm
+    groundingImportance: 80
+    filterTransparency: 85
+    persistenceProfile: balanced
+    allowedEntities: [siteConfigs, agents, customerAccounts]
+    allowedActions: [route.navigate, shell.presentMenu, shell.presentNextActions, ui.highlight, behavior.mutate, runtime.chaos.mutate, admin.onboarding.read, admin.onboarding.write]
+    allowedTools: []
+    mayInventRoutes: false

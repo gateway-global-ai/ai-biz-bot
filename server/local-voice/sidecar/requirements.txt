@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+numpy
+faster-whisper
+kokoro>=0.9.4
+soundfile

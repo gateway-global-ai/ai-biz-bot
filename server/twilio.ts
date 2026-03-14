@@ -4,14 +4,26 @@ import twilio from 'twilio';
 let cachedClient: any = null;
 let cachedPhoneNumber: string | null = null;
 
-function getCredentials(): { accountSid: string; authToken: string; phoneNumber: string | undefined } {
-  // First try direct environment variables
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
+function resolvePrimaryTwilioEnv() {
+  const accountSid =
+    process.env.SYSTEM_TWILIO_ACCOUNT_SID ||
+    process.env.TWILIO_ACCOUNT_SID;
+  const authToken =
+    process.env.SYSTEM_TWILIO_AUTH_TOKEN ||
+    process.env.TWILIO_AUTH_TOKEN;
   const phoneNumber =
+    process.env.SYSTEM_TWILIO_PHONE_NUMBER ||
     process.env.TWILIO_ACCOUNT_PHONE_NUMBER ||
     process.env.TWILIO_PHONE_NUMBER_BOT ||
     process.env.TWILIO_PHONE_NUMBER;
+
+  return { accountSid, authToken, phoneNumber };
+}
+
+function getCredentials(): { accountSid: string; authToken: string; phoneNumber: string | undefined } {
+  // Primary account credentials should come from system-level env vars.
+  // Legacy TWILIO_* names are still accepted for backward compatibility.
+  const { accountSid, authToken, phoneNumber } = resolvePrimaryTwilioEnv();
 
   if (accountSid && authToken) {
     return {
@@ -21,17 +33,14 @@ function getCredentials(): { accountSid: string; authToken: string; phoneNumber:
     };
   }
 
-  throw new Error('Twilio credentials not configured. Please set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN secrets.');
+  throw new Error(
+    'Twilio credentials not configured. Set SYSTEM_TWILIO_ACCOUNT_SID and SYSTEM_TWILIO_AUTH_TOKEN (or legacy TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN).'
+  );
 }
 
 /** Returns credentials or null when Twilio is not configured (so callers can return 503 instead of throwing). */
 function getCredentialsOrNull(): { accountSid: string; authToken: string; phoneNumber: string | undefined } | null {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const phoneNumber =
-    process.env.TWILIO_ACCOUNT_PHONE_NUMBER ||
-    process.env.TWILIO_PHONE_NUMBER_BOT ||
-    process.env.TWILIO_PHONE_NUMBER;
+  const { accountSid, authToken, phoneNumber } = resolvePrimaryTwilioEnv();
   if (accountSid && authToken) {
     return { accountSid, authToken, phoneNumber };
   }
@@ -207,8 +216,10 @@ export async function updatePhoneNumberWebhooks(phoneSid: string, config: {
   voiceUrl?: string;
   voiceFallbackUrl?: string;
   statusCallback?: string;
+  smsStatusCallback?: string;
   smsUrl?: string;
   smsFallbackUrl?: string;
+  voiceCallerIdLookup?: boolean;
 }): Promise<boolean> {
   try {
     const client = await getTwilioClient();
@@ -216,8 +227,10 @@ export async function updatePhoneNumberWebhooks(phoneSid: string, config: {
       voiceUrl: config.voiceUrl,
       voiceFallbackUrl: config.voiceFallbackUrl,
       statusCallback: config.statusCallback,
+      smsStatusCallback: config.smsStatusCallback,
       smsUrl: config.smsUrl,
       smsFallbackUrl: config.smsFallbackUrl,
+      voiceCallerIdLookup: config.voiceCallerIdLookup,
     });
     return true;
   } catch (error: any) {
@@ -235,8 +248,14 @@ export async function getIncomingPhoneNumbers(): Promise<any[]> {
       phoneNumber: num.phoneNumber,
       friendlyName: num.friendlyName,
       voiceUrl: num.voiceUrl,
+      voiceFallbackUrl: num.voiceFallbackUrl,
+      statusCallback: num.statusCallback,
       smsUrl: num.smsUrl,
+      smsFallbackUrl: num.smsFallbackUrl,
+      smsStatusCallback: num.smsStatusCallback,
+      voiceCallerIdLookup: Boolean(num.voiceCallerIdLookup),
       capabilities: num.capabilities,
+      dateCreated: num.dateCreated,
     }));
   } catch (error: any) {
     console.error('Error fetching incoming numbers:', error);
@@ -256,6 +275,22 @@ function getVerifyServiceSid(): string {
   throw new Error(
     'TWILIO_VERIFY_SERVICE_URL_SID is not configured or does not contain a valid VA* SID.'
   );
+}
+
+/**
+ * Returns true if real SMS verification can be sent (not mock, Verify SID and Twilio creds present).
+ * Use this to return 503 with a clear message instead of falsely claiming "code sent".
+ */
+export function isVerifyConfigured(): boolean {
+  if (process.env.MOCK_TWILIO_SMS === 'true') return false;
+  try {
+    getCredentials();
+    const raw = process.env.TWILIO_VERIFY_SERVICE_URL_SID || '';
+    const match = raw.match(/(VA[a-f0-9]{32})/i);
+    return !!(match || (raw.length > 0 && raw.toUpperCase().startsWith('VA')));
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -2,7 +2,8 @@
  * Prompt Compiler — Character-First Behavioral System
  *
  * Translates the three-layer agent identity into a master system prompt.
- * Assembly order (Keanu's mandate):
+ * Assembly order:
+ *   0. Operational Mode & Strict Permissions (if set) — unbendable directive
  *   1. Short-Term Memory Grounding  (who the agent IS right now, at work)
  *   2. Long-Term Core Identity      (who the agent has always been)
  *   3. DISC Behavioral Narrative    (how the agent naturally operates)
@@ -14,6 +15,7 @@
  */
 
 import type { Agent } from '@shared/schema';
+import { getOperationalMode, getModeInstruction } from '../config/operationalModes';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,7 @@ interface ArchProfile {
   reflect?: number;     // 0-100
   context?: number;     // 0-100
   handoff?: number;     // 0-100
+  responseWindowSeconds?: number; // target spoken turn length: 5–60s
 }
 
 export interface BusinessContext {
@@ -111,6 +114,7 @@ function archToMechanics(arch: ArchProfile): string {
   const r = arch.reflect ?? 50;
   const ctx = arch.context ?? 60;
   const h = arch.handoff ?? 40;
+  const rw = arch.responseWindowSeconds ?? 20;
 
   const ackLine = a >= 70
     ? 'When someone speaks to you, your first instinct is to make them feel heard before anything else. You validate before you respond.'
@@ -136,7 +140,15 @@ function archToMechanics(arch: ArchProfile): string {
     ? 'You occasionally offer a next step or question to keep the conversation moving.'
     : 'You let the other person lead the pace. You respond; you do not push.';
 
-  return `### YOUR CONVERSATION MECHANICS (ARCH A:${a} R:${r} C:${ctx} H:${h})\n${ackLine} ${refLine} ${ctxLine} ${handLine}`;
+  const rwLine = rw <= 10
+    ? `RESPONSE WINDOW: Your spoken responses must be extremely brief — target ${rw} seconds or fewer. You are operating in a high-urgency or high-volume context. One sentence per turn when possible.`
+    : rw <= 20
+    ? `RESPONSE WINDOW: Keep each spoken response to approximately ${rw} seconds. Be direct and efficient. Say what matters, then stop and listen.`
+    : rw <= 35
+    ? `RESPONSE WINDOW: Each response can run up to ${rw} seconds. You have room to explain and add context, but avoid rambling. Conclude naturally.`
+    : `RESPONSE WINDOW: You have an advisory window of up to ${rw} seconds per response. Use it when depth serves the person — explain reasoning, explore options, and guide thoughtfully.`;
+
+  return `### YOUR CONVERSATION MECHANICS (ARCH A:${a} R:${r} C:${ctx} H:${h} | Window:${rw}s)\n${ackLine} ${refLine} ${ctxLine} ${handLine}\n\n${rwLine}`;
 }
 
 // ── Master Compiler ───────────────────────────────────────────────────────────
@@ -146,6 +158,19 @@ export function buildBehavioralPrompt(
   businessContext?: BusinessContext,
 ): string {
   const sections: string[] = [];
+
+  // ── Layer 0: Operational Mode & Strict Permissions (foundational template) ──
+  const modeId = (agent as { operationalMode?: string | null }).operationalMode ?? null;
+  const modeDef = getOperationalMode(modeId);
+  if (modeDef) {
+    const instruction = getModeInstruction(
+      modeId,
+      (agent as { verificationLevel?: string | null }).verificationLevel
+    );
+    sections.push(
+      `### [SYSTEM: OPERATIONAL MODE & STRICT PERMISSIONS]\nYou are currently operating strictly in: ${modeDef.label.toUpperCase()} (${modeDef.id} MODE).\n\nCRITICAL DIRECTIVE based on your mode:\n${instruction}`
+    );
+  }
 
   const stm = agent.shortTermMemory as ShortTermMemory | null;
   const ltm = agent.longTermMemory as LongTermMemory | null;

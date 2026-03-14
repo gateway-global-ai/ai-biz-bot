@@ -8,6 +8,9 @@ import { TourRunner, TourSpec } from '../tour/TourRunner';
 import { HotelResultsPanel, HotelResultsPanelData } from './HotelResultsPanel';
 import { HotelInventoryGrid } from './HotelInventoryGrid';
 import WarrantResultsPanel, { WarrantResultsData } from './WarrantResultsPanel';
+import { KioskOnboarding } from './KioskOnboarding';
+import { PlanManager } from './PlanManager';
+import { SharedCanvasPanel } from './SharedCanvasPanel';
 
 interface ToolRouterProps {
   toolType: string;
@@ -15,6 +18,7 @@ interface ToolRouterProps {
   onSubmit: (value: string) => void;
   onCancel: () => void;
   onTriggerSpeech?: (text: string) => void;
+  onContextUpdate?: (context: string) => void;
 }
 
 export const ToolRouter: React.FC<ToolRouterProps> = ({ 
@@ -22,7 +26,8 @@ export const ToolRouter: React.FC<ToolRouterProps> = ({
   metadata, 
   onSubmit, 
   onCancel,
-  onTriggerSpeech
+  onTriggerSpeech,
+  onContextUpdate
 }) => {
   switch (toolType) {
     case 'manual_input':
@@ -52,6 +57,25 @@ export const ToolRouter: React.FC<ToolRouterProps> = ({
     case 'warrant_results':
     case 'fetch_city_warrants':
       return <WarrantResultsPanel data={metadata as WarrantResultsData} />;
+    case 'kiosk_onboarding':
+      return <KioskOnboarding onSubmit={onSubmit} onTriggerSpeech={onTriggerSpeech} onContextUpdate={onContextUpdate} siteConfigId={metadata.siteConfigId} />;
+    case 'manage_pricing_plans':
+      return (
+        <PlanManager 
+          siteConfigId={metadata.siteConfigId} 
+          onClose={onCancel}
+          onTriggerSpeech={onTriggerSpeech}
+        />
+      );
+    case 'shared_canvas':
+      return (
+        <SharedCanvasPanel
+          metadata={metadata}
+          onTriggerSpeech={onTriggerSpeech}
+          onContextUpdate={onContextUpdate}
+          onCancel={onCancel}
+        />
+      );
     default:
       console.warn(`[ToolRouter] Unknown tool type: ${toolType}`);
       return null;

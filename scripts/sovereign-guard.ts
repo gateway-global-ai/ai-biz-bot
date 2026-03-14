@@ -126,6 +126,7 @@ function checkFile(filePath: string): Violation[] {
   const fullPath = path.resolve(process.cwd(), filePath);
 
   if (!fs.existsSync(fullPath)) return violations;
+  if (fs.statSync(fullPath).isDirectory()) return violations;
 
   const content = fs.readFileSync(fullPath, 'utf8');
   const lines = content.split('\n');

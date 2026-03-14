@@ -10,12 +10,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import WebsitePreview from '@/components/WebsitePreview';
 import { 
   Phone, Building2, Users, Globe, ShieldCheck, 
-  ArrowLeft, CheckCircle2, MessageSquare, 
-  Briefcase, Zap, PhoneCall, CreditCard, ChevronRight,
-  Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server,
+  ArrowLeft, CheckCircle2, MessageSquare, FileText,
+  Briefcase, Zap, PhoneCall, CreditCard, ChevronRight, ChevronDown,
+  Headphones, Calendar, TrendingUp, Store, ShoppingCart, Server, Cpu,
   Search, MapPin, Star, ExternalLink, Loader2, ArrowRight, Sparkles,
   Clock, Bot, Wand2, X, Eye, Send, User, LogIn, LogOut, KeyRound,
-  QrCode, Sticker, Smartphone, Mic
+  QrCode, Sticker, Smartphone, Mic, Menu
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -29,19 +29,15 @@ import { useCustomerAuth } from '@/lib/customerAuth';
 import { useToast } from '@/hooks/use-toast';
 import OtpLoginModal from '@/components/OtpLoginModal';
 import ShareButton from '@/components/ShareButton';
+import { DemoLaunchCard } from '@/components/DemoLaunchCard';
 import { Code2 } from 'lucide-react';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 import { ensureApiLoader, loadPlacesLibrary } from '@/utils/googleMapsLoader';
 
-import headerLogo from "@assets/clear_voice_ai_dark_sm.png";
-// Hero background: served from public/ so it is not processed or compressed. Replace client/public/hero-bg-gateway.png with your high-quality image.
 const HERO_BG_URL = "/hero-bg-gateway.png";
-import howItWorksQr from "@assets/how-it-works-qr.png";
-import howItWorksWebsite from "@assets/how-it-works-website.png";
-import howItWorksVoice from "@assets/how-it-works-voice.png";
-import clearVoiceQrReceptionist from "@assets/clear-voice-qr-receptionist.png";
+const HERO_BG_URL_FALLBACK = "/hero-bg.png";
 import affiliateStickerHero from "@assets/affiliate-sticker-hero.png";
 import affiliateProgramInfographic from "@assets/affiliate-program-infographic.png";
 import affiliate4StepsInfographic from "@assets/affiliate-4-steps-infographic.png";
@@ -237,18 +233,11 @@ function AffiliateResellerSection() {
           <p className="text-slate-500 text-center text-xs mt-4">Based on $99/mo per business. Commission on all recurring revenue.</p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 items-start mb-10">
+        <div className="max-w-3xl mx-auto mb-10">
           <div className="rounded-sui overflow-hidden border border-indigo-500/20 shadow-xl">
             <img
               src={affiliate4StepsInfographic}
               alt="Affiliate program: 4 easy steps — add business to platform, generate QR code, visit store with flyer, demo AI receptionist, place decal, send invite via SMS. Powered by Clear Voice AI."
-              className="w-full h-auto object-cover"
-            />
-          </div>
-          <div className="rounded-sui overflow-hidden border border-indigo-500/20 shadow-xl">
-            <img
-              src={affiliateProgramInfographic}
-              alt="Affiliate program: $99 starter package, 100 prospects, window decals, reseller dashboard, weekly payouts. Powered by Clear Voice AI."
               className="w-full h-auto object-cover"
             />
           </div>
@@ -340,8 +329,6 @@ export default function BusinessPage() {
   const [otpError, setOtpError] = useState('');
   const [generatingProgress, setGeneratingProgress] = useState(0);
   const [tokenError, setTokenError] = useState<string | null>(null);
-  const [showCreateTeamConfirm, setShowCreateTeamConfirm] = useState(false);
-  const [provisioningTeam, setProvisioningTeam] = useState(false);
   // Manual profile (no Google Place): for businesses without a Google listing (e.g. Gateway Global AI, digital-only)
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualName, setManualName] = useState('');
@@ -349,6 +336,15 @@ export default function BusinessPage() {
   const [manualPhone, setManualPhone] = useState('');
   const [manualWebsite, setManualWebsite] = useState('');
   const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [locationCity, setLocationCity] = useState('');
+  const [locationState, setLocationState] = useState('');
+  const groundingHintRef = useRef('');
+  const [showLocationOptions, setShowLocationOptions] = useState(false);
+
+  useEffect(() => {
+    const hint = [locationCity.trim(), locationState.trim()].filter(Boolean).join(', ');
+    groundingHintRef.current = hint;
+  }, [locationCity, locationState]);
 
   const { user, isAuthenticated, login: authLogin, logout: authLogout } = useAuth();
   const { user: customerUser, isAuthenticated: isCustomerAuth, login: customerLogin, logout: customerLogout } = useCustomerAuth();
@@ -399,6 +395,17 @@ export default function BusinessPage() {
     const params = new URLSearchParams(window.location.search);
     const siteConfigId = params.get('siteConfigId');
     if (siteConfigId) setResolvedSiteConfigId(siteConfigId);
+  }, []);
+
+  // Desktop-first experience: open AI Biz Bot by default so the interface shell
+  // immediately feels alive on larger screens.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.innerWidth < 1024) return;
+    if (window.location.pathname === '/' || window.location.pathname === '/business') return;
+    setInitialView('chat');
+    setChatLayout('floating');
+    setIsChatOpen(true);
   }, []);
 
   // Bypass hook: if URL has ?siteConfigId= and site is provisioned, redirect to agents
@@ -602,10 +609,12 @@ export default function BusinessPage() {
         });
 
         try {
+          const locationHint = groundingHintRef.current?.trim();
+          const textQuery = locationHint ? `${rawQuery}, ${locationHint}` : rawQuery;
           const searchRes = await fetch('/api/places/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: rawQuery }),
+            body: JSON.stringify({ query: textQuery }),
           });
           if (!searchRes.ok) throw new Error(`Search returned ${searchRes.status}`);
           const searchData = await searchRes.json();
@@ -662,75 +671,6 @@ export default function BusinessPage() {
       });
     }, 200);
   }, [selectedPlace]);
-
-  const handleCreateAiTeamConfirm = async () => {
-    if (!selectedPlace || provisioningTeam) return;
-    const placeId = selectedPlace.place_id || (selectedPlace as any).placeId;
-    const businessName = selectedPlace.name;
-    const placeTypes = Array.isArray(selectedPlace.types) ? selectedPlace.types : [];
-    if (!businessName) {
-      toast({ title: 'Missing business name', variant: 'destructive' });
-      return;
-    }
-    setProvisioningTeam(true);
-    try {
-      let resolvedPlaceTypes = placeTypes;
-      if (placeId) {
-        try {
-          const resolveRes = await fetch('/api/intelligence/resolve', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ placeId }),
-          });
-          if (resolveRes.ok) {
-            const resolveData = await resolveRes.json();
-            if (Array.isArray(resolveData.placeTypes) && resolveData.placeTypes.length) {
-              resolvedPlaceTypes = resolveData.placeTypes;
-            }
-          }
-        } catch {
-          // best-effort only: never block provisioning
-        }
-      }
-      const createRes = await fetch('/api/site-configs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: businessName,
-          placeId: placeId || undefined,
-          placeData: selectedPlace,
-        }),
-      });
-      if (!createRes.ok) {
-        const err = await createRes.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to create site');
-      }
-      const siteConfig = await createRes.json();
-      const siteConfigId = siteConfig.id;
-      setResolvedSiteConfigId(siteConfigId);
-      if (siteConfig.slug) setResolvedSiteSlug(siteConfig.slug);
-      const provisionRes = await fetch('/api/intelligence/provision', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          siteConfigId,
-          placeTypes: resolvedPlaceTypes.length ? resolvedPlaceTypes : ['establishment'],
-          businessName,
-        }),
-      });
-      if (!provisionRes.ok) {
-        const err = await provisionRes.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to provision agents');
-      }
-      setShowCreateTeamConfirm(false);
-      toast({ title: 'AI team created', description: 'Your 6 agents are ready.' });
-      setLocation(`/agents?siteConfigId=${encodeURIComponent(siteConfigId)}`);
-    } catch (e: any) {
-      toast({ title: 'Error', description: e.message || 'Could not create AI team', variant: 'destructive' });
-    } finally {
-      setProvisioningTeam(false);
-    }
-  };
 
   const handleManualProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -827,10 +767,23 @@ export default function BusinessPage() {
     return () => clearInterval(interval);
   }, [stage]);
 
-  // Only show the platform SDK chat widget on landing. When user is in preview/full-access
-  // they get a single chat inside WebsitePreview; avoid two chat UIs.
-  // REMOVED: Legacy GatewayChat embed script
-  // Now using unified ConciergePanel component instead
+  // Open the in-page ConciergePanel with a demo business (by slug). Does not navigate away.
+  const openDemoInChat = useCallback((slug: string) => {
+    fetch(`/api/site-configs/by-slug/${encodeURIComponent(slug)}`)
+      .then((r) => {
+        if (!r.ok) throw new Error('Demo not found');
+        return r.json();
+      })
+      .then((config: { id: string; slug?: string }) => {
+        setResolvedSiteConfigId(config.id);
+        setResolvedSiteSlug(config.slug ?? slug);
+        setInitialView('chat');
+        setIsChatOpen(true);
+      })
+      .catch(() => {
+        toast({ title: 'Could not load demo', description: 'Please try again.', variant: 'destructive' });
+      });
+  }, [toast]);
 
   const handleSendMagicLink = async () => {
     if (!phoneNumber.trim()) {
@@ -945,21 +898,26 @@ export default function BusinessPage() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/20 backdrop-blur-md border-b border-white/10 px-6 py-3 flex items-center">
-        <img src={headerLogo} alt="Clear Voice AI" className="h-9 w-auto md:h-14 relative z-10 object-contain" style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.2))' }} />
+      <nav className="fixed top-0 left-0 right-0 z-50 px-4 md:px-6 py-4">
+        <img
+          src="/powered_by_clear_voice_ai.png"
+          alt="Powered by Clear Voice AI"
+          className="h-8 w-auto md:h-10 object-contain"
+          style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.25))' }}
+        />
       </nav>
       <button
         type="button"
         onClick={() => { setInitialView('voice'); setIsChatOpen(true); }}
-        className="fixed bottom-6 right-6 z-50 w-20 h-20 md:w-24 md:h-24 rounded-full shadow-lg shadow-indigo-500/30 bg-transparent hover:bg-indigo-500/10 border border-indigo-400/30 p-1.5 overflow-visible flex-shrink-0"
+        className="fixed bottom-6 right-6 z-50 w-20 h-20 md:w-28 md:h-28 rounded-full shadow-lg shadow-indigo-500/30 bg-transparent hover:bg-indigo-500/10 border border-indigo-400/30 p-1.5 overflow-visible flex-shrink-0"
         data-testid="button-header-chat"
         title="Chat & Voice — AI Biz Bot"
         aria-label="Open chat"
       >
         <img
-          src="/chat-header-logo.png"
+          src="/gateway-ai-fab.png"
           alt="Gateway Global AI — Chat & Voice"
-          className="w-full h-full object-contain scale-[1.81]"
+          className="h-full w-full object-contain"
         />
       </button>
       {stage === 'generating' && (
@@ -1014,10 +972,10 @@ export default function BusinessPage() {
       )}
       {showOverlay && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center px-6">
-          {/* Same hero background as landing — feels like same page, next step */}
-          <div className="absolute inset-0 z-0 pointer-events-none">
-            <img src={HERO_BG_URL} alt="" className="w-full h-full object-cover" aria-hidden />
-            <div className="absolute inset-0 bg-slate-950/60" aria-hidden />
+          {/* Same hero background as landing — gradient fallback when images 404 */}
+          <div className="absolute inset-0 z-0 pointer-events-none bg-gradient-to-b from-blue-950 via-slate-900 to-slate-950">
+            <img src={HERO_BG_URL} alt="" className="w-full h-full object-cover" aria-hidden onError={(e) => { const el = e.target as HTMLImageElement; if (el.src.endsWith(HERO_BG_URL_FALLBACK)) { el.style.display = 'none'; } else { el.src = HERO_BG_URL_FALLBACK; } }} />
+            <div className="absolute inset-0 bg-gradient-to-b from-blue-950/80 via-slate-900/55 to-slate-950/75" aria-hidden />
           </div>
           <div className="relative z-10 max-w-lg w-full">
             {(stage === 'phone-gate' || stage === 'sending-link') && (
@@ -1208,86 +1166,116 @@ export default function BusinessPage() {
           </div>
         </div>
       )}
-      {/* Hero Section — min one viewport; overflow-auto so "No Google listing" link is never clipped */}
-      <section className="relative min-h-[100vh] min-h-[100svh] flex flex-col pt-24 px-6 overflow-y-auto overflow-x-hidden bg-slate-900">
-        {/* Hero background: gateway building facade (G AI logo, Boardwalk Suites QR) */}
-        <div className="absolute inset-0 z-0 pointer-events-none">
+      <section className="relative min-h-screen overflow-hidden border-b border-white/10">
+        <div className="absolute inset-0 z-0">
           <img
             src={HERO_BG_URL}
             alt=""
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover"
             aria-hidden
+            onError={(e) => {
+              const el = e.target as HTMLImageElement;
+              if (el.src.endsWith(HERO_BG_URL_FALLBACK)) {
+                el.style.display = 'none';
+              } else {
+                el.src = HERO_BG_URL_FALLBACK;
+              }
+            }}
           />
-          <div className="absolute inset-0 bg-slate-950/50" aria-hidden />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.28)_0%,rgba(15,23,42,0.52)_38%,rgba(15,23,42,0.74)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08)_0%,transparent_42%)]" />
         </div>
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none z-[1]" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-violet-600/10 rounded-full blur-[80px] pointer-events-none z-[1]" />
-        <div className="flex-1 flex items-center relative z-10">
-          <div className="w-full max-w-5xl mx-auto flex flex-col items-center gap-6 md:gap-8">
-            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-white text-center" data-testid="text-hero-heading">
-              AI VOICE NETWORK
+
+        <div className="relative z-10 flex min-h-screen items-center justify-center px-6 pb-20 pt-28">
+          <div className="w-full max-w-4xl text-center">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-[0.42em] text-emerald-300/90">
+              Join The Clear Voice Network
+            </p>
+            <h1 className="text-4xl font-black uppercase tracking-[-0.04em] text-white drop-shadow-[0_6px_20px_rgba(0,0,0,0.35)] md:text-6xl lg:text-[5rem]">
+              AI Maps For Business
             </h1>
-            <div className="max-w-2xl w-full" data-testid="container-place-search">
+            <p className="mt-3 text-lg font-bold uppercase tracking-[0.14em] text-white/95 md:text-2xl">
+              Claim Your Free Profile
+            </p>
+
+            <div className="mx-auto mt-8 max-w-2xl">
+              <form
+                className="rounded-[20px] border border-indigo-300/70 bg-white/94 p-2 shadow-[0_0_0_4px_rgba(129,140,248,0.18),0_24px_70px_rgba(15,23,42,0.45)]"
+                onSubmit={(e) => e.preventDefault()}
+                aria-label="Search for your business"
+              >
+                <div className="flex min-h-[60px] items-center gap-3 rounded-[16px] border border-slate-200 bg-white px-4">
+                  <Search className="h-5 w-5 flex-shrink-0 text-slate-400" />
+                  <div ref={pickerContainerRef} className="min-h-[2.25rem] min-w-0 flex-1 text-left" />
+                  {!mapsKey && (
+                    <div className="flex-shrink-0">
+                      <Loader2 className="h-4 w-4 animate-spin text-indigo-500" />
+                    </div>
+                  )}
+                </div>
+              </form>
+              <p className="mt-3 text-[11px] font-medium text-white/70">
+                Powered by Google Places
+              </p>
+              {mapsError && (
+                <p className="mt-3 flex items-center justify-center gap-1 text-xs text-amber-300" data-testid="text-maps-error">
+                  <ShieldCheck className="h-3 w-3 flex-shrink-0" />
+                  {mapsError}
+                </p>
+              )}
               {showManualForm ? (
-                <div className="relative rounded-2xl border border-white/10 bg-slate-50/5 backdrop-blur-xl p-6 shadow-2xl">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400 mb-3">Create profile without Google listing</p>
+                <div className="mt-4 rounded-sui border border-white/10 bg-slate-950/75 p-5 text-left shadow-[0_18px_40px_rgba(15,23,42,0.45)] backdrop-blur-xl">
+                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-indigo-300">
+                    Create profile without Google listing
+                  </p>
                   <form onSubmit={handleManualProfileSubmit} className="space-y-4">
                     <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1.5">Business name *</label>
+                      <label className="mb-1.5 block text-xs font-medium text-slate-300">Business name *</label>
                       <Input
                         value={manualName}
                         onChange={(e) => setManualName(e.target.value)}
                         placeholder="e.g. Gateway Global AI"
-                        className="bg-slate-900/60 border-slate-600 text-white placeholder:text-slate-500 rounded-sui"
+                        className="border-slate-600 bg-slate-900/60 text-white placeholder:text-slate-500 rounded-sui"
                         required
                         autoFocus
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-400 mb-1.5">Address (optional)</label>
-                      <Input
-                        value={manualAddress}
-                        onChange={(e) => setManualAddress(e.target.value)}
-                        placeholder="Street, city, state"
-                        className="bg-slate-900/60 border-slate-600 text-white placeholder:text-slate-500 rounded-sui"
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Phone (optional)</label>
+                        <label className="mb-1.5 block text-xs font-medium text-slate-300">Phone</label>
                         <Input
                           value={manualPhone}
                           onChange={(e) => setManualPhone(e.target.value)}
                           placeholder="+1 234 567 8900"
-                          className="bg-slate-900/60 border-slate-600 text-white placeholder:text-slate-500 rounded-sui"
+                          className="border-slate-600 bg-slate-900/60 text-white placeholder:text-slate-500 rounded-sui"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Website (optional)</label>
+                        <label className="mb-1.5 block text-xs font-medium text-slate-300">Website</label>
                         <Input
                           value={manualWebsite}
                           onChange={(e) => setManualWebsite(e.target.value)}
                           placeholder="https://..."
                           type="url"
-                          className="bg-slate-900/60 border-slate-600 text-white placeholder:text-slate-500 rounded-sui"
+                          className="border-slate-600 bg-slate-900/60 text-white placeholder:text-slate-500 rounded-sui"
                         />
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-3 pt-2">
+                    <div className="flex flex-wrap gap-3 pt-1">
                       <Button
                         type="submit"
                         disabled={manualSubmitting || !manualName.trim()}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-sui font-semibold"
+                        className="rounded-sui bg-indigo-600 font-semibold text-white hover:bg-indigo-500"
                         data-testid="button-create-manual-profile"
                       >
                         {manualSubmitting ? (
                           <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Creating...
                           </>
                         ) : (
                           <>
-                            <Sparkles className="w-4 h-4 mr-2" />
+                            <Sparkles className="mr-2 h-4 w-4" />
                             Create my profile
                           </>
                         )}
@@ -1295,99 +1283,230 @@ export default function BusinessPage() {
                       <Button
                         type="button"
                         variant="ghost"
-                        className="text-slate-400 hover:text-white border border-slate-600 hover:border-slate-500 rounded-sui"
+                        className="rounded-sui border border-slate-600 text-slate-300 hover:bg-slate-800 hover:text-white"
                         onClick={() => setShowManualForm(false)}
                         disabled={manualSubmitting}
                       >
-                        <Search className="w-4 h-4 mr-2" />
                         Back to search
                       </Button>
                     </div>
                   </form>
                 </div>
               ) : (
-                <>
-                  <div className="relative group">
-                    <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
-                    <form className="relative bg-slate-50/5 backdrop-blur-xl rounded-2xl border border-white/10 p-2 flex items-center gap-2 shadow-2xl">
-                      <div ref={pickerContainerRef} className="flex-1 min-w-0" />
-                      {!mapsKey && (
-                        <div className="pr-3">
-                          <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />
-                        </div>
-                      )}
-                    </form>
-                  </div>
-                  {mapsError && (
-                    <p className="text-xs text-amber-400 mt-3 flex items-center gap-1" data-testid="text-maps-error">
-                      <ShieldCheck className="w-3 h-3 flex-shrink-0" />
-                      {mapsError}
-                    </p>
-                  )}
-                  {!mapsError && <p className="text-xs text-slate-400 mt-3 text-center">Powered by Google Places</p>}
-                  <p className="text-center mt-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowManualForm(true)}
-                      className="text-sm font-semibold text-indigo-300 hover:text-white underline underline-offset-2"
-                      data-testid="link-manual-profile"
-                    >
-                      No Google listing? Create your profile manually
-                    </button>
-                  </p>
-                </>
+                <button
+                  type="button"
+                  onClick={() => setShowManualForm(true)}
+                  className="mt-4 text-xs font-medium text-white/75 underline-offset-4 transition hover:text-white hover:underline"
+                >
+                  No Google listing? Create your profile manually.
+                </button>
               )}
             </div>
-            <p className="text-white text-xl md:text-2xl font-bold text-center mt-4" style={{ WebkitTextStroke: '1px #1e3a8a', paintOrder: 'stroke fill' }} data-testid="text-claim-profile">
-              CLAIM YOUR FREE PROFILE
-            </p>
-            <div className="flex flex-wrap justify-center gap-3 mt-4">
-              <Button
-                variant="ghost"
-                className="text-white font-semibold rounded-sui px-6 py-3 border border-indigo-400/40 bg-cover bg-center hover:border-indigo-400/70 hover:shadow-[0_0_20px_6px_rgba(99,102,241,0.25)] transition-all duration-200 flex flex-col items-center gap-1"
-                style={{ backgroundImage: 'url(/button-texture.png)', backgroundColor: 'transparent', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.4), 0 0 12px 2px rgba(99,102,241,0.15)', textShadow: '0 0 12px rgba(99,102,241,0.5), 0 1px 2px rgba(0,0,0,0.5)' }}
-                onClick={() => { setInitialView('voice'); setIsChatOpen(true); }}
-                data-testid="button-manifesto"
-                title="Listen to the Manifesto — Voice"
+
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setInitialView('voice');
+                  setIsChatOpen(true);
+                }}
+                className="group min-w-[150px] rounded-full border border-white/15 bg-slate-950/85 px-5 py-3 text-left shadow-[0_18px_40px_rgba(15,23,42,0.45)] backdrop-blur-xl transition hover:border-emerald-400/40 hover:bg-slate-900/95"
               >
-                <span className="flex items-center gap-2">
-                  <Mic className="w-4 h-4 shrink-0" aria-hidden />
-                  MANIFESTO
-                </span>
-                <span className="text-[10px] font-normal uppercase tracking-wider text-white/90">Voice</span>
-              </Button>
-              <Button
-                variant="ghost"
-                className="text-white font-semibold rounded-sui px-6 py-3 border border-indigo-400/40 bg-cover bg-center hover:border-indigo-400/70 hover:shadow-[0_0_20px_6px_rgba(99,102,241,0.25)] transition-all duration-200 flex flex-col items-center gap-1"
-                style={{ backgroundImage: 'url(/button-texture.png)', backgroundColor: 'transparent', backgroundSize: 'cover', backgroundPosition: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.4), 0 0 12px 2px rgba(99,102,241,0.15)', textShadow: '0 0 12px rgba(99,102,241,0.5), 0 1px 2px rgba(0,0,0,0.5)' }}
-                onClick={() => { setInitialView('voice'); setIsChatOpen(true); }}
-                data-testid="button-ai-biz-bot"
-                title="Talk to AI Biz Bot — Voice"
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-white">
+                  <Mic className="h-3.5 w-3.5 text-emerald-300" />
+                  Manifesto
+                </div>
+                <div className="mt-1 pl-5 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/60">
+                  Voice
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setInitialView('chat');
+                  setIsChatOpen(true);
+                }}
+                className="group min-w-[150px] rounded-full border border-white/15 bg-slate-950/85 px-5 py-3 text-left shadow-[0_18px_40px_rgba(15,23,42,0.45)] backdrop-blur-xl transition hover:border-indigo-400/50 hover:bg-slate-900/95"
               >
-                <span className="flex items-center gap-2">
-                  <Mic className="w-4 h-4 shrink-0" aria-hidden />
-                  AI BIZ BOT
-                </span>
-                <span className="text-[10px] font-normal uppercase tracking-wider text-white/90">Voice</span>
-              </Button>
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-white">
+                  <Bot className="h-3.5 w-3.5 text-indigo-300" />
+                  AI Biz Bot
+                </div>
+                <div className="mt-1 pl-5 text-[10px] font-semibold uppercase tracking-[0.28em] text-white/60">
+                  Voice
+                </div>
+              </button>
             </div>
           </div>
         </div>
-        <div className="pb-8 md:pb-12" />
+      </section>
 
-        {/* Business Preview Overlay — sovereign/chat style: dark header, white content, rounded-sui */}
-        {selectedPlace && stage === 'landing' && (
+      <section className="border-y border-white/5 bg-slate-950 px-6 py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="max-w-3xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-indigo-400">
+              Communication Stack
+            </p>
+            <h2 className="mt-3 text-3xl font-bold text-white md:text-4xl">
+              QR code, router, and AI voice chat in one customer-entry system.
+            </h2>
+            <p className="mt-4 text-base leading-relaxed text-slate-400">
+              Every scan can route into the same Clear Voice AI experience. The QR code becomes the
+              entry point, the router sends the visitor to the right business context, and voice or
+              chat picks up without making the customer download an app or dial a phone tree.
+            </p>
+          </div>
+          <div className="mt-10 grid gap-6 md:grid-cols-3">
+            {[
+              {
+                title: 'QR Entry',
+                description: 'Put the business on a window, table, flyer, or packaging and launch the same AI experience from a camera scan.',
+                icon: QrCode,
+              },
+              {
+                title: 'Router Layer',
+                description: 'Resolve the correct business, route, and prompt context before the conversation starts.',
+                icon: Server,
+              },
+              {
+                title: 'Voice + Chat',
+                description: 'Use Clear Voice AI for push-to-talk voice and AI Biz Bot for chat on the same public surface.',
+                icon: Headphones,
+              },
+            ].map(({ title, description, icon: Icon }) => (
+              <div key={title} className="rounded-sui border border-indigo-500/20 bg-slate-900/40 p-6 backdrop-blur-xl">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-sui border border-indigo-500/20 bg-indigo-500/10">
+                  <Icon className="h-5 w-5 text-indigo-300" />
+                </div>
+                <h3 className="text-lg font-semibold text-white">{title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-slate-400">{description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[#0F172A] px-6 py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="max-w-3xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-400">
+              AI OS
+            </p>
+            <h2 className="mt-3 text-3xl font-bold text-white md:text-4xl">
+              The operator layer behind Clear Voice.
+            </h2>
+            <p className="mt-4 text-base leading-relaxed text-slate-400">
+              Clear Voice is the public interface. AI OS is the internal operating layer for policy,
+              agents, routing, telemetry, and business control. The homepage sells the outcome; the OS
+              stays in Mission Control.
+            </p>
+          </div>
+          <div className="mt-10 grid gap-6 md:grid-cols-3">
+            {[
+              {
+                title: 'Governed Runtime',
+                description: 'Route, view, and action boundaries keep the operator system separate from the public marketing surface.',
+                icon: Cpu,
+              },
+              {
+                title: 'Agent Control',
+                description: 'Voice, chat, and business workflows stay tied to the right business and the right policy context.',
+                icon: Bot,
+              },
+              {
+                title: 'Secure Operations',
+                description: 'Prompt assembly, runtime controls, and safety policies remain in the governed OS core.',
+                icon: ShieldCheck,
+              },
+            ].map(({ title, description, icon: Icon }) => (
+              <div key={title} className="rounded-sui border border-white/10 bg-slate-900/40 p-6 backdrop-blur-xl">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-sui border border-white/10 bg-white/5">
+                  <Icon className="h-5 w-5 text-emerald-300" />
+                </div>
+                <h3 className="text-lg font-semibold text-white">{title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-slate-400">{description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-white/5 bg-slate-950 px-6 py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-indigo-400">
+                Franchise Rollout
+              </p>
+              <h2 className="mt-3 text-3xl font-bold text-white md:text-4xl">
+                One operating model across many locations.
+              </h2>
+              <p className="mt-4 text-base leading-relaxed text-slate-400">
+                Franchise groups can standardize QR entry, voice routing, and agent behavior while still
+                preserving local business context by location.
+              </p>
+            </div>
+            <div className="grid gap-4">
+              {[
+                'Launch location pages and QR codes by site without rebuilding the whole stack.',
+                'Keep brand, policies, and core routing standardized across the network.',
+                'Let each storefront keep its own data, hours, offers, and local voice context.',
+              ].map((item) => (
+                <div key={item} className="rounded-sui border border-white/10 bg-slate-900/40 p-5 text-sm leading-relaxed text-slate-300 backdrop-blur-xl">
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[#0F172A] px-6 py-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="max-w-3xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-emerald-400">
+              Industry Packs
+            </p>
+            <h2 className="mt-3 text-3xl font-bold text-white md:text-4xl">
+              Launch pre-shaped AI business flows by vertical.
+            </h2>
+            <p className="mt-4 text-base leading-relaxed text-slate-400">
+              Industry packs bundle the prompts, routing assumptions, launch assets, and objection-handling
+              patterns for a specific kind of business so deployment is faster and more repeatable.
+            </p>
+          </div>
+          <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              { title: 'Retail', icon: ShoppingCart },
+              { title: 'Services', icon: Briefcase },
+              { title: 'Appointments', icon: Calendar },
+              { title: 'Voice-First Ops', icon: PhoneCall },
+            ].map(({ title, icon: Icon }) => (
+              <div key={title} className="rounded-sui border border-white/10 bg-slate-900/40 p-6 backdrop-blur-xl">
+                <Icon className="h-5 w-5 text-emerald-300" />
+                <h3 className="mt-4 text-lg font-semibold text-white">{title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-slate-400">
+                  Reusable deployment patterns for routing, knowledge activation, and customer interaction design.
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Business Preview Overlay — sovereign glass: dark header + glass content, rounded-sui */}
+      {selectedPlace && stage === 'landing' && (
           <div className="absolute inset-0 z-20 bg-slate-950/95 backdrop-blur-sm flex items-center justify-center px-6">
-            <div className="max-w-lg w-full rounded-sui overflow-hidden border border-indigo-500/20 shadow-2xl bg-white">
+            <div className="max-w-lg w-full rounded-sui overflow-hidden border border-indigo-500/20 shadow-2xl bg-slate-900/40 backdrop-blur-xl">
               {/* Dark header (matches chat header) */}
               <div className="bg-[#0F172A] px-5 py-3 border-b border-slate-700/80">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-indigo-400">Confirm your business</p>
                 <h3 className="text-lg font-bold text-white truncate" data-testid="text-place-name">{selectedPlace.name}</h3>
               </div>
-              {/* White content area (matches chat content) */}
+              {/* Glass content area — sovereign palette */}
               <div className="p-5 flex flex-col gap-4">
                 {selectedPlace.photos && selectedPlace.photos.length > 0 && (selectedPlace.photos[0] as any)?.proxyUrl ? (
-                  <div className="w-full h-36 rounded-sui overflow-hidden bg-slate-100 border border-slate-200">
+                  <div className="w-full h-36 rounded-sui overflow-hidden bg-slate-800/60 border border-indigo-500/20">
                     <img
                       src={(selectedPlace.photos[0] as any).proxyUrl}
                       alt={selectedPlace.name}
@@ -1396,38 +1515,38 @@ export default function BusinessPage() {
                     />
                   </div>
                 ) : (
-                  <div className="w-full h-36 rounded-sui bg-slate-100 border border-slate-200 flex items-center justify-center">
+                  <div className="w-full h-36 rounded-sui bg-slate-800/60 border border-indigo-500/20 flex items-center justify-center">
                     <Building2 className="w-10 h-10 text-slate-400" />
                   </div>
                 )}
                 <div>
-                  <p className="text-sm text-slate-600 flex items-center gap-1.5">
-                    <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-500" />
+                  <p className="text-sm text-slate-400 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
                     <span className="truncate">{selectedPlace.formatted_address}</span>
                   </p>
                   {selectedPlace.rating && (
                     <div className="flex items-center gap-1.5 mt-2">
                       <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-                      <span className="font-semibold text-slate-900">{selectedPlace.rating}</span>
+                      <span className="font-semibold text-white">{selectedPlace.rating}</span>
                       {selectedPlace.user_ratings_total && (
-                        <span className="text-slate-500 text-sm">({selectedPlace.user_ratings_total.toLocaleString()})</span>
+                        <span className="text-slate-400 text-sm">({selectedPlace.user_ratings_total.toLocaleString()})</span>
                       )}
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2 mt-3">
                     {selectedPlace.formatted_phone_number && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/40 border border-indigo-500/20 text-slate-300 text-xs font-medium">
                         <Phone className="w-3 h-3" /> {selectedPlace.formatted_phone_number}
                       </span>
                     )}
                     {selectedPlace.types?.slice(0, 3).map(t => (
-                      <span key={t} className="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 text-xs capitalize">
+                      <span key={t} className="px-2.5 py-1 rounded-lg bg-slate-800/40 border border-indigo-500/20 text-slate-400 text-xs capitalize">
                         {t.replace(/_/g, ' ')}
                       </span>
                     ))}
                   </div>
                 </div>
-                <div className="flex flex-col gap-3 pt-2 border-t border-slate-200">
+                <div className="flex flex-col gap-3 pt-2 border-t border-slate-700">
                   <Button
                     className="w-full bg-indigo-500 hover:bg-indigo-600 text-white rounded-sui font-semibold"
                     data-testid="button-generate-site"
@@ -1438,16 +1557,7 @@ export default function BusinessPage() {
                   </Button>
                   <Button
                     variant="outline"
-                    className="w-full border-slate-200 text-slate-700 hover:bg-slate-50 rounded-sui"
-                    onClick={() => setShowCreateTeamConfirm(true)}
-                    data-testid="button-create-ai-team"
-                  >
-                    <Bot className="w-4 h-4 mr-2" />
-                    Create my AI team (6 agents)
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-sui"
+                    className="w-full border-indigo-500/40 text-slate-300 hover:text-white hover:bg-indigo-500/20 rounded-sui"
                     onClick={() => setSelectedPlace(null)}
                     data-testid="button-clear-selection"
                   >
@@ -1458,67 +1568,55 @@ export default function BusinessPage() {
               </div>
             </div>
           </div>
-        )}
+      )}
 
-        {/* Confirmation: Create AI team for this business */}
-        <Dialog open={showCreateTeamConfirm} onOpenChange={setShowCreateTeamConfirm}>
-          <DialogContent className="bg-slate-900 border-slate-700 text-white">
-            <DialogHeader>
-              <DialogTitle>Create your AI team</DialogTitle>
-            </DialogHeader>
-            <p className="text-slate-300">
-              Create your AI team for <span className="font-semibold text-white">{selectedPlace?.name}</span>? We&apos;ll set up 6 agents: Concierge, Booking, Lead Qualifier, Retention, Billing, and Gatekeeper.
-            </p>
-            <div className="flex gap-3 justify-end pt-4">
-              <Button variant="outline" className="border-slate-600 text-slate-300" onClick={() => setShowCreateTeamConfirm(false)} disabled={provisioningTeam}>
-                No
-              </Button>
-              <Button className="bg-indigo-600 hover:bg-indigo-500" onClick={handleCreateAiTeamConfirm} disabled={provisioningTeam} data-testid="button-confirm-create-team">
-                {provisioningTeam ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  'Yes'
-                )}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+      {/* Website Preview — renders the full website-builder template */}
+      {(stage === 'preview' || stage === 'full-access') && selectedPlace && (
+        <div className="fixed inset-0 z-[200] overflow-y-auto bg-slate-50">
+          <WebsitePreview
+            place={selectedPlace}
+            onBack={() => { setStage('landing'); setSelectedPlace(null); }}
+            siteConfigId={resolvedSiteConfigId ?? undefined}
+            heroImageUrl={selectedPlace.place_id ? `/api/places/photo-proxy/${selectedPlace.place_id}?maxWidth=1200` : undefined}
+            placeId={selectedPlace.place_id}
+            publicSlug={resolvedSiteSlug ?? undefined}
+          />
+        </div>
+      )}
 
-        {/* Website Preview — renders the full website-builder template */}
-        {(stage === 'preview' || stage === 'full-access') && selectedPlace && (
-          <div className="fixed inset-0 z-[200] overflow-y-auto bg-slate-50">
-            <WebsitePreview
-              place={selectedPlace}
-              onBack={() => { setStage('landing'); setSelectedPlace(null); }}
-              siteConfigId={resolvedSiteConfigId ?? undefined}
-              heroImageUrl={selectedPlace.place_id ? `/api/places/photo-proxy/${selectedPlace.place_id}?maxWidth=1200` : undefined}
-              placeId={selectedPlace.place_id}
-              publicSlug={resolvedSiteSlug ?? undefined}
-            />
-          </div>
-        )}
-      </section>
-      {/* Sovereign Network — shadow telecom summary */}
-      <section className="py-16 px-6 bg-slate-900/20 border-y border-white/5">
-        <div className="max-w-5xl mx-auto text-center">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-sui bg-indigo-500/10 border border-indigo-500/20 mb-6">
-            <QrCode className="w-6 h-6 text-indigo-400" />
-          </div>
-          <h2 className="text-3xl font-bold text-white mb-4">
-            We didn&apos;t build an AI wrapper — we built a shadow telecom.
-          </h2>
-          <p className="text-slate-400 max-w-2xl mx-auto mb-8 leading-relaxed">
-            The QR code is the new phone number. We bypass the legacy Public Switched Telephone Network, carriers, and SIP trunk providers — and replace them with the open web. Customers scan, land on your site, and talk to your AI over a direct WebSocket with sub-150ms latency. No per-minute carrier fees, no 10DLC compliance, infinite scalability.
+      {/* Target demo: Voice Concierge, Target — gradient fallback when image 404 */}
+      <section id="case-studies" className="relative min-h-[380px] flex flex-col items-center justify-center py-16 px-6 overflow-hidden border-y border-white/5">
+        <div className="absolute inset-0 z-0 bg-gradient-to-br from-slate-900 via-indigo-950/40 to-slate-950">
+          <img src="/hero-qr-demo.png" alt="" className="w-full h-full object-cover" aria-hidden onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          <div className="absolute inset-0 bg-slate-950/75" aria-hidden />
+        </div>
+        <div className="relative z-10 max-w-4xl mx-auto w-full flex flex-col items-center">
+          <h2 className="text-3xl font-bold text-white text-center mb-1">Voice Concierge, Target</h2>
+          <p className="text-slate-300 text-center max-w-2xl mx-auto mb-6">
+            Store-level voice and chat agent trained on Target hours, policies, and help topics. This demo shows how QR codes at a location open the same AI in the visitor&apos;s browser — no app, no phone number. Limitations: demo data only; not connected to live Target systems.
           </p>
-          <Link href="/network">
-            <Button className="bg-indigo-600 hover:bg-indigo-500 text-white rounded-sui font-semibold" data-testid="button-sovereign-network">
-              See how we bypass the legacy grid
-              <ChevronRight className="w-4 h-4 ml-2" />
-            </Button>
-          </Link>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-2xl">
+            <DemoLaunchCard slug="voice-ai-assistant" companyName="Target" agentLabel="AI Biz Bot" description="Chat: hours, help, policies. Explains QR benefits and how it works." onOpenInChat={openDemoInChat} variant="target" />
+            <DemoLaunchCard slug="voice-ai-assistant" companyName="Target" agentLabel="Voice Concierge" description="Same knowledge over voice. Try push-to-talk in the chat panel." onOpenInChat={openDemoInChat} variant="target" />
+          </div>
+        </div>
+      </section>
+
+      {/* The Joint Chiropractic demo — same hero as pitch deck; gradient fallback when image 404 */}
+      <section className="relative min-h-[380px] flex flex-col items-center justify-center py-16 px-6 overflow-hidden border-y border-white/5">
+        <div className="absolute inset-0 z-0 bg-gradient-to-br from-slate-900 via-emerald-950/30 to-slate-950">
+          <img src="/pitch-decks/the-joint/hero.png" alt="" className="w-full h-full object-cover" aria-hidden onError={(e) => { const el = e.target as HTMLImageElement; if (el.dataset.fallback) { el.style.display = 'none'; } else { el.dataset.fallback = '1'; el.src = '/hero-joint-demo.png'; } }} />
+          <div className="absolute inset-0 bg-slate-950/70" aria-hidden />
+        </div>
+        <div className="relative z-10 max-w-4xl mx-auto w-full flex flex-col items-center">
+          <h2 className="text-3xl font-bold text-white text-center mb-1">The Joint Chiropractic</h2>
+          <p className="text-slate-300 text-center max-w-2xl mx-auto mb-6">
+            Demo as the chiropractor: one business, two ways to engage. AI Biz Bot for scheduling, membership, walk-ins; Voice Concierge with the same knowledge. Open in the chat on this page.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full max-w-2xl">
+            <DemoLaunchCard slug="the-joint-chiropractic" companyName="The Joint Chiropractic" agentLabel="AI Biz Bot" description="Chat — scheduling, membership, walk-ins." onOpenInChat={openDemoInChat} />
+            <DemoLaunchCard slug="the-joint-chiropractic" companyName="The Joint Chiropractic" agentLabel="Voice Concierge" description="Same knowledge over voice. Push-to-talk in the panel." onOpenInChat={openDemoInChat} />
+          </div>
         </div>
       </section>
       {/* Features - commented out for now
@@ -1548,88 +1646,41 @@ export default function BusinessPage() {
         </div>
       </section>
       */}
-      {/* How It Works — QR code → Website flow only */}
-      <section className="py-16 px-6 bg-slate-900/20 border-y border-white/5">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-bold text-white text-center mb-4">How It Works</h2>
-          <p className="text-slate-400 text-center max-w-2xl mx-auto mb-12">
-            Businesses display a Clear Voice AI QR code at their location. Customers scan it and land on the business website — then start a voice or chat conversation instantly.
-          </p>
-          <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-8">
-            <div className="flex flex-col items-center text-center w-full md:max-w-[280px]">
-              <div className="w-full rounded-sui overflow-hidden border border-indigo-500/20 bg-slate-900/40 shadow-xl mb-4">
-                <img src={howItWorksQr} alt="QR code sign — Boardwalk Suites Lafayette, Receptionist, powered by Clear Voice AI" className="w-full h-auto object-cover" />
-              </div>
-              <h3 className="text-lg font-bold text-white mb-2">1. Scan the QR code</h3>
-              <p className="text-slate-400 text-sm">
-                At the door, front desk, or table — each location has a QR sign (e.g. &quot;Receptionist&quot; or &quot;Concierge&quot;) powered by Clear Voice AI.
-              </p>
-            </div>
-            <div className="flex-shrink-0 text-indigo-400" aria-hidden>
-              <ArrowRight className="w-10 h-10 md:w-12 md:h-12" />
-            </div>
-            <div className="flex flex-col items-center text-center w-full md:max-w-[280px]">
-              <div className="w-full rounded-sui overflow-hidden border border-indigo-500/20 bg-slate-900/40 shadow-xl mb-4">
-                <img src={howItWorksWebsite} alt="Business website on phone — Voice Concierge and Chat" className="w-full h-auto object-cover" />
-              </div>
-              <h3 className="text-lg font-bold text-white mb-2">2. Open the business website</h3>
-              <p className="text-slate-400 text-sm">
-                Your phone opens the business’s page — hours, location, and a clear way to reach the AI assistant.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Clear Voice AI — title full width, paragraph full width, then 50/50 split: image | bullets */}
-      <section className="py-16 px-6 bg-slate-900/40 border-y border-white/5">
-        <div className="max-w-5xl mx-auto">
-          <div className="rounded-sui bg-slate-900/60 border border-indigo-500/20 backdrop-blur-xl overflow-hidden shadow-2xl p-6 md:p-10">
-            <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 uppercase tracking-tight w-full">
-              Clear Voice AI will replace telephony for business by 2030
-            </h2>
-            <p className="text-slate-300 text-sm md:text-base leading-relaxed mb-8 w-full">
-              A quiet revolution is forming and it’s happening right in front of you — and you probably didn’t see it yet. Gateway Global AI made a bold promise to the world that its Clear Voice AI technology would replace telephony for business by 2030, and they appear to have good reason to believe that. The Clear Voice PTT interface outperforms and out-engineers traditional phone and the leading models and providers like Eleven Labs, Vapi, ChatGPT, and Gemini Live.
-            </p>
-            <div className="grid md:grid-cols-2 gap-8 md:gap-10 w-full">
-              <div className="rounded-sui overflow-hidden border border-indigo-500/20 w-full">
-                <img src={howItWorksVoice} alt="Clear Voice AI interface — Hold to Speak, Voice Concierge" className="w-full h-auto object-cover" />
-              </div>
-              <div className="flex flex-col justify-center">
-                <div className="rounded-sui overflow-hidden border border-indigo-500/20 max-w-[280px] mb-4">
-                  <img src={clearVoiceQrReceptionist} alt="Scan for Receptionist — Powered by Clear Voice AI" className="w-full h-auto object-cover" />
-                </div>
-                <h3 className="text-lg font-bold text-white mb-4">Why Clear Voice AI Works</h3>
-                <ul className="space-y-3 text-slate-300 text-sm md:text-base">
-                  <li className="flex items-start gap-2">
-                    <span className="text-indigo-400 mt-0.5">•</span>
-                    <span>Users scan the QR code and the Clear Voice PTT interface loads instantly — avoiding dial tones, phone trees, and voicemail.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-indigo-400 mt-0.5">•</span>
-                    <span>Phones equipped to scan QR codes so they do not need phone numbers.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-indigo-400 mt-0.5">•</span>
-                    <span>The Clear Voice interface is connected to Google Places and is an expert trained on the business and the customer’s needs.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-indigo-400 mt-0.5">•</span>
-                    <span>Clear Voice AI effortlessly handles turn-taking, background noise, and tool calls.</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-indigo-400 mt-0.5">•</span>
-                    <span>Clear Voice AI utilizes proprietary DISC and ARCH communication protocols to produce AI agents that outperform 90% of humans on information calls.</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Reseller & Affiliate Program — bottom of page: register + $99 Stripe checkout */}
       <AffiliateResellerSection />
+
+      <section className="border-t border-white/5 bg-slate-950 px-6 py-20">
+        <div className="mx-auto max-w-4xl rounded-sui border border-indigo-500/20 bg-slate-900/40 p-8 text-center backdrop-blur-xl md:p-10">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-indigo-400">
+            Request Info
+          </p>
+          <h2 className="mt-3 text-3xl font-bold text-white">
+            Want a guided walkthrough of the Clear Voice platform?
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-400">
+            Search for your business above to start the live onboarding flow, or contact the team if you
+            want a guided demo for a location, franchise network, reseller program, or industry-pack rollout.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/contact">
+              <Button className="rounded-sui bg-indigo-600 px-6 text-white hover:bg-indigo-500">
+                Request Information
+              </Button>
+            </Link>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setInitialView('voice');
+                setIsChatOpen(true);
+              }}
+              className="rounded-sui border-slate-600 bg-transparent px-6 text-slate-200 hover:bg-slate-800"
+            >
+              Open Voice Concierge
+            </Button>
+          </div>
+        </div>
+      </section>
 
       <footer className="py-12 text-center text-sm border-t border-slate-900 space-y-4">
         <div className="flex items-center justify-center gap-4">
@@ -1722,6 +1773,7 @@ export default function BusinessPage() {
           const nextMode = modes[(currentIndex + 1) % modes.length];
           setChatLayout(nextMode);
         }}
+        showOwnerControls={false}
         onOpenAdmin={(tab) => {
           const path = tab ? `/app/aibizbot?tab=${tab}${resolvedSiteConfigId ? `&site=${resolvedSiteConfigId}` : ''}` : '/app/aibizbot';
           const url = `${typeof window !== 'undefined' ? window.location.origin : ''}${path}`;
@@ -1745,6 +1797,12 @@ export default function BusinessPage() {
         isAuthenticated={isAuthenticated || isCustomerAuth}
         onHistoryClick={() => setLocation('/app/compliance-gateway')}
         onSmsConsentClick={() => setLocation('/login')}
+        publicSlug={resolvedSiteSlug ?? undefined}
+        transferUrl={typeof window !== 'undefined' ? `${window.location.origin}/demo` : '/demo'}
+        transferTitle={selectedPlace ? 'Open Demo On Phone' : 'Gateway Global AI Demo'}
+        transferDescription={selectedPlace
+          ? 'Scan to continue this demo flow on your phone.'
+          : 'Scan to open the business lookup and chat demo on your phone.'}
         variant="sovereign"
         zIndex={60}
       />

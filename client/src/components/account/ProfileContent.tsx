@@ -287,7 +287,9 @@ function MsaModalContent({ status, token, onAccepted, onClose }: MsaModalContent
   );
 }
 
-export type CommandCenterSection = 'profile' | 'governance' | 'billing-summary' | 'my-businesses';
+import { OperationsPanel } from '@/components/account/OperationsPanel';
+
+export type CommandCenterSection = 'profile' | 'governance' | 'operations' | 'billing-summary' | 'my-businesses';
 
 export function ProfileContent({ section: embeddedSection }: { section?: CommandCenterSection } = {}) {
   const { user, token, updateUser, isAuthenticated, isLoading } = useCustomerAuth();
@@ -305,7 +307,7 @@ export function ProfileContent({ section: embeddedSection }: { section?: Command
   const pickerRef = useRef<HTMLDivElement>(null);
   const [showMsaModal, setShowMsaModal] = useState(false);
   const hashToSection = (h: string): CommandCenterSection | null =>
-    (['profile', 'governance', 'billing-summary', 'my-businesses'] as CommandCenterSection[]).includes(h as CommandCenterSection) ? (h as CommandCenterSection) : null;
+    (['profile', 'governance', 'operations', 'billing-summary', 'my-businesses'] as CommandCenterSection[]).includes(h as CommandCenterSection) ? (h as CommandCenterSection) : null;
   const initialSection = (() => {
     if (typeof window === 'undefined') return 'profile';
     const hash = window.location.hash.slice(1);
@@ -316,12 +318,14 @@ export function ProfileContent({ section: embeddedSection }: { section?: Command
   const displaySection: CommandCenterSection = embeddedSection ?? activeSection;
   const showProfile = displaySection === 'profile' || (isEmbedded && embeddedSection === 'profile');
   const showGovernance = displaySection === 'governance' || (isEmbedded && embeddedSection === 'profile');
+  const showOperations = displaySection === 'operations';
   const showBillingSummary = !isEmbedded && displaySection === 'billing-summary';
   const showMyBusinesses = displaySection === 'my-businesses' || (isEmbedded && embeddedSection === 'my-businesses');
 
   const categoryMenu: { id: CommandCenterSection; label: string }[] = [
     { id: 'profile', label: 'Profile' },
-    { id: 'governance', label: 'Governance' },
+    { id: 'governance', label: 'Legal & Compliance' },
+    { id: 'operations', label: 'Operations' },
     { id: 'billing-summary', label: 'Billing summary' },
     { id: 'my-businesses', label: 'My Businesses' },
   ];
@@ -802,6 +806,12 @@ export function ProfileContent({ section: embeddedSection }: { section?: Command
         </Card>
         )}
 
+        {showOperations && (
+          <Card className="bg-slate-900/80 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl overflow-hidden" data-testid="card-operations">
+             <OperationsPanel siteConfigId={businesses[0]?.id} />
+          </Card>
+        )}
+
         {showBillingSummary && (
         <Card className="bg-slate-900/80 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl p-6" data-testid="card-billing">
           <div className="flex items-center gap-3 mb-6">
@@ -859,103 +869,24 @@ export function ProfileContent({ section: embeddedSection }: { section?: Command
 
         {showMyBusinesses && (
         <Card className="bg-slate-900/80 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl p-6" data-testid="card-my-businesses">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-sui">
-                <Building2 className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-white">My Businesses</h2>
-                <p className="text-sm text-slate-300">{businesses.length} site{businesses.length !== 1 ? "s" : ""} registered</p>
-              </div>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-sui">
+              <Building2 className="w-5 h-5 text-emerald-400" />
             </div>
-            <Button
-              variant="outline"
-              onClick={() => setShowAddBusiness(!showAddBusiness)}
-              className="border-slate-700 text-slate-300 hover:border-indigo-500"
-              data-testid="button-add-business"
-            >
-              {showAddBusiness ? <><X className="w-4 h-4 mr-2" />Cancel</> : <><Globe className="w-4 h-4 mr-2" />Add Business</>}
-            </Button>
+            <div>
+              <h2 className="text-lg font-semibold text-white">My Businesses</h2>
+              <p className="text-sm text-slate-300">Add prospects, invite via SMS, and track earnings in the Reseller Dashboard.</p>
+            </div>
           </div>
-
-          {showAddBusiness && (
-            <div className="mb-4 p-4 bg-slate-50/5 border border-white/10 rounded-sui backdrop-blur-sm relative z-50" data-testid="add-business-panel">
-              <p className="text-sm text-slate-400 mb-3">
-                <Search className="w-4 h-4 inline-block mr-1 -mt-0.5" />
-                Search Google Maps for your business, then select it to generate your AI website.
-              </p>
-              <div ref={pickerRef} className="w-full" data-testid="place-picker-container" />
-              {addingBusiness && (
-                <div className="flex items-center gap-2 mt-3 text-sm text-blue-400">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating your AI website...
-                </div>
-              )}
-            </div>
-          )}
-
-          {businessesQuery.isLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
-            </div>
-          ) : businessesQuery.isError ? (
-            <div className="text-center py-8 border border-dashed border-amber-500/30 rounded-2xl bg-amber-500/5">
-              <p className="text-amber-200 text-sm mb-3">Couldn&apos;t load businesses. Please try again.</p>
-              <Button variant="outline" size="sm" onClick={() => businessesQuery.refetch()}>Retry</Button>
-            </div>
-          ) : businesses.length === 0 && !showAddBusiness ? (
-            <div className="text-center py-8 border border-dashed border-white/10 rounded-2xl">
-              <Building2 className="w-10 h-10 mx-auto text-slate-400 mb-3" />
-              <p className="text-slate-400 text-sm mb-4">No businesses yet. Generate your first AI-powered website!</p>
-              <Button variant="default" onClick={() => setShowAddBusiness(true)} className="bg-indigo-600 hover:bg-indigo-500" data-testid="button-create-first">
-                Get Started
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {businesses.map((biz: any) => (
-                <div
-                  key={biz.id}
-                  className="flex items-center justify-between gap-3 p-4 bg-slate-50/5 !border !border-white/10 rounded-2xl backdrop-blur-sm hover:bg-slate-50/[0.07] transition-colors flex-wrap"
-                  data-testid={`business-row-${biz.id}`}
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-10 h-10 rounded-sui bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-5 h-5 text-indigo-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-white font-medium truncate">{biz.name}</p>
-                      {biz.domain && <p className="text-xs text-slate-300 truncate">{biz.domain}</p>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Badge className={`text-xs ${biz.chatbotEnabled ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-slate-700/50 text-slate-400 border-slate-600/30"}`}>
-                      {biz.chatbotEnabled ? "Live" : "Draft"}
-                    </Badge>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => nav(`/aibizbot?site=${biz.id}`)}
-                      className="border-indigo-500/40 text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/10 text-xs h-8"
-                      data-testid={`button-configure-ai-${biz.id}`}
-                    >
-                      <Settings2 className="w-3 h-3 mr-1.5" /> Configure AI
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => nav(`/my-account/site/${biz.id}`)}
-                      className="border-slate-700 text-slate-300 hover:border-slate-500 text-xs h-8"
-                      data-testid={`button-manage-${biz.id}`}
-                    >
-                      Manage <ExternalLink className="w-3 h-3 ml-1.5" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <Button
+            variant="outline"
+            onClick={() => setLocation("/app/reseller")}
+            className="border-indigo-500/40 text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/10"
+            data-testid="button-open-reseller-dashboard"
+          >
+            <ExternalLink className="w-4 h-4 mr-2" />
+            Open Reseller Dashboard
+          </Button>
         </Card>
         )}
       </div>

@@ -13,17 +13,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { GatewayRouterPanel } from '@/components/admin/GatewayRouterPanel';
 import { AgentCreatorPanel } from '@/components/admin/AgentCreatorPanel';
-import { Link, useLocation } from 'wouter';
+import { AgentRosterPanel } from '@/components/admin/AgentRosterPanel';
+import { useLocation, Link } from 'wouter';
 import {
   Bot, Plus, Globe, MessageSquare, Settings, Trash2,
   Send, Loader2, ExternalLink, Code, Copy, Check, Network, Users,
   Sparkles, Clock, Star, MapPin, Phone, Zap,
-  ShoppingCart, Headphones, Palette, BookOpen, UserPlus, Image as ImageIcon, Building2,
-  User, Activity, CreditCard, Shield, ChevronRight, QrCode, Share2
+  ShoppingCart, Headphones, Palette, BookOpen, Image as ImageIcon, Building2,
+  Activity, QrCode, Share2, ArrowLeft, BarChart3, Upload, FileText,
+  Home
 } from 'lucide-react';
 import { GoogleWorkspacePanel } from '@/components/workspace/GoogleWorkspacePanel';
 import StandardizedChatInterface from '@/components/StandardizedChatInterface';
 import { QRRoutesManager } from '@/components/account/QRRoutesManager';
+import { CashBoardPanel } from '@/components/account/CashBoardPanel';
+import { AiBizBotDashboard } from '@/pages/owner/AiBizBotDashboard';
 import type { Agent, SiteConfig, BotTemplate } from '@shared/schema';
 
 interface ChatMessage {
@@ -44,6 +48,9 @@ interface KnowledgeDoc {
   title: string;
   content: string;
   addedAt: string;
+  category?: string;
+  topic?: string;
+  documentDate?: string;
 }
 
 interface DemoLeadRow {
@@ -72,14 +79,16 @@ function KnowledgeLibraryTab({
   onUpdate: () => void;
 }) {
   const { toast } = useToast();
-  const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [adding, setAdding] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addDoc = async () => {
-    if (!title.trim() || !content.trim()) {
-      toast({ title: 'Title and content required', variant: 'destructive' });
+    if (!content.trim()) {
+      toast({ title: 'Content required', variant: 'destructive' });
       return;
     }
     setAdding(true);
@@ -87,17 +96,45 @@ function KnowledgeLibraryTab({
       const res = await fetch(`/api/site-configs/${siteId}/knowledge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), content: content.trim() }),
+        body: JSON.stringify({ content: content.trim() }),
       });
       if (!res.ok) throw new Error(await res.text());
-      setTitle('');
       setContent('');
       onUpdate();
-      toast({ title: 'Document added to knowledge library' });
+      toast({ title: 'Document added; AI classified and indexed it.' });
     } catch (e: any) {
       toast({ title: 'Failed to add', description: e.message, variant: 'destructive' });
     }
     setAdding(false);
+  };
+
+  const uploadFiles = async (files: FileList | File[]) => {
+    const list = Array.isArray(files) ? files : Array.from(files);
+    if (!list.length) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      list.forEach((f) => formData.append('files', f));
+      const res = await fetch(`/api/site-configs/${siteId}/knowledge/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      onUpdate();
+      toast({ title: 'Documents uploaded', description: `${data.added ?? list.length} file(s) classified and indexed by AI.` });
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err: any) {
+      toast({ title: 'Upload failed', description: err.message, variant: 'destructive' });
+    }
+    setUploading(false);
+  };
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = e.dataTransfer.files;
+    if (files?.length) uploadFiles(files);
   };
 
   const deleteDoc = async (docId: string) => {
@@ -114,197 +151,102 @@ function KnowledgeLibraryTab({
   };
 
   return (
-    <div className="space-y-5">
-      <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-4">
-        <p className="text-sm text-slate-300 mb-3">
-          Upload or paste content to train your site&apos;s AI. The chatbot will use this knowledge to answer questions. You can add research docs, menus, FAQs, or anything that helps the agent sound expert about your business.
+    <div className="space-y-6">
+      <div className="rounded-sui bg-slate-900/40 border border-indigo-500/20 p-4">
+        <p className="text-sm text-slate-300 mb-4">
+          Drag and drop documents or paste content below. The system will <strong>automatically classify</strong> each item as <strong>api_docs</strong>, <strong>hotel</strong>, or <strong>platform_economics</strong> and index it so the AI Biz Bot can find answers.
         </p>
+
+        {/* Drag-and-drop upload */}
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+          className={`mb-6 rounded-sui border-2 border-dashed p-8 text-center transition-colors ${
+            dragOver ? 'border-indigo-400 bg-indigo-500/10' : 'border-slate-600 bg-slate-800/30'
+          }`}
+        >
+          <Upload className="w-10 h-10 mx-auto text-slate-400 mb-2" />
+          <p className="text-slate-300 text-sm mb-1">Drop files here or click to browse</p>
+          <p className="text-slate-400 text-xs mb-3">.txt, .md, .pdf, .yaml, .csv — AI will tag category and topic</p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".txt,.md,.pdf,.yaml,.yml,.csv,text/plain,text/markdown,application/pdf"
+            className="hidden"
+            onChange={(e) => e.target.files?.length && uploadFiles(e.target.files)}
+            disabled={uploading}
+          />
+          <Button
+            size="sm"
+            className="bg-indigo-500 hover:bg-indigo-600"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Choose files'}
+          </Button>
+        </div>
+
+        {/* Paste content — content only; LLM sets title/category/topic */}
+        <h3 className="text-sm font-medium text-white mb-2">Or paste content</h3>
         <div className="space-y-3">
-          <div>
-            <Label className="text-slate-300 text-xs mb-1 block">Document title</Label>
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Blueberry Hill AI training guide"
-              className="bg-slate-800 border-slate-700 text-white"
-              data-testid="input-knowledge-title"
-            />
-          </div>
-          <div>
-            <Label className="text-slate-300 text-xs mb-1 block">Content (markdown or plain text)</Label>
-            <Textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Paste or type content the AI should use to answer questions..."
-              className="min-h-[160px] bg-slate-800 border-slate-700 text-white font-mono text-sm"
-              data-testid="textarea-knowledge-content"
-            />
-          </div>
+          <Textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Paste content… AI will classify and index it."
+            className="min-h-[120px] bg-slate-800 border-slate-700 text-white font-mono text-sm"
+            data-testid="textarea-knowledge-content"
+          />
           <Button onClick={addDoc} disabled={adding} size="sm" data-testid="button-knowledge-add">
             {adding ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <BookOpen className="w-4 h-4 mr-1" />}
             Add to library
           </Button>
         </div>
       </div>
+
       <div>
         <Label className="text-slate-300 text-xs mb-2 block">Documents in library ({docs.length})</Label>
         {docs.length === 0 ? (
-          <p className="text-slate-500 text-sm">No documents yet. Add one above to train the agent.</p>
+          <p className="text-slate-300 text-sm">No documents yet. Upload files or add content above. The AI Biz Bot will search this library when users ask questions.</p>
         ) : (
-          <ul className="space-y-2">
-            {docs.map((d) => (
-              <li
-                key={d.id}
-                className="flex items-center justify-between gap-3 p-3 rounded-lg bg-slate-800/50 border border-slate-700"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm text-white truncate">{d.title}</p>
-                  <p className="text-xs text-slate-500 truncate">{d.content.length > 80 ? d.content.slice(0, 80) + '…' : d.content}</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 shrink-0"
-                  onClick={() => deleteDoc(d.id)}
-                  disabled={deletingId === d.id}
-                  data-testid={`button-knowledge-delete-${d.id}`}
-                >
-                  {deletingId === d.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                </Button>
-              </li>
-            ))}
-          </ul>
+          <div className="rounded-sui border border-indigo-500/20 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-800/60 border-b border-indigo-500/20">
+                  <th className="text-left py-2 px-3 text-slate-300 font-medium">Title</th>
+                  <th className="text-left py-2 px-3 text-slate-300 font-medium">Category</th>
+                  <th className="text-left py-2 px-3 text-slate-300 font-medium">Topic</th>
+                  <th className="text-left py-2 px-3 text-slate-300 font-medium">Date</th>
+                  <th className="text-right py-2 px-3 text-slate-300 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {docs.map((d) => (
+                  <tr key={d.id} className="border-b border-slate-700/50 hover:bg-slate-800/30">
+                    <td className="py-2 px-3 font-medium text-white truncate max-w-[200px]">{d.title}</td>
+                    <td className="py-2 px-3 text-slate-400">{d.category ?? 'General'}</td>
+                    <td className="py-2 px-3 text-slate-400">{d.topic ?? 'General'}</td>
+                    <td className="py-2 px-3 text-slate-400 font-mono text-xs">{d.documentDate ?? d.addedAt?.slice(0, 10) ?? '—'}</td>
+                    <td className="py-2 px-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        onClick={() => deleteDoc(d.id)}
+                        disabled={deletingId === d.id}
+                        data-testid={`button-knowledge-delete-${d.id}`}
+                      >
+                        {deletingId === d.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function DemoLeadsSidebar({
-  leads,
-  onSelectSite,
-  selectedSiteId,
-}: {
-  leads: DemoLeadRow[];
-  onSelectSite: (siteId: string) => void;
-  selectedSiteId: string | null;
-}) {
-  if (leads.length === 0) return null;
-  return (
-    <div className="space-y-2 mb-6">
-      <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-        <UserPlus className="w-3.5 h-3.5" />
-        Customers &amp; Demos
-      </h3>
-      <p className="text-[10px] text-slate-500 mb-2">New signups with demo links</p>
-      <ul className="space-y-2 max-h-48 overflow-y-auto">
-        {leads.slice(0, 20).map((lead) => (
-          <li
-            key={lead.id}
-            className="p-2.5 rounded-lg border border-slate-700 bg-slate-800/50 text-left"
-          >
-            <p className="font-medium text-xs text-white truncate">{lead.businessName}</p>
-            {lead.phone && <p className="text-[10px] text-slate-500 truncate">{lead.phone}</p>}
-            <p className="text-[10px] text-slate-500 mt-0.5">
-              {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : '—'}
-            </p>
-            <div className="flex items-center gap-1.5 mt-2">
-              <a
-                href={lead.demoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300"
-              >
-                <ExternalLink className="w-3 h-3" /> Open demo
-              </a>
-              {lead.siteId && (
-                <button
-                  type="button"
-                  onClick={() => onSelectSite(lead.siteId!)}
-                  className={`inline-flex items-center gap-1 text-[10px] ${selectedSiteId === lead.siteId ? 'text-indigo-300' : 'text-slate-500 hover:text-slate-400'}`}
-                >
-                  <Globe className="w-3 h-3" /> View site
-                </button>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
-      {leads.length > 20 && (
-        <p className="text-[10px] text-slate-500">Showing 20 of {leads.length}</p>
-      )}
-    </div>
-  );
-}
-
-function SiteList({
-  sites,
-  selectedId,
-  onSelect,
-  onCreateNew,
-}: {
-  sites: SiteConfig[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  onCreateNew: () => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2 mb-4">
-        <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">Your Sites</h3>
-        <Button size="sm" variant="outline" onClick={onCreateNew} data-testid="button-create-site">
-          <Plus className="w-4 h-4 mr-1" /> Add Site
-        </Button>
-      </div>
-      {sites.length === 0 && (
-        <div className="text-center py-8 text-slate-500">
-          <Globe className="w-10 h-10 mx-auto mb-3 text-slate-600" />
-          <p className="text-sm">No sites configured yet.</p>
-          <p className="text-xs text-slate-600 mt-1">Generate a website from the home page, then add it here.</p>
-        </div>
-      )}
-      {sites.map((site) => {
-        const placeData = site.placeData as any;
-        return (
-          <button
-            key={site.id}
-            onClick={() => onSelect(site.id)}
-            className={`w-full text-left p-3 rounded-lg border transition-colors ${
-              selectedId === site.id
-                ? 'bg-indigo-500/10 border-indigo-500/30 text-white'
-                : 'bg-slate-800/50 border-slate-700 text-slate-300 hover:bg-slate-800'
-            }`}
-            data-testid={`button-site-${site.id}`}
-          >
-            <div className="flex items-start gap-3">
-              <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${
-                selectedId === site.id ? 'bg-indigo-500/20 text-indigo-400' : 'bg-slate-700 text-slate-400'
-              }`}>
-                <Globe className="w-4 h-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-sm truncate">{site.name}</p>
-                {site.domain && <p className="text-xs text-slate-500 truncate">{site.domain}</p>}
-                <div className="flex items-center gap-2 mt-1">
-                  {site.chatbotEnabled ? (
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Chat On</Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-slate-500">Chat Off</Badge>
-                  )}
-                  {placeData?.rating && (
-                    <span className="text-[10px] text-amber-400 flex items-center gap-0.5">
-                      <Star className="w-2.5 h-2.5 fill-current" /> {placeData.rating}
-                    </span>
-                  )}
-                  {site.modelProvider && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-emerald-400 border-emerald-400/30">{site.modelProvider}</Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-          </button>
-        );
-      })}
     </div>
   );
 }
@@ -349,6 +291,334 @@ function getSuggestedSocialSharing(site: SiteConfig): SocialSharingFields {
     ogType: 'website',
     twitterCard: 'summary_large_image',
   };
+}
+
+/** Suggest a URL-safe slug from a name (no random suffix). */
+function suggestSlugFromName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 60)
+    .replace(/^-|-$/g, '') || 'my-site';
+}
+
+/** Home tab: 4 summary cards (Account, Voice Services, Recent Activity, Affiliate), then customer website. No header logo (branding is in sidebar). */
+function HomeTab({
+  site,
+  onUpdate,
+  isUpdating,
+}: {
+  site: SiteConfig;
+  onUpdate?: (u: Partial<SiteConfig>) => void;
+  isUpdating?: boolean;
+}) {
+  const placeData = site.placeData as { formatted_phone_number?: string; name?: string } | null;
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const websiteUrl = site.slug ? `${baseUrl}/biz/${site.slug}` : '';
+  const [slugDraft, setSlugDraft] = useState(site.slug ?? suggestSlugFromName(site.name ?? ''));
+  useEffect(() => {
+    if (site.slug) setSlugDraft(site.slug);
+    else setSlugDraft(suggestSlugFromName(site.name ?? ''));
+  }, [site.id, site.slug, site.name]);
+
+  const { data: energy, isLoading: energyLoading } = useQuery<{ minuteBalance: number | null; totalBilledMinutes: number; totalBilledAmountCents: number }>({
+    queryKey: ['energy-balance', site.id],
+    queryFn: () => fetch(`/api/site-configs/${site.id}/energy`).then((r) => r.json()),
+  });
+
+  const { data: voiceLogs = [], isLoading: logsLoading } = useQuery<{ callType: string; rawDurationSeconds: number; billedMinutes: number; createdAt: string }[]>({
+    queryKey: ['energy-logs', site.id],
+    queryFn: () => fetch(`/api/site-configs/${site.id}/energy/logs?limit=10`).then((r) => r.json()),
+  });
+
+  const { data: resellerStatus } = useQuery<{ stripeConnectId: string | null; balance: number | null } | null>({
+    queryKey: ['/api/reseller/status'],
+    queryFn: async () => {
+      const r = await fetch('/api/reseller/status', { credentials: 'include' });
+      if (!r.ok) return null;
+      return r.json();
+    },
+    retry: false,
+  });
+  const { data: commissions } = useQuery<{ totalEarnings: number; activeClients: number; commissions: unknown[] } | null>({
+    queryKey: ['/api/reseller/commissions'],
+    queryFn: async () => {
+      const r = await fetch('/api/reseller/commissions', { credentials: 'include' });
+      if (!r.ok) return null;
+      return r.json();
+    },
+    retry: false,
+  });
+
+  const planMinutes = (site as any).voicePhoneAiMinutes ?? 0;
+  const usedMinutes = energy?.totalBilledMinutes ?? 0;
+
+  return (
+    <div className="space-y-6">
+      {/* 4 cards — Shadcn-style: rounded-xl, shadow, clear hierarchy */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="rounded-xl border border-slate-200/90 bg-white shadow-md">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-2">
+              <Activity className="w-4 h-4 text-indigo-500" /> Account
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">UUID</span><span className="font-mono text-xs text-slate-900 truncate max-w-[120px]" title={site.id}>{site.id.slice(0, 8)}…</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Website URL</span><a href={websiteUrl} target="_blank" rel="noreferrer" className="text-indigo-600 truncate max-w-[140px] hover:underline" title={websiteUrl}>{(websiteUrl && site.slug) ? `/biz/${site.slug}` : '—'}</a></div>
+            <div className="flex justify-between"><span className="text-slate-500">Phone</span><span className="text-slate-900 font-mono text-xs">{(site as any).provisionedPhoneNumber || placeData?.formatted_phone_number || '—'}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">AI Router</span><span className="text-slate-700 text-xs">On</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">AI Phone</span><span className="text-slate-700 text-xs">{(site as any).provisionedPhoneNumber ? 'Active' : '—'}</span></div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl border border-slate-200/90 bg-white shadow-md">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-2">
+              <Phone className="w-4 h-4 text-indigo-500" /> Voice Services
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5 text-sm">
+            {energyLoading ? (
+              <Skeleton className="h-16 w-full rounded" />
+            ) : (
+              <>
+                <div className="flex justify-between"><span className="text-slate-500">Minutes in plan</span><span className="text-slate-900 font-mono">{planMinutes}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Minutes used</span><span className="text-slate-900 font-mono">{usedMinutes}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Balance</span><span className="text-emerald-600 font-mono">{energy?.minuteBalance ?? '—'}</span></div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl border border-slate-200/90 bg-white shadow-md">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-2">
+              <Clock className="w-4 h-4 text-indigo-500" /> Recent Activity
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {logsLoading ? (
+              <Skeleton className="h-20 w-full rounded" />
+            ) : voiceLogs.length === 0 ? (
+              <p className="text-xs text-slate-500">No voice activity yet</p>
+            ) : (
+              <ul className="space-y-1.5 max-h-28 overflow-y-auto">
+                {voiceLogs.slice(0, 5).map((log, i) => (
+                  <li key={i} className="flex justify-between text-xs">
+                    <span className="text-slate-500">{log.callType || 'Voice'}</span>
+                    <span className="text-slate-700">{log.billedMinutes}m · {log.createdAt ? new Date(log.createdAt).toLocaleDateString() : ''}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-xl border border-slate-200/90 bg-white shadow-md">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-indigo-500" /> Affiliate Program
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1.5 text-sm">
+            {(commissions != null || resellerStatus != null) ? (
+              <>
+                <div className="flex justify-between"><span className="text-slate-500">Earnings (YTD)</span><span className="text-slate-900 font-mono">${(commissions?.totalEarnings ?? 0).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Active clients</span><span className="text-slate-900 font-mono">{commissions?.activeClients ?? 0}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Balance</span><span className="text-emerald-600 font-mono">${(resellerStatus?.balance ?? 0).toFixed(2)}</span></div>
+                <p className="text-[10px] text-slate-500 mt-1">Next payout via Stripe Connect</p>
+              </>
+            ) : (
+              <p className="text-xs text-slate-500">Not a reseller or sign in required</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Customer website below — hero in background of preview area */}
+      <Card className="rounded-xl border border-slate-200/90 overflow-hidden bg-white shadow-md">
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+          <span className="text-sm font-medium text-slate-900">Your website</span>
+          {websiteUrl && (
+            <a href={websiteUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+              Open in new tab <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+        <div className="relative min-h-[420px] overflow-hidden">
+          {/* Hero section image as background for this block */}
+          <div className="absolute inset-0 z-0">
+            <img src="/hero-storefront-lovely-lashes.png" alt="" className="w-full h-full object-cover" aria-hidden onError={(e) => { const el = e.target as HTMLImageElement; el.style.display = 'none'; }} />
+            <div className="absolute inset-0 bg-slate-900/40" aria-hidden />
+          </div>
+          <div className="relative z-10 h-[420px] flex flex-col">
+          {websiteUrl ? (
+            <iframe
+              src={websiteUrl}
+              title={`${site.name} — Live site`}
+              className="w-full h-full min-h-[420px] border-0 flex-1"
+              sandbox="allow-scripts allow-same-origin allow-forms"
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-[420px] text-slate-600 p-6">
+              <Globe className="w-12 h-12 mb-4 opacity-50 text-slate-400" />
+              <p className="text-sm font-medium text-slate-700 mb-1">No public URL yet</p>
+              <p className="text-xs text-slate-600 mb-4">Set a URL slug below to get your website link. You can change it later in Settings.</p>
+              {onUpdate && (
+                <div className="w-full max-w-sm space-y-2">
+                  <Label className="text-xs text-slate-600">Website URL slug</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={slugDraft}
+                      onChange={(e) => setSlugDraft(e.target.value)}
+                      placeholder={suggestSlugFromName(site.name ?? '')}
+                      className="bg-white border-slate-300 text-slate-900 font-mono text-sm"
+                      data-testid="input-home-slug"
+                    />
+                    <Button
+                      onClick={() => onUpdate({ slug: slugDraft.trim() || undefined })}
+                      disabled={!slugDraft.trim() || isUpdating}
+                      className="shrink-0"
+                      data-testid="button-save-slug"
+                    >
+                      {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-slate-600">Your link will be: /biz/{slugDraft.trim() || '…'}</p>
+                </div>
+              )}
+            </div>
+          )}
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/** Publishing tab: custom domain + Hostinger verify-ownership. Payment-gated (non-free plan). */
+function PublishingTab({
+  site,
+  onUpdate,
+  toast,
+  onSwitchToPlan,
+}: {
+  site: SiteConfig;
+  onUpdate: (u: Partial<SiteConfig>) => void;
+  toast: (opts: { title: string; description?: string; variant?: 'default' | 'destructive' }) => void;
+  onSwitchToPlan?: () => void;
+}) {
+  const sitePlan = (site as any).plan || 'free';
+  const domainVerifiedAt = (site as any).domainVerifiedAt as string | null | undefined;
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<{ is_accessible?: boolean; txt_to_verify?: string | null } | null>(null);
+
+  if (sitePlan === 'free') {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-sui bg-amber-500/10 border border-amber-500/30 p-4">
+          <p className="text-amber-200 text-sm font-medium">Publishing requires a paid plan</p>
+          <p className="text-slate-400 text-xs mt-1">Upgrade to add and verify a custom domain for this site.</p>
+          <Button
+            size="sm"
+            className="mt-3 bg-amber-600 hover:bg-amber-500"
+            onClick={onSwitchToPlan}
+            data-testid="button-publishing-upgrade"
+          >
+            <Sparkles className="w-3 h-3 mr-1" /> Go to Plan
+          </Button>
+        </div>
+        <p className="text-slate-600 text-xs">Switch to the Plan tab to upgrade, then return here to set your custom domain.</p>
+      </div>
+    );
+  }
+
+  const handleVerify = async () => {
+    const domain = (site.domain || '').trim().replace(/^www\./i, '');
+    if (!domain) {
+      toast({ title: 'Enter a domain first', variant: 'destructive' });
+      return;
+    }
+    setVerifying(true);
+    setVerifyResult(null);
+    try {
+      const res = await fetch(`/api/site-configs/${site.id}/domain/verify-ownership`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: data?.error || 'Verification failed', variant: 'destructive' });
+        setVerifyResult({ is_accessible: false, txt_to_verify: data?.txt_to_verify ?? null });
+        return;
+      }
+      setVerifyResult({ is_accessible: data?.is_accessible, txt_to_verify: data?.txt_to_verify ?? null });
+      if (data?.is_accessible) {
+        onUpdate({ domain: data?.domain ?? domain } as any);
+        queryClient.invalidateQueries({ queryKey: ['/api/site-configs', site.id] });
+        toast({ title: 'Domain verified', description: 'Custom domain is now verified and saved.' });
+      } else if (data?.txt_to_verify) {
+        toast({ title: 'Add DNS record', description: 'Add the TXT record below to your domain DNS, then verify again.' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-900 mb-1">Custom domain</h3>
+        <p className="text-xs text-slate-600 mb-3">Add and verify your custom domain via Hostinger. Shown below the site name on agent pages.</p>
+        <Label className="text-slate-700 text-xs mb-1.5 block">Domain</Label>
+        <Input
+          value={site.domain || ''}
+          onChange={(e) => onUpdate({ domain: e.target.value })}
+          placeholder="e.g. mybusiness.com"
+          className="bg-white border-slate-300 text-slate-900"
+          data-testid="input-publishing-domain"
+        />
+        {domainVerifiedAt && (
+          <p className="text-[10px] text-emerald-400 mt-1.5 flex items-center gap-1">
+            <Check className="w-3 h-3" /> Verified {new Date(domainVerifiedAt).toLocaleDateString()}
+          </p>
+        )}
+      </div>
+      <Button
+        onClick={handleVerify}
+        disabled={verifying || !(site.domain || '').trim()}
+        className="bg-indigo-600 hover:bg-indigo-500"
+        data-testid="button-verify-domain"
+      >
+        {verifying ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Globe className="w-4 h-4 mr-2" />}
+        Verify ownership
+      </Button>
+      {verifyResult && (
+        <div className="rounded-sui bg-slate-50 border border-slate-200 p-4 space-y-2">
+          <p className="text-xs font-medium text-slate-600">Verification result</p>
+          {verifyResult.is_accessible ? (
+            <p className="text-sm text-emerald-400">Domain is verified and saved.</p>
+          ) : verifyResult.txt_to_verify ? (
+            <div>
+              <p className="text-xs text-slate-400 mb-2">Add this TXT record to your domain DNS, then click Verify again. Propagation can take up to 10 minutes.</p>
+              <div className="font-mono text-xs bg-slate-900/80 border border-slate-600 rounded p-2 text-slate-300 break-all">
+                {verifyResult.txt_to_verify}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Verification did not succeed. Check the domain and try again.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SocialSharingCard({ site, onUpdate }: { site: SiteConfig; onUpdate: (u: Partial<SiteConfig>) => void }) {
@@ -401,7 +671,7 @@ function SocialSharingCard({ site, onUpdate }: { site: SiteConfig; onUpdate: (u:
           <Share2 className="w-4 h-4 text-indigo-400" />
           Social Sharing
         </CardTitle>
-        <p className="text-[10px] text-slate-500 mt-0.5">
+        <p className="text-[10px] text-slate-400 mt-0.5">
           Open Graph and meta tags for when this page is shared on social media. All fields have defaults so you can leave them blank.
         </p>
       </CardHeader>
@@ -512,17 +782,20 @@ function AdminPanel({
   onUpdate,
   isUpdating,
   initialTab,
+  horizontalTabs = false,
 }: {
   site: SiteConfig;
   agents: Agent[];
   templates: BotTemplate[];
   onUpdate: (updates: Partial<SiteConfig>) => void;
   isUpdating: boolean;
-  initialTab?: 'settings' | 'plan' | 'gateway' | 'agents' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'knowledge' | 'qr-network';
+  initialTab?: 'home' | 'settings' | 'plan' | 'gateway' | 'agents' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'qr-network' | 'cash-board' | 'publishing';
+  /** When true, use horizontal tab bar at top instead of vertical sidebar (single-site / reseller flow). */
+  horizontalTabs?: boolean;
 }) {
   const placeData = site.placeData as any;
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<'settings' | 'plan' | 'gateway' | 'agents' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'knowledge' | 'qr-network'>(initialTab ?? 'settings');
+  const [activeTab, setActiveTab] = useState<'home' | 'settings' | 'plan' | 'gateway' | 'agents' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'qr-network' | 'cash-board' | 'publishing'>(initialTab ?? 'home');
   useEffect(() => {
     if (initialTab) setActiveTab(initialTab);
   }, [initialTab]);
@@ -641,12 +914,6 @@ function AdminPanel({
     enabled: activeTab === 'logs',
   });
 
-  const { data: knowledgeDocs = [], refetch: refetchKnowledge } = useQuery<{ id: string; title: string; content: string; addedAt: string }[]>({
-    queryKey: ['/api/site-configs', site.id, 'knowledge'],
-    queryFn: () => fetch(`/api/site-configs/${site.id}/knowledge`).then(r => r.json()),
-    enabled: activeTab === 'knowledge',
-  });
-
   const { data: providers = [] } = useQuery<{ provider: string; model: string }[]>({
     queryKey: ['/api/gateway/providers'],
     queryFn: () => fetch('/api/gateway/providers').then(r => r.json()),
@@ -714,61 +981,72 @@ function AdminPanel({
 
   const sitePlan = (site as any).plan || 'free';
   const tabs = [
+    { id: 'home' as const, label: 'Home', icon: Home },
     { id: 'settings' as const, label: 'Settings', icon: Settings },
     { id: 'plan' as const, label: 'Plan', icon: Sparkles },
+    { id: 'publishing' as const, label: 'Publishing', icon: Globe },
     { id: 'gateway' as const, label: 'Gateway', icon: Network },
     { id: 'agents' as const, label: 'Agents', icon: Users },
     { id: 'agent' as const, label: 'Agent', icon: Bot },
     ...(sitePlan === 'voice' ? [{ id: 'workspace' as const, label: 'Workspace', icon: Building2 }] : []),
-    { id: 'knowledge' as const, label: 'Knowledge', icon: BookOpen },
     { id: 'chat' as const, label: 'Test Chat', icon: MessageSquare },
     { id: 'logs' as const, label: 'Logs', icon: Clock },
     { id: 'embed' as const, label: 'Embed', icon: Code },
     { id: 'qr-network' as const, label: 'QR Network', icon: QrCode },
+    { id: 'cash-board' as const, label: 'Cash Board', icon: BarChart3 },
   ];
 
-  return (
-    <div className="flex h-full min-h-0">
-      {/* Vertical menu list (Phase 4.1) */}
-      <div className="w-48 border-r border-slate-700 bg-slate-900/50 flex flex-col shrink-0">
-        <div className="p-4 border-b border-slate-700">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center shrink-0">
-              <Globe className="w-5 h-5 text-indigo-400" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-lg font-bold text-white truncate">{site.name}</h2>
-              {site.domain && (
-                <p className="text-xs text-slate-400 flex items-center gap-1 truncate">
-                  <ExternalLink className="w-3 h-3 shrink-0" /> <span className="truncate">{site.domain}</span>
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-        <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? 'bg-slate-700 text-white'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                }`}
-                data-testid={`tab-${tab.id}`}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+  const tabButtons = tabs.map((tab) => {
+    const Icon = tab.icon;
+    return (
+      <button
+        key={tab.id}
+        type="button"
+        onClick={() => setActiveTab(tab.id)}
+        className={`shrink-0 flex items-center gap-2 px-3 py-2 rounded-sui text-sm font-medium transition-colors ${
+          activeTab === tab.id
+            ? 'bg-indigo-500 text-white border border-indigo-500'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+        }`}
+        data-testid={`tab-${tab.id}`}
+      >
+        <Icon className="w-4 h-4 shrink-0" />
+        <span className="truncate">{tab.label}</span>
+      </button>
+    );
+  });
 
-      <div className="flex-1 overflow-y-auto p-4 min-w-0">
+  const adminHeroBg = '/hero-storefront-lovely-lashes.png';
+  const adminHeroFallback = '/hero-qr-demo.png';
+
+  return (
+    <div className="relative flex min-h-screen h-screen w-full overflow-hidden">
+      {/* Hero background — clearly visible behind content */}
+      <div className="absolute inset-0 z-0">
+        <img src={adminHeroBg} alt="" className="w-full h-full object-cover" aria-hidden onError={(e) => { const el = e.target as HTMLImageElement; if (el.src.endsWith(adminHeroFallback)) el.style.display = 'none'; else el.src = adminHeroFallback; }} />
+        <div className="absolute inset-0 bg-white/55 backdrop-blur-[1px]" aria-hidden />
+      </div>
+      <div className="relative z-10 flex min-h-screen h-screen w-full min-w-0">
+        {/* Vertical sidebar always — one-to-many nav (no horizontal row of tabs) */}
+        <aside className="w-52 shrink-0 flex flex-col border-r border-slate-200/80 bg-white/95 backdrop-blur-sm shadow-sm">
+          <div className="p-4 border-b border-slate-200 shrink-0 flex flex-col items-center gap-2">
+            {horizontalTabs && (
+              <Link href="/platform/tenants" className="text-xs text-slate-600 hover:text-slate-900 flex items-center gap-1 w-full">
+                <ArrowLeft className="w-3.5 h-3.5 shrink-0" /> Back to list
+              </Link>
+            )}
+            <img src="/clear_voice_ai_light_sm_sq.png" alt="Powered by Clear Voice AI" className="h-14 w-auto max-w-full object-contain" />
+          </div>
+          <nav className="flex-1 overflow-y-auto p-2 space-y-0.5 min-h-0 scrollbar-hide">
+            {tabButtons}
+          </nav>
+        </aside>
+
+      {/* Main content — glass so hero shows through */}
+      <div className="flex-1 min-w-0 min-h-0 overflow-y-auto scrollbar-hide bg-white/80 backdrop-blur-sm">
+        <div className="p-6 md:p-8 max-w-4xl">
+
+        {activeTab === 'home' && <HomeTab site={site} onUpdate={onUpdate} isUpdating={isUpdating} />}
 
         {activeTab === 'plan' && (() => {
           const sitePlan = (site as any).plan || 'free';
@@ -789,8 +1067,8 @@ function AdminPanel({
           return (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label className="text-slate-300 text-xs">Business Subscription</Label>
-                <Badge variant="outline" className="text-indigo-300 border-indigo-300/30 text-[10px]">
+                <Label className="text-slate-600 text-xs">Business Subscription</Label>
+                <Badge variant="outline" className="text-indigo-600 border-indigo-300 text-[10px]">
                   {planLabels[sitePlan] || sitePlan}
                 </Badge>
               </div>
@@ -804,27 +1082,27 @@ function AdminPanel({
                   return (
                     <div
                       key={key}
-                      className={`rounded-lg border p-3 flex flex-col gap-2 ${
-                        isCurrent ? 'border-indigo-500/40 bg-indigo-500/10' : 'border-slate-700 bg-slate-800/50'
+                      className={`rounded-sui border p-4 flex flex-col gap-2 ${
+                        isCurrent ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 bg-white'
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-semibold text-white">{planLabels[key]}</p>
-                          <p className="text-lg font-bold text-white">
+                          <p className="text-xs font-semibold text-slate-600">{planLabels[key]}</p>
+                          <p className="text-lg font-bold text-slate-900">
                             {planPrices[key] === 0 ? 'Free' : `$${planPrices[key]}`}
-                            {planPrices[key] > 0 && <span className="text-[10px] text-slate-400 font-normal">/mo</span>}
+                            {planPrices[key] > 0 && <span className="text-[10px] text-slate-500 font-normal">/mo</span>}
                           </p>
                         </div>
                         {isCurrent ? (
-                          <Badge variant="secondary" className="bg-indigo-500/20 text-indigo-300 text-[10px]">Current</Badge>
+                          <Badge variant="secondary" className="bg-indigo-100 text-indigo-700 text-[10px]">Current</Badge>
                         ) : isDowngrade ? (
                           <span className="text-[10px] text-slate-500">Lower tier</span>
                         ) : (
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-[10px] h-7 px-2 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10"
+                            className="text-[10px] h-7 px-2 border-indigo-500 text-indigo-600 hover:bg-indigo-50"
                             disabled={upgradingPlan === key}
                             onClick={async () => {
                               setUpgradingPlan(key);
@@ -849,7 +1127,7 @@ function AdminPanel({
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {planFeatures[key].map((f) => (
-                          <span key={f} className="text-[9px] bg-slate-700/60 text-slate-400 rounded px-1.5 py-0.5">{f}</span>
+                          <span key={f} className="text-[9px] bg-slate-100 text-slate-600 rounded px-1.5 py-0.5">{f}</span>
                         ))}
                       </div>
                     </div>
@@ -865,12 +1143,17 @@ function AdminPanel({
           );
         })()}
 
+        {activeTab === 'publishing' && <PublishingTab site={site} onUpdate={onUpdate} toast={toast} onSwitchToPlan={() => setActiveTab('plan')} />}
+
         {activeTab === 'workspace' && (
           <GoogleWorkspacePanel siteConfigId={site.id} />
         )}
 
         {/* QR Network — shadow telecom routing table */}
-        {activeTab === 'qr-network' && <QRRoutesManager />}
+        {activeTab === 'qr-network' && <QRRoutesManager siteConfigId={site.id} siteSlug={site.slug ?? undefined} />}
+
+        {/* Cash Board — conversation events (actionable routes) */}
+        {activeTab === 'cash-board' && <CashBoardPanel siteConfigId={site.id} />}
 
         {/* Gateway Router — Dynamic Entry Point Engine switchboard */}
         {activeTab === 'gateway' && (
@@ -881,39 +1164,59 @@ function AdminPanel({
           />
         )}
 
-        {/* Agents — Specialty Agent Creator */}
+        {/* Agents — DB roster (create/edit/assign) + Specialty Agent Creator */}
         {activeTab === 'agents' && (
-          <AgentCreatorPanel
-            siteConfigId={site.id}
-            knowledgeLibrary={site.knowledgeLibrary}
-            onSaved={() => queryClient.invalidateQueries({ queryKey: ['/api/site-configs', site.id] })}
-          />
+          <div className="space-y-8">
+            <AgentRosterPanel
+              siteConfigId={site.id}
+              currentAssignedAgentId={site.assignedAgentId ?? null}
+              onAssignAgent={(agentId) => onUpdate({ assignedAgentId: agentId })}
+            />
+            <div className="border-t border-slate-200 pt-6">
+              <AgentCreatorPanel
+                siteConfigId={site.id}
+                knowledgeLibrary={site.knowledgeLibrary}
+                onSaved={() => queryClient.invalidateQueries({ queryKey: ['/api/site-configs', site.id] })}
+              />
+            </div>
+          </div>
         )}
 
         {activeTab === 'settings' && (
           <div className="space-y-5">
             <div>
-              <Label className="text-slate-300 text-xs mb-1.5 block">Site Name</Label>
+              <Label className="text-slate-600 text-xs mb-1.5 block">Site Name</Label>
               <Input
                 value={site.name}
                 onChange={(e) => onUpdate({ name: e.target.value })}
-                className="bg-slate-800 border-slate-700 text-white"
+                className="bg-white border-slate-300 text-slate-900"
                 data-testid="input-site-name"
               />
             </div>
             <div>
-              <Label className="text-slate-300 text-xs mb-1.5 block">Domain</Label>
+              <Label className="text-slate-600 text-xs mb-1.5 block">Domain</Label>
               <Input
                 value={site.domain || ''}
                 onChange={(e) => onUpdate({ domain: e.target.value })}
                 placeholder="e.g. aibizbot.gatewayglobal.ai"
-                className="bg-slate-800 border-slate-700 text-white"
+                className="bg-white border-slate-300 text-slate-900"
                 data-testid="input-site-domain"
               />
             </div>
+            <div>
+              <Label className="text-slate-600 text-xs mb-1.5 block">Website URL slug</Label>
+              <Input
+                value={site.slug ?? ''}
+                onChange={(e) => onUpdate({ slug: e.target.value === '' ? null : e.target.value })}
+                placeholder="e.g. mikes-site"
+                className="bg-white border-slate-300 text-slate-900 font-mono text-sm"
+                data-testid="input-site-slug"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">Your public link: /biz/[slug]. Letters, numbers, and hyphens only; saved as lowercase.</p>
+            </div>
             <div className="flex items-center justify-between gap-4">
               <div>
-                <Label className="text-slate-300 text-sm">Chatbot Enabled</Label>
+                <Label className="text-slate-600 text-sm">Chatbot Enabled</Label>
                 <p className="text-[10px] text-slate-500">Show chat widget on customer website</p>
               </div>
               <Switch
@@ -924,7 +1227,7 @@ function AdminPanel({
             </div>
             <div className="flex items-center justify-between gap-4">
               <div>
-                <Label className="text-slate-300 text-sm">Voice Concierge</Label>
+                <Label className="text-slate-600 text-sm">Voice Concierge</Label>
                 <p className="text-[10px] text-slate-500">Enable voice AI on customer website</p>
               </div>
               <Switch
@@ -934,67 +1237,46 @@ function AdminPanel({
               />
             </div>
             <div>
-              <Label className="text-slate-300 text-xs mb-1.5 block">AI Model Provider</Label>
-              <Select
-                value={site.modelProvider || 'gemini'}
-                onValueChange={(val) => onUpdate({ modelProvider: val })}
-              >
-                <SelectTrigger className="bg-slate-800 border-slate-700 text-white" data-testid="select-model-provider">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="gemini">Gemini 2.5 Flash (Google)</SelectItem>
-                  <SelectItem value="openai">OpenAI</SelectItem>
-                  <SelectItem value="anthropic">Anthropic</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-slate-500 mt-1">Select the AI provider. Gemini 2.5 Flash Native Audio is the default.</p>
+              <Label className="text-slate-600 text-xs mb-1.5 block">AI Model</Label>
+              <div className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2 text-sm text-slate-600" data-testid="display-ai-model">
+                Gemini 2.5 (platform default)
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1">Model is set in Doppler (GEMINI_MODEL_ID). Not configurable per site.</p>
             </div>
             <div>
-              <Label className="text-slate-300 text-xs mb-1.5 block">Model Name (optional)</Label>
-              <Input
-                value={site.modelName || ''}
-                onChange={(e) => onUpdate({ modelName: e.target.value || null })}
-                placeholder="Leave empty for default model"
-                className="bg-slate-800 border-slate-700 text-white"
-                data-testid="input-model-name"
-              />
-              <p className="text-[10px] text-slate-500 mt-1">Override the default model. e.g. gemini-2.5-flash-preview, gemini-2.0-flash</p>
-            </div>
-            <div>
-              <Label className="text-slate-300 text-xs mb-1.5 block">Greeting Message</Label>
+              <Label className="text-slate-600 text-xs mb-1.5 block">Greeting Message</Label>
               <Textarea
                 value={site.greetingMessage || ''}
                 onChange={(e) => onUpdate({ greetingMessage: e.target.value })}
                 placeholder="Hi! I'm your AI assistant. How can I help?"
-                className="bg-slate-800 border-slate-700 text-white resize-none"
+                className="bg-white border-slate-300 text-slate-900 resize-none"
                 rows={3}
                 data-testid="input-greeting"
               />
             </div>
             <div>
-              <Label className="text-slate-300 text-xs mb-1.5 block">Widget Color</Label>
+              <Label className="text-slate-600 text-xs mb-1.5 block">Widget Color</Label>
               <div className="flex items-center gap-3">
                 <input
                   type="color"
                   value={site.widgetColor || '#2563eb'}
                   onChange={(e) => onUpdate({ widgetColor: e.target.value })}
-                  className="w-10 h-10 rounded-md border border-slate-700 cursor-pointer bg-transparent"
+                  className="w-10 h-10 rounded-md border border-slate-300 cursor-pointer bg-transparent"
                   data-testid="input-widget-color"
                 />
                 <span className="text-sm text-slate-400 font-mono">{site.widgetColor || '#2563eb'}</span>
               </div>
             </div>
             {placeData && (
-              <Card className="bg-slate-800/50 border-slate-700">
+              <Card className="bg-white border border-slate-200 shadow-sm">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-blue-400" />
+                  <CardTitle className="text-sm text-slate-600 flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-indigo-500" />
                     Linked Business
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-1 text-xs text-slate-400">
-                  <p className="text-white font-medium">{placeData.name}</p>
+                <CardContent className="space-y-1 text-xs text-slate-500">
+                  <p className="text-slate-900 font-medium">{placeData.name}</p>
                   {placeData.formatted_address && <p>{placeData.formatted_address}</p>}
                   {placeData.formatted_phone_number && (
                     <p className="flex items-center gap-1"><Phone className="w-3 h-3" /> {placeData.formatted_phone_number}</p>
@@ -1007,10 +1289,10 @@ function AdminPanel({
             )}
 
             {/* ── Hero Image Generator ── */}
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-white border border-slate-200 shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm text-slate-300 flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4 text-violet-400" />
+                <CardTitle className="text-sm text-slate-600 flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-violet-500" />
                   Hero Image
                 </CardTitle>
                 <p className="text-[10px] text-slate-500 mt-0.5">
@@ -1099,14 +1381,10 @@ function AdminPanel({
           </div>
         )}
 
-        {activeTab === 'knowledge' && (
-          <KnowledgeLibraryTab siteId={site.id} docs={knowledgeDocs} onUpdate={refetchKnowledge} />
-        )}
-
         {activeTab === 'agent' && (
           <div className="space-y-5">
 
-            {/* Pre-built Agent Templates from agent swarm registry */}
+            {/* Pre-built Agent Templates */}
             {agentTemplates.length > 0 && (
               <div>
                 <Label className="text-slate-300 text-xs mb-2 block">Pre-built Agent Templates</Label>
@@ -1493,9 +1771,9 @@ function AdminPanel({
                 {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 bg-slate-800" />)}
               </div>
             ) : chatLogs.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
-                <MessageSquare className="w-10 h-10 mx-auto mb-3 text-slate-600" />
-                <p className="text-sm">No chat conversations yet.</p>
+              <div className="text-center py-8 text-slate-600">
+                <MessageSquare className="w-10 h-10 mx-auto mb-3 text-slate-500" />
+                <p className="text-sm font-medium text-slate-700">No chat conversations yet.</p>
                 <p className="text-xs text-slate-600 mt-1">Visitor conversations will appear here.</p>
               </div>
             ) : (
@@ -1510,7 +1788,7 @@ function AdminPanel({
                       {log.role === 'user' ? 'Visitor' : 'AI Bot'}
                     </Badge>
                     {log.createdAt && (
-                      <span className="text-[10px] text-slate-500">
+                      <span className="text-[10px] text-slate-400">
                         {new Date(log.createdAt).toLocaleString()}
                       </span>
                     )}
@@ -1644,6 +1922,8 @@ function AdminPanel({
           <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
         </div>
       )}
+      </div>
+      </div>
     </div>
   );
 }
@@ -1779,49 +2059,50 @@ export default function AiBizBotAdmin() {
     updateMutation.mutate({ id: selectedSiteId, updates });
   }, [selectedSiteId, updateMutation]);
 
+  const search = typeof window !== 'undefined' ? window.location.search : '';
+  const isSingleSiteMode = new URLSearchParams(search).get('single') === '1';
+  const selectedSite = selectedSiteId ? sites.find((s) => s.id === selectedSiteId) : null;
+
+  // No separate left sidebar: site selection lives in the dashboard (Your sites) and in the top bar when editing.
   return (
     <div className="flex h-full bg-slate-950">
-      <div className="w-72 border-r border-slate-800 bg-slate-900 flex flex-col shrink-0">
-        <div className="p-4 border-b border-slate-800">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <Bot className="w-5 h-5 text-indigo-400" />
-            AI Biz Bot
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">Manage chatbots on customer websites</p>
-        </div>
-        <div className="flex-1 overflow-y-auto p-3">
-          {sitesLoading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 bg-slate-800" />)}
-            </div>
-          ) : isCreating ? (
-            <CreateSiteDialog
-              onCancel={() => setIsCreating(false)}
-              onCreate={(data) => createMutation.mutate(data)}
-            />
-          ) : (
-            <>
-              <DemoLeadsSidebar
-                leads={demoLeads}
-                onSelectSite={(id) => { setSelectedSiteId(id); setMainView('config'); }}
-                selectedSiteId={selectedSiteId}
-              />
-              <SiteList
-                sites={sites}
-                selectedId={selectedSiteId}
-                onSelect={(id) => { setSelectedSiteId(id); setMainView('config'); }}
-                onCreateNew={() => setIsCreating(true)}
-              />
-            </>
-          )}
-        </div>
-      </div>
-
       <div className="flex-1 relative flex flex-col min-w-0">
+        {isSingleSiteMode && (
+          <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white">
+            <Link href="/platform/tenants">
+              <span className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-slate-900 transition-colors cursor-pointer">
+                <ArrowLeft className="w-4 h-4" />
+                Back to Business Customers
+              </span>
+            </Link>
+            <span className="text-slate-400">|</span>
+            <span className="text-slate-900 font-medium">
+              Managing: {selectedSite?.name ?? (selectedSiteId ? '…' : 'Select a site')}
+            </span>
+          </div>
+        )}
+        {/* When a site is selected (and not single-site mode), show top bar: Back to dashboard + site name */}
+        {!isSingleSiteMode && selectedSiteId && selectedSite && (
+          <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900/80">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-slate-400 hover:text-white"
+                onClick={() => { setSelectedSiteId(null); setMainView('account'); }}
+              >
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                Back to dashboard
+              </Button>
+              <span className="text-slate-400">|</span>
+              <span className="font-medium text-white truncate">Managing: {selectedSite.name}</span>
+            </div>
+          </div>
+        )}
         {mainView === 'chat' ? (
           <div className="h-full flex flex-col">
-            <div className="flex items-center gap-2 p-2 border-b border-slate-800 bg-slate-900/50 shrink-0">
-              <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white" onClick={() => setMainView(selectedSiteId ? 'config' : 'account')}>
+            <div className="flex items-center gap-2 p-2 border-b border-slate-200 bg-white shrink-0">
+              <Button variant="ghost" size="sm" className="text-slate-600 hover:text-slate-900" onClick={() => setMainView(selectedSiteId ? 'config' : 'account')}>
                 ← Back
               </Button>
             </div>
@@ -1842,7 +2123,15 @@ export default function AiBizBotAdmin() {
               templates={templates}
               onUpdate={handleUpdate}
               isUpdating={updateMutation.isPending}
-              initialTab={typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tab') === 'identity-manager' ? 'qr-network' : undefined}
+              initialTab={(() => {
+                if (typeof window === 'undefined') return undefined;
+                const t = new URLSearchParams(window.location.search).get('tab');
+                if (t === 'identity-manager') return 'qr-network';
+                if (t === 'publishing') return 'publishing';
+                if (t === 'home') return 'home';
+                return undefined;
+              })()}
+              horizontalTabs={isSingleSiteMode}
             />
             <div className="absolute top-4 right-4 z-20">
               <Button
@@ -1853,110 +2142,59 @@ export default function AiBizBotAdmin() {
                     deleteMutation.mutate(selectedSiteId);
                   }
                 }}
-                className="text-red-400 border-red-400/30 hover:bg-red-500/10"
+                className="text-red-600 border-red-300 hover:bg-red-50"
                 data-testid="button-delete-site"
               >
                 <Trash2 className="w-3 h-3 mr-1" /> Delete
               </Button>
             </div>
           </>
-        ) : (
-          <div className="h-full overflow-y-auto p-6">
-            <h3 className="text-lg font-semibold text-white mb-1">Command Center</h3>
-            <p className="text-sm text-slate-400 mb-6">Account & governance — same as My Account</p>
-            <div className="space-y-6 max-w-2xl">
-              {(() => {
-                const appBase = location.startsWith('/app') ? '/app' : '';
-                return (
-            <>
-              <section>
-                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2 border-b border-slate-700 pb-1">
-                  Admin
-                </h4>
-                <div className="space-y-1">
-                  <Link href={appBase + '/aibizbot'}>
-                    <Card className="bg-slate-800/50 border-slate-700 hover:border-indigo-500/30 cursor-pointer transition-colors">
-                      <CardContent className="p-3 flex items-center gap-3">
-                        <div className="p-2 bg-slate-500/10 border border-slate-600 rounded-sui shrink-0">
-                          <Shield className="w-5 h-5 text-slate-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-white">Sub Item 1</p>
-                          <p className="text-xs text-slate-400">Admin tools &amp; governance</p>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-slate-500 shrink-0" />
-                      </CardContent>
-                    </Card>
-                  </Link>
-                </div>
-              </section>
-              <section>
-                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2 border-b border-slate-700 pb-1">
-                  User
-                </h4>
-                <div className="space-y-1">
-                  <Link href={appBase + '/my-account'}>
-                    <Card className="bg-slate-800/50 border-slate-700 hover:border-indigo-500/30 cursor-pointer transition-colors">
-                      <CardContent className="p-3 flex items-center gap-3">
-                        <div className="p-2 bg-blue-500/10 border border-blue-500/20 rounded-sui shrink-0">
-                          <User className="w-5 h-5 text-blue-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-white">Profile</p>
-                          <p className="text-xs text-slate-400">Your account information</p>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-slate-500 shrink-0" />
-                      </CardContent>
-                    </Card>
-                  </Link>
-                  <Link href={appBase + '/billing'}>
-                    <Card className="bg-slate-800/50 border-slate-700 hover:border-indigo-500/30 cursor-pointer transition-colors">
-                      <CardContent className="p-3 flex items-center gap-3">
-                        <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-sui shrink-0">
-                          <CreditCard className="w-5 h-5 text-emerald-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-white">Billing</p>
-                          <p className="text-xs text-slate-400">Billing & subscription</p>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-slate-500 shrink-0" />
-                      </CardContent>
-                    </Card>
-                  </Link>
-                  <Link href={appBase + '/my-account'}>
-                    <Card className="bg-slate-800/50 border-slate-700 hover:border-indigo-500/30 cursor-pointer transition-colors">
-                      <CardContent className="p-3 flex items-center gap-3">
-                        <div className="p-2 bg-violet-500/10 border border-violet-500/20 rounded-sui shrink-0">
-                          <Building2 className="w-5 h-5 text-violet-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-white">My Businesses</p>
-                          <p className="text-xs text-slate-400">Sites and chatbot config</p>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-slate-500 shrink-0" />
-                      </CardContent>
-                    </Card>
-                  </Link>
-                  <Link href={appBase + '/mixing-board'}>
-                    <Card className="bg-slate-800/50 border-slate-700 hover:border-indigo-500/30 cursor-pointer transition-colors">
-                      <CardContent className="p-3 flex items-center gap-3">
-                        <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-sui shrink-0">
-                          <Users className="w-5 h-5 text-amber-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-white">Reseller Program</p>
-                          <p className="text-xs text-slate-400">Mixing board, commissions</p>
-                        </div>
-                        <ChevronRight className="w-5 h-5 text-slate-500 shrink-0" />
-                      </CardContent>
-                    </Card>
-                  </Link>
-                </div>
-              </section>
-            </>
-                );
-              })()}
+        ) : isSingleSiteMode && selectedSiteId ? (
+          <div className="h-full overflow-y-auto p-6 flex items-center justify-center">
+            <div className="text-center max-w-sm">
+              <Bot className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+              <p className="text-slate-400 text-sm mb-4">Site not found. It may have been deleted.</p>
+              <Link href="/platform/tenants">
+                <span className="inline-flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 cursor-pointer">
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to Business Customers
+                </span>
+              </Link>
             </div>
+          </div>
+        ) : isCreating ? (
+          <div className="h-full overflow-y-auto bg-slate-950 p-6 flex items-start justify-center">
+            <div className="w-full max-w-md rounded-sui bg-slate-900/40 border border-indigo-500/20 p-6">
+              <CreateSiteDialog
+                onCancel={() => setIsCreating(false)}
+                onCreate={(data) => createMutation.mutate(data)}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="h-full overflow-y-auto bg-slate-950">
+            <AiBizBotDashboard
+              sitesCount={sites.length}
+              demoLeadsCount={demoLeads.length}
+              onAddSite={() => setIsCreating(true)}
+              sites={sites.map((s) => ({
+                id: s.id,
+                name: s.name,
+                domain: s.domain,
+                slug: s.slug,
+                chatbotEnabled: s.chatbotEnabled,
+                placeData: s.placeData as { rating?: number } | null,
+              }))}
+              onSelectSite={(id) => { setSelectedSiteId(id); setMainView('config'); }}
+              demoLeads={demoLeads.map((l) => ({
+                id: l.id,
+                businessName: l.businessName,
+                phone: l.phone,
+                demoUrl: l.demoUrl,
+                siteId: l.siteId,
+                createdAt: l.createdAt,
+              }))}
+            />
           </div>
         )}
       </div>

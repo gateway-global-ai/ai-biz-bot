@@ -21,6 +21,23 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const TOKEN_KEY = "gateway_auth_token";
+const MISSION_CONTROL_BYPASS_TOKEN = "mission-control-dev-bypass";
+const MISSION_CONTROL_BYPASS_USER: User = {
+  id: "mission-control-dev-admin",
+  phone: "+10000000000",
+  name: "Mission Control Dev Admin",
+  role: "superadmin",
+  resellerId: null,
+};
+
+function shouldBypassMissionControlAuth() {
+  if (typeof window === "undefined") return false;
+  return (
+    import.meta.env.DEV &&
+    import.meta.env.VITE_ALLOW_LOCAL_MISSION_CONTROL_BYPASS === "true" &&
+    window.location.pathname.startsWith("/mission-control")
+  );
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -53,6 +70,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const checkSession = async (): Promise<boolean> => {
+    if (shouldBypassMissionControlAuth()) {
+      setToken(MISSION_CONTROL_BYPASS_TOKEN);
+      setUser(MISSION_CONTROL_BYPASS_USER);
+      setIsLoading(false);
+      return true;
+    }
+
     const storedToken = localStorage.getItem(TOKEN_KEY);
     if (!storedToken) {
       setIsLoading(false);

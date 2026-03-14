@@ -349,8 +349,12 @@ Generate a brief, natural-sounding conversation response for this scenario: ${sc
 
 Keep the response conversational, warm, and under 100 words. Speak directly as the agent.`;
 
-      // Generate text response
-      const textModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      // Generate text response (model from env only)
+      const textModelId = process.env.GEMINI_MODEL_ID;
+      if (!textModelId) {
+        return res.status(503).json({ error: 'GEMINI_MODEL_ID not configured' });
+      }
+      const textModel = genAI.getGenerativeModel({ model: textModelId });
       const textResult = await textModel.generateContent(conversationPrompt);
       const conversationText = textResult.response.text() || "Hello! I'm your AI assistant. How can I help you today?";
 
@@ -416,10 +420,54 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // AGENT MANAGEMENT API
   // ============================================
 
-  // Get all agents
+  // Get all agents (optional: ?siteConfigId=... filter by site; ?excludeProvider=kimi exclude KIMI)
   router.get("/api/agents", async (req, res) => {
     try {
-      const agentList = await storage.getAgents();
+      const siteConfigId = req.query.siteConfigId as string | undefined;
+      const excludeProvider = req.query.excludeProvider as string | undefined;
+
+      // Check auth for visibility
+      const authHeader = req.headers.authorization;
+      const token = authHeader?.replace("Bearer ", "");
+      let userRole = 'public';
+
+      if (token) {
+        const session = await storage.getValidAuthSession(token);
+        if (session) {
+           const user = await storage.getAdminUserById(session.adminUserId);
+           if (user) {
+             // Map admin/superadmin to 'owner' for this logic
+             if (['admin', 'superadmin', 'owner'].includes(user.role || '')) {
+               userRole = 'owner';
+             } else if (user.role === 'employee') {
+               userRole = 'employee';
+             }
+           }
+        }
+      }
+
+      let agentList;
+      if (siteConfigId && siteConfigId !== 'undefined' && siteConfigId !== '') {
+        agentList = await storage.getAgentsBySiteConfigId(siteConfigId);
+      } else {
+        agentList = await storage.getAgents();
+      }
+
+      // Filter by visibility
+      if (userRole === 'owner') {
+        // Owner sees all
+      } else if (userRole === 'employee') {
+        // Employee sees public and internal
+        agentList = agentList.filter((a: any) => ['public', 'internal'].includes(a.visibility || 'private'));
+      } else {
+        // Public sees only public
+        agentList = agentList.filter((a: any) => (a.visibility || 'private') === 'public');
+      }
+
+      if (excludeProvider === 'kimi') {
+        agentList = agentList.filter((a: any) => (a.aiModelProvider ?? 'gemini') !== 'kimi');
+      }
+
       res.json(agentList);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -480,13 +528,17 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // AGENT BUDGET & STARTUP SCRIPT API
   // ============================================
 
-  // Cost estimation: approximate USD per 1K tokens by model
-  const MODEL_COST_PER_1K_TOKENS: Record<string, { input: number; output: number }> = {
-    'gemini-2.0-flash': { input: 0.0001, output: 0.0004 },
-    'gemini-2.5-flash': { input: 0.00015, output: 0.0006 },
-    
-    'default': { input: 0.002, output: 0.006 },
-  };
+  // Cost estimation: approximate USD per 1K tokens by model (no hardcoded model IDs)
+  const DEFAULT_GEMINI_RATES = { input: 0.00015, output: 0.0006 };
+  function getModelCostRates(): Record<string, { input: number; output: number }> {
+    const m: Record<string, { input: number; output: number }> = {
+      default: { input: 0.002, output: 0.006 },
+    };
+    const envModel = process.env.GEMINI_MODEL_ID;
+    if (envModel) m[envModel] = DEFAULT_GEMINI_RATES;
+    return m;
+  }
+  const MODEL_COST_PER_1K_TOKENS = getModelCostRates();
 
   function estimateCostUsd(modelId: string, inputTokens: number, outputTokens: number): number {
     const rates = MODEL_COST_PER_1K_TOKENS[modelId] || MODEL_COST_PER_1K_TOKENS['default'];
@@ -610,7 +662,10 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       // Mark as running
       await storage.updateAgent(agent.id, { startupStatus: 'running' });
 
-      const modelId = agent.aiModelId || process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash';
+      const modelId = agent.aiModelId || process.env.GEMINI_MODEL_ID;
+      if (!modelId) {
+        return res.status(503).json({ error: 'GEMINI_MODEL_ID not configured; set in Doppler or set agent.aiModelId' });
+      }
       const temperature = (agent.aiTemperature || 60) / 100;
       const maxTokens = agent.aiMaxTokens || 4096;
 

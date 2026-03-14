@@ -40,7 +40,7 @@ router.get("/search", async (req: Request, res: Response) => {
   }
 });
 
-/** Serve QR code image for a business by slug. Generates and saves if not yet created. */
+/** Serve QR code image for a business by slug. Redirects to public /qr/img/:slug so image is never behind API auth. */
 router.get("/image/:slug", async (req: Request, res: Response) => {
   try {
     const { slug } = req.params;
@@ -54,26 +54,10 @@ router.get("/image/:slug", async (req: Request, res: Response) => {
       return;
     }
     const baseUrl = getBaseUrl(req);
-    const publicUrl = `${baseUrl}/biz/${slug}`;
-    const filePath = getQRFilePath(slug);
-
-    if (!fs.existsSync(filePath)) {
-      await generateBusinessQR(publicUrl, slug);
-      const qrCodeUrl = `/api/qr/image/${slug}`;
-      await storage.updateSiteConfig(config.id, { qrCodeUrl });
-    }
-
-    if (!fs.existsSync(filePath)) {
-      res.status(500).json({ error: "QR generation failed" });
-      return;
-    }
-
-    res.setHeader("Content-Type", "image/png");
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    res.sendFile(path.resolve(filePath));
+    res.redirect(302, `${baseUrl}/qr/img/${encodeURIComponent(slug)}`);
   } catch (e: any) {
-    console.error("[QR] image serve error:", e?.message);
-    res.status(500).json({ error: "Failed to serve QR image" });
+    console.error("[QR] image redirect error:", e?.message);
+    res.status(500).json({ error: "Failed to redirect" });
   }
 });
 
@@ -93,7 +77,7 @@ router.post("/generate/:siteConfigId", async (req: Request, res: Response) => {
     const baseUrl = getBaseUrl(req);
     const publicUrl = `${baseUrl}/biz/${config.slug}`;
     await generateBusinessQR(publicUrl, config.slug);
-    const qrCodeUrl = `/api/qr/image/${config.slug}`;
+    const qrCodeUrl = `/qr/img/${config.slug}`; // public path (no auth)
     await storage.updateSiteConfig(config.id, { qrCodeUrl });
     res.json({
       slug: config.slug,

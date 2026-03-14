@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { storage } from "./storage";
-import { sendVerification, checkVerification } from "./twilio";
+import { sendVerification, checkVerification, isVerifyConfigured } from "./twilio";
 import crypto from "crypto";
 
 function generateSessionToken(): string {
@@ -37,6 +37,14 @@ export async function sendOtp(req: Request, res: Response): Promise<void> {
 
     if (!adminUser.isActive) {
       res.status(403).json({ error: "This account has been deactivated" });
+      return;
+    }
+
+    if (!isVerifyConfigured()) {
+      console.warn("[Auth] Send OTP skipped: SMS verification not configured (set TWILIO_VERIFY_SERVICE_URL_SID and ensure MOCK_TWILIO_SMS is not true)");
+      res.status(503).json({
+        error: "SMS verification is not configured on this server. No code was sent. Contact your administrator or check Twilio Verify and MOCK_TWILIO_SMS settings.",
+      });
       return;
     }
 

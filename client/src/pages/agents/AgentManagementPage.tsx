@@ -20,19 +20,6 @@ interface AgentInstance {
   };
 }
 
-interface AgentSwarm {
-  id: string;
-  businessId: string;
-  name: string;
-  description?: string;
-  managerAgentId: string;
-  agents: Array<{
-    agentId: string;
-    priority: number;
-    roles: string[];
-  }>;
-}
-
 const MODAL_CONFIG = {
   'voice-inbound': { icon: Phone, label: 'Inbound Calls', color: 'bg-blue-500' },
   'voice-outbound': { icon: PhoneCall, label: 'Outbound Calls', color: 'bg-green-500' },
@@ -42,13 +29,11 @@ const MODAL_CONFIG = {
 
 export default function AgentManagementPage() {
   const [agents, setAgents] = useState<AgentInstance[]>([]);
-  const [swarms, setSwarms] = useState<AgentSwarm[]>([]);
   const [loading, setLoading] = useState(true);
   const [businessId] = useState('demo-business-1'); // Would come from auth context
 
   useEffect(() => {
     loadAgents();
-    loadSwarms();
   }, []);
 
   const loadAgents = async () => {
@@ -62,18 +47,6 @@ export default function AgentManagementPage() {
       console.error('Failed to load agents:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadSwarms = async () => {
-    try {
-      const res = await fetch(`/api/swarms/business/${businessId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSwarms(data);
-      }
-    } catch (error) {
-      console.error('Failed to load swarms:', error);
     }
   };
 
@@ -96,7 +69,6 @@ export default function AgentManagementPage() {
           data.agents.voiceOutbound,
           data.agents.sms,
         ]);
-        setSwarms([data.swarm]);
       }
     } catch (error) {
       console.error('Quick setup failed:', error);
@@ -175,7 +147,7 @@ export default function AgentManagementPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Agent Management</h1>
         <p className="text-muted-foreground">
-          Manage your AI agent swarm and configure agent behavior
+          Manage your AI agents and configure agent behavior
         </p>
       </div>
 
@@ -187,7 +159,7 @@ export default function AgentManagementPage() {
               Quick Actions
             </CardTitle>
             <CardDescription>
-              Set up and manage your agent swarm
+              Set up and manage your agents
             </CardDescription>
           </CardHeader>
           <CardContent className="flex gap-4">
@@ -206,7 +178,6 @@ export default function AgentManagementPage() {
       <Tabs defaultValue="agents" className="space-y-6">
         <TabsList>
           <TabsTrigger value="agents">Agents ({agents.length})</TabsTrigger>
-          <TabsTrigger value="swarms">Swarms ({swarms.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="agents" className="space-y-4">
@@ -216,7 +187,7 @@ export default function AgentManagementPage() {
                 <Bot className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
                 <h3 className="text-lg font-semibold mb-2">No Agents Deployed</h3>
                 <p className="text-muted-foreground mb-4">
-                  Get started by deploying your agent swarm
+                  Get started by deploying your agents
                 </p>
                 <Button onClick={handleQuickSetup}>
                   <Plus className="w-4 h-4 mr-2" />
@@ -298,56 +269,6 @@ export default function AgentManagementPage() {
                   </Card>
                 );
               })}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="swarms" className="space-y-4">
-          {swarms.length === 0 ? (
-            <Card>
-              <CardContent className="text-center py-12">
-                <Users className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold mb-2">No Swarms Created</h3>
-                <p className="text-muted-foreground mb-4">
-                  Create a swarm to organize and manage your agents
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {swarms.map((swarm) => (
-                <Card key={swarm.id}>
-                  <CardHeader>
-                    <CardTitle>{swarm.name}</CardTitle>
-                    <CardDescription>{swarm.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Manager:</span>
-                        <span className="font-medium">{swarm.managerAgentId}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Agents:</span>
-                        <span className="font-medium">{swarm.agents.length}</span>
-                      </div>
-                      <div className="mt-4">
-                        <p className="text-xs text-muted-foreground mb-2">Agent Roles:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {swarm.agents.map((sa) => {
-                            const agent = agents.find(a => a.id === sa.agentId);
-                            return agent ? (
-                              <Badge key={sa.agentId} variant="outline" className="text-xs">
-                                {MODAL_CONFIG[agent.modal].label}
-                              </Badge>
-                            ) : null;
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
             </div>
           )}
         </TabsContent>

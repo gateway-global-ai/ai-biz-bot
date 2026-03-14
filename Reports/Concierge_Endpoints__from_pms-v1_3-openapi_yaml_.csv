@@ -1,0 +1,36 @@
+,method,path,operationId,summary,params,security,tags
+6,POST,/deleteAppPropertySettings,,deleteAppPropertySettings,,"[{""api_key"": [""delete:appPropertySettings""]}, {""OAuth2"": [""delete:appPropertySettings""]}]",AppSettings
+7,DELETE,/deleteGuestNote,,deleteGuestNote,"propertyID, guestID, noteID","[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+9,DELETE,/deleteRoomBlock,,deleteRoomBlock,"propertyID, roomBlockID","[{""api_key"": [""delete:roomblock""]}, {""OAuth2"": [""delete:roomblock""]}]",Room
+12,GET,/getAppPropertySettings,,getAppPropertySettings,"propertyID, key","[{""api_key"": [""read:appPropertySettings""]}, {""OAuth2"": [""read:appPropertySettings""]}]",AppSettings
+15,GET,/getAvailableRoomTypes,,getAvailableRoomTypes,"propertyIDs, startDate, endDate, rooms, adults, children, promoCode, detailedRates, includeSharedRooms, sort, order, minRate, maxRate, pageNumber, pageSize","[{""api_key"": [""read:room""]}, {""OAuth2"": [""read:room""]}]",Room
+24,GET,/getGuest,,getGuest,"propertyID, reservationID, guestID, includeGuestRequirements","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+25,GET,/getGuestList,,getGuestList,"propertyIDs, resultsFrom, resultsTo, checkInFrom, checkInTo, checkOutFrom, checkOutTo, guestFirstName, guestLastName, guestEmail, guestPhone, guestCellPhone, status, sortBy, includeGuestInfo, excludeSecondaryGuests, includeGuestRequirements, pageNumber, pageSize","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+26,GET,/getGuestNotes,,getGuestNotes,"propertyID, guestID","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+27,GET,/getGuestsByFilter,,getGuestsByFilter,"propertyIDs, status, reservationID, roomID, guestName, checkInFrom, checkInTo, checkOutFrom, checkOutTo","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+28,GET,/getGuestsByStatus,,getGuestsByStatus,"status, propertyID, resultsFrom, resultsTo, pageNumber, pageSize","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+29,GET,/getGuestsModified,,getGuestsModified,"propertyIDs, inHouse, resultsFrom, resultsTo, checkInFrom, checkInTo, checkOutFrom, checkOutTo, includeGuestRequirements, pageNumber, pageSize","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+30,GET,/getHotelDetails,,getHotelDetails,propertyID,"[{""api_key"": [""read:hotel""]}, {""OAuth2"": [""read:hotel""]}]",Hotel
+31,GET,/getHotels,,getHotels,"propertyIDs, propertyName, propertyCity, pageNumber, pageSize","[{""api_key"": [""read:hotel""]}, {""OAuth2"": [""read:hotel""]}]",Hotel
+48,GET,/getReservationRoomDetails,,getReservationRoomDetails,"propertyID, subReservationID","[{""api_key"": [""read:room""]}, {""OAuth2"": [""read:room""]}]",Room
+51,GET,/getRoomBlocks,,getRoomBlocks,"propertyID, roomBlockID, roomTypeID, roomID, startDate, endDate, pageNumber, pageSize","[{""api_key"": [""read:roomblock""]}, {""OAuth2"": [""read:roomblock""]}]",Room
+52,GET,/getRoomTypes,,getRoomTypes,"propertyIDs, roomTypeIDs, startDate, endDate, adults, children, detailedRates, roomTypeName, propertyCity, propertyName, maxGuests, pageNumber, pageSize, sort","[{""api_key"": [""read:room""]}, {""OAuth2"": [""read:room""]}]",Room
+53,GET,/getRooms,,getRooms,"propertyIDs, roomTypeID, roomTypeNameShort, startDate, endDate, includeRoomRelations, pageNumber, pageSize, sort","[{""api_key"": [""read:room""]}, {""OAuth2"": [""read:room""]}]",Room
+54,GET,/getRoomsFeesAndTaxes,,getRoomsFeesAndTaxes,"propertyID, startDate, endDate, roomsTotal, roomsCount","[{""api_key"": [""read:room""]}, {""OAuth2"": [""read:room""]}]",Room
+55,GET,/getRoomsUnassigned,,getRoomsUnassigned,propertyIDs,"[{""api_key"": [""read:room""]}, {""OAuth2"": [""read:room""]}]",Room
+58,GET,/getUsers,,getUsers,property_ids,"[{""api_key"": [""read:user""]}, {""OAuth2"": [""read:user""]}]",User
+66,POST,/postAppPropertySettings,,postAppPropertySettings,,"[{""api_key"": [""write:appPropertySettings""]}, {""OAuth2"": [""write:appPropertySettings""]}]",AppSettings
+78,POST,/postGuest,,postGuest,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+79,POST,/postGuestDocument,,postGuestDocument,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+80,POST,/postGuestNote,,postGuestNote,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+81,POST,/postGuestPhoto,,postGuestPhoto,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+82,POST,/postGuestsToRoom,,postGuestsToRoom,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+94,POST,/postRoomAssign,,postRoomAssign,,"[{""api_key"": [""write:room""]}, {""OAuth2"": [""write:room""]}]",Room
+95,POST,/postRoomBlock,,postRoomBlock,,"[{""api_key"": [""write:roomblock""]}, {""OAuth2"": [""write:roomblock""]}]",Room
+96,POST,/postRoomCheckIn,,postRoomCheckIn,,"[{""api_key"": [""write:room""]}, {""OAuth2"": [""write:room""]}]",Room
+97,POST,/postRoomCheckOut,,postRoomCheckOut,,"[{""api_key"": [""write:room""]}, {""OAuth2"": [""write:room""]}]",Room
+101,POST,/putAppPropertySettings,,putAppPropertySettings,,"[{""api_key"": [""write:appPropertySettings""]}, {""OAuth2"": [""write:appPropertySettings""]}]",AppSettings
+103,PUT,/putGuest,,putGuest,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+104,PUT,/putGuestNote,,putGuestNote,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+111,PUT,/putRoomBlock,,putRoomBlock,,"[{""api_key"": [""write:roomblock""]}, {""OAuth2"": [""write:roomblock""]}]",Room
+114,GET,/userinfo,,userinfo,"property_id, role_details","[{""api_key"": []}, {""OAuth2"": []}]",Authentication

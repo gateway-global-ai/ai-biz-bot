@@ -7,8 +7,41 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { gatewayChat } from "../ai-gateway";
 import { buildRichSystemInstruction } from "../services/systemInstructionBuilder";
 import { buildBehavioralPrompt } from "../services/promptCompiler";
+import { compileFullSystemPrompt } from "../services/systemPromptCompiler";
+import type { BusinessContext } from "../services/promptCompiler";
 import { PLATFORM_GATEWAY_SYSTEM_PROMPT } from "../prompts/platformGatewayPrompt";
+import { FREE_TIER_SYSTEM_INSTRUCTION } from "../prompts/freeTierPrompt";
 import { analyticsLogs, smsConversations, smsMessages } from "@shared/schema";
+import { detectSensitiveInput } from "../services/sensitiveInputGuard";
+import {
+  resolveFieldWriteMode,
+  resolveIntakePolicyConfig,
+} from "../services/intakePolicyService";
+
+function buildSecureInputResponse(policy: any, siteConfigId?: string) {
+  return {
+    requiresSecureInput: true,
+    secureInput: {
+      policyId: policy.policyId,
+      fieldName: policy.fieldName,
+      classification: policy.classification,
+      allowedChannels: policy.allowedChannels,
+      redactInTranscript: policy.redactInTranscript,
+      storeMode: policy.storeMode,
+      displayMode: policy.displayMode,
+      schemaEndpoint:
+        siteConfigId && siteConfigId !== "platform-landing"
+          ? `/api/site-configs/${siteConfigId}/intake/secure-form/${policy.policyId}`
+          : null,
+      submitEndpoint:
+        siteConfigId && siteConfigId !== "platform-landing"
+          ? `/api/site-configs/${siteConfigId}/intake/secure-submit`
+          : null,
+    },
+    response:
+      "For your security, sensitive details must be entered through the secure form. I opened a secure step for this field.",
+  };
+}
 
 const router = Router();
 
@@ -35,6 +68,37 @@ const router = Router();
       }
 
       const { message, businessName, businessAddress, businessPhone, siteConfigId, visitorId, history } = parsed.data;
+      const sensitiveCheck = detectSensitiveInput(message);
+      if (sensitiveCheck.requiresSecureForm && sensitiveCheck.policy) {
+        if (siteConfig) {
+          const intakePolicy = resolveIntakePolicyConfig(siteConfig);
+          const writeMode = resolveFieldWriteMode(
+            intakePolicy,
+            sensitiveCheck.matchedFieldName ?? sensitiveCheck.policy.fieldName
+          );
+          if (writeMode === "denied") {
+            return res.status(200).json({
+              deniedInput: true,
+              response:
+                "This field cannot be updated through customer conversation. Please contact your receptionist.",
+            });
+          }
+          if (writeMode === "review") {
+            return res.status(200).json({
+              requiresReviewQueue: true,
+              reviewQueue: {
+                fieldName: sensitiveCheck.policy.fieldName,
+                reviewerRole:
+                  intakePolicy.fields[sensitiveCheck.policy.fieldName]?.reviewerRole ??
+                  "receptionist",
+              },
+              response:
+                "I captured your request and queued it for staff review before any account updates are committed.",
+            });
+          }
+        }
+        return res.status(200).json(buildSecureInputResponse(sensitiveCheck.policy, siteConfigId));
+      }
 
       let siteConfig: any = null;
       let resolvedProvider: any = 'gemini';
@@ -64,15 +128,28 @@ const router = Router();
       if (isPlatformChat) {
         systemPrompt = PLATFORM_GATEWAY_SYSTEM_PROMPT;
       } else {
-        const basePrompt = customSystemPrompt || `You are the AI Biz Bot, a friendly AI assistant for ${businessName || 'this business'}. You help website visitors with questions about the business.
-
-Business details:
-- Name: ${businessName || 'N/A'}
-- Address: ${businessAddress || 'N/A'}  
-- Phone: ${businessPhone || 'N/A'}
-
-You are helpful, concise, and conversational. Answer questions about the business, help with directions, hours, and services. If you don't know something specific, suggest the visitor call or visit. Keep responses brief since this is a chat widget.`;
-        systemPrompt = basePrompt + knowledgeBlock;
+        const assignedAgentId = (siteConfig as { assignedAgentId?: string | null })?.assignedAgentId;
+        const pd = (siteConfig as { placeData?: Record<string, unknown> | null })?.placeData as Record<string, unknown> | null | undefined;
+        const defaultBasePrompt = `You are the AI Biz Bot, a friendly AI assistant for ${businessName || "this business"}. You help website visitors with questions about the business.\n\nBusiness details:\n- Name: ${businessName || "N/A"}\n- Address: ${businessAddress || "N/A"}\n- Phone: ${businessPhone || "N/A"}\n\nYou are helpful, concise, and conversational. Keep responses brief since this is a chat widget.`;
+        let agent: Awaited<ReturnType<typeof storage.getAgent>> = null;
+        if (assignedAgentId) agent = await storage.getAgent(assignedAgentId);
+        if (agent) {
+          const businessContext: BusinessContext = {
+            name: businessName ?? (pd && typeof pd.name === "string" ? pd.name : undefined) ?? (siteConfig as { name?: string }).name ?? "this business",
+            address: businessAddress ?? (pd && typeof (pd as any).formattedAddress === "string" ? (pd as any).formattedAddress : typeof (pd as any).formatted_address === "string" ? (pd as any).formatted_address : undefined),
+            phone: businessPhone ?? (pd && typeof (pd as any).formatted_phone_number === "string" ? (pd as any).formatted_phone_number : undefined),
+          };
+          systemPrompt = compileFullSystemPrompt(agent, siteConfig as any, businessContext) + knowledgeBlock;
+        } else {
+          systemPrompt = (customSystemPrompt || defaultBasePrompt) + knowledgeBlock;
+        }
+        if (agent?.defaultEmotion && /^(calm|engaged|focused|energized|empathetic)$/i.test(String(agent.defaultEmotion))) {
+          systemPrompt += `\n\nDefault emotional tone: ${String(agent.defaultEmotion).toUpperCase()}. Maintain this tone in your responses.`;
+        }
+        const plan = (siteConfig as { plan?: string })?.plan ?? "free";
+        if (plan === "free") {
+          systemPrompt += FREE_TIER_SYSTEM_INSTRUCTION;
+        }
       }
 
       const gatewayMessages = [
@@ -147,6 +224,10 @@ You are helpful, concise, and conversational. Answer questions about the busines
       }
 
       const { agentId, message, history, projectId } = parsed.data;
+      const sensitiveCheck = detectSensitiveInput(message);
+      if (sensitiveCheck.requiresSecureForm && sensitiveCheck.policy) {
+        return res.status(200).json(buildSecureInputResponse(sensitiveCheck.policy));
+      }
 
       const agent = await storage.getAgent(agentId);
       if (!agent) {

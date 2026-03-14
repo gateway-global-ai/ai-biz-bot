@@ -70,6 +70,7 @@ export function setupVoiceStreamWebSocket(server: Server): void {
     let streamSid: string | null = null;
     let geminiWs: WebSocket | null = null;
     let geminiReady = false;
+    let outboundAudioChunks = 0;
     /** μ-law payloads queued while the Gemini Live session is still in setup. */
     const audioQueue: string[] = [];
     let callEndHandled = false;
@@ -82,6 +83,10 @@ export function setupVoiceStreamWebSocket(server: Server): void {
     // Press "1" again to close mic → sends end-of-utterance so Gemini responds.
     let pttEnabled = false;
     let isMicOpen = false;
+    // Track speech activity for logging only (do not gate outbound audio).
+    let callerHasSpoken = false;
+    const CALLER_SPEECH_ENERGY_THRESHOLD = 200;
+    let geminiHeartbeat: NodeJS.Timeout | null = null;
 
     /** Open a persistent WebSocket to the Gemini Live API and wire up audio relay. */
     function openGeminiLive(agentName: string, personality: string): void {
@@ -109,6 +114,16 @@ export function setupVoiceStreamWebSocket(server: Server): void {
                 },
               },
             },
+            realtime_input_config: {
+              automatic_activity_detection: {
+                disabled: false,
+                // Keep phone turns responsive while avoiding over-eager cutoffs.
+                silence_duration_ms: 300,
+                prefix_padding_ms: 50,
+                start_of_speech_sensitivity: "START_SENSITIVITY_LOW",
+                end_of_speech_sensitivity: "END_SENSITIVITY_LOW",
+              },
+            },
             system_instruction: {
               parts: [
                 {
@@ -132,6 +147,25 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
           if (msg.setupComplete) {
             console.log(`[VoiceStream] Gemini Live setup complete for call ${callSid}`);
             geminiReady = true;
+            if (!geminiHeartbeat) {
+              // Keep the Live session healthy during quiet moments on PSTN calls.
+              geminiHeartbeat = setInterval(() => {
+                if (!geminiWs || geminiWs.readyState !== WebSocket.OPEN) return;
+                const silentPcm16 = Buffer.alloc(320); // 10ms @ 16kHz PCM16 mono
+                geminiWs.send(
+                  JSON.stringify({
+                    realtime_input: {
+                      media_chunks: [
+                        {
+                          mime_type: "audio/pcm;rate=16000",
+                          data: silentPcm16.toString("base64"),
+                        },
+                      ],
+                    },
+                  })
+                );
+              }, 5000);
+            }
             // Flush any audio that arrived before setup completed
             if (audioQueue.length > 0) {
               console.log(`[VoiceStream] Flushing ${audioQueue.length} queued audio chunks`);
@@ -148,6 +182,9 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
             msg.serverContent?.modelTurn?.parts ??
             msg.serverContent?.outputTranscription?.parts ??
             [];
+          if (parts.length > 0 && msg.serverContent?.modelTurn?.parts) {
+            console.log(`[VoiceStream] Gemini modelTurn parts received: ${parts.length} for call ${callSid}`);
+          }
 
           for (const part of parts) {
             if (part.inlineData?.data) {
@@ -164,6 +201,12 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
               const pcm8k = resampleLinear(pcm, sampleRate, 8000);
               const mulaw = encodeMulaw(pcm8k);
               if (streamSid && ws.readyState === WebSocket.OPEN) {
+                outboundAudioChunks++;
+                if (outboundAudioChunks === 1 || outboundAudioChunks % 50 === 0) {
+                  console.log(
+                    `[VoiceStream] Sent ${outboundAudioChunks} audio chunk(s) to Twilio for call ${callSid}`
+                  );
+                }
                 sendAudioToTwilio(ws, streamSid, mulaw.toString("base64"));
               }
             }
@@ -183,6 +226,10 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
 
       geminiWs.on("close", (code) => {
         console.log(`[VoiceStream] Gemini Live closed for call ${callSid} (code ${code})`);
+        if (geminiHeartbeat) {
+          clearInterval(geminiHeartbeat);
+          geminiHeartbeat = null;
+        }
         geminiWs = null;
         geminiReady = false;
       });
@@ -226,6 +273,10 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
 
       if (geminiWs && geminiWs.readyState === WebSocket.OPEN) {
         geminiWs.close(1000, "Call ended");
+      }
+      if (geminiHeartbeat) {
+        clearInterval(geminiHeartbeat);
+        geminiHeartbeat = null;
       }
     }
 
@@ -288,6 +339,20 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
               if (pttEnabled && !isMicOpen) break;
 
               const payload = message.media.payload;
+              const mulawBuffer = Buffer.from(payload, "base64");
+              const pcm8k = decodeMulaw(mulawBuffer);
+              let energy = 0;
+              for (let i = 0; i < pcm8k.length; i++) {
+                energy += Math.abs(pcm8k[i]);
+              }
+              const avgEnergy = pcm8k.length > 0 ? energy / pcm8k.length : 0;
+
+              // Detect first audible caller speech (telemetry only).
+              if (!callerHasSpoken && avgEnergy >= CALLER_SPEECH_ENERGY_THRESHOLD) {
+                callerHasSpoken = true;
+                console.log(`[VoiceStream] Caller speech detected – enabling AI audio output for call ${callSid}`);
+              }
+
               if (geminiReady) {
                 sendAudioToGemini(payload);
               } else {

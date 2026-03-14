@@ -30,7 +30,9 @@ export default function PublicBusinessPage() {
 
   useEffect(() => {
     if (!slug) return;
-    fetch(`/api/site-configs/by-slug/${encodeURIComponent(slug)}`)
+    const fromQr = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('from') === 'qr';
+    const url = `/api/site-configs/by-slug/${encodeURIComponent(slug)}${fromQr ? '?from=qr' : ''}`;
+    fetch(url)
       .then(r => {
         if (!r.ok) throw new Error('Business not found');
         return r.json();
