@@ -44,7 +44,7 @@ const VOICE_PERSONAS = [
 ];
 
 const DEFAULT_FREE_CONFIG: VoiceAdminConfig = {
-  model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+  model: process.env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025',
   voice: 'Puck',
   role: 'AI Business Assistant',
   companyName: 'AI Biz Bot',

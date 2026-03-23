@@ -11,6 +11,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { storage } from '../storage.js';
+import { requireAuth } from '../auth.js';
 import {
   resolve_data_id,
   ingest_serpapi_reviews,
@@ -87,7 +88,7 @@ router.post('/resolve', async (req, res) => {
 // ── POST /provision ───────────────────────────────────────────────────────────
 // Provision 6 industry-specific agents for a site (Concierge, Booking, Lead Qualifier, etc.).
 
-router.post('/provision', async (req, res) => {
+router.post('/provision', requireAuth, async (req, res) => {
   const schema = z.object({
     siteConfigId: z.string().min(1),
     placeTypes: z.array(z.string()).default(['establishment']),

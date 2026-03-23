@@ -14,17 +14,17 @@ async function executeWeeklyPayouts(): Promise<void> {
   const { getStripeClient } = await import("../stripeClient");
   const stripe = getStripeClient();
 
-  const pending = await db.select().from(commissions).where(eq(commissions.status, "PENDING_PAYOUT"));
+  const pending = await db.select().from(commissions).where(eq(commissions.status, "pending"));
 
   for (const commission of pending) {
     const [reseller] = await db.select().from(resellers).where(eq(resellers.id, commission.resellerId));
-    if (!reseller?.stripeConnectId) {
+    if (!reseller?.stripeAccountId) {
       console.warn(`[Cron] Skipping commission ${commission.id}: reseller ${commission.resellerId} has no Stripe Connect ID`);
       continue;
     }
 
     try {
-      const amountCents = Math.round(Number(commission.commission) * 100);
+      const amountCents = commission.commissionCents;
       if (amountCents <= 0) {
         console.warn(`[Cron] Skipping commission ${commission.id}: non-positive amount`);
         continue;
@@ -33,13 +33,13 @@ async function executeWeeklyPayouts(): Promise<void> {
       const transfer = await stripe.transfers.create({
         amount: amountCents,
         currency: "usd",
-        destination: reseller.stripeConnectId,
+        destination: reseller.stripeAccountId,
         metadata: { commissionId: commission.id },
       });
 
       await db
         .update(commissions)
-        .set({ status: "PAID", stripeTransferId: transfer.id })
+        .set({ status: "paid", stripeTransferId: transfer.id, paidAt: new Date() })
         .where(eq(commissions.id, commission.id));
 
       console.log(`[Cron] Paid commission ${commission.id} → reseller ${reseller.id}: $${(amountCents / 100).toFixed(2)}`);

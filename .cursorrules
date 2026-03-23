@@ -1,16 +1,52 @@
-# 🏛️ GLOBAL ARCHITECTURE MANDATE (CRITICAL)
-1. **The Source of Truth:** Before proposing any architectural changes, creating new database tables, or modifying core routing, you MUST read `/docs/ARCHITECTURE.md`.
+# SOVEREIGN CORE GOVERNANCE (OS-V1)
+
+## THE SENTINEL DIRECTIVE
+
+You are an architect of the **Gateway Global AI OS**. You do not build undifferentiated chatbots; you build **governed, deterministic agents** backed by policy, schema, and auditability. Prefer **registries, compilers, and contracts** over ad hoc prompts or vibes.
+
+## CORE PHYSICS
+
+1. **GOVERNANCE FIRST** — Before material architecture, routing, views, or prompt behavior changes, consult [`docs-governance/`](docs-governance/). Anchor documents include [`SAFE_MODE_CONTRACT.md`](docs-governance/SAFE_MODE_CONTRACT.md), [`KNOWLEDGE_PLAN_ORCHESTRATOR.md`](docs-governance/KNOWLEDGE_PLAN_ORCHESTRATOR.md), [`EXECUTION_PLANE_BOUNDARY_SPEC.md`](docs-governance/EXECUTION_PLANE_BOUNDARY_SPEC.md), [`PROMPT_RUNTIME_GOVERNANCE.md`](docs-governance/PROMPT_RUNTIME_GOVERNANCE.md). For core platform structure, read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+2. **THE AUDIT PLANE** — Knowledge certification is **structured** (gap analysis, [`server/services/knowledgeCertificationContext.ts`](server/services/knowledgeCertificationContext.ts), tool gates). Do not use prompt-only tuning as a substitute for certification, policy, or missing data.
+
+3. **EXECUTION PLANE INTEGRITY** — Keep UI, orchestration, and lockdown execution paths separate. No heavy domain logic or unbounded database work on voice hot paths. See [`docs-governance/EXECUTION_PLANE_BOUNDARY_SPEC.md`](docs-governance/EXECUTION_PLANE_BOUNDARY_SPEC.md).
+
+4. **TYPE DISCIPLINE** — Prefer strict typing in **new** code; avoid `any` unless justified. Repo-wide `tsc` cleanup may require a dedicated pass.
+
+5. **SECRET INTEGRITY** — No hardcoded API keys or model IDs in source. Use Doppler / Secret Manager. See [`docs-governance/`](docs-governance/) and [`.cursor/rules/api-lockdown.mdc`](.cursor/rules/api-lockdown.mdc).
+
+6. **TIERED RULES** — The root file is **Tier 1**. Scoped rules live in [`.cursor/rules/*.mdc`](.cursor/rules). The map is [`docs-governance/CURSOR_RULES_INDEX.md`](docs-governance/CURSOR_RULES_INDEX.md). Do not assume one file replaces path-scoped `.mdc` rules.
+
+---
+
+# GLOBAL ARCHITECTURE MANDATE (CRITICAL)
+
+1. **The Source of Truth:** Before proposing any architectural changes, creating new database tables, or modifying core routing, you MUST read [`/docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 2. **The Graveyard:** The `_legacy_archive/` directory contains deprecated code. YOU MUST NEVER read from, import from, or modify anything inside `_legacy_archive/`.
-3. **The Monolith Ban:** The `server/routes.ts` file is currently considered legacy technical debt (~7,500 lines). YOU MUST NEVER add new routes to this file. All new routes must be created as modular files inside `server/routes/` and mounted cleanly.
+
+3. **The Monolith Ban:** The [`server/routes.ts`](server/routes.ts) file is legacy technical debt (~7,500 lines). YOU MUST NEVER **add new routes** to this file. All new routes must be created as modular files inside [`server/routes/`](server/routes/) and mounted. Targeted edits to **import and mount** modular routers are allowed when required.
+
+---
+
+# VOICE / LIVE API (SUMMARY)
+
+The Gemini Native Audio pipeline and related files are **frozen infrastructure**. Do not modify handshake, sample rates, or route paths without an explicit **voice governance task**. The canonical protected file list is in [`.cursor/rules/sovereign-voice-lockdown.mdc`](.cursor/rules/sovereign-voice-lockdown.mdc) (includes [`server/geminiVoice.ts`](server/geminiVoice.ts), [`server/voiceStream.ts`](server/voiceStream.ts), [`server/voiceGemini.ts`](server/voiceGemini.ts), [`server/voiceSession.ts`](server/voiceSession.ts), [`server/audioCodec.ts`](server/audioCodec.ts), [`server/config/geminiLiveProtocol.ts`](server/config/geminiLiveProtocol.ts), client voice services, [`client/public/clear-voice-processor.js`](client/public/clear-voice-processor.js), etc.). Certification bridge notes: [`docs-governance/VOICE_PHASE_5D_BRIDGE.md`](docs-governance/VOICE_PHASE_5D_BRIDGE.md).
+
+---
 
 # Platform Architecture Guidelines
+
 ## 1. Credentials & Signing
-- **Secret Manager**: Located at `server/utils/secretManager.ts`. Use `@google-cloud/secret-manager`.
-- **Key Split**: 
-    - `Maps_JS_API`: Restricted by HTTP Referrer (Client-side).
-    - `GEMINI_API_KEY`: Server-side only (except for Live API /api/gemini-key).
-    - `GROUNDING_LITE_KEY`: Server-side only via Secret Manager.
+
+- **Secret Manager**: [`server/utils/secretManager.ts`](server/utils/secretManager.ts). Use `@google-cloud/secret-manager`.
+- **Key Split**:
+  - `Maps_JS_API`: Restricted by HTTP Referrer (client-side).
+  - `GEMINI_API_KEY`: Server-side only (except for Live API `/api/gemini-key`).
+  - `GROUNDING_LITE_KEY`: Server-side only via Secret Manager.
 
 ## 2. Testing Standards
+
 - Always use `doppler run --` for local script execution to avoid leaking secrets into the shell history.
 - All new API routes MUST be added to the permit-check script.

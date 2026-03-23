@@ -51,7 +51,7 @@ export class VoiceClientFactory {
           sentiment: false, 
           disc: false 
         },
-        model: 'gemini-2.5-flash-native-audio-preview-12-2025' // Ensure correct model is default
+        model: process.env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025'
       };
     } else {
       return {
@@ -68,7 +68,7 @@ export class VoiceClientFactory {
           sentiment: true,
           disc: true
         },
-        model: 'gemini-2.5-flash-native-audio-preview-12-2025'
+        model: process.env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025'
       };
     }
   }

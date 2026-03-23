@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import type { RouteComponentProps } from 'wouter';
 import { MessageSquare, X, Send, Loader2, Bot, Brain, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -18,10 +19,11 @@ interface ThoughtStep {
   agentName?: string;
 }
 
-export default function ChatWithAgentPreview({ 
+export default function ChatWithAgentPreview({
+  params: _params,
   agentId,
-  showThoughtProcess = true 
-}: AgentPreviewProps) {
+  showThoughtProcess = true,
+}: RouteComponentProps & AgentPreviewProps) {
   const [showOrchestration, setShowOrchestration] = useState(true);
   const [currentAgent, setCurrentAgent] = useState('AI Biz Bot');
   const [thoughtProcess, setThoughtProcess] = useState<ThoughtStep[]>([]);

@@ -4,6 +4,7 @@
 // Correct Grounding Lite endpoint: https://mapstools.googleapis.com/mcp/search_places (MCP standard).
 //
 // API routes (no key permit required): POST /api/analytics/recovery-success (Error Navigator recovery log).
+// Future: POST /api/v1/verification/* — Twilio-backed only; no Gemini permit (see docs-governance/NOVA_VERIFICATION_GOVERNANCE.md).
 
 import axios from 'axios';
 import twilio from 'twilio';

@@ -42,7 +42,21 @@
  */
 
 import { LiveServerMessage, Modality, Type } from '@google/genai';
-import { BusinessData } from '../types';
+
+/** @deprecated Legacy preview shape — WebsitePreview / LiveVoiceClient only. */
+interface LegacyBusinessData {
+  name: string;
+  address?: string;
+  description?: string;
+  categoryType?: string;
+  menu?: unknown;
+  rating?: number;
+}
+
+function audioContextNeedsResume(ctx: AudioContext): boolean {
+  const s = ctx.state as string;
+  return s === 'suspended' || s === 'interrupted';
+}
 
 function encode(bytes: Uint8Array) {
   let binary = '';
@@ -100,15 +114,15 @@ export class LiveVoiceClient {
   }
 
   async resumeAudio() {
-    if (this.inputAudioContext && (this.inputAudioContext.state === 'suspended' || this.inputAudioContext.state === 'interrupted')) {
+    if (this.inputAudioContext && audioContextNeedsResume(this.inputAudioContext)) {
       await this.inputAudioContext.resume();
     }
-    if (this.outputAudioContext && (this.outputAudioContext.state === 'suspended' || this.outputAudioContext.state === 'interrupted')) {
+    if (this.outputAudioContext && audioContextNeedsResume(this.outputAudioContext)) {
       await this.outputAudioContext.resume();
     }
   }
 
-  async connect(businessData: BusinessData, agentConfig: any, voiceName: string = 'Zephyr', userContext: string = '') {
+  async connect(businessData: LegacyBusinessData, agentConfig: any, voiceName: string = 'Zephyr', userContext: string = '') {
     if (this.isConnected) {
         this.disconnect();
     }
@@ -160,7 +174,7 @@ export class LiveVoiceClient {
           : `The business "${businessData.name}" has been SUCCESSFULLY DECRYPTED. 
              CRITICAL: DO NOT tell them to search for a business—the search is already finished!
              Celebrate the captured data. Highlight their ${businessData.rating} star reputation and the live reviews we've integrated.
-             Analyze their ${businessData.menu?.length || 0} categories briefly and encourage them to click "Enter Generated World" to see their new foundational architecture.`
+             Analyze their ${Array.isArray(businessData.menu) ? businessData.menu.length : 0} categories briefly and encourage them to click "Enter Generated World" to see their new foundational architecture.`
         }
         
         Keep responses brief, punchy, and high-tech.
@@ -184,7 +198,7 @@ export class LiveVoiceClient {
         Keep responses natural and concise.
       `;
 
-    const tools = [];
+    const tools: unknown[] = [];
     if (agentConfig.roleType === 'owner' && isLandingPage) {
         tools.push({
             function_declarations: [

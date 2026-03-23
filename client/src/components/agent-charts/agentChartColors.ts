@@ -1,17 +1,5 @@
 /**
- * Shared colors for DiSC and ARCH agent profile charts.
- * Matches investor demo theme and zip reference (D/I/S/C, A/R/Cx/H).
+ * @deprecated Import `DISC_COLORS` and `ARCH_COLORS` from `@/config/brand` instead.
+ * Re-export preserved for legacy call sites.
  */
-export const DISC_COLORS = {
-  D: "#ef4444", // Dominance — red
-  I: "#f59e0b", // Influence — amber
-  S: "#10b981", // Steadiness — emerald
-  C: "#3b82f6", // Conscientiousness — blue
-} as const;
-
-export const ARCH_COLORS = {
-  A: "#10b981", // Acknowledge — emerald
-  R: "#3b82f6", // Reflect — blue
-  Cx: "#f59e0b", // Context — amber
-  H: "#ef4444", // Handoff — red
-} as const;
+export { DISC_COLORS, ARCH_COLORS } from "@/config/brand";

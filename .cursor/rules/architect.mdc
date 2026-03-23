@@ -1,9 +1,7 @@
 ---
-alwaysApply: true
----
----
 description: Technical Integrity Guardian for the Gateway Global MVP. Prevents destructive refactoring of persistent state machine logic.
 globs: ["src/services/geminiService.ts", "src/config/agentConfig.json"]
+alwaysApply: true
 ---
 
 # Technical Integrity Guardian

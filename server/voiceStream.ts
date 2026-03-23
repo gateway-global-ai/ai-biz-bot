@@ -2,6 +2,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { Server } from "http";
 import { decodeMulaw, encodeMulaw, resampleLinear } from "./audioCodec";
 import { voiceSessionManager } from "./voiceSession";
+import { buildVoiceKnowledgeSnapshot } from "./services/voiceKnowledgeBridge";
 import { registerWebSocketRoute } from "./websocketRouter";
 import * as fs from "fs";
 import * as path from "path";
@@ -17,12 +18,17 @@ const GEMINI_LIVE_WS_URL =
   process.env.GEMINI_WS_URL ||
   "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent";
 
+/** PCM input MIME type — rate sourced from Doppler GEMINI_INPUT_SAMPLE. */
+const PCM_INPUT_MIME = `audio/pcm;rate=${process.env.GEMINI_INPUT_SAMPLE || "16000"}`;
+
 /**
  * Gemini model that supports real-time bidirectional audio (Clear Voice).
- * Uses GEMINI_MODEL_ID so the deployment controls the model without a code change.
+ * MUST be set in Doppler — never hardcode a model string here.
  */
-const GEMINI_LIVE_MODEL =
-  process.env.GEMINI_MODEL_ID || "gemini-2.0-flash-live-001";
+const GEMINI_LIVE_MODEL = process.env.GEMINI_MODEL_ID;
+if (!GEMINI_LIVE_MODEL) {
+  throw new Error("[voiceStream] GEMINI_MODEL_ID is not set in Doppler. Cannot start voice pipeline.");
+}
 
 interface TwilioStreamMessage {
   event: "connected" | "start" | "media" | "mark" | "stop" | "dtmf";
@@ -110,7 +116,7 @@ export function setupVoiceStreamWebSocket(server: Server): void {
               response_modalities: ["AUDIO"],
               speech_config: {
                 voice_config: {
-                  prebuilt_voice_config: { voice_name: "Puck" },
+                  prebuilt_voice_config: { voice_name: process.env.GEMINI_VOICE_NAME || "Puck" },
                 },
               },
             },
@@ -157,7 +163,7 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
                     realtime_input: {
                       media_chunks: [
                         {
-                          mime_type: "audio/pcm;rate=16000",
+                          mime_type: PCM_INPUT_MIME,
                           data: silentPcm16.toString("base64"),
                         },
                       ],
@@ -250,7 +256,7 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
           realtime_input: {
             media_chunks: [
               {
-                mime_type: "audio/pcm;rate=16000",
+                mime_type: PCM_INPUT_MIME,
                 data: base64Pcm,
               },
             ],
@@ -327,6 +333,20 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
               }
               session.streamSid = streamSid;
               voiceSessionManager.startCall(callSid);
+
+              if (siteConfigId) {
+                try {
+                  const snap = await buildVoiceKnowledgeSnapshot(siteConfigId);
+                  if (snap) {
+                    voiceSessionManager.updateSession(callSid, { knowledgeSnapshot: snap });
+                  }
+                } catch (ksErr) {
+                  console.warn(
+                    "[VoiceStream] Phase 5D knowledge snapshot failed:",
+                    (ksErr as Error)?.message,
+                  );
+                }
+              }
 
               // Open the Gemini Live real-time audio connection (Clear Voice pipeline)
               openGeminiLive(agentName, personality);

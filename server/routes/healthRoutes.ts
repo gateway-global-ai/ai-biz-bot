@@ -9,7 +9,7 @@ import { storefrontCategories } from '@shared/schema';
 const router = Router();
 
 const GEMINI_LIST_MODELS_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
-const NATIVE_AUDIO_PREVIEW_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
+const NATIVE_AUDIO_PREVIEW_MODEL = process.env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025';
 
 async function checkDatabase() {
   const tested = { query: 'SELECT 1', target: 'database' };

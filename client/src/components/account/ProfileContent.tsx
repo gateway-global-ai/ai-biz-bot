@@ -359,7 +359,7 @@ export function ProfileContent({ section: embeddedSection }: { section?: Command
       const { PlaceAutocompleteElement } = await loadPlacesLibrary();
       if (cancelled) return;
 
-      autocomplete = new PlaceAutocompleteElement();
+      autocomplete = new PlaceAutocompleteElement({});
       autocomplete.setAttribute("placeholder", "Search for your business...");
       autocomplete.setAttribute("data-testid", "input-add-business-search");
       autocomplete.style.cssText = "width:100%;display:block;border:1px solid #334155;border-radius:0.5rem;";

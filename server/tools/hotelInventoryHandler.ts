@@ -17,7 +17,8 @@ export async function handleGetHotelInventory(args: {
   roomFilter?: string;
   _sessionSiteConfigId?: string;
 }): Promise<unknown> {
-  const siteConfigId = args._sessionSiteConfigId;
+  const siteConfigId =
+    args._sessionSiteConfigId ?? (args as { siteConfigId?: string }).siteConfigId;
 
   // PMS fork: if this site has an active Cloudbeds integration, use it (no platformId required).
   if (siteConfigId) {

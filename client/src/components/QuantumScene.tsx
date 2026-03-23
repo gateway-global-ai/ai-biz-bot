@@ -9,7 +9,7 @@ import { Float, Sphere, Stars, Environment, Icosahedron } from "@react-three/dre
 import * as THREE from "three";
 
 const ConnectionLines = ({ count = 90 }: { count?: number }) => {
-  const { positions, colors } = useMemo(() => {
+  const geometry = useMemo(() => {
     const posArray: number[] = [];
     const colArray: number[] = [];
     const color1 = new THREE.Color("#1D4ED8");
@@ -36,29 +36,25 @@ const ConnectionLines = ({ count = 90 }: { count?: number }) => {
       colArray.push(col.r, col.g, col.b);
     }
 
-    return {
-      positions: new Float32Array(posArray),
-      colors: new Float32Array(colArray),
-    };
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(posArray), 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(colArray), 3));
+    return geo;
   }, [count]);
 
+  const lineMaterial = useMemo(
+    () =>
+      new THREE.LineBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.35,
+      }),
+    []
+  );
+
   return (
-    <lineSegments>
-      <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          count={positions.length / 3}
-          array={positions}
-          itemSize={3}
-        />
-        <bufferAttribute
-          attach="attributes-color"
-          count={colors.length / 3}
-          array={colors}
-          itemSize={3}
-        />
-      </bufferGeometry>
-      <lineBasicMaterial vertexColors transparent opacity={0.35} />
+    <lineSegments geometry={geometry}>
+      <primitive object={lineMaterial} attach="material" dispose={null} />
     </lineSegments>
   );
 };
@@ -70,7 +66,18 @@ interface NodeProps {
 }
 
 const Node: React.FC<NodeProps> = ({ position, color, size = 1 }) => {
-  const ref = useRef<THREE.Mesh>(null);
+  const ref = useRef<React.ElementRef<typeof Sphere>>(null);
+  const material = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 2,
+        toneMapped: false,
+      }),
+    [color]
+  );
+
   useFrame((state) => {
     if (ref.current) {
       ref.current.scale.setScalar(
@@ -80,12 +87,7 @@ const Node: React.FC<NodeProps> = ({ position, color, size = 1 }) => {
   });
   return (
     <Sphere ref={ref} args={[0.2, 16, 16]} position={position}>
-      <meshStandardMaterial
-        color={color}
-        emissive={color}
-        emissiveIntensity={2}
-        toneMapped={false}
-      />
+      <primitive object={material} attach="material" dispose={null} />
     </Sphere>
   );
 };
@@ -93,11 +95,14 @@ const Node: React.FC<NodeProps> = ({ position, color, size = 1 }) => {
 export const NetworkScene: React.FC = () => {
   const distantPositions = useMemo(
     () =>
-      [...Array(38)].map(() => [
-        (Math.random() - 0.5) * 14,
-        (Math.random() - 0.5) * 14,
-        (Math.random() - 0.5) * 10,
-      ] as [number, number, number]),
+      [...Array(38)].map(
+        () =>
+          [
+            (Math.random() - 0.5) * 14,
+            (Math.random() - 0.5) * 14,
+            (Math.random() - 0.5) * 10,
+          ] as [number, number, number]
+      ),
     []
   );
 
@@ -134,6 +139,26 @@ export const NetworkScene: React.FC = () => {
 };
 
 export const CoreScene: React.FC = () => {
+  const wireMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: "#1D4ED8",
+        wireframe: true,
+      }),
+    []
+  );
+  const innerMat = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: "#60A5FA",
+        emissive: "#2563EB",
+        emissiveIntensity: 0.5,
+        transparent: true,
+        opacity: 0.6,
+      }),
+    []
+  );
+
   return (
     <div className="w-full h-full absolute inset-0 opacity-40 pointer-events-none">
       <Canvas camera={{ position: [0, 0, 5], fov: 45 }}>
@@ -141,16 +166,10 @@ export const CoreScene: React.FC = () => {
 
         <Float rotationIntensity={0.5} floatIntensity={0.2} speed={2}>
           <Icosahedron args={[1.5, 1]}>
-            <meshStandardMaterial color="#1D4ED8" wireframe />
+            <primitive object={wireMat} attach="material" dispose={null} />
           </Icosahedron>
           <Icosahedron args={[1.2, 0]}>
-            <meshStandardMaterial
-              color="#60A5FA"
-              emissive="#2563EB"
-              emissiveIntensity={0.5}
-              transparent
-              opacity={0.6}
-            />
+            <primitive object={innerMat} attach="material" dispose={null} />
           </Icosahedron>
         </Float>
 

@@ -37,6 +37,19 @@ function decode(base64: string) {
   return bytes;
 }
 
+/** Normalize `BusinessContext.hours` for URL query strings (lib.dom / Places can be string or string[]). */
+function formatHours(hours: string | string[] | undefined): string | undefined {
+  if (hours === undefined || hours === null) return undefined;
+  if (Array.isArray(hours)) return hours.join('; ');
+  return String(hours);
+}
+
+/** Safari and some engines use `interrupted`; lib.dom may not list it — narrow at the boundary only. */
+function audioContextNeedsResume(ctx: AudioContext): boolean {
+  const s = ctx.state as string;
+  return s === 'suspended' || s === 'interrupted';
+}
+
 export class GeminiStreamingClient implements IVoiceClient {
   private config: VoiceConfig;
   private inputAudioContext: AudioContext | null = null;
@@ -53,7 +66,10 @@ export class GeminiStreamingClient implements IVoiceClient {
   private nextStartTime = 0;
   private activeSources = new Set<AudioBufferSourceNode>();
   private currentInputText = '';
-  
+  /** Site config id from last `connect()` — used for verification passage heartbeat (not on VoiceConfig). */
+  private sessionSiteConfigId: string | null = null;
+  private verificationHeartbeatSent = false;
+
   // Callbacks
   private messageCallback: (message: VoiceMessage) => void = () => {};
   private volumeCallback: (volume: number) => void = () => {};
@@ -69,6 +85,8 @@ export class GeminiStreamingClient implements IVoiceClient {
     }
 
     this.config = config;
+    this.sessionSiteConfigId = business.id ?? null;
+    this.verificationHeartbeatSent = false;
 
     try {
       this.currentStream = await navigator.mediaDevices.getUserMedia({ 
@@ -361,28 +379,32 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
     });
     // #endregion
     
-    // Check state BEFORE attempting to close to prevent InvalidStateError
-    if (this.inputAudioContext?.state !== 'closed') {
+    // Local bindings so async close() sees a stable, narrowed reference (TS + race safety).
+    const inputCtx = this.inputAudioContext;
+    if (inputCtx && inputCtx.state !== 'closed') {
       try {
-        await this.inputAudioContext.close();
+        await inputCtx.close();
       } catch (e) {
         console.warn('[GeminiStreamingClient] Error closing inputAudioContext:', e);
       }
     }
-    if (this.outputAudioContext?.state !== 'closed') {
+    const outputCtx = this.outputAudioContext;
+    if (outputCtx && outputCtx.state !== 'closed') {
       try {
-        await this.outputAudioContext.close();
+        await outputCtx.close();
       } catch (e) {
         console.warn('[GeminiStreamingClient] Error closing outputAudioContext:', e);
       }
     }
-    
+
     this.inputAudioContext = null;
     this.outputAudioContext = null;
     this.socket = null;
     this.connected = false;
     this.streaming = false;
     this.currentInputText = '';
+    this.sessionSiteConfigId = null;
+    this.verificationHeartbeatSent = false;
     this.connectionCallback(false);
     this.isDisconnecting = false;
   }
@@ -447,10 +469,10 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
   // Internal methods
 
   private async resumeAudioContexts() {
-    if (this.inputAudioContext && (this.inputAudioContext.state === 'suspended' || this.inputAudioContext.state === 'interrupted')) {
+    if (this.inputAudioContext && audioContextNeedsResume(this.inputAudioContext)) {
       await this.inputAudioContext.resume();
     }
-    if (this.outputAudioContext && (this.outputAudioContext.state === 'suspended' || this.outputAudioContext.state === 'interrupted')) {
+    if (this.outputAudioContext && audioContextNeedsResume(this.outputAudioContext)) {
       await this.outputAudioContext.resume();
     }
   }
@@ -523,6 +545,19 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
       console.log('[GeminiStreamingClient] Server is ready! Starting audio processing...');
       try {
         await this.setupAudioProcessing();
+        if (!this.verificationHeartbeatSent && this.sessionSiteConfigId) {
+          this.verificationHeartbeatSent = true;
+          void fetch(resolvePlatformUrl('/api/v1/verification/session_heartbeat'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              siteConfigId: this.sessionSiteConfigId,
+              transport: 'websocket',
+            }),
+            keepalive: true,
+          }).catch(() => {});
+        }
         this.connected = true;
         this.connectionCallback(true);
       } catch (err: any) {
@@ -690,7 +725,8 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
         includeIntelligence: 'true',
         includeOwnerData: 'false',
       });
-      if (business.hours) params.set('hours', business.hours);
+      const hoursStr = formatHours(business.hours);
+      if (hoursStr !== undefined) params.set('hours', hoursStr);
       if (business.services) params.set('services', business.services.join(','));
 
       const response = await fetch(
@@ -706,6 +742,7 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
   }
 
   private buildSystemInstruction(business: BusinessContext, agent: AgentConfig): string {
+    const hoursLine = formatHours(business.hours);
     return `
       Identity: You are ${agent.role} for "${business.name}".
       Personality: ${agent.personality}.
@@ -713,7 +750,7 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
       BUSINESS CONTEXT:
       - Name: ${business.name}
       - Address: ${business.address}
-      ${business.hours ? `- Hours: ${business.hours}` : ''}
+      ${hoursLine ? `- Hours: ${hoursLine}` : ''}
       ${business.services ? `- Services: ${business.services.join(', ')}` : ''}
 
       CORE GOAL:

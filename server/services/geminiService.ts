@@ -8,6 +8,9 @@ import axios from 'axios';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 /** Text-capable model for generateContent (not the voice/native-audio model). */
+if (!process.env.GEMINI_MODEL_FALLBACK) {
+  console.error('[GOVERNANCE] GEMINI_MODEL_FALLBACK is not set in Doppler — text model is degraded. Add GEMINI_MODEL_FALLBACK to Doppler immediately.');
+}
 const TEXT_MODEL = process.env.GEMINI_MODEL_FALLBACK || process.env.GEMINI_MODEL_ID || 'gemini-2.0-flash';
 
 /**
@@ -35,9 +38,10 @@ export async function generateWithGemini(prompt: string): Promise<string> {
       payload
     );
   } catch (err: any) {
-    if (err.response?.status === 404 && modelSlug !== 'gemini-2.0-flash') {
+    const fallbackModel = process.env.GEMINI_MODEL_FALLBACK || (console.error('[GOVERNANCE] GEMINI_MODEL_FALLBACK not set in Doppler — using hardcoded fallback'), 'gemini-2.0-flash');
+    if (err.response?.status === 404 && modelSlug !== fallbackModel) {
       response = await axios.post(
-        `${BASE_URL}/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        `${BASE_URL}/models/${fallbackModel}:generateContent?key=${apiKey}`,
         payload
       );
     } else {

@@ -1,4 +1,4 @@
-import React, { ReactNode, useEffect, useState } from "react";
+import React, { ReactNode, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Bot,
@@ -43,22 +43,17 @@ export default function PlatformSiteFrame({
   const [, setLocation] = useLocation();
   const { isAuthenticated } = useAuth();
   const { isAuthenticated: isCustomerAuth } = useCustomerAuth();
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    if (!autoOpenChatOnDesktop) return false;
+    return window.innerWidth >= 1024;
+  });
   const [chatLayout, setChatLayout] = useState<"floating" | "fixed" | "fullscreen">(
     "floating"
   );
   const [initialView, setInitialView] = useState<"chat" | "voice">("chat");
 
   const voiceConfig = VoiceClientFactory.getDefaultConfig("premium");
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!autoOpenChatOnDesktop) return;
-    if (window.innerWidth < 1024) return;
-    setInitialView("chat");
-    setChatLayout("floating");
-    setIsChatOpen(true);
-  }, [autoOpenChatOnDesktop]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">

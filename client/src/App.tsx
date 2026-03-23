@@ -1,4 +1,5 @@
 import { Switch, Route, Redirect } from "wouter";
+import { lazy, Suspense } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,81 +8,86 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { CustomerAuthProvider } from "@/lib/customerAuth";
-import TelephonyPanel from "@/pages/developer/TelephonyPanel";
-import GatewayAdmin from "@/pages/admin/GatewayAdmin";
-import AgentTelephony from "@/pages/developer/AgentTelephony";
-import AgentChat from "@/pages/agents/AgentChat";
-import DiscVisualizer from "@/pages/showcase/DiscVisualizer";
-import DeveloperPage from "@/pages/developer/DeveloperPage";
-import BusinessPage from "@/pages/customer/BusinessPage";
-import PlatformHomePage from "@/pages/public/PlatformHomePage";
-import GoogleApiAnalyst from "@/pages/integrations/GoogleApiAnalyst";
-import OnboardingFlow from "@/pages/agents/OnboardingFlow";
-import DiscAssessment from "@/pages/showcase/DiscAssessment";
-import MockConversation from "@/pages/showcase/MockConversation";
-import AgentManager from "@/pages/agents/AgentManager";
-import AgentDashboard from "@/pages/agents/AgentDashboard";
-import AgentsLandingPage from "@/pages/public/AgentsLandingPage";
-import ImmersiveClassroom from "@/pages/agents/classroom/ImmersiveClassroom";
-import CustomerManager from "@/pages/biz-dashboard/CustomerManager";
-import TwilioAccountManager from "@/pages/developer/TwilioAccountManager";
-import MvpLanding from "@/pages/showcase/MvpLanding";
-import LandingV2 from "@/pages/showcase/LandingV2";
-// Gemini Live handles all voice demos
-import TwilioHealthCheck from "@/pages/developer/TwilioHealthCheck";
-import SystemHealthCheck from "@/pages/developer/SystemHealthCheck";
-import TelephonyManager from "@/pages/developer/TelephonyManager";
-import BillingPage from "@/pages/account/BillingPage";
-import OnboardingGateway from "@/pages/account/OnboardingGateway";
-import NovaVerifyPage from "@/pages/account/NovaVerifyPage";
-import GoogleDrivePage from "@/pages/integrations/GoogleDrivePage";
-import GoogleCalendarPage from "@/pages/biz-dashboard/GoogleCalendarPage";
-import GoogleTasksPage from "@/pages/biz-dashboard/GoogleTasksPage";
-import AiBizBotAdmin from "@/pages/owner/AiBizBotAdmin";
-import Login from "@/pages/account/Login";
-import SdkShowcase from "@/pages/showcase/SdkShowcase";
-import GooglePlacesSdk from "@/pages/integrations/GooglePlacesSdk";
-import MyAccount from "@/pages/account/MyAccount";
-import CustomerSiteManager from "@/pages/owner/CustomerSiteManager";
-import PublicBusinessPage from "@/pages/public/PublicBusinessPage";
-import AgentPage from "@/pages/agents/AgentPage";
-import KioskPage from "@/pages/public/KioskPage";
-import SovereignNetworkPage from "@/pages/public/SovereignNetworkPage";
-import PhonePage from "@/pages/public/PhonePage";
-import ClearVoiceLogoCenteredPage from "@/pages/public/ClearVoiceLogoCenteredPage";
-import PlatformBuyPage from "@/pages/public/PlatformBuyPage";
-import PlatformInfoPage from "@/pages/public/PlatformInfoPage";
-import VoiceLeadMachine from "@/pages/biz-dashboard/VoiceLeadMachine";
-import SitesAndLeads from "@/pages/owner/SitesAndLeads";
-import MixingBoard from "@/pages/reseller/MixingBoard";
-import ResellerDashboard from "@/pages/reseller/ResellerDashboard";
-import ResellerApplyPage from "@/pages/ResellerApplyPage";
-import CommandChat from "@/pages/agents/CommandChat";
-import InquiryManagement from "@/pages/owner/InquiryManagement";
-import CallTracking from "@/pages/biz-dashboard/CallTracking";
-import TransparencyDashboard from "@/pages/biz-dashboard/TransparencyDashboard";
-import ContactForm from "@/pages/customer/ContactForm";
-import CustomerChatInterface from "@/pages/customer/CustomerChatInterface";
-import OwnerChatInterface from "@/pages/owner/OwnerChatInterface";
-import DeveloperChatInterface from "@/pages/developer/DeveloperChatInterface";
-import ChatEmbedShowcase from "@/pages/showcase/ChatEmbedShowcase";
-import AgentManagementPage from "@/pages/agents/AgentManagementPage";
-import AgentTestingDashboard from "@/pages/agents/AgentTestingDashboard";
-import ChatWithAgentPreview from "@/pages/customer/ChatWithAgentPreview";
-import WidgetShowcasePage from "@/pages/showcase/WidgetShowcasePage";
-import TestB2b from "@/pages/showcase/TestB2b";
-import OlympicB2b from "@/pages/showcase/OlympicB2b";
-import AgentPortal from "@/pages/showcase/AgentPortal";
-import InvestorDemo from "@/pages/showcase/InvestorDemo";
-import PitchDeckViewer from "@/pages/showcase/PitchDeckViewer";
-import StorefrontsIndex from "@/pages/storefronts/StorefrontsIndex";
-import StorefrontCategoryPage from "@/pages/storefronts/StorefrontCategoryPage";
-import BrandAdminPage from "@/pages/brand-admin";
-import NotFound from "@/pages/admin/not-found";
-import { AdminShell } from "@/pages/admin/AdminShell";
-import MissionControlRuntime from "../../os-core/src/app/MissionControlRuntime";
 import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
+
+// ── Eager: first-paint critical paths only ────────────────────────────────────
+import PlatformHomePage from "@/pages/public/PlatformHomePage";
+import NotFound from "@/pages/admin/not-found";
+
+// ── Lazy: everything else — loaded only when the route is visited ─────────────
+const TelephonyPanel        = lazy(() => import("@/pages/developer/TelephonyPanel"));
+const GatewayAdmin          = lazy(() => import("@/pages/admin/GatewayAdmin"));
+const AgentTelephony        = lazy(() => import("@/pages/developer/AgentTelephony"));
+const AgentChat             = lazy(() => import("@/pages/agents/AgentChat"));
+const DiscVisualizer        = lazy(() => import("@/pages/showcase/DiscVisualizer"));
+const DeveloperPage         = lazy(() => import("@/pages/developer/DeveloperPage"));
+const UiKitPage             = lazy(() => import("@/pages/developer/ui-kit"));
+const BusinessPage          = lazy(() => import("@/pages/customer/BusinessPage"));
+const GoogleApiAnalyst      = lazy(() => import("@/pages/integrations/GoogleApiAnalyst"));
+const OnboardingFlow        = lazy(() => import("@/pages/agents/OnboardingFlow"));
+const DiscAssessment        = lazy(() => import("@/pages/showcase/DiscAssessment"));
+const MockConversation      = lazy(() => import("@/pages/showcase/MockConversation"));
+const AgentManager          = lazy(() => import("@/pages/agents/AgentManager"));
+const AgentDashboard        = lazy(() => import("@/pages/agents/AgentDashboard"));
+const AgentsLandingPage     = lazy(() => import("@/pages/public/AgentsLandingPage"));
+const ImmersiveClassroom    = lazy(() => import("@/pages/agents/classroom/ImmersiveClassroom"));
+const CustomerManager       = lazy(() => import("@/pages/biz-dashboard/CustomerManager"));
+const TwilioAccountManager  = lazy(() => import("@/pages/developer/TwilioAccountManager"));
+const MvpLanding            = lazy(() => import("@/pages/showcase/MvpLanding"));
+const LandingV2             = lazy(() => import("@/pages/showcase/LandingV2"));
+const TwilioHealthCheck     = lazy(() => import("@/pages/developer/TwilioHealthCheck"));
+const SystemHealthCheck     = lazy(() => import("@/pages/developer/SystemHealthCheck"));
+const TelephonyManager      = lazy(() => import("@/pages/developer/TelephonyManager"));
+const BillingPage           = lazy(() => import("@/pages/account/BillingPage"));
+const OnboardingGateway     = lazy(() => import("@/pages/account/OnboardingGateway"));
+const NovaVerifyPage        = lazy(() => import("@/pages/account/NovaVerifyPage"));
+const GoogleDrivePage       = lazy(() => import("@/pages/integrations/GoogleDrivePage"));
+const GoogleCalendarPage    = lazy(() => import("@/pages/biz-dashboard/GoogleCalendarPage"));
+const GoogleTasksPage       = lazy(() => import("@/pages/biz-dashboard/GoogleTasksPage"));
+const AiBizBotAdmin         = lazy(() => import("@/pages/owner/AiBizBotAdmin"));
+const Login                 = lazy(() => import("@/pages/account/Login"));
+const SdkShowcase           = lazy(() => import("@/pages/showcase/SdkShowcase"));
+const GooglePlacesSdk       = lazy(() => import("@/pages/integrations/GooglePlacesSdk"));
+const MyAccount             = lazy(() => import("@/pages/account/MyAccount"));
+const CustomerSiteManager   = lazy(() => import("@/pages/owner/CustomerSiteManager"));
+const PublicBusinessPage    = lazy(() => import("@/pages/public/PublicBusinessPage"));
+const AgentPage             = lazy(() => import("@/pages/agents/AgentPage"));
+const KioskPage             = lazy(() => import("@/pages/public/KioskPage"));
+const SovereignNetworkPage  = lazy(() => import("@/pages/public/SovereignNetworkPage"));
+const PhonePage             = lazy(() => import("@/pages/public/PhonePage"));
+const ClearVoiceLogoCenteredPage = lazy(() => import("@/pages/public/ClearVoiceLogoCenteredPage"));
+const PlatformBuyPage       = lazy(() => import("@/pages/public/PlatformBuyPage"));
+const PlatformInfoPage      = lazy(() => import("@/pages/public/PlatformInfoPage"));
+const VoiceLeadMachine      = lazy(() => import("@/pages/biz-dashboard/VoiceLeadMachine"));
+const SitesAndLeads         = lazy(() => import("@/pages/owner/SitesAndLeads"));
+const MixingBoard           = lazy(() => import("@/pages/reseller/MixingBoard"));
+const ResellerDashboard     = lazy(() => import("@/pages/reseller/ResellerDashboard"));
+const ResellerApplyPage     = lazy(() => import("@/pages/ResellerApplyPage"));
+const SmsConsent            = lazy(() => import("@/pages/legal/SmsConsent"));
+const CommandChat           = lazy(() => import("@/pages/agents/CommandChat"));
+const InquiryManagement     = lazy(() => import("@/pages/owner/InquiryManagement"));
+const CallTracking          = lazy(() => import("@/pages/biz-dashboard/CallTracking"));
+const TransparencyDashboard = lazy(() => import("@/pages/biz-dashboard/TransparencyDashboard"));
+const ContactForm           = lazy(() => import("@/pages/customer/ContactForm"));
+const CustomerChatInterface = lazy(() => import("@/pages/customer/CustomerChatInterface"));
+const OwnerChatInterface    = lazy(() => import("@/pages/owner/OwnerChatInterface"));
+const DeveloperChatInterface = lazy(() => import("@/pages/developer/DeveloperChatInterface"));
+const ChatEmbedShowcase     = lazy(() => import("@/pages/showcase/ChatEmbedShowcase"));
+const AgentManagementPage   = lazy(() => import("@/pages/agents/AgentManagementPage"));
+const AgentTestingDashboard = lazy(() => import("@/pages/agents/AgentTestingDashboard"));
+const ChatWithAgentPreview  = lazy(() => import("@/pages/customer/ChatWithAgentPreview"));
+const WidgetShowcasePage    = lazy(() => import("@/pages/showcase/WidgetShowcasePage"));
+const TestB2b               = lazy(() => import("@/pages/showcase/TestB2b"));
+const OlympicB2b            = lazy(() => import("@/pages/showcase/OlympicB2b"));
+const AgentPortal           = lazy(() => import("@/pages/showcase/AgentPortal"));
+const InvestorDemo          = lazy(() => import("@/pages/showcase/InvestorDemo"));
+const PitchDeckViewer       = lazy(() => import("@/pages/showcase/PitchDeckViewer"));
+const StorefrontsIndex      = lazy(() => import("@/pages/storefronts/StorefrontsIndex"));
+const StorefrontCategoryPage = lazy(() => import("@/pages/storefronts/StorefrontCategoryPage"));
+const BrandAdminPage        = lazy(() => import("@/pages/brand-admin"));
+const AdminShell            = lazy(() => import("@/pages/admin/AdminShell").then(m => ({ default: m.AdminShell })));
+const MissionControlRuntime = lazy(() => import("../../os-core/src/app/MissionControlRuntime"));
 
 function ServerPanel() {
   return (
@@ -400,21 +406,29 @@ function AppWithSidebar() {
   );
 }
 
+const RouteSpinner = () => (
+  <div className="min-h-screen flex items-center justify-center bg-[#0F172A]">
+    <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+  </div>
+);
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
           <CustomerAuthProvider>
+            <Suspense fallback={<RouteSpinner />}>
             <Switch>
               {/* Public routes */}
               <Route path="/" component={PlatformHomePage} />
               <Route path="/business" component={BusinessPage} />
-              <Route path="/demo" component={BusinessPage} />
+              <Route path="/demo" component={AgentsLandingPage} />
               <Route path="/buy" component={PlatformBuyPage} />
               <Route path="/more-info" component={PlatformInfoPage} />
               <Route path="/login" component={Login} />
               <Route path="/contact" component={ContactForm} />
+              <Route path="/sms-consent" component={SmsConsent} />
               <Route path="/v2" component={LandingV2} />
               <Route path="/investor-demo" component={InvestorDemo} />
               <Route path="/network" component={SovereignNetworkPage} />
@@ -424,6 +438,8 @@ function App() {
               {/* voice-demo route — handled by Gemini Live on homepage */}
               <Route path="/sdk" component={SdkShowcase} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
+              {/* ClearVoice Developer UI Kit — public URL; content gated inside page (dev or VITE_UI_KIT). Not LiveKit. */}
+              <Route path="/dev/ui-kit" component={UiKitPage} />
               <Route path="/reseller/apply" component={ResellerApplyPage} />
               <Route path="/chat/customer" component={CustomerChatInterface} />
               <Route path="/chat-showcase" component={ChatEmbedShowcase} />
@@ -443,6 +459,7 @@ function App() {
               <Route path="/test-b2b-olympic" component={OlympicB2b} />
               <Route path="/test-b2b-wireframe" component={TestB2b} />
               {/* Public business pages — shareable, no auth required */}
+              <Route path="/agents" component={AgentsLandingPage} />
               <Route path="/biz/:slug" component={PublicBusinessPage} />
               <Route path="/agent/:slug" component={AgentPage} />
               <Route path="/kiosk/:slug" component={KioskPage} />
@@ -486,6 +503,7 @@ function App() {
               {/* Protected admin routes with sidebar */}
               <Route component={AppWithSidebar} />
             </Switch>
+            </Suspense>
           </CustomerAuthProvider>
         </AuthProvider>
         <Toaster />

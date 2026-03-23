@@ -7,12 +7,17 @@
 set -e
 APP_NAME="${1:-aibizbot.gatewayglobal.ai}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/pm2-reload-app.sh
+source "$REPO_ROOT/script/lib/pm2-reload-app.sh"
 cd "$REPO_ROOT"
 
 echo "==> Fetching and pulling main..."
 git fetch origin
 git checkout main
 git pull origin main
+
+# user_uploads/ is gitignored. For public media (e.g. user_uploads/hero_video.mp4 → GET /user_uploads/hero_video.mp4),
+# copy files onto the server separately if they are not already present.
 
 if command -v pm2 &>/dev/null; then
   echo "==> Stopping PM2 app (free port)..."
@@ -26,11 +31,5 @@ echo "==> Installing deps and building..."
 npm ci
 npm run build
 
-if command -v pm2 &>/dev/null; then
-  echo "==> Starting PM2 app: $APP_NAME"
-  pm2 start "$APP_NAME" --update-env || pm2 restart "$APP_NAME" --update-env
-  pm2 save
-  echo "==> Done. App started."
-else
-  echo "==> Build complete. Start the app manually (e.g. node dist/index.mjs or pm2 start ...)."
-fi
+pm2_reload_app "$APP_NAME" "$REPO_ROOT"
+echo "==> Done. App started."

@@ -22,6 +22,11 @@ import {
   ArrowLeft, Building2, Bot, Package, QrCode, Phone, BookOpen,
   Globe, Sparkles, MapPin, Loader2, Save, ExternalLink, Check, Settings,
 } from "lucide-react";
+import { VoiceActivationPulse } from "@/components/admin/VoiceActivationPulse";
+import {
+  KnowledgeProficiencyCard,
+  knowledgeGapReportQueryOptions,
+} from "@/components/admin/KnowledgeProficiencyCard";
 
 type BusinessTab = "overview" | "agents" | "products" | "routing" | "telephony" | "knowledge";
 
@@ -166,11 +171,19 @@ function OverviewTab({ site, onSave }: { site: SiteConfig; onSave: (updates: Par
           </Button>
         </div>
       </div>
+
+      <VoiceActivationPulse siteConfigId={site.id} days={14} />
     </div>
   );
 }
 
-function KnowledgeTab({ siteConfigId }: { siteConfigId: string }) {
+function KnowledgeTab({
+  siteConfigId,
+  onNavigateTab,
+}: {
+  siteConfigId: string;
+  onNavigateTab?: (tab: BusinessTab) => void;
+}) {
   const [uploading, setUploading] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -197,7 +210,16 @@ function KnowledgeTab({ siteConfigId }: { siteConfigId: string }) {
 
   return (
     <div className="space-y-5 max-w-2xl">
-      <div className="rounded-sui bg-slate-900/40 border border-indigo-500/20 p-6 space-y-4">
+      <KnowledgeProficiencyCard
+        siteConfigId={siteConfigId}
+        uploadFormAnchorId="knowledge-upload-anchor"
+        onNavigateTab={onNavigateTab}
+      />
+
+      <div
+        id="knowledge-upload-anchor"
+        className="rounded-sui bg-slate-900/40 border border-indigo-500/20 p-6 space-y-4 scroll-mt-4"
+      >
         <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">Add Knowledge</h3>
         <div className="space-y-3">
           <Input value={title} onChange={(e) => setTitle(e.target.value)}
@@ -244,6 +266,11 @@ export function PlatformBusinessManager() {
     queryKey: ["/api/agents"],
   });
   const siteAgents = agents.filter((a: any) => a.siteConfigId === siteId);
+
+  const { data: knowledgeGapPayload } = useQuery({
+    ...knowledgeGapReportQueryOptions(siteId),
+  });
+  const knowledgeAtRisk = knowledgeGapPayload?.report?.atRisk === true;
 
   const updateMutation = useMutation({
     mutationFn: (updates: Partial<SiteConfig>) =>
@@ -308,6 +335,11 @@ export function PlatformBusinessManager() {
           </Badge>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {knowledgeAtRisk && (
+            <Badge className="text-[10px] bg-amber-500/20 text-amber-200 border-amber-500/40 border">
+              Knowledge at risk
+            </Badge>
+          )}
           <span className="text-xs text-slate-500 font-mono">{siteAgents.length} agent{siteAgents.length !== 1 ? "s" : ""}</span>
           {site.slug && (
             <a href={`/agent/${site.slug}`} target="_blank" rel="noopener noreferrer">
@@ -364,11 +396,11 @@ export function PlatformBusinessManager() {
         )}
         {activeTab === "telephony" && (
           <div className="telephony-canvas">
-            <TelephonyPanelFull siteConfigId={siteId} />
+            <TelephonyPanelFull params={{}} siteConfigId={siteId} />
           </div>
         )}
         {activeTab === "knowledge" && (
-          <KnowledgeTab siteConfigId={siteId} />
+          <KnowledgeTab siteConfigId={siteId} onNavigateTab={setActiveTab} />
         )}
       </div>
     </div>

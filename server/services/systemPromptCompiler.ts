@@ -40,7 +40,7 @@ function mergeGuardrails(
   siteGuardrails: StructuredGuardrails | null | undefined
 ): StructuredGuardrails {
   const agent = validateGuardrails(agentControls?.guardrails);
-  const site = validateGuardrails(siteGuardrails);
+  const site = validateGuardrails(siteGuardrails ?? undefined);
   return {
     always: [...(agent.always ?? []), ...(site.always ?? [])].slice(0, MAX_GUARDRAIL_ITEMS),
     never: [...(agent.never ?? []), ...(site.never ?? [])].slice(0, MAX_GUARDRAIL_ITEMS),
@@ -81,7 +81,7 @@ export function compileFullSystemPrompt(
 ): string {
   const sections: string[] = [];
 
-  const identity = buildBehavioralPrompt(agent, businessContext);
+  const identity = buildBehavioralPrompt(agent, businessContext, siteConfig as Record<string, unknown>);
   sections.push(identity);
 
   const agentControls = agent.structuredControls as StructuredControls | null | undefined;
