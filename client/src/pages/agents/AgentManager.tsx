@@ -64,6 +64,26 @@ const VERIFICATION_LEVELS = [
   { value: 'biometric', label: 'Biometric' },
 ];
 
+/** Operational modes: match server config/operationalModes.ts. UI-only (id, label, permissions, constraint). */
+const OPERATIONAL_MODES_UI: Array<{ id: string; label: string; permissions: string; constraint: string }> = [
+  { id: 'SAFE', label: 'Safe Mode', permissions: 'Discussion Only.', constraint: 'Cannot offer to perform tasks. Cannot prompt for or save Customer PII (Personally Identifiable Information).' },
+  { id: 'CONCIERGE', label: 'Concierge Mode', permissions: 'Routing Only.', constraint: 'Can only assess user intent and route customers to provided internal destinations/agents.' },
+  { id: 'RECEPTIONIST', label: 'Receptionist Mode', permissions: 'Intake & Data Collection.', constraint: 'Can take customer information and save inquiries/tickets for others to handle. Cannot resolve complex issues.' },
+  { id: 'SALES', label: 'Sales Mode', permissions: 'Commerce Generation.', constraint: 'Can assist with locating products/services from a catalog, create an invoice, order, or fill a shopping cart. (No payment capture).' },
+  { id: 'CASHIER', label: 'Cashier Mode', permissions: 'Payment Capture.', constraint: 'Has access to shopping cart info and customer details. Can accept payments or provide secure payment links.' },
+  { id: 'CUSTOMER_SUPPORT', label: 'Customer Support Mode', permissions: 'Account Access & Resolution.', constraint: 'Requires active Customer Verification (OTP/Magic Link).' },
+  { id: 'MANAGER', label: 'Manager Mode', permissions: 'Oversight & Approval.', constraint: 'Has access to customer data, chat logs, and guidelines. Can approve execute-with-approval decisions for other agents.' },
+  { id: 'RESEARCH', label: 'Research Mode', permissions: 'Read-Only Discovery.', constraint: 'Restricted to internet/internal KB research. Cannot edit or modify external systems. Operates strictly in an isolated sandbox/owner folder.' },
+  { id: 'CODING', label: 'Coding Mode', permissions: 'Write/Execute Access.', constraint: 'Can work on systems and coding in designated working folders. Can make changes and edits.' },
+  { id: 'REVIEW', label: 'Review Mode', permissions: 'Read/Annotate.', constraint: 'Can review code/work previously done. Can comment, but strictly cannot modify, delete, or commit code changes.' },
+];
+
+const VERIFICATION_LEVELS = [
+  { value: 'otp', label: 'OTP' },
+  { value: 'magic_link', label: 'Magic Link' },
+  { value: 'biometric', label: 'Biometric' },
+];
+
 type Sentiment = 'calm' | 'engaged' | 'alert';
 
 const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label: string }> = {

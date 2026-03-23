@@ -77,6 +77,37 @@ const router = Router();
       }
 
       const { message, businessName, businessAddress, businessPhone, siteConfigId, visitorId, history } = parsed.data;
+      const sensitiveCheck = detectSensitiveInput(message);
+      if (sensitiveCheck.requiresSecureForm && sensitiveCheck.policy) {
+        if (siteConfig) {
+          const intakePolicy = resolveIntakePolicyConfig(siteConfig);
+          const writeMode = resolveFieldWriteMode(
+            intakePolicy,
+            sensitiveCheck.matchedFieldName ?? sensitiveCheck.policy.fieldName
+          );
+          if (writeMode === "denied") {
+            return res.status(200).json({
+              deniedInput: true,
+              response:
+                "This field cannot be updated through customer conversation. Please contact your receptionist.",
+            });
+          }
+          if (writeMode === "review") {
+            return res.status(200).json({
+              requiresReviewQueue: true,
+              reviewQueue: {
+                fieldName: sensitiveCheck.policy.fieldName,
+                reviewerRole:
+                  intakePolicy.fields[sensitiveCheck.policy.fieldName]?.reviewerRole ??
+                  "receptionist",
+              },
+              response:
+                "I captured your request and queued it for staff review before any account updates are committed.",
+            });
+          }
+        }
+        return res.status(200).json(buildSecureInputResponse(sensitiveCheck.policy, siteConfigId));
+      }
 
       const isPlatformChat = siteConfigId === "platform-landing";
       let siteConfig: any = null;
