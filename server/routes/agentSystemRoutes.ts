@@ -358,8 +358,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       const textResult = await textModel.generateContent(conversationPrompt);
       const conversationText = textResult.response.text() || "Hello! I'm your AI assistant. How can I help you today?";
 
-      // Generate TTS using direct API call (Gemini TTS model)
-      const ttsModel = process.env.GEMINI_TTS_MODEL_ID || 'gemini-2.5-flash-preview-tts';
+      // Generate TTS using direct API call (Gemini TTS model — from Doppler only)
+      const ttsModel = process.env.GEMINI_TTS_MODEL_ID;
+      if (!ttsModel) {
+        return res.status(503).json({ error: "GEMINI_TTS_MODEL_ID not configured" });
+      }
       const ttsVoice = process.env.GEMINI_VOICE_NAME || 'Puck';
       const apiVersion = process.env.GEMINI_API_VERSION || 'v1beta';
       const ttsResponse = await fetch(
@@ -423,11 +426,12 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // AGENT MANAGEMENT API
   // ============================================
 
-  // Get all agents (optional: ?siteConfigId=... filter by site; ?excludeProvider=kimi exclude KIMI)
+  // Get all agents (optional: ?siteConfigId=...; ?excludeNonGemini=1 keeps only Gemini-model agents)
   router.get("/api/agents", async (req, res) => {
     try {
       const siteConfigId = req.query.siteConfigId as string | undefined;
-      const excludeProvider = req.query.excludeProvider as string | undefined;
+      const excludeNonGemini =
+        req.query.excludeNonGemini === "1" || req.query.excludeNonGemini === "true";
 
       // Check auth for visibility
       const authHeader = req.headers.authorization;
@@ -467,8 +471,8 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
         agentList = agentList.filter((a: any) => (a.visibility || 'private') === 'public');
       }
 
-      if (excludeProvider === 'kimi') {
-        agentList = agentList.filter((a: any) => (a.aiModelProvider ?? 'gemini') !== 'kimi');
+      if (excludeNonGemini) {
+        agentList = agentList.filter((a: any) => (a.aiModelProvider ?? "gemini") === "gemini");
       }
 
       res.json(agentList);

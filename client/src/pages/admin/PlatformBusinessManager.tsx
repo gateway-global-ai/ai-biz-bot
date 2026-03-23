@@ -403,7 +403,7 @@ export function PlatformBusinessManager() {
   const siteAgents = agents.filter((a: any) => a.siteConfigId === siteId);
 
   const { data: knowledgeGapPayload } = useQuery({
-    ...knowledgeGapReportQueryOptions(siteId, token ?? null),
+    ...knowledgeGapReportQueryOptions(siteId),
   });
   const knowledgeAtRisk = knowledgeGapPayload?.report?.atRisk === true;
 
