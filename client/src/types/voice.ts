@@ -98,6 +98,7 @@ export interface BusinessContext {
 }
 
 export interface AgentConfig {
+  name?: string;
   role: string;
   personality: string;
   objectives: string[];

@@ -1,5 +1,6 @@
 
 import React, { useCallback, useState, useMemo, useEffect, useRef } from "react";
+import type { Library } from "@googlemaps/js-api-loader";
 import { GoogleMap, useJsApiLoader, Polyline, OverlayView } from "@react-google-maps/api";
 import { DayItinerary, Poi, LocationType, FlightOffer, Coordinates } from "@/types/olympic";
 import { 
@@ -33,8 +34,8 @@ const defaultCenter = {
   lng: 9.1900, // Milan
 };
 
-// Define libraries outside component to prevent re-renders
-const LIBRARIES: ("geometry" | "places" | "drawing" | "visualization" | "localContext")[] = ['geometry'];
+// Define libraries outside component to prevent re-renders (must match @googlemaps/js-api-loader Library union)
+const LIBRARIES: Library[] = ["geometry"];
 
 // Styles for standard map view
 const darkMapStyles = [

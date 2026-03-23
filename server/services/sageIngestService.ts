@@ -45,7 +45,7 @@ export async function compileKnowledgeBase(
   if (!corpus.trim()) return `# Knowledge: ${businessName}\n\nNo reviews were available to generate insights.\n`;
 
   const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL_FALLBACK || (console.error('[GOVERNANCE] GEMINI_MODEL_FALLBACK not set in Doppler'), 'gemini-2.0-flash') });
   const prompt = `You are a business analyst. Below are customer reviews for "${businessName}".
 
 Turn this into a concise, structured markdown knowledge base that an AI concierge can use to answer customer questions. Include:

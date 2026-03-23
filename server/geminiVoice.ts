@@ -10,6 +10,8 @@ import { broadcastLiveEvent } from "./services/eventBridge";
 import { storage } from "./storage";
 import { FREE_TIER_SYSTEM_INSTRUCTION } from "./prompts/freeTierPrompt";
 import { buildBehavioralPrompt, type BusinessContext } from "./services/promptCompiler";
+import { enqueueVoiceSessionConnectEvent } from "./services/gatePassageAsyncQueue";
+import { formatNewCustomerIntakePromptLine, resolveIntakePolicyConfig } from "./services/intakePolicyService";
 
 /** Gemini Multimodal Live API WebSocket base URL (no key). Same fallback as voiceStream.ts. */
 const GEMINI_LIVE_WS_BASE =
@@ -73,6 +75,8 @@ export function setupGeminiLiveWebSocket(server: Server): void {
     // Contextual Snap — per-click agentId and metaPrompt from the Dynamic Entry Point Engine.
     let sessionAgentId: string | null = null;
     let sessionMetaPrompt: string | null = null;
+    /** One-time transparency event per WebSocket (async flush — not on audio hot path). */
+    let voiceConnectEventEnqueued = false;
 
     const processClientMessage = async (data: Buffer) => {
       // The client, GeminiStreamingClient, sends JSON strings. It does not send binary data.
@@ -88,6 +92,15 @@ export function setupGeminiLiveWebSocket(server: Server): void {
             sessionSiteConfigId = message.sessionContext.siteConfigId;
             if (!sessionId) sessionId = randomUUID();
             console.log(`[GeminiVoice] Identity anchor set: siteConfigId=${sessionSiteConfigId}`);
+            if (!voiceConnectEventEnqueued && sessionSiteConfigId && sessionId) {
+              voiceConnectEventEnqueued = true;
+              enqueueVoiceSessionConnectEvent({
+                siteConfigId: sessionSiteConfigId,
+                voiceSessionId: sessionId,
+                transport: "websocket",
+                incomingMessage: request,
+              });
+            }
           }
           // Contextual Snap: capture agentId and metaPrompt from the entry point click.
           if (message.sessionContext?.agentId) {
@@ -173,6 +186,9 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                   ? '\n\n--- QUICK FACTS (use to answer hours, location, website without calling get_business_details) ---\n\n' + quickFactsLines.join('. ') + '\n'
                   : '';
 
+                const intakePolicySnap = resolveIntakePolicyConfig(siteConfig);
+                const newCustomerIntakeBlock = formatNewCustomerIntakePromptLine(intakePolicySnap);
+
                 const INTRODUCTION_PROTOCOL = '\n\n--- INTRODUCTION PROTOCOL ---\nIn your very first response: greet the user, introduce yourself by name and role, say who you represent (company name), and briefly state what you can help with. Be professional.';
 
                 const RUNTIME_POLICY = '\n\n--- RUNTIME POLICY ---\nDo not offer to book, schedule, or reserve anything. You do not have access to a calendar. Your tools are only for: (1) Google Maps / local search when the user asks for locations or a map, and (2) requesting manual text input when audio is unclear. For pricing, menus, booking, or visiting the business, direct the user to the Links menu in this chat (Website, Online store) or the business phone/website. Do not say you can "look that up" or "check that" via tools.';
@@ -187,15 +203,38 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                 const PRICING_RULE = '\n\nIf the customer asks for prices, menus, or booking: you cannot book or schedule. Direct them to the business website or the Links menu in this chat for current pricing and to book. Do not offer to book or schedule — only point them to the Links menu or website.';
 
                 if (plan === 'free') {
-                  let compiledInstruction = `${agentPersona}${sovereignTruths}${knowledgeBlockFromArray}${quickFactsBlock}${INTRODUCTION_PROTOCOL}${RUNTIME_POLICY}${LINKS_MENU}${PRICING_RULE}${FREE_TIER_SYSTEM_INSTRUCTION}`;
+                  let compiledInstruction = `${agentPersona}${sovereignTruths}${knowledgeBlockFromArray}${quickFactsBlock}${newCustomerIntakeBlock}${INTRODUCTION_PROTOCOL}${RUNTIME_POLICY}${LINKS_MENU}${PRICING_RULE}${FREE_TIER_SYSTEM_INSTRUCTION}`;
                   message.setup.system_instruction = { parts: [{ text: compiledInstruction }] };
                   message.setup.tools = [{ functionDeclarations: [] }];
                   console.log('[GeminiVoice] Contextual Snap applied: free tier (no tools), compiled persona');
                 } else {
-                  let snapAgent: Awaited<ReturnType<typeof storage.getAgent>> = null;
+                  let snapAgent: Awaited<ReturnType<typeof storage.getAgent>> | undefined;
                   if (assignedAgentId) snapAgent = await storage.getAgent(assignedAgentId);
 
-                  let compiledInstruction = `${agentPersona}${sovereignTruths}${knowledgeBlockFromArray}${quickFactsBlock}${INTRODUCTION_PROTOCOL}${RUNTIME_POLICY}${LINKS_MENU}${
+                  // Compute allowed tools first so system prompt matches tool list (avoid telling the model
+                  // "only Maps + manual input" while get_hotel_inventory is enabled — that stalls the session).
+                  const modeAllowlist = getToolsAllowedForMode(snapAgent?.operationalMode ?? null);
+                  const agentAllowed: string[] = agentDef?.allowedTools ?? [];
+                  const effectiveAllowed =
+                    agentAllowed.length > 0
+                      ? agentAllowed.filter((t) => modeAllowlist.includes(t))
+                      : modeAllowlist;
+                  const HOSPITALITY_TOOL_NAMES = [
+                    'get_hotel_inventory',
+                    'guest_phone_verification',
+                    'pms_lookup_guest_journey',
+                    'pms_get_housekeeping_status',
+                    'pms_get_hotel_dashboard',
+                  ];
+                  const allowHospitality = effectiveAllowed.some((t) =>
+                    HOSPITALITY_TOOL_NAMES.includes(t)
+                  );
+                  const HOSPITALITY_POLICY =
+                    '\n\n--- HOSPITALITY ---\nYou may use PMS tools enabled for this session (e.g. live room inventory, guest journey by phone after verification when required, housekeeping status, property dashboard). Summarize results clearly and calmly. For completing a reservation or payment, direct guests to the official booking link or website when appropriate.\n';
+                  const runtimeBlock = allowHospitality ? HOSPITALITY_POLICY : RUNTIME_POLICY;
+                  const pricingBlock = allowHospitality ? '' : PRICING_RULE;
+
+                  let compiledInstruction = `${agentPersona}${sovereignTruths}${knowledgeBlockFromArray}${quickFactsBlock}${newCustomerIntakeBlock}${INTRODUCTION_PROTOCOL}${runtimeBlock}${LINKS_MENU}${
                     sessionMetaPrompt
                       ? `\n\nIMMEDIATE DIRECTIVE (execute in your very first response):\n${sessionMetaPrompt}\n\nRULE: You MUST execute the IMMEDIATE DIRECTIVE in your very first spoken response. Do not wait for the user to speak first.`
                       : ''
@@ -204,17 +243,12 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                   if (emotion && /^(calm|engaged|focused|energized|empathetic)$/i.test(String(emotion))) {
                     compiledInstruction += `\n\nDefault emotional tone: ${String(emotion).toUpperCase()}. Maintain this tone in your responses.`;
                   }
-                  compiledInstruction += PRICING_RULE;
+                  compiledInstruction += pricingBlock;
                   message.setup.system_instruction = { parts: [{ text: compiledInstruction }] };
-                  console.log(`[GeminiVoice] Contextual Snap applied: agentId=${sessionAgentId}, metaPrompt=${!!sessionMetaPrompt}, compiled persona`);
+                  console.log(
+                    `[GeminiVoice] Contextual Snap applied: agentId=${sessionAgentId}, metaPrompt=${!!sessionMetaPrompt}, hospitalityPms=${allowHospitality}, compiled persona`
+                  );
 
-                  // Execution plane: filter tools by operational mode first, then by agent allowedTools
-                  const modeAllowlist = getToolsAllowedForMode(snapAgent?.operationalMode ?? null);
-                  const agentAllowed: string[] = agentDef?.allowedTools ?? [];
-                  const effectiveAllowed =
-                    agentAllowed.length > 0
-                      ? agentAllowed.filter((t) => modeAllowlist.includes(t))
-                      : modeAllowlist;
                   const filteredDeclarations = Object.values(TOOL_DECLARATIONS).filter((t) =>
                     effectiveAllowed.includes(t.name)
                   );
@@ -264,7 +298,7 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           const audioMessageForGoogle = {
             realtime_input: {
               media_chunks: [{
-                mime_type: 'audio/pcm;rate=16000', 
+                mime_type: `audio/pcm;rate=${process.env.GEMINI_INPUT_SAMPLE || '16000'}`, 
                 data: message.data 
               }]
             }

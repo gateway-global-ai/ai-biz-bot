@@ -961,6 +961,17 @@ app.use((req, res, next) => {
   const sdkPath = path.resolve(runtimeDirname, "..", "platform", "chat", "src");
   app.use('/sdk', express.static(sdkPath));
 
+  // Serve product images and other server-side uploads
+  const serverUploadsPath = path.resolve(runtimeDirname, "..", "server", "uploads");
+  app.use('/uploads', express.static(serverUploadsPath));
+
+  // Optional local uploads (gitignored); e.g. /user_uploads/hero_video.mp4
+  const userUploadsRoot = path.resolve(runtimeDirname, "..", "user_uploads");
+  if (fs.existsSync(userUploadsRoot)) {
+    app.use("/user_uploads", express.static(userUploadsRoot));
+    log(`User uploads available at /user_uploads`);
+  }
+
   // Serve Hotel Search UI at /hotel-search (v2 - latest version)
   const hotelSearchPath = path.resolve(runtimeDirname, "..", "user_uploads", "new", "v2", "hotel-search-ui", "dist");
   if (fs.existsSync(hotelSearchPath)) {

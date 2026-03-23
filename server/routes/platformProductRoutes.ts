@@ -7,12 +7,82 @@
  *
  * Mount: app.use('/api/platform-products', platformProductRoutes)
  */
-import { Router } from "express";
+import { Router, Request, Response } from "express";
 import { db } from "../db";
 import { platformProducts, siteConfigs } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
+import multer from "multer";
+import { requireAuth } from "../auth";
+import sharp from "sharp";
+import FormData from "form-data";
+import fetch from "node-fetch";
+import * as fs from "fs";
+import * as path from "path";
 
 const router = Router();
+
+// Multer: memory storage, 10MB limit, images only
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
+
+/** Upload an image buffer to Stripe and set it on the product. Returns the public URL. */
+async function uploadImageToStripe(
+  stripe: any,
+  stripeProductId: string,
+  imageBuffer: Buffer,
+  filename: string
+): Promise<string | null> {
+  try {
+    const form = new FormData();
+    form.append("purpose", "product_image");
+    form.append("file", imageBuffer, {
+      filename,
+      contentType: "image/webp",
+    });
+
+    const stripeKey = process.env.STRIPE_SECRET_KEY!;
+    const uploadRes = await fetch("https://files.stripe.com/v1/files", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${stripeKey}`,
+        ...form.getHeaders(),
+      },
+      body: form,
+    });
+
+    if (!uploadRes.ok) {
+      const err = await uploadRes.text();
+      console.warn("[platformProducts] Stripe file upload failed:", err);
+      return null;
+    }
+
+    const fileObj = (await uploadRes.json()) as { url?: string; id?: string };
+    const fileUrl = fileObj.url ?? null;
+
+    if (fileUrl) {
+      await stripe.products.update(stripeProductId, { images: [fileUrl] });
+    }
+    return fileUrl;
+  } catch (err: any) {
+    console.warn("[platformProducts] uploadImageToStripe error:", err.message);
+    return null;
+  }
+}
+
+/** Save image buffer to /uploads/products/ and return the public path. */
+async function saveProductImage(id: string, buffer: Buffer): Promise<string> {
+  const uploadDir = path.join(process.cwd(), "server", "uploads", "products");
+  fs.mkdirSync(uploadDir, { recursive: true });
+  const filename = `${id}.webp`;
+  fs.writeFileSync(path.join(uploadDir, filename), buffer);
+  return `/uploads/products/${filename}`;
+}
 
 // ── GET /api/platform-products?siteConfigId=:id ───────────────────────────
 router.get("/", async (req, res) => {
@@ -33,7 +103,7 @@ router.get("/", async (req, res) => {
 });
 
 // ── POST /api/platform-products ───────────────────────────────────────────
-router.post("/", async (req, res) => {
+router.post("/", requireAuth, async (req, res) => {
   try {
     const {
       siteConfigId,
@@ -64,7 +134,7 @@ router.post("/", async (req, res) => {
 
     if (syncStripe) {
       try {
-        const { getStripeClient } = await import("./stripeClient");
+        const { getStripeClient } = await import("../stripeClient");
         const stripe = getStripeClient();
 
         const stripeProduct = await stripe.products.create({
@@ -113,7 +183,7 @@ router.post("/", async (req, res) => {
 });
 
 // ── PATCH /api/platform-products/:id ─────────────────────────────────────
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -151,7 +221,7 @@ router.patch("/:id", async (req, res) => {
 
     if (syncStripe) {
       try {
-        const { getStripeClient } = await import("./stripeClient");
+        const { getStripeClient } = await import("../stripeClient");
         const stripe = getStripeClient();
 
         const effectiveName = name ?? existing.name;
@@ -220,7 +290,7 @@ router.patch("/:id", async (req, res) => {
 
 // ── DELETE /api/platform-products/:id ─────────────────────────────────────
 // Soft-delete (isActive=false) + archive in Stripe
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const [existing] = await db
@@ -236,7 +306,7 @@ router.delete("/:id", async (req, res) => {
     // Archive in Stripe (products can't be deleted if they have prices)
     if (existing.stripeProductId) {
       try {
-        const { getStripeClient } = await import("./stripeClient");
+        const { getStripeClient } = await import("../stripeClient");
         const stripe = getStripeClient();
         await stripe.products.update(existing.stripeProductId, { active: false });
       } catch (stripeErr: any) {
@@ -251,6 +321,154 @@ router.delete("/:id", async (req, res) => {
 
     res.json({ success: true });
   } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/platform-products/:id/image — upload product image ──────────
+router.post("/:id/image", requireAuth, upload.single("image"), async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    if (!req.file) return res.status(400).json({ error: "No image file provided" });
+
+    const [existing] = await db
+      .select()
+      .from(platformProducts)
+      .where(eq(platformProducts.id, id))
+      .limit(1);
+    if (!existing) return res.status(404).json({ error: "Product not found" });
+
+    // Optimize: resize to 800×800 WebP, strip metadata
+    const optimized = await sharp(req.file.buffer)
+      .resize(800, 800, { fit: "cover", position: "centre" })
+      .webp({ quality: 85 })
+      .toBuffer();
+
+    // Save locally for serving
+    const localPath = await saveProductImage(id, optimized);
+
+    // Upload to Stripe if product has a Stripe ID
+    let stripeImageUrl: string | null = null;
+    if (existing.stripeProductId) {
+      const { getStripeClient } = await import("../stripeClient");
+      const stripe = getStripeClient();
+      stripeImageUrl = await uploadImageToStripe(
+        stripe,
+        existing.stripeProductId,
+        optimized,
+        `${id}.webp`
+      );
+    }
+
+    // Update DB with image path
+    const [updated] = await db
+      .update(platformProducts)
+      .set({ imageUrl: localPath, updatedAt: new Date() } as any)
+      .where(eq(platformProducts.id, id))
+      .returning();
+
+    res.json({
+      success: true,
+      imageUrl: localPath,
+      stripeImageUrl,
+      product: updated,
+    });
+  } catch (err: any) {
+    console.error("[platformProducts] Image upload error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /api/platform-products/:id/generate-image — AI-generate image ────
+router.post("/:id/generate-image", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { prompt: customPrompt } = req.body as { prompt?: string };
+
+    const [existing] = await db
+      .select()
+      .from(platformProducts)
+      .where(eq(platformProducts.id, id))
+      .limit(1);
+    if (!existing) return res.status(404).json({ error: "Product not found" });
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "GEMINI_API_KEY not configured" });
+
+    // Build a brand-consistent prompt using Gateway Global AI style guide
+    const brandPrompt = customPrompt ?? `
+Professional product icon for "${existing.name}".
+Style: Bold dark navy background (#0F172A), bright Kelly green (#22C55E) as the accent color.
+Include a strong silhouette icon representing: ${existing.description ?? existing.name}.
+White text label at the bottom in a dark navy banner.
+Clean, high-contrast, icon-style composition. Square format. No gradients.
+Match the visual style of Gateway Global AI brand: dark background, green accent, professional icon figure.
+    `.trim();
+
+    // Call Imagen via Gemini API
+    const imagenRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instances: [{ prompt: brandPrompt }],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: "1:1",
+            outputMimeType: "image/png",
+          },
+        }),
+      }
+    );
+
+    if (!imagenRes.ok) {
+      const errText = await imagenRes.text();
+      console.error("[platformProducts] Imagen API error:", errText);
+      return res.status(502).json({ error: "Image generation failed", detail: errText });
+    }
+
+    const imagenData = (await imagenRes.json()) as {
+      predictions?: Array<{ bytesBase64Encoded?: string }>;
+    };
+
+    const b64 = imagenData.predictions?.[0]?.bytesBase64Encoded;
+    if (!b64) return res.status(502).json({ error: "No image returned from Imagen" });
+
+    const imgBuffer = Buffer.from(b64, "base64");
+
+    // Optimize and save
+    const optimized = await sharp(imgBuffer)
+      .resize(800, 800, { fit: "cover" })
+      .webp({ quality: 85 })
+      .toBuffer();
+
+    const localPath = await saveProductImage(id, optimized);
+
+    // Upload to Stripe
+    let stripeImageUrl: string | null = null;
+    if (existing.stripeProductId) {
+      const { getStripeClient } = await import("../stripeClient");
+      const stripe = getStripeClient();
+      stripeImageUrl = await uploadImageToStripe(stripe, existing.stripeProductId, optimized, `${id}.webp`);
+    }
+
+    // Update DB
+    const [updated] = await db
+      .update(platformProducts)
+      .set({ imageUrl: localPath, updatedAt: new Date() } as any)
+      .where(eq(platformProducts.id, id))
+      .returning();
+
+    res.json({
+      success: true,
+      imageUrl: localPath,
+      stripeImageUrl,
+      generatedWithPrompt: brandPrompt,
+      product: updated,
+    });
+  } catch (err: any) {
+    console.error("[platformProducts] Image generation error:", err);
     res.status(500).json({ error: err.message });
   }
 });

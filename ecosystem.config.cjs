@@ -41,7 +41,21 @@ if (fs.existsSync(envPath)) {
 module.exports = {
   apps: [
     {
-      // Staging / dev environment — Doppler config: dev
+      name: 'aibizbot-stage.gatewayglobal.ai',
+      script: 'doppler',
+      args: 'run --config stg -- node dist/index.mjs',
+      cwd: '/opt/gatewayglobal/aibizbot-stage.gatewayglobal.ai',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '1G',
+      env: {
+        NODE_ENV: 'production',
+        DOPPLER_TOKEN: process.env.DOPPLER_TOKEN || process.env.DOPPLER_TOKEN_STG
+      }
+    },
+    {
+      // Dev — Doppler config: dev (port 3004)
       // cwd resolves dist/public/index.html to:
       //   /opt/gatewayglobal/aibizbot-dev.gatewayglobal.ai/dist/public/index.html
       name: 'aibizbot-dev.gatewayglobal.ai',

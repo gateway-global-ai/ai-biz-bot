@@ -150,7 +150,7 @@ All components support:
 
 ## Examples
 
-See `/chat-showcase` for live examples and code snippets.
+See `/chat-showcase` for interactive examples and code snippets.
 
 ## Technical Details
 

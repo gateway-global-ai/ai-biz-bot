@@ -188,6 +188,84 @@ export const TOOL_DECLARATIONS = {
     }
   },
 
+  guest_phone_verification: {
+    name: "guest_phone_verification",
+    description:
+      "Sends or verifies a one-time code (SMS) for the guest's phone number before discussing account-specific or folio details. Use send_otp first, then verify_otp with the code the guest enters. Requires Twilio Verify on the server.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        action: {
+          type: "STRING",
+          enum: ["send_otp", "verify_otp"],
+          description: "send_otp to text a code; verify_otp after the guest reads the code.",
+        },
+        phone: {
+          type: "STRING",
+          description: "Guest phone number (any common format; normalized server-side).",
+        },
+        otp_code: {
+          type: "STRING",
+          description: "Required when action is verify_otp — the code the guest entered.",
+        },
+      },
+      required: ["action", "phone"],
+    },
+  },
+
+  pms_lookup_guest_journey: {
+    name: "pms_lookup_guest_journey",
+    description:
+      "Looks up the guest in Cloudbeds by phone across recent/future reservations and classifies journey: in_house, upcoming_stay, recent_checkout, past_guest, or no_pms_match. Use after the guest agrees to share their phone or after OTP verification. Does not replace folio or payment advice—follow property policy.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        phone: {
+          type: "STRING",
+          description: "Guest phone number to match against PMS guest records.",
+        },
+      },
+      required: ["phone"],
+    },
+  },
+
+  pms_get_housekeeping_status: {
+    name: "pms_get_housekeeping_status",
+    description:
+      "Reads Cloudbeds housekeeping room status for the property (room condition, occupancy flags). For housekeeping managers and supervisors. Optional filter by room condition clean vs dirty.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        roomCondition: {
+          type: "STRING",
+          enum: ["clean", "dirty"],
+          description: "Optional filter.",
+        },
+        pageSize: {
+          type: "INTEGER",
+          description: "Page size (default 100, max 5000).",
+        },
+      },
+      required: [],
+    },
+  },
+
+  pms_get_hotel_dashboard: {
+    name: "pms_get_hotel_dashboard",
+    description:
+      "Returns Cloudbeds property dashboard snapshot for a date (occupancy and operational summary fields per API). For hotel managers and GM agents.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        date: {
+          type: "STRING",
+          description: "YYYY-MM-DD (defaults to today).",
+        },
+      },
+      required: [],
+    },
+  },
+
   get_business_details: {
     name: "get_business_details",
     description: "Fetches enriched business data for a Google Place (name, address, hours, rating, etc.). Use when the user asks about a specific business or when you need current place details.",
@@ -638,7 +716,22 @@ export const TOOL_DECLARATIONS = {
       },
       required: ["canvas_type", "title", "items"]
     }
-  }
+  },
+
+  get_inbound_caller_identity: {
+    name: "get_inbound_caller_identity",
+    description:
+      "Returns whether the Twilio inbound Caller ID / CNAM skill is enabled for this site and how to use it responsibly. Does NOT return live PSTN numbers in browser voice. Caller Name is not identity verification — use guest_phone_verification / OTP before PMS or guest account details.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        reason: {
+          type: "STRING",
+          description: "Optional short reason you are checking (e.g. greeting inbound caller).",
+        },
+      },
+    },
+  },
 };
 
 export const generateMarketingArtifactTool = {

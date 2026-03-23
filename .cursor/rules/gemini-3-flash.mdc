@@ -1,3 +1,8 @@
+---
+description: Gemini model ID discipline, Interactions API, and thought-signature handling — no hardcoded model strings.
+alwaysApply: true
+---
+
 # Gemini Model Development Rules
 
 ## Model Standards

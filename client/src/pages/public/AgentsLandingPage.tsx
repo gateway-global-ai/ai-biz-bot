@@ -49,6 +49,10 @@ export default function AgentsLandingPage() {
   const [showNovaGate, setShowNovaGate] = useState(false);
 
   const handleNovaVerified = (token: string, userId: string) => {
+    if (userId === 'guest') {
+      setShowNovaGate(false);
+      return;
+    }
     localStorage.setItem('gateway_auth_token', token);
     setShowNovaGate(false);
     // Navigate to platform — they may need to select a site or will be shown their agent
@@ -74,7 +78,6 @@ export default function AgentsLandingPage() {
           isOpen={true}
           layoutMode="fullscreen"
           variant="sovereign"
-          autoStartPttOnOpen={true}
           showOwnerControls={false}
           onClose={() => setView('landing')}
           onCycleLayout={() => {}}
@@ -117,6 +120,7 @@ export default function AgentsLandingPage() {
                 businessName="Gateway Global AI"
                 placeTypes={[]}
                 mode={novaGateMode}
+                surface="embedded"
                 onVerified={handleNovaVerified}
                 onCancel={() => setShowNovaGate(false)}
               />

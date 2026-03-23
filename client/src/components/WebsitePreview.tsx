@@ -5,6 +5,8 @@ import { LiveVoiceClient } from '@/services/liveService';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 import { HotelBookingBlock } from '@/components/HotelBookingBlock';
+import { BusinessHeroIdle } from '@/components/biz/BusinessHeroIdle';
+import type { OSCapabilities } from '@/hooks/useOSMenu';
 
 interface PlaceData {
   name: string;
@@ -114,7 +116,11 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
   // --- NEW: ConciergePanel State ---
   const [chatLayout, setChatLayout] = useState<'floating' | 'fixed' | 'fullscreen'>('fixed');
   const [initialView, setInitialView] = useState<'chat' | 'voice'>('chat');
-  
+
+  // Capabilities bubbled up from ConciergePanel once it loads the site config
+  const DEFAULT_CAPS: OSCapabilities = { booking: false, account: false, sms: false, payments: false, reviews: false, loyalty: false };
+  const [siteCapabilities, setSiteCapabilities] = useState<OSCapabilities>(DEFAULT_CAPS);
+
   // Voice configuration - default to Premium (Clear Voice) for preview
   const voiceConfig = VoiceClientFactory.getDefaultConfig('premium');
   
@@ -1101,6 +1107,27 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
         }}
         onOpenAdmin={() => setIsAdminOpen(true)}
         publicSlug={publicSlug ?? null}
+        websiteUrl={place.website ?? null}
+        onCapabilitiesReady={(caps) => setSiteCapabilities(caps)}
+        idleContent={
+          <BusinessHeroIdle
+            place={place}
+            heroImageUrl={heroImageUrlProp}
+            siteConfigId={siteConfigId}
+            publicSlug={publicSlug}
+            websiteUrl={place.website ?? null}
+            onlineStoreUrl={null}
+            capabilities={siteCapabilities}
+            isAuthenticated={!!user}
+            onStartVoice={() => {
+              setInitialView('voice');
+              setIsChatOpen(true);
+            }}
+            onMenuAction={(_viewId) => {
+              setIsChatOpen(true);
+            }}
+          />
+        }
         zIndex={50}
       />
 

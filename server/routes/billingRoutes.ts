@@ -33,11 +33,11 @@ const router = Router();
         resellerId = created.id;
         await storage.updateAdminUser(adminUser.id, { resellerId });
       }
-      const { getStripeClient } = await import("./stripeClient");
+      const { getStripeClient } = await import("../stripeClient");
       const stripe = getStripeClient();
-      if (reseller.stripeConnectId) {
+      if (reseller.stripeAccountId) {
         const link = await stripe.accountLinks.create({
-          account: reseller.stripeConnectId,
+          account: reseller.stripeAccountId,
           refresh_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/reseller/payouts?refresh=1`,
           return_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/reseller/payouts?success=1`,
           type: "account_onboarding",
@@ -50,7 +50,7 @@ const router = Router();
         email: (adminUser as any).email ?? undefined,
         capabilities: { transfers: { requested: true } },
       });
-      await storage.updateReseller(reseller.id, { stripeConnectId: account.id });
+      await storage.updateReseller(reseller.id, { stripeAccountId: account.id });
       const link = await stripe.accountLinks.create({
         account: account.id,
         refresh_url: `${process.env.APP_URL || "https://aibizbot.gatewayglobal.ai"}/reseller/payouts?refresh=1`,
@@ -72,12 +72,12 @@ const router = Router();
       const resellerId = (adminUser as any).resellerId ?? null;
       if (!resellerId) return res.status(403).json({ error: "Reseller account not linked" });
       const reseller = await storage.getResellerById(resellerId);
-      if (!reseller?.stripeConnectId) return res.json({ stripeConnectId: null, balance: null });
-      const { getStripeClient } = await import("./stripeClient");
+      if (!reseller?.stripeAccountId) return res.json({ stripeConnectId: null, balance: null });
+      const { getStripeClient } = await import("../stripeClient");
       const stripe = getStripeClient();
-      const balance = await stripe.balance.retrieve({ stripeAccount: reseller.stripeConnectId });
+      const balance = await stripe.balance.retrieve({ stripeAccount: reseller.stripeAccountId });
       const available = (balance.available?.[0]?.amount ?? 0) / 100;
-      res.json({ stripeConnectId: reseller.stripeConnectId, balance: available });
+      res.json({ stripeConnectId: reseller.stripeAccountId, balance: available });
     } catch (e: any) {
       console.error("[Reseller] status error:", e?.message);
       res.status(500).json({ error: e?.message ?? "Failed to load status" });
@@ -91,19 +91,17 @@ const router = Router();
       if (!adminUser) return res.status(401).json({ error: "Admin user not found" });
       const resellerId = (adminUser as any).resellerId ?? null;
       if (!resellerId) return res.status(403).json({ error: "Reseller account not linked" });
-      const { db } = await import("./db");
-      const { commissions: commissionsTable } = await import("@shared/schema");
-      const list = await db.select().from(commissionsTable).where(eq(commissionsTable.resellerId, resellerId));
-      const totalEarnings = list.reduce((s, c) => s + Number(c.commission), 0);
+      const list = await db.select().from(resellerCommissions).where(eq(resellerCommissions.resellerId, resellerId));
+      const totalEarnings = list.reduce((s, c) => s + c.commissionCents / 100, 0);
       const activeClients = new Set(list.map((c) => c.siteConfigId).filter(Boolean)).size;
-      const energyBounties = list.filter((c) => c.type === "REFILL").reduce((s, c) => s + Number(c.commission), 0);
+      const energyBounties = list.filter((c) => c.eventType === "top_up").reduce((s, c) => s + c.commissionCents / 100, 0);
       res.json({
         commissions: list.map((c) => ({
           id: c.id,
           siteConfigId: c.siteConfigId,
-          amount: Number(c.amount),
-          commission: Number(c.commission),
-          type: c.type,
+          grossAmountCents: c.grossAmountCents,
+          commissionCents: c.commissionCents,
+          eventType: c.eventType,
           status: c.status,
           createdAt: c.createdAt,
         })),
@@ -440,7 +438,7 @@ const router = Router();
       }
       if (!customerAccount) return res.status(401).json({ error: "Authentication required" });
       if (!customerAccount.stripeCustomerId) return res.json({ invoices: [] });
-      const { getStripeClient } = await import("./stripeClient");
+      const { getStripeClient } = await import("../stripeClient");
       const stripe = getStripeClient();
       const list = await stripe.invoices.list({
         customer: customerAccount.stripeCustomerId,
@@ -470,7 +468,7 @@ const router = Router();
       const { siteId, packageType } = parsed.data;
       const site = await storage.getSiteConfigById(siteId);
       if (!site) return res.status(404).json({ error: "Site not found" });
-      const { getStripeClient, STRIPE_ENERGY_PRICE_IDS } = await import("./stripeClient");
+      const { getStripeClient, STRIPE_ENERGY_PRICE_IDS } = await import("../stripeClient");
       const priceId = STRIPE_ENERGY_PRICE_IDS[packageType];
       if (!priceId) return res.status(400).json({ error: "Energy refill price not configured for this package" });
       const stripe = getStripeClient();

@@ -336,6 +336,12 @@ export interface IStorage {
   // Customer Account operations
   getCustomerAccountByPhone(phone: string): Promise<CustomerAccount | undefined>;
   getCustomerAccountById(id: string): Promise<CustomerAccount | undefined>;
+  /** Resolve a customer account by id, phone, or email (first match in that order). Email match is case-insensitive. */
+  findCustomerAccount(criteria: {
+    id?: string;
+    phone?: string;
+    email?: string;
+  }): Promise<CustomerAccount | undefined>;
   createCustomerAccount(account: InsertCustomerAccount): Promise<CustomerAccount>;
   updateCustomerAccount(id: string, updates: Partial<InsertCustomerAccount>): Promise<CustomerAccount | undefined>;
   updateCustomerAccountLastLogin(id: string): Promise<void>;
@@ -726,7 +732,7 @@ export class DatabaseStorage implements IStorage {
     return r;
   }
 
-  async updateReseller(id: string, updates: Partial<{ stripeConnectId: string | null; name: string | null; email: string | null; phone: string | null }>): Promise<Reseller | undefined> {
+  async updateReseller(id: string, updates: Partial<{ stripeAccountId: string | null; name: string | null; email: string | null; phone: string | null }>): Promise<Reseller | undefined> {
     const [updated] = await db.update(resellers).set({ ...updates, updatedAt: new Date() }).where(eq(resellers.id, id)).returning();
     return updated;
   }
@@ -1470,6 +1476,34 @@ export class DatabaseStorage implements IStorage {
   async getCustomerAccountById(id: string): Promise<CustomerAccount | undefined> {
     const [account] = await db.select().from(customerAccounts).where(eq(customerAccounts.id, id));
     return account;
+  }
+
+  async findCustomerAccount(criteria: {
+    id?: string;
+    phone?: string;
+    email?: string;
+  }): Promise<CustomerAccount | undefined> {
+    const id = criteria.id?.trim();
+    if (id) {
+      const byId = await this.getCustomerAccountById(id);
+      if (byId) return byId;
+    }
+    const phone = criteria.phone?.trim();
+    if (phone) {
+      const byPhone = await this.getCustomerAccountByPhone(phone);
+      if (byPhone) return byPhone;
+    }
+    const emailRaw = criteria.email?.trim();
+    if (emailRaw) {
+      const normalized = emailRaw.toLowerCase();
+      const [byEmail] = await db
+        .select()
+        .from(customerAccounts)
+        .where(sql`lower(${customerAccounts.email}) = ${normalized}`)
+        .limit(1);
+      if (byEmail) return byEmail;
+    }
+    return undefined;
   }
 
   async createCustomerAccount(account: InsertCustomerAccount): Promise<CustomerAccount> {

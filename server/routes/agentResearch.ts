@@ -74,7 +74,7 @@ Requirements:
     // Use the standard non-realtime model for text generation
     // Strip the native-audio suffix if present to get a text-capable variant
     const textModelId = modelId.replace(/-native-audio-preview[^'"]*/i, "").replace(/^models\//, "");
-    const safeModelId = textModelId || "gemini-2.5-flash-preview-05-20";
+    const safeModelId = textModelId || process.env.GEMINI_MODEL_FALLBACK || (console.error('[GOVERNANCE] GEMINI_MODEL_FALLBACK not set in Doppler'), "gemini-2.0-flash");
 
     const result = await genai.models.generateContent({
       model: safeModelId,
