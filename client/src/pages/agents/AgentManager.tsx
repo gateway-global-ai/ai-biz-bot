@@ -130,7 +130,7 @@ const BotAvatar = ({ scores, sentiment }: { scores: DiscScores; sentiment: Senti
       />
 
       <div 
-        className="absolute w-20 h-20 rounded-xl flex items-center justify-center bg-slate-900 border-2 z-10 transition-all duration-500"
+        className="absolute w-20 h-20 rounded-sui flex items-center justify-center bg-slate-900 border-2 z-10 transition-all duration-500"
         style={{
           borderColor: sentimentConfig.primary,
           boxShadow: `0 0 ${dNorm * 40 * auraIntensity}px ${sentimentConfig.glow}, 0 0 ${20 * auraIntensity}px ${sentimentConfig.glow}`,
@@ -378,7 +378,7 @@ export default function AgentManager({ siteConfigId, params: _params }: AgentMan
               >
                 <ChevronLeft className="w-6 h-6" />
               </UIButton>
-              <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-indigo-500">
+              <div className="w-12 h-12 rounded-sui overflow-hidden border-2 border-indigo-500">
                 <img src={agentAvatar.src} alt={agentAvatar.name} className="w-full h-full object-cover" />
               </div>
               <div>
@@ -422,7 +422,7 @@ export default function AgentManager({ siteConfigId, params: _params }: AgentMan
                 {OPERATIONAL_MODES_UI.map((mode) => (
                   <label
                     key={mode.id}
-                    className={`flex gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    className={`flex gap-3 p-3 rounded-sui border cursor-pointer transition-colors ${
                       operationalMode === mode.id
                         ? 'border-indigo-500/50 bg-indigo-500/10'
                         : 'border-slate-600 bg-slate-800/50 hover:bg-slate-800'
@@ -782,7 +782,7 @@ export default function AgentManager({ siteConfigId, params: _params }: AgentMan
                       <button
                         key={avatar.id}
                         onClick={() => setNewAgent({ ...newAgent, avatarId: avatar.id })}
-                        className={`relative group rounded-lg overflow-hidden border-2 transition-all ${
+                        className={`relative group rounded-sui overflow-hidden border-2 transition-all ${
                           newAgent.avatarId === avatar.id 
                             ? 'border-indigo-500 ring-2 ring-indigo-500/50' 
                             : 'border-slate-700 hover:border-slate-500'
@@ -933,7 +933,7 @@ export default function AgentManager({ siteConfigId, params: _params }: AgentMan
                         onClick={() => selectAgent(agent)}
                       >
                         <td className="p-4">
-                          <div className="w-12 h-12 rounded-lg overflow-hidden border border-slate-700">
+                          <div className="w-12 h-12 rounded-sui overflow-hidden border border-slate-700">
                             <img 
                               src={agentAvatar.src} 
                               alt={agentAvatar.name}

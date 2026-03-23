@@ -302,9 +302,12 @@ const router = Router();
       // Use agent's configured model, falling back to K2_TURBO
       const agentTemp = agent.aiTemperature ? agent.aiTemperature / 100 : 0.7;
       const agentMaxTokens = agent.aiMaxTokens || 4096;
-      // Sovereign: Gemini is the sole AI provider. Model from Doppler.
-      if (!process.env.GEMINI_MODEL_FALLBACK) console.error('[GOVERNANCE] GEMINI_MODEL_FALLBACK not set in Doppler');
-      const modelToUse = process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash';
+      // Sovereign: Gemini is the sole AI provider. Model IDs from Doppler only (no hardcoded model strings).
+      const modelToUse = process.env.GEMINI_MODEL_FALLBACK || process.env.GEMINI_MODEL_ID;
+      if (!modelToUse) {
+        console.error("[GOVERNANCE] Set GEMINI_MODEL_FALLBACK or GEMINI_MODEL_ID in Doppler");
+        return res.status(503).json({ error: "AI model not configured" });
+      }
 
       // Retry once on transient failures
       let response: string;
