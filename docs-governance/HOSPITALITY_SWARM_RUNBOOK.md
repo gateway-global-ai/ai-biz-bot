@@ -73,6 +73,14 @@ Allowlists are enforced in `server/config/operationalModes.ts`. Voice prompts al
 
 Tune windows in `server/tools/cloudbedsSwarmTools.ts` if needed.
 
+## Payment links (SMS vs email)
+
+Cloudbeds and similar PMSs often **email** payment links; those messages are easy to lose to **spam** filters. After the guest’s phone is known (OTP / Nova verification), prefer **transactional SMS** for delivery physics that match transaction value.
+
+- **API:** `POST /api/share/send-payment-link` (admin **Bearer** session, site-scoped). Body: `to` (E.164 or US 10-digit), `paymentUrl` (**https** URL copied from Cloudbeds or another trusted PMS UI — not model-invented), `siteConfigId`, optional `contextLabel` (e.g. `Boardwalk Suites Lafayette`).
+- **Pipe:** [`dispatchSms`](../server/services/smsRouter.ts) with **`CUSTOMER_CARE`** (A2P transactional — confirmations / links). No marketing STOP footer.
+- **OTP** flows remain on Twilio Verify; this endpoint is for **payment URL delivery** only.
+
 ## OAuth scopes
 
 Cloudbeds OAuth tokens must include scopes for guest, reservation, housekeeping, and dashboard reads used above (`read:guest`, `read:reservation`, `read:housekeeping`, `read:dashboard`, etc.). See OpenAPI `components.securitySchemes.OAuth2`.
