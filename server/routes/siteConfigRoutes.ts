@@ -52,6 +52,7 @@ import {
   verificationPolicySchema,
   resolveVerificationPolicyConfig,
 } from '../services/verificationPolicyService';
+import { assessBizPageOgReadiness } from '../services/socialOgReadiness';
 
 /** Converts a business name into a URL-safe slug with a 4-char random suffix. */
 function generateSlug(name: string): string {
@@ -1667,6 +1668,45 @@ router.post('/admin/ensure-joint-site', async (_req, res) => {
   } catch (error: any) {
     console.error("Error creating site:", error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/social-preview-readiness
+ * Deployment check: effective OG tags for `/biz/:slug` (same rules as social crawler middleware).
+ */
+router.get("/:id/social-preview-readiness", requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || id === "undefined") {
+      return res.status(400).json({ error: "A valid site configuration ID is required." });
+    }
+    const access = await assertSiteScopedAccess({ req, siteConfigId: id });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: "Site not found" });
+
+    const protocol = req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+    const host = req.headers.host || "localhost";
+    const baseUrl = `${protocol}://${host}`;
+
+    const result = assessBizPageOgReadiness(
+      {
+        name: site.name,
+        slug: site.slug,
+        heroImageUrl: site.heroImageUrl,
+        socialSharing: (site as { socialSharing?: Record<string, string> }).socialSharing,
+        placeData: site.placeData,
+      },
+      baseUrl
+    );
+
+    res.json({ siteConfigId: id, ...result });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Failed to assess social preview";
+    console.error("[SiteConfigRoutes] social-preview-readiness:", e);
+    res.status(500).json({ error: msg });
   }
 });
 

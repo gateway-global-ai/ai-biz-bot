@@ -29,6 +29,7 @@ import {
   knowledgeGapReportQueryOptions,
 } from "@/components/admin/KnowledgeProficiencyCard";
 import { SovereignVerificationCanvas } from "@/components/auth/SovereignVerificationCanvas";
+import { PlatformGovernanceHealthCard } from "@/components/admin/PlatformGovernanceHealthCard";
 
 type BusinessTab = "overview" | "agents" | "products" | "routing" | "telephony" | "knowledge" | "security";
 
@@ -58,7 +59,15 @@ interface SiteConfig {
   heroImageUrl?: string | null;
 }
 
-function OverviewTab({ site, onSave }: { site: SiteConfig; onSave: (updates: Partial<SiteConfig>) => void }) {
+function OverviewTab({
+  site,
+  onSave,
+  token,
+}: {
+  site: SiteConfig;
+  onSave: (updates: Partial<SiteConfig>) => void;
+  token: string | null;
+}) {
   const [name, setName] = useState(site.name || "");
   const [description, setDescription] = useState(site.businessDescription || "");
   const [website, setWebsite] = useState(site.website || "");
@@ -174,6 +183,13 @@ function OverviewTab({ site, onSave }: { site: SiteConfig; onSave: (updates: Par
           </Button>
         </div>
       </div>
+
+      <PlatformGovernanceHealthCard
+        siteConfigId={site.id}
+        token={token}
+        slug={site.slug ?? null}
+        siteName={site.name}
+      />
 
       <VoiceActivationPulse siteConfigId={site.id} days={14} />
     </div>
@@ -496,7 +512,7 @@ export function PlatformBusinessManager() {
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
         {activeTab === "overview" && (
-          <OverviewTab site={site} onSave={(updates) => updateMutation.mutate(updates)} />
+          <OverviewTab site={site} onSave={(updates) => updateMutation.mutate(updates)} token={token ?? null} />
         )}
         {activeTab === "agents" && (
           <AgentRosterPanel

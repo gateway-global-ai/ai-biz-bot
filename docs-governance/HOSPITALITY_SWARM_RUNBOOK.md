@@ -97,6 +97,14 @@ When guests still receive **Cloudbeds PayByLink** (or similar) via **email**, fi
 
 **Split strategy:** Use **SMS** (`send-payment-link`) for time-critical payment URLs when the guest phone is verified; use the **DNS / email checklist** above when email must remain in the mix.
 
+### Launch planning — OG meta & share containers (all properties)
+
+Do **not** treat Open Graph as a post-launch polish item. Any URL that acts as a **share container** (public `/biz/:slug`, campaign links, QR targets) should pass a **readiness check** before go-live:
+
+- **Owner dashboard:** Set **Social Sharing** (`og:title`, `og:description`, `og:image` 1200×630, `og:url`) in the owner UI (e.g. `/aibizbot`). Empty fields fall back to name, Places summary, or hero image; missing both custom **og:image** and **hero** yields the **platform default** preview — links look like generic text cards in iMessage, Slack, and Facebook.
+- **Crawler behavior:** Social crawlers receive minimal HTML with meta tags for `/biz/:slug` (see `server/routes.ts` middleware). The **Platform Business Manager** overview includes **Governance & share health** with `GET /api/site-configs/:id/social-preview-readiness` (authenticated, site-scoped) to mirror that assessment.
+- **Deployment gate:** Add “OG / link preview verified” to your internal launch checklist alongside DNS and PayByLink email audit.
+
 ## OAuth scopes
 
 Cloudbeds OAuth tokens must include scopes for guest, reservation, housekeeping, and dashboard reads used above (`read:guest`, `read:reservation`, `read:housekeeping`, `read:dashboard`, etc.). See OpenAPI `components.securitySchemes.OAuth2`.
