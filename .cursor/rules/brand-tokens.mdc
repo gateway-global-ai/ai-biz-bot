@@ -1,0 +1,65 @@
+---
+description: Brand token enforcement — prevents color drift and zone background violations across the AI OS shell.
+globs: ["client/src/**/*.tsx", "client/src/**/*.ts"]
+alwaysApply: true
+---
+
+# Brand Token Governance
+
+## Rule: Import Zone Colors from brand.ts
+
+All background colors for shell zones and the canvas zone must be imported from `client/src/config/brand.ts`.
+
+**Shell zones** (header, visualizer bar, PTT footer): always use `SHELL.bg` (`#0f172a`).
+**Canvas zone** (content area, 40%): always use `CANVAS.bg` (`#ffffff`).
+
+## Absolute Prohibitions
+
+- NEVER use inline hex `#0f172a`, `#1e293b`, `#0F172A` for zone backgrounds — import `SHELL.bg`
+- NEVER use inline hex `#ffffff`, `#f8fafc` for the canvas zone — import `CANVAS.bg`
+- NEVER use `bg-slate-900`, `bg-slate-950`, `bg-gray-900` on the canvas zone
+- NEVER use `bg-white`, `bg-slate-50` on shell zones
+- NEVER split zone backgrounds conditionally (e.g. `isSovereign ? 'bg-white' : 'bg-slate-50'`) — the canvas is always white, the shell is always dark
+- NEVER use purple (`#8b5cf6`, `bg-violet-500`, `bg-purple-500`) as a primary brand color — it is reserved for the ARCH "Reflect" slider only
+- NEVER use `bg-violet-400`, `bg-indigo-400`, `bg-blue-400`, `bg-emerald-400` on the visualizer bars — use `BRAND.green` and `BRAND.greenLight` from brand.ts
+- NEVER hardcode DISC or ARCH slider colors inline — import `DISC_COLORS` and `ARCH_COLORS` from brand.ts
+- NEVER change `headerStyle`, `visualizerStyle`, or `footerStyle` flex-basis values in ConciergePanel without an explicit governance task — these are fixed shell dimensions: header=56px, visualizer=64px, footer=110px
+
+## Required Pattern
+
+```tsx
+import { SHELL, CANVAS, BRAND } from '@/config/brand';
+
+// Shell zone (header/footer/visualizer)
+<div style={{ backgroundColor: SHELL.bg }}>
+
+// Canvas zone (content area)
+<div style={{ backgroundColor: CANVAS.bg }}>
+
+// Or via Tailwind with the bg-[#...] syntax using the constant
+<div className="bg-[#0f172a]"> // Only if importing the constant is not practical
+```
+
+## ConciergePanel Specific Rules
+
+- `ConciergePanel` header: always `bg-[#0f172a]` — never conditional on `isSovereign`, `ownerMode`, or `shellMode`. Height is fixed at **56px** (`flex: '0 0 56px'`).
+- `ConciergePanel` visualizer band: always `bg-[#0f172a]` with `overflow-hidden` to contain glow effects. Height is fixed at **64px** (`flex: '0 0 64px'`). Bar color is **always brand green** — `BRAND.green` (#008a3e) when recording, `BRAND.greenLight` (#10b981) when AI is speaking or processing, `#475569` when idle.
+- `ConciergePanel` content area: always `bg-white` — the `isSovereign ? 'bg-white' : 'bg-slate-50'` split is a governance violation
+- `ConciergePanel` footer: always `bg-[#0f172a]`. Height is fixed at **110px** (`flex: '0 0 110px'`).
+
+## Logo Rule
+
+The ClearVoice AI logo renders unconditionally in the header. No conditional rendering based on `ownerMode`, `role`, `shellMode`, or any other flag. The logo is a permanent shell element.
+
+## Footer Slot Contract
+
+The PTT footer has three fixed slots:
+1. Left 20%: `[Mute icon] [Share/QR icon]` — both permanent residents
+2. Center 50%: PTT button — minimum 50% width on mobile
+3. Right 20%: Reconnect button
+
+Adding a button means placing it within a slot. Replacing a slot occupant is a governance violation.
+
+## Idle Canvas Rule
+
+When `messages.length === 0` in ConciergePanel, the canvas must render `<OSMenuList>` with actionable menu items. It must never render only a decorative element (connection blob, AIOSMark alone, empty white space).

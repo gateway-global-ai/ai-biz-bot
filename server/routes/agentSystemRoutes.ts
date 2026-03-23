@@ -4,7 +4,7 @@ import { db } from "../db";
 import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { gatewayChat, parseTask, generateNavigatorIntroduction } from "../ai-gateway";
+import { gatewayChat, chat, parseTask, generateNavigatorIntroduction } from "../ai-gateway";
 import { requireAuth } from "../auth";
 import {
   DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, PLAN_LIMITS,
@@ -274,7 +274,7 @@ const router = Router();
         
         // Send SMS via Twilio
         if (callCoordinates && config?.accountSid && config?.authToken) {
-          const { sendSms } = await import("./twilio");
+          const { sendSms } = await import("../twilio");
           await sendSms(e164Phone, smsMessage, callCoordinates);
           console.log(`[Task Submit] Sent Navigator intro SMS to ${e164Phone}`);
         } else {
@@ -358,9 +358,15 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       const textResult = await textModel.generateContent(conversationPrompt);
       const conversationText = textResult.response.text() || "Hello! I'm your AI assistant. How can I help you today?";
 
-      // Generate TTS using direct API call (Gemini TTS model)
+      // Generate TTS using direct API call (Gemini TTS model — from Doppler only)
+      const ttsModel = process.env.GEMINI_TTS_MODEL_ID;
+      if (!ttsModel) {
+        return res.status(503).json({ error: "GEMINI_TTS_MODEL_ID not configured" });
+      }
+      const ttsVoice = process.env.GEMINI_VOICE_NAME || 'Puck';
+      const apiVersion = process.env.GEMINI_API_VERSION || 'v1beta';
       const ttsResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/${apiVersion}/models/${ttsModel}:generateContent?key=${process.env.GEMINI_API_KEY}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -370,7 +376,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
               responseModalities: ["AUDIO"],
               speechConfig: {
                 voiceConfig: {
-                  prebuiltVoiceConfig: { voiceName: 'Kore' }
+                  prebuiltVoiceConfig: { voiceName: ttsVoice }
                 }
               }
             }
@@ -420,11 +426,12 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // AGENT MANAGEMENT API
   // ============================================
 
-  // Get all agents (optional: ?siteConfigId=... filter by site; ?excludeProvider=kimi exclude KIMI)
+  // Get all agents (optional: ?siteConfigId=...; ?excludeNonGemini=1 keeps only Gemini-model agents)
   router.get("/api/agents", async (req, res) => {
     try {
       const siteConfigId = req.query.siteConfigId as string | undefined;
-      const excludeProvider = req.query.excludeProvider as string | undefined;
+      const excludeNonGemini =
+        req.query.excludeNonGemini === "1" || req.query.excludeNonGemini === "true";
 
       // Check auth for visibility
       const authHeader = req.headers.authorization;
@@ -464,8 +471,8 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
         agentList = agentList.filter((a: any) => (a.visibility || 'private') === 'public');
       }
 
-      if (excludeProvider === 'kimi') {
-        agentList = agentList.filter((a: any) => (a.aiModelProvider ?? 'gemini') !== 'kimi');
+      if (excludeNonGemini) {
+        agentList = agentList.filter((a: any) => (a.aiModelProvider ?? "gemini") === "gemini");
       }
 
       res.json(agentList);
@@ -487,8 +494,8 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   });
 
-  // Create agent
-  router.post("/api/agents", async (req, res) => {
+  // Create agent — requires auth; configuration changes require superadmin
+  router.post("/api/agents", requireAuth, async (req, res) => {
     try {
       const parsed = insertAgentSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -501,9 +508,16 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   });
 
-  // Update agent
-  router.patch("/api/agents/:id", async (req, res) => {
+  // Update agent — requires auth; core configuration fields restricted to superadmin
+  router.patch("/api/agents/:id", requireAuth, async (req, res) => {
     try {
+      const session = (req as any).session;
+      const configOnlyFields = ['systemPrompt', 'safeMode', 'roleType', 'name', 'dominance', 'influence', 'steadiness', 'conscientiousness'];
+      const requestedFields = Object.keys(req.body);
+      const touchesConfig = requestedFields.some(f => configOnlyFields.includes(f));
+      if (touchesConfig && session?.role !== 'superadmin') {
+        return res.status(403).json({ error: "Agent configuration changes require superadmin privileges" });
+      }
       const agent = await storage.updateAgent(req.params.id, req.body);
       if (!agent) {
         return res.status(404).json({ error: "Agent not found" });
@@ -514,8 +528,8 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   });
 
-  // Delete agent
-  router.delete("/api/agents/:id", async (req, res) => {
+  // Delete agent — requires auth
+  router.delete("/api/agents/:id", requireAuth, async (req, res) => {
     try {
       await storage.deleteAgent(req.params.id);
       res.json({ success: true });
@@ -575,8 +589,8 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     res.json({ key });
   });
 
-  // Update agent budget configuration
-  router.patch("/api/agents/:id/budget", async (req, res) => {
+  // Update agent budget configuration — requires auth
+  router.patch("/api/agents/:id/budget", requireAuth, async (req, res) => {
     try {
       const schema = z.object({
         budgetAmountUsd: z.string().refine(v => !isNaN(parseFloat(v)) && parseFloat(v) >= 0, { message: "Budget must be a non-negative number" }).optional(),
@@ -644,8 +658,8 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   });
 
-  // Run agent startup script
-  router.post("/api/agents/:id/startup-run", async (req, res) => {
+  // Run agent startup script — requires auth
+  router.post("/api/agents/:id/startup-run", requireAuth, async (req, res) => {
     try {
       const agent = await storage.getAgent(req.params.id);
       if (!agent) return res.status(404).json({ error: "Agent not found" });
@@ -729,8 +743,8 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   });
 
-  // Reset agent budget spending
-  router.post("/api/agents/:id/budget-reset", async (req, res) => {
+  // Reset agent budget spending — requires auth
+  router.post("/api/agents/:id/budget-reset", requireAuth, async (req, res) => {
     try {
       const agent = await storage.getAgent(req.params.id);
       if (!agent) return res.status(404).json({ error: "Agent not found" });

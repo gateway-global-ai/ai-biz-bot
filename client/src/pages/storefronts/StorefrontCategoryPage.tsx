@@ -107,7 +107,7 @@ export default function StorefrontCategoryPage() {
     const setup = async () => {
       const { PlaceAutocompleteElement } = await loadPlacesLibrary();
       if (cancelled || !container) return;
-      const autocomplete = new PlaceAutocompleteElement();
+      const autocomplete = new PlaceAutocompleteElement({});
       autocomplete.setAttribute('placeholder', `e.g. ${data.searchQuery} in ${data.location}`);
       autocomplete.style.cssText = 'width:100%;display:block;';
       const style = document.createElement('style');

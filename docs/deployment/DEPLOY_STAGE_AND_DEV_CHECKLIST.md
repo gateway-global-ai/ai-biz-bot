@@ -74,13 +74,16 @@ cp .env.example .env
 
 Optional: use `nano .env` or `vim .env` to edit.
 
-### 1.3 Build and start with PM2
+### 1.3 Build and start with PM2 (Doppler + ecosystem)
+
+Prefer **`./script/deploy-staging.sh`** after the first clone (it runs `npm ci`, `npm run build`, migrations, and `pm2` from **`ecosystem.config.cjs`** with `doppler run --config stg`).
+
+First-time manual equivalent (after `doppler setup` with config **stg** and `DOPPLER_TOKEN_STG` in `.env`):
 
 ```bash
-npm ci --omit=dev
+npm ci
 npm run build
-npm run db:push
-pm2 start dist/index.cjs --name aibizbot-stage.gatewayglobal.ai -i 1
+pm2 start ecosystem.config.cjs --only aibizbot-stage.gatewayglobal.ai --update-env
 pm2 save
 ```
 
@@ -159,15 +162,17 @@ cp .env.example .env
 # Plus API keys, etc.
 ```
 
-### 2.3 Build and start with PM2
+### 2.3 Build and start with PM2 (Doppler + ecosystem)
+
+Prefer **`./script/deploy-dev.sh`** for ongoing deploys. First-time:
 
 ```bash
-npm ci --omit=dev
+npm ci
 npm run build
-npm run db:push
-pm2 start dist/index.cjs --name aibizbot-dev.gatewayglobal.ai -i 1
+pm2 start ecosystem.config.cjs --only aibizbot-dev.gatewayglobal.ai --update-env
 pm2 save
 ```
+(Requires `doppler setup` with config **dev** and `DOPPLER_TOKEN_DEV` in `.env`.)
 
 ### 2.4 Nginx
 

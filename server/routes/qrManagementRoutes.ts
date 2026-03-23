@@ -597,6 +597,12 @@ qrRedirectRouter.get("/:id", async (req: Request, res: Response) => {
       // Non-blocking — fall through to plain destination
     }
   }
+  // If this QR route targets a specific canvas view, append ?view=<viewId>
+  // so PublicBusinessPage can deep-link directly into that menu section.
+  if ((route as any).viewId) {
+    const sep = finalDestination.includes('?') ? '&' : '?';
+    finalDestination = `${finalDestination}${sep}view=${encodeURIComponent((route as any).viewId)}`;
+  }
 
   res.redirect(302, finalDestination);
 });

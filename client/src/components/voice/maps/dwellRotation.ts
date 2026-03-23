@@ -5,8 +5,6 @@
  * Creates a professional "fly-around" effect for panoramic views.
  */
 
-import { Map } from '@vis.gl/react-google-maps';
-
 /**
  * Starts a 360-degree rotation animation around the current map center.
  * @param map - The Google Map instance from useMap()
@@ -14,7 +12,7 @@ import { Map } from '@vis.gl/react-google-maps';
  * @returns Cleanup function to stop the rotation
  */
 export function startDwellRotation(
-  map: Map | null,
+  map: google.maps.Map | null,
   durationSeconds: number = 30
 ): (() => void) | null {
   if (!map) {

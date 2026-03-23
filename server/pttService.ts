@@ -42,8 +42,8 @@ export class PushToTalkService {
     conversationHistory: Array<{ role: string; content: string }> = []
   ): Promise<PTTResponse> {
     try {
-      const model = config.model || 'gemini-2.5-flash-native-audio-preview-12-2025';
-      const voice = config.voice || 'Puck';
+      const model = config.model || process.env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025';
+      const voice = config.voice || process.env.GEMINI_VOICE_NAME || 'Puck';
       const systemPrompt = config.systemPrompt || 'You are a helpful AI assistant.';
       
       // Convert audio buffer to base64
@@ -73,35 +73,26 @@ export class PushToTalkService {
       
       // Configure for Live API with proper settings
       // Note: Using generateContent for PTT (one-shot), not live.connect
+      // Sample rates (16k in / 24k out) are enforced by the Clear Voice pipeline + worklet;
+      // @google/genai GenerateContentConfig does not expose a separate audioConfig block here.
       const response = await this.client.models.generateContent({
         model,
         contents,
         config: {
           systemInstruction: { parts: [{ text: systemPrompt }] },
-          responseModalities: ['AUDIO', 'TEXT'],
+          responseModalities: ["AUDIO", "TEXT"],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: {
-                voiceName: voice
-              }
-            }
+                voiceName: voice,
+              },
+            },
           },
-          // Audio processing configuration
-          audioConfig: {
-            enableAutomaticSpeechRecognition: true,
-            enableTextToSpeech: true,
-            // Input audio is expected at 16kHz (browser standard)
-            // Output audio will be 24kHz (Gemini native)
-            inputAudioSampleRate: 16000,
-            outputAudioSampleRate: 24000,
-          },
-          generationConfig: {
-            temperature: 0.8,
-            topP: 0.95,
-            topK: 40,
-            maxOutputTokens: 2048,
-          }
-        }
+          temperature: 0.8,
+          topP: 0.95,
+          topK: 40,
+          maxOutputTokens: 2048,
+        },
       });
       
       // Extract response
@@ -123,9 +114,9 @@ export class PushToTalkService {
         if (part.text) {
           responseText += part.text;
         }
-        if (part.inlineData && part.inlineData.mimeType?.startsWith('audio/')) {
+        if (part.inlineData?.mimeType?.startsWith("audio/") && part.inlineData.data) {
           // Audio is PCM 24kHz from Gemini
-          responseAudio = Buffer.from(part.inlineData.data, 'base64');
+          responseAudio = Buffer.from(part.inlineData.data, "base64");
         }
       }
       
@@ -155,7 +146,7 @@ export class PushToTalkService {
       const audioBase64 = audioBuffer.toString('base64');
       
       const response = await this.client.models.generateContent({
-        model: 'gemini-2.5-flash-native-audio-preview',
+        model: process.env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025',
         contents: [{
           role: 'user',
           parts: [{
@@ -190,10 +181,10 @@ export class PushToTalkService {
   /**
    * Generate speech from text (TTS)
    */
-  async generateSpeech(text: string, voice: string = 'Puck'): Promise<{ success: boolean; audio?: Buffer; error?: string }> {
+  async generateSpeech(text: string, voice: string = process.env.GEMINI_VOICE_NAME || 'Puck'): Promise<{ success: boolean; audio?: Buffer; error?: string }> {
     try {
       const response = await this.client.models.generateContent({
-        model: 'gemini-2.5-flash-native-audio-preview',
+        model: process.env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025',
         contents: text,
         config: {
           responseModalities: [Modality.AUDIO],
@@ -210,10 +201,10 @@ export class PushToTalkService {
       // Extract audio from response
       const parts = response.candidates?.[0]?.content?.parts || [];
       for (const part of parts) {
-        if (part.inlineData && part.inlineData.mimeType?.startsWith('audio/')) {
+        if (part.inlineData?.mimeType?.startsWith("audio/") && part.inlineData.data) {
           return {
             success: true,
-            audio: Buffer.from(part.inlineData.data, 'base64')
+            audio: Buffer.from(part.inlineData.data, "base64"),
           };
         }
       }

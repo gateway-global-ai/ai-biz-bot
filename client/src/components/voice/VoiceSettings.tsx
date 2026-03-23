@@ -29,7 +29,7 @@ import {
   MessageSquare,
   ArrowLeft
 } from 'lucide-react';
-import { DiscRadar, ArchBreakdown } from '@/components/agent-charts/AgentProfileCharts';
+import { DiscRadar, ArchBreakdown } from '@/ui/charts';
 import type { DiscScores, ArchProfile } from '@shared/schema';
 
 // --- Types ---
