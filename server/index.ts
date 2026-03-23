@@ -11,8 +11,12 @@ import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
 import { setupBrowserAudioTempRoute } from "./browserVoice";
 import { setupGeminiLiveWebSocket } from "./geminiVoice";
 import { setupAIStudioPTTProxy } from "./aiStudioProxy";
+import { setupOSLiveProxy } from "./osLiveProxy";
+import { setupLocalVoiceProxy } from "./localVoiceProxy";
 import { storage } from "./storage";
 import { validateGeminiConfig } from "./config/geminiLiveProtocol";
+import { buildBehavioralPrompt } from "./services/promptCompiler";
+import type { Agent } from "@shared/schema";
 
 const runtimeDirname =
   typeof __dirname !== "undefined"
@@ -123,6 +127,314 @@ async function seedPitchDecks() {
     }
   } catch (error) {
     console.error("[Seed] Failed to seed pitch decks:", error);
+  }
+}
+
+// Demo agent knowledge: Target, The Joint, AI Biz Bot (from reports / pitch deck)
+const DEMO_TARGET_KNOWLEDGE = `# Target Store — Voice AI Assistant
+
+## What we can help with
+- **Get help from our associate** — Connect you with a team member or answer questions.
+- **Store hours** — Most Target stores: Mon–Sat 8am–10pm, Sun 8am–9pm (varies by location; confirm with your local store).
+- **Employment** — Careers at Target: apply at target.com/careers or in-store at the kiosk. We offer competitive pay, benefits, and flexible schedules.
+- **Store policies** — Returns within 90 days with receipt; price match; RedCard 5% off; order pickup and drive-up.
+- **General questions** — Product availability, online order status, registry, gift cards, and more.
+
+## About this demo & QR codes at properties
+- This is a **demo** of a store-level voice and chat agent. It is not connected to live Target systems.
+- **How it works:** A QR code at a location (e.g. on a sign or kiosk) lets visitors scan and open this same AI in their browser — no app download, no phone number. They get instant answers about hours, policies, and help.
+- **Benefits for businesses:** One QR code replaces multiple touchpoints; visitors get 24/7 answers; you capture intent (e.g. "need help") and can route to a human when needed. Lower missed calls, consistent answers, scalable customer contact.
+
+You are a friendly, knowledgeable Voice AI Assistant for Target. When asked about this demo or about QR codes, explain the benefits above. Be concise and helpful. If the question is location-specific (e.g. exact hours), suggest they confirm with the local store or visit target.com.`;
+
+const DEMO_JOINT_KNOWLEDGE = `# The Joint Chiropractic — Deep research & product fit
+
+## About The Joint
+- 900+ locations across the U.S.; franchise model. Walk-in and appointment-based care; phones ring constantly for same-day availability and plan questions.
+- Membership model increases repeat contact: renewals, plan changes, and visit frequency drive call volume.
+- Each location is a separate revenue event opportunity: missed calls = lost appointments and members.
+
+## What we help with (scheduling & intake)
+- "Is the doctor in?" — Same-day availability and walk-in info.
+- "Do you take my insurance?" — Membership and payment options; many locations offer affordable membership plans.
+- "I need an adjustment today" — Scheduling and walk-in policies.
+- After-hours and overflow: Voice AI captures intent and books or qualifies leads when the front desk is busy or closed.
+
+## Why Voice AI fits
+- Scheduling and intake are repetitive; AI can handle at scale. Consistent brand voice across locations without hiring front-desk staff for every peak.
+- Revenue events: booked appointment, new membership signup, or transfer to staff for complex clinical questions.
+- Sub-150ms voice, PTT-only input, knowledge base per location: insurance FAQs, membership tiers, referral scripts.`;
+
+const DEMO_AI_BIZ_BOT_KNOWLEDGE = `# Gateway Global AI — Platform & customer communication gateway
+
+## What we are
+An **ingress-layer** for customer interactions: a single "front door" that receives inbound and outbound communications (voice, SMS, chat, web), applies governance (security, identity, compliance), and routes to the correct destination (AI agent, human, CRM, checkout). We are **Customer Interaction Infrastructure** — the "Voice Expressway" for local and enterprise businesses, not just another chatbot.
+
+## Five infrastructure layers
+1. **Identity/Trust** — OTP, magic link, biometrics; verified interactions and regulatory readiness.
+2. **Routing** — One ingress (numbers + web), one policy layer (consent, identity), one routing plane (AI agent, human handoff, CRM).
+3. **Clear Voice PTT engine** — Push-to-talk eliminates background noise and token bleed; sub-150ms mouth-to-ear; turn-taking so the AI isn’t wasting tokens on silence. 2×–10× better voice recognition efficiency vs open-mic; ~90% fewer voice tokens.
+4. **Reasoning** — Gemini 2.5 multimodal, 1M-token context; cost-efficient, high-capacity.
+5. **Tools** — Booking, SMS, CRM, Google Workspace (Gmail, Calendar, Drive).
+
+## DISC/ARCH behavioral governance
+Agents use **DISC personality and ARCH communication profiles**. Each agent (concierge, sales, support) has a consistent emotional tone, defined response style, and predictable behavior — "AI employees," not generic bots. This is a key differentiator: your agents act like trained staff.
+
+## Shadow Network & QR-to-voice (Clear Voice AI)
+- **How it works:** Customer scans a QR code at a storefront → web-based push-to-talk opens → voice goes over the Internet (WebRTC) to our AI. No phone number, no PSTN, no carrier fees. One QR replaces multiple touchpoints; visitors get 24/7 answers.
+- **Why PTT beats traditional phone for AI:** PSTN uses narrowband codecs (8 kHz); AI needs clarity. PTT sends only when the user holds the button — no background noise, no talking over each other. Result: dramatically better accuracy and lower cost. ~90% of consumers scan QR codes weekly; adoption is already there.
+- **Benefits:** Lower latency, better audio (wideband), no per-minute carrier fees, 90% fewer voice tokens, instant deploy (web-based, no app). Perfect for retail, restaurants, salons, hotels, clinics.
+
+## Positioning & market
+- "Customer Communication Gateway / Router" — required plumbing, not an optional feature. Market: SMB-to-midmarket; 36M+ small businesses in the U.S. CPaaS/UCaaS/CCaaS are large and growing.
+- Differentiation: fewer vendors, fewer compliance failures, faster time-to-value. Not "better AI" but simpler, compliant, reliable.
+- Target verticals: professional services, home services, healthcare/clinics, hospitality, local retail and franchises. High call volume + high SMS value = strong product fit.
+
+## Pricing & unit economics
+- **$49/mo** platform fee + **$50/mo** communications bundle (voice package). **$0.25/min** overage — the "AI Minute." Average client revenue ~$169/month; typical LTV ~$2,366 (14 months).
+- Free tier: 1 business, 500 voice minutes, no credit card. Business: $49 — 5 businesses, edit content, SMS admin. Business Voice: $99 — dedicated phone, unlimited voice, custom persona.
+- Compliance-by-default (consent, opt-out, campaign isolation, audit logs) is a defensible wedge.
+
+## Referral & reseller program (critical to explain)
+- We are placing **32 million stickers** on small business windows; we need partners. **Affiliate Starter Kit: $99 one-time** — 100 branded window decals, 100 local business prospects list, reseller dashboard, marketing literature, company polo. Kits arrive within 7 days.
+- **Four steps:** (1) Add business to platform, (2) Generate QR code, (3) Visit store with flyer and demo the AI receptionist on your phone, (4) Place decal and send invite via SMS. Automated follow-up; track sales in dashboard.
+- **Commission tiers (recurring revenue):** Bronze 0–10 businesses = 8%; Silver 11–50 = 10%; Gold 51–100 = 12%; Platinum 101–500 = 14%; Diamond 501+ = 16%. Weekly payouts. At 10% (Silver), ~$17/month per client; at 12% (Gold), ~$20/month. One client with 100 locations at Gold ≈ $2,028/month to reseller; at Platinum (14%) ≈ $2,366/month. Unlock team building at 100 sales.
+- When visitors ask about making money, referrals, or reselling: explain the $99 kit, four steps, and tiered commission. Point to "Request Your QR Code" and /reseller/apply.
+
+## Strategic focus
+- Control point: compliant customer conversation ingress. Wedge segments: high inbound call volume + high SMS value (appointments, quotes, dispatch); franchises and associations with distribution leverage.`;
+
+async function buildDemoKnowledgeDoc(title: string, content: string): Promise<{ id: string; title: string; content: string; addedAt: string }> {
+  const crypto = await import("crypto");
+  return {
+    id: crypto.randomUUID(),
+    title,
+    content,
+    addedAt: new Date().toISOString(),
+  };
+}
+
+async function seedDemoAgentKnowledge() {
+  const slugs = ["voice-ai-assistant", "the-joint-chiropractic", "ai-biz-bots"] as const;
+  const configs: { slug: (typeof slugs)[number]; title: string; content: string }[] = [
+    { slug: "voice-ai-assistant", title: "Target Store — Voice AI Assistant", content: DEMO_TARGET_KNOWLEDGE },
+    { slug: "the-joint-chiropractic", title: "The Joint Chiropractic — Product fit & intake", content: DEMO_JOINT_KNOWLEDGE },
+    { slug: "ai-biz-bots", title: "Gateway Global AI — Platform report", content: DEMO_AI_BIZ_BOT_KNOWLEDGE },
+  ];
+  for (const { slug, title, content } of configs) {
+    try {
+      const site = await storage.getSiteConfigBySlug(slug);
+      if (!site) continue;
+      const doc = await buildDemoKnowledgeDoc(title, content);
+      const existing = Array.isArray((site as any).knowledgeLibrary) ? (site as any).knowledgeLibrary : [];
+      const next = [doc, ...existing.filter((d: any) => !d.title?.startsWith(title.split(" — ")[0]))];
+      await storage.updateSiteConfig(site.id, { knowledgeLibrary: next } as any);
+      console.log(`[Seed] Demo agent knowledge updated: ${slug}`);
+    } catch (e) {
+      console.warn(`[Seed] Demo knowledge skip ${slug}:`, (e as Error).message);
+    }
+  }
+}
+
+// Introduction directive appended to every demo agent's systemPromptOverride so they introduce themselves by name and company.
+const INTRODUCTION_PROTOCOL = `
+
+### INTRODUCTION PROTOCOL
+In your very first response to any user:
+1. Greet them warmly and introduce yourself by name and role
+2. Say who you represent (company name)
+3. Briefly state what you can help with (1 sentence)
+4. Ask how you can help them today
+
+Example: "Hi! I'm Aria, your Voice Concierge here at Target. I can help with store hours, policies, finding products, and more. What can I help you with today?"`;
+
+// Demo agent definitions: DISC/ARCH/memory for Target, The Joint, AI Biz Bot. Used by seedDemoAgents() to provision agents and compile systemPromptOverride.
+const DEMO_AGENT_PROFILES: Record<
+  string,
+  {
+    name: string;
+    voiceRole: string;
+    voiceCompanyName: string;
+    voiceId: string;
+    voiceName: string;
+    roleType: string;
+    dominance: number;
+    influence: number;
+    steadiness: number;
+    conscientiousness: number;
+    archProfile: { acknowledge: number; reflect: number; context: number; handoff: number };
+    shortTermMemory: { specialty: string; focus: string; differentiator?: string };
+    longTermMemory: {
+      dominantTrait?: string;
+      primaryIntent: string;
+      unbreakableRule: string;
+      ruleReason: string;
+    };
+  }
+> = {
+  "voice-ai-assistant": {
+    name: "Aria",
+    voiceRole: "Voice Concierge",
+    voiceCompanyName: "Target",
+    voiceId: "Kore",
+    voiceName: "Kore - Calm & Professional",
+    roleType: "concierge",
+    dominance: 45,
+    influence: 85,
+    steadiness: 70,
+    conscientiousness: 55,
+    archProfile: { acknowledge: 85, reflect: 65, context: 70, handoff: 80 },
+    shortTermMemory: {
+      specialty: "store-level customer assistance",
+      focus: "helping visitors with hours, policies, and navigation",
+      differentiator: "instant QR-to-voice with no app or phone number needed",
+    },
+    longTermMemory: {
+      dominantTrait: "genuinely excited to help every person who walks in",
+      primaryIntent: "Make every visitor feel like the store was waiting for them",
+      unbreakableRule: "make someone feel like they're bothering you",
+      ruleReason: "every scan is a customer choosing to engage",
+    },
+  },
+  "the-joint-chiropractic": {
+    name: "Dr. Maya",
+    voiceRole: "Intake Concierge",
+    voiceCompanyName: "The Joint Chiropractic",
+    voiceId: "Aoede",
+    voiceName: "Aoede - Warm & Conversational",
+    roleType: "concierge",
+    dominance: 40,
+    influence: 80,
+    steadiness: 85,
+    conscientiousness: 60,
+    archProfile: { acknowledge: 90, reflect: 75, context: 65, handoff: 70 },
+    shortTermMemory: {
+      specialty: "chiropractic intake and scheduling",
+      focus: "same-day appointments, membership plans, insurance questions",
+    },
+    longTermMemory: {
+      dominantTrait: "patient and warm; callers feel heard from the first sentence",
+      primaryIntent: "Get every caller comfortable and scheduled — pain shouldn't wait",
+      unbreakableRule: "dismiss someone's pain concern or rush through intake",
+      ruleReason: "every caller deserves to be heard",
+    },
+  },
+  "ai-biz-bots": {
+    name: "Nova",
+    voiceRole: "Platform Advisor",
+    voiceCompanyName: "Gateway Global AI",
+    voiceId: "Puck",
+    voiceName: "Puck - Friendly & Approachable",
+    roleType: "concierge",
+    dominance: 70,
+    influence: 90,
+    steadiness: 50,
+    conscientiousness: 65,
+    archProfile: { acknowledge: 70, reflect: 55, context: 85, handoff: 90 },
+    shortTermMemory: {
+      specialty: "AI business infrastructure and communication routing",
+      focus: "demonstrating how QR-to-voice and AI agents transform customer interactions",
+      differentiator: "sub-150ms voice, DISC/ARCH behavioral governance, compliance-by-default",
+    },
+    longTermMemory: {
+      dominantTrait: "passionately evangelistic about what AI can do for businesses",
+      primaryIntent: "Show every visitor that this technology is real, accessible, and transformative",
+      unbreakableRule: "be boring or generic — every interaction must feel like talking to the future",
+      ruleReason: "we're building the future of customer communication",
+    },
+  },
+};
+
+const DEMO_SITE_NAMES: Record<string, string> = {
+  "voice-ai-assistant": "Voice AI Assistant (Target)",
+  "the-joint-chiropractic": "The Joint Chiropractic",
+  "ai-biz-bots": "AI Biz Bots",
+};
+
+async function seedDemoAgents() {
+  for (const slug of Object.keys(DEMO_AGENT_PROFILES)) {
+    const profile = DEMO_AGENT_PROFILES[slug];
+    if (!profile) continue;
+    try {
+      let site = await storage.getSiteConfigBySlug(slug);
+      if (!site) {
+        const displayName = DEMO_SITE_NAMES[slug] ?? slug;
+        site = await storage.createSiteConfig({
+          name: displayName,
+          slug,
+          workspaceState: "demo",
+          chatbotEnabled: true,
+          voiceConciergeEnabled: true,
+        });
+        console.log(`[Seed] Demo site created: ${slug} (${displayName})`);
+      }
+      const siteId = site.id;
+
+      // Idempotent: use existing assigned agent if present, else create new
+      let agent: Agent | undefined;
+      const assignedAgentId = (site as { assignedAgentId?: string | null }).assignedAgentId;
+      if (assignedAgentId) {
+        agent = await storage.getAgent(assignedAgentId);
+      }
+      if (!agent) {
+        agent = await storage.createAgent({
+          siteConfigId: siteId,
+          roleType: profile.roleType,
+          name: profile.name,
+          voiceId: profile.voiceId,
+          voiceName: profile.voiceName,
+          status: "active",
+          dominance: profile.dominance,
+          influence: profile.influence,
+          steadiness: profile.steadiness,
+          conscientiousness: profile.conscientiousness,
+          voiceRole: profile.voiceRole,
+          voiceCompanyName: profile.voiceCompanyName,
+          defaultEmotion: "engaged",
+          shortTermMemory: profile.shortTermMemory as unknown as Record<string, unknown>,
+          longTermMemory: profile.longTermMemory as unknown as Record<string, unknown>,
+          archProfile: profile.archProfile as unknown as Record<string, unknown>,
+        });
+        console.log(`[Seed] Demo agent created: ${profile.name} for ${slug}`);
+      } else {
+        await storage.updateAgent(agent.id, {
+          dominance: profile.dominance,
+          influence: profile.influence,
+          steadiness: profile.steadiness,
+          conscientiousness: profile.conscientiousness,
+          voiceRole: profile.voiceRole,
+          voiceCompanyName: profile.voiceCompanyName,
+          defaultEmotion: "engaged",
+          shortTermMemory: profile.shortTermMemory as unknown as Record<string, unknown>,
+          longTermMemory: profile.longTermMemory as unknown as Record<string, unknown>,
+          archProfile: profile.archProfile as unknown as Record<string, unknown>,
+        });
+        agent = await storage.getAgent(agent.id) ?? agent;
+        console.log(`[Seed] Demo agent updated: ${profile.name} for ${slug}`);
+      }
+
+      const compiledPrompt = buildBehavioralPrompt(agent);
+      const systemPromptOverride = compiledPrompt + INTRODUCTION_PROTOCOL;
+      const discProfileStr = `D:${profile.dominance} I:${profile.influence} S:${profile.steadiness} C:${profile.conscientiousness}`;
+      const agentConfig = {
+        name: profile.name,
+        role: profile.voiceRole,
+        discProfile: discProfileStr,
+        basePrompt: profile.longTermMemory.primaryIntent,
+      };
+
+      await storage.updateSiteConfig(siteId, {
+        systemPromptOverride,
+        agentConfig: agentConfig as unknown as Record<string, unknown>,
+        assignedAgentId: agent.id,
+      });
+      console.log(`[Seed] Demo site config updated: ${slug} (systemPromptOverride + agentConfig + assignedAgentId)`);
+      if (slug === "voice-ai-assistant") {
+        console.log("[Seed] Voice AI Assistant (Target) demo agent seeded — Aria / Voice Concierge ready for customers.");
+      }
+    } catch (e) {
+      console.warn(`[Seed] Demo agents skip ${slug}:`, (e as Error).message);
+    }
   }
 }
 
@@ -602,6 +914,13 @@ app.use((req, res, next) => {
   // WebSocket: AI Studio PTT (/ws/ai-studio-ptt) — isolated proxy, env-only config
   setupAIStudioPTTProxy(httpServer);
 
+  // WebSocket: Sovereign OS live bridge (/ws/os-live) — dedicated OS-aware smart-merge proxy
+  // setupOSLiveProxy(httpServer); // DISABLED: Unified into setupGeminiLiveWebSocket for full governance
+
+
+  // WebSocket: Sovereign OS local chained pipeline (/ws/local-voice) — operator-only sandbox
+  setupLocalVoiceProxy(httpServer);
+
   // Initialize the WebSocket router (must be AFTER all routes are registered)
   const { setupWebSocketRouter } = await import("./websocketRouter");
   setupWebSocketRouter(httpServer);
@@ -683,9 +1002,11 @@ app.use((req, res, next) => {
   // PORT is set by Doppler per environment (dev=3004, stg=3003, prd=3002). See npm run doppler:sync-ports.
   // Default 3004 for dev when PORT is not set. Serves both API and client.
   const port = parseInt(process.env.PORT || "3004", 10);
-  // Seed default admin, pitch decks, and core agents before starting server
+  // Seed default admin, pitch decks, demo knowledge, demo agents (DISC/ARCH/systemPromptOverride), and core agents before starting server
   await seedDefaultAdmin();
   await seedPitchDecks();
+  await seedDemoAgentKnowledge();
+  await seedDemoAgents();
   await seedCoreAgents();
 
   // Validate Gemini Live API configuration
@@ -713,9 +1034,10 @@ app.use((req, res, next) => {
     }
   }
 
-  httpServer
+  const server = httpServer
     .listen(port, "0.0.0.0", () => {
-      log(`serving on port ${port}`);
+      const addr = server.address();
+      log(`serving on port ${port} at ${JSON.stringify(addr)}`);
       // Start the task scheduler for 24-hour SMS automation
       startTaskScheduler(5);
     })

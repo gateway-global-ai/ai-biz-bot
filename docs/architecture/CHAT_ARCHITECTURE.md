@@ -1,5 +1,7 @@
 # Chat Interface Architecture Decision
 
+**Chat-first agent control and KB:** For the in-chat menu, Knowledge overlay, prompt compilation, and KB RBAC, see [CHAT_AND_AGENT_CONTROL.md](./CHAT_AND_AGENT_CONTROL.md).
+
 ## Decision
 
 **We are committing to using BOTH the Gateway Chat SDK (`/sdk/chat/`) for embeddable widgets AND `StandardizedChatInterface` for in-app React pages as the ONLY approved chat interface implementations.**

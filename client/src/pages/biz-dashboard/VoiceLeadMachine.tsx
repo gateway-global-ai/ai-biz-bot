@@ -66,13 +66,13 @@ function StatsOverview() {
       {statCards.map((s) => {
         const Icon = s.icon;
         return (
-          <Card key={s.label} className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+          <Card key={s.label} className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <Icon className={`w-4 h-4 ${s.color}`} />
                 <span className="text-xs text-slate-400">{s.label}</span>
               </div>
-              <p className="text-2xl font-bold text-slate-900" data-testid={`text-vlm-stat-${s.label.toLowerCase().replace(/\s+/g, "-")}`}>{s.value}</p>
+              <p className="text-2xl font-bold text-white" data-testid={`text-vlm-stat-${s.label.toLowerCase().replace(/\s+/g, "-")}`}>{s.value}</p>
             </CardContent>
           </Card>
         );
@@ -104,9 +104,9 @@ function DiscoveryPanel() {
   });
 
   return (
-    <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+    <Card className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
       <CardHeader>
-        <CardTitle className="text-slate-900 flex items-center gap-2">
+        <CardTitle className="text-white flex items-center gap-2">
           <Search className="w-5 h-5 text-purple-400" />
           Lead Discovery
         </CardTitle>
@@ -120,7 +120,7 @@ function DiscoveryPanel() {
               placeholder="e.g. Austin, TX"
               value={city}
               onChange={(e) => setCity(e.target.value)}
-              className="bg-white/60 border-slate-200 text-slate-900"
+              className="bg-slate-800/60 border-slate-700 text-white"
             />
           </div>
           <div>
@@ -130,7 +130,7 @@ function DiscoveryPanel() {
               placeholder="e.g. restaurants, plumbers, dentists"
               value={industry}
               onChange={(e) => setIndustry(e.target.value)}
-              className="bg-white/60 border-slate-200 text-slate-900"
+              className="bg-slate-800/60 border-slate-700 text-white"
             />
           </div>
         </div>
@@ -138,7 +138,7 @@ function DiscoveryPanel() {
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Max Results</label>
             <Select value={maxResults} onValueChange={setMaxResults}>
-              <SelectTrigger data-testid="select-vlm-max" className="w-28 bg-white/60 border-slate-200 text-slate-900">
+              <SelectTrigger data-testid="select-vlm-max" className="w-28 bg-slate-800/60 border-slate-700 text-white">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -169,11 +169,11 @@ function DiscoveryPanel() {
           </Button>
         </div>
         {discoverMutation.isPending && (
-          <div className="bg-slate-100/70 rounded-lg p-4 border border-slate-200">
+          <div className="bg-slate-800/40 rounded-sui p-4 border border-slate-700">
             <div className="flex items-center gap-3">
               <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
               <div>
-                <p className="text-sm text-slate-900 font-medium">Searching Google Maps...</p>
+                <p className="text-sm text-white font-medium">Searching Google Maps...</p>
                 <p className="text-xs text-slate-400">This may take 30-60 seconds depending on results</p>
               </div>
             </div>
@@ -230,7 +230,7 @@ function ProspectsPanel() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger data-testid="select-vlm-filter" className="w-36 bg-white/60 border-slate-200 text-slate-900">
+          <SelectTrigger data-testid="select-vlm-filter" className="w-36 bg-slate-800/60 border-slate-700 text-white">
             <SelectValue placeholder="Filter" />
           </SelectTrigger>
           <SelectContent>
@@ -251,22 +251,22 @@ function ProspectsPanel() {
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-purple-400" /></div>
       ) : prospects.length === 0 ? (
-        <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+        <Card className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
           <CardContent className="py-12 text-center">
             <Users className="w-12 h-12 mx-auto text-slate-600 mb-3" />
-            <p className="text-slate-900 font-medium mb-1">No prospects yet</p>
+            <p className="text-white font-medium mb-1">No prospects yet</p>
             <p className="text-sm text-slate-400">Use Lead Discovery to find business leads from Google Maps</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-2">
           {prospects.map((p) => (
-            <Card key={p.id} className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+            <Card key={p.id} className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
               <CardContent className="p-4">
                 <div className="flex flex-wrap items-start gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <h4 className="text-slate-900 font-medium truncate">{p.businessName}</h4>
+                      <h4 className="text-white font-medium truncate">{p.businessName}</h4>
                       <QualityBadge score={p.qualityScore} />
                       <StatusBadge status={p.status} />
                     </div>
@@ -353,14 +353,14 @@ function CampaignsPanel() {
       </div>
 
       {showNew && (
-        <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+        <Card className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
           <CardContent className="p-4 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <Input data-testid="input-campaign-name" placeholder="Campaign name" value={name} onChange={(e) => setName(e.target.value)} className="bg-white/60 border-slate-200 text-slate-900" />
-              <Input data-testid="input-campaign-city" placeholder="Target city" value={campaignCity} onChange={(e) => setCampaignCity(e.target.value)} className="bg-white/60 border-slate-200 text-slate-900" />
-              <Input data-testid="input-campaign-industry" placeholder="Industry" value={campaignIndustry} onChange={(e) => setCampaignIndustry(e.target.value)} className="bg-white/60 border-slate-200 text-slate-900" />
+              <Input data-testid="input-campaign-name" placeholder="Campaign name" value={name} onChange={(e) => setName(e.target.value)} className="bg-slate-800/60 border-slate-700 text-white" />
+              <Input data-testid="input-campaign-city" placeholder="Target city" value={campaignCity} onChange={(e) => setCampaignCity(e.target.value)} className="bg-slate-800/60 border-slate-700 text-white" />
+              <Input data-testid="input-campaign-industry" placeholder="Industry" value={campaignIndustry} onChange={(e) => setCampaignIndustry(e.target.value)} className="bg-slate-800/60 border-slate-700 text-white" />
             </div>
-            <Textarea data-testid="input-campaign-script" placeholder="Call script template (use {businessName}, {industry}, {city} for variables)" value={script} onChange={(e) => setScript(e.target.value)} className="bg-white/60 border-slate-200 text-slate-900" rows={3} />
+            <Textarea data-testid="input-campaign-script" placeholder="Call script template (use {businessName}, {industry}, {city} for variables)" value={script} onChange={(e) => setScript(e.target.value)} className="bg-slate-800/60 border-slate-700 text-white" rows={3} />
             <div className="flex justify-end gap-2">
               <Button data-testid="button-campaign-cancel" variant="outline" onClick={() => setShowNew(false)}>Cancel</Button>
               <Button data-testid="button-campaign-save" onClick={() => createMutation.mutate()} disabled={!name || !campaignCity || !campaignIndustry || createMutation.isPending}>
@@ -375,37 +375,37 @@ function CampaignsPanel() {
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-purple-400" /></div>
       ) : campaigns.length === 0 ? (
-        <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+        <Card className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
           <CardContent className="py-12 text-center">
             <Target className="w-12 h-12 mx-auto text-slate-600 mb-3" />
-            <p className="text-slate-900 font-medium mb-1">No campaigns yet</p>
+            <p className="text-white font-medium mb-1">No campaigns yet</p>
             <p className="text-sm text-slate-400">Create a campaign to organize your outbound calling</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
           {campaigns.map((c) => (
-            <Card key={c.id} className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+            <Card key={c.id} className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
               <CardContent className="p-4">
                 <div className="flex flex-wrap items-center gap-3 mb-3">
-                  <h4 className="text-slate-900 font-medium">{c.name}</h4>
+                  <h4 className="text-white font-medium">{c.name}</h4>
                   <StatusBadge status={c.status} />
                   <span className="text-xs text-slate-400">{c.industry} - {c.city}</span>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                  <div className="bg-slate-100/60 rounded-lg p-2">
+                  <div className="bg-slate-800/40 rounded-sui p-2">
                     <p className="text-xs text-slate-400">Prospects</p>
-                    <p className="text-lg font-bold text-slate-900">{c.totalProspects || 0}</p>
+                    <p className="text-lg font-bold text-white">{c.totalProspects || 0}</p>
                   </div>
-                  <div className="bg-slate-100/60 rounded-lg p-2">
+                  <div className="bg-slate-800/40 rounded-sui p-2">
                     <p className="text-xs text-slate-400">Called</p>
-                    <p className="text-lg font-bold text-slate-900">{c.totalCalled || 0}</p>
+                    <p className="text-lg font-bold text-white">{c.totalCalled || 0}</p>
                   </div>
-                  <div className="bg-slate-100/60 rounded-lg p-2">
+                  <div className="bg-slate-800/40 rounded-sui p-2">
                     <p className="text-xs text-slate-400">Connected</p>
                     <p className="text-lg font-bold text-emerald-400">{c.totalConnected || 0}</p>
                   </div>
-                  <div className="bg-slate-100/60 rounded-lg p-2">
+                  <div className="bg-slate-800/40 rounded-sui p-2">
                     <p className="text-xs text-slate-400">Sales</p>
                     <p className="text-lg font-bold text-green-400">{c.totalSales || 0}</p>
                   </div>
@@ -453,17 +453,17 @@ function CallLogsPanel() {
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-purple-400" /></div>
       ) : attempts.length === 0 ? (
-        <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+        <Card className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
           <CardContent className="py-12 text-center">
             <PhoneCall className="w-12 h-12 mx-auto text-slate-600 mb-3" />
-            <p className="text-slate-900 font-medium mb-1">No call attempts yet</p>
+            <p className="text-white font-medium mb-1">No call attempts yet</p>
             <p className="text-sm text-slate-400">Call a prospect to see call logs here</p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-2">
           {attempts.map((a) => (
-            <Card key={a.id} className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+            <Card key={a.id} className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
               <CardContent className="p-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2">
@@ -564,9 +564,9 @@ function AutoAgentPanel() {
 
   return (
     <div className="space-y-4">
-      <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+      <Card className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
         <CardHeader>
-          <CardTitle className="text-slate-900 flex items-center gap-2">
+          <CardTitle className="text-white flex items-center gap-2">
             <Rocket className="w-5 h-5 text-purple-400" />
             Auto Agent Pipeline
           </CardTitle>
@@ -579,16 +579,16 @@ function AutoAgentPanel() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="text-xs text-slate-400 mb-1 block">Target City</label>
-              <Input data-testid="input-auto-city" placeholder="e.g. Austin, TX" value={city} onChange={(e) => setCity(e.target.value)} className="bg-white/60 border-slate-200 text-slate-900" />
+              <Input data-testid="input-auto-city" placeholder="e.g. Austin, TX" value={city} onChange={(e) => setCity(e.target.value)} className="bg-slate-800/60 border-slate-700 text-white" />
             </div>
             <div>
               <label className="text-xs text-slate-400 mb-1 block">Industry</label>
-              <Input data-testid="input-auto-industry" placeholder="e.g. restaurants, plumbers" value={industry} onChange={(e) => setIndustry(e.target.value)} className="bg-white/60 border-slate-200 text-slate-900" />
+              <Input data-testid="input-auto-industry" placeholder="e.g. restaurants, plumbers" value={industry} onChange={(e) => setIndustry(e.target.value)} className="bg-slate-800/60 border-slate-700 text-white" />
             </div>
             <div>
               <label className="text-xs text-slate-400 mb-1 block">Max Leads</label>
               <Select value={maxLeads} onValueChange={setMaxLeads}>
-                <SelectTrigger data-testid="select-auto-max" className="bg-white/60 border-slate-200 text-slate-900">
+                <SelectTrigger data-testid="select-auto-max" className="bg-slate-800/60 border-slate-700 text-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -606,7 +606,7 @@ function AutoAgentPanel() {
             <div>
               <label className="text-xs text-slate-400 mb-1 block">Min Quality Score (0-100)</label>
               <Select value={minQuality} onValueChange={setMinQuality}>
-                <SelectTrigger data-testid="select-auto-quality" className="bg-white/60 border-slate-200 text-slate-900">
+                <SelectTrigger data-testid="select-auto-quality" className="bg-slate-800/60 border-slate-700 text-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -636,7 +636,7 @@ function AutoAgentPanel() {
               data-testid="input-auto-script"
               value={callScript}
               onChange={(e) => setCallScript(e.target.value)}
-              className="bg-white/60 border-slate-200 text-slate-900 text-sm"
+              className="bg-slate-800/60 border-slate-700 text-white text-sm"
               rows={4}
               placeholder="Use {businessName}, {industry}, {city} for personalization"
             />
@@ -663,7 +663,7 @@ function AutoAgentPanel() {
       </Card>
 
       {(runMutation.isPending || (progress && progress.phase !== "idle")) && (
-        <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+        <Card className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
           <CardContent className="p-4">
             <div className="flex items-center gap-3 mb-4">
               {progress?.phase !== "complete" && progress?.phase !== "error" ? (
@@ -682,30 +682,30 @@ function AutoAgentPanel() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="bg-slate-100/60 rounded-lg p-2 text-center">
+              <div className="bg-slate-800/40 rounded-sui p-2 text-center">
                 <p className="text-xs text-slate-400">Discovered</p>
-                <p className="text-lg font-bold text-slate-900" data-testid="text-auto-discovered">{progress?.discovered || 0}</p>
+                <p className="text-lg font-bold text-white" data-testid="text-auto-discovered">{progress?.discovered || 0}</p>
               </div>
-              <div className="bg-slate-100/60 rounded-lg p-2 text-center">
+              <div className="bg-slate-800/40 rounded-sui p-2 text-center">
                 <p className="text-xs text-slate-400">Enriched</p>
-                <p className="text-lg font-bold text-slate-900" data-testid="text-auto-enriched">{progress?.enriched || 0}</p>
+                <p className="text-lg font-bold text-white" data-testid="text-auto-enriched">{progress?.enriched || 0}</p>
               </div>
-              <div className="bg-slate-100/60 rounded-lg p-2 text-center">
+              <div className="bg-slate-800/40 rounded-sui p-2 text-center">
                 <p className="text-xs text-slate-400">Sites Built</p>
                 <p className="text-lg font-bold text-emerald-400" data-testid="text-auto-sites">{progress?.sitesGenerated || 0}</p>
               </div>
-              <div className="bg-slate-100/60 rounded-lg p-2 text-center">
+              <div className="bg-slate-800/40 rounded-sui p-2 text-center">
                 <p className="text-xs text-slate-400">Calls Queued</p>
                 <p className="text-lg font-bold text-orange-400" data-testid="text-auto-calls">{progress?.callsQueued || 0}</p>
               </div>
-              <div className="bg-slate-100/60 rounded-lg p-2 text-center">
+              <div className="bg-slate-800/40 rounded-sui p-2 text-center">
                 <p className="text-xs text-slate-400">Errors</p>
                 <p className="text-lg font-bold text-red-400" data-testid="text-auto-errors">{progress?.errors?.length || 0}</p>
               </div>
             </div>
 
             {progress?.errors?.length > 0 && (
-              <div className="mt-3 bg-red-950/30 border border-red-900/50 rounded-lg p-3">
+              <div className="mt-3 bg-red-950/30 border border-red-900/50 rounded-sui p-3">
                 <p className="text-xs text-red-400 font-medium mb-1">Errors:</p>
                 <ul className="text-xs text-red-300 space-y-1">
                   {progress.errors.slice(0, 5).map((err: string, i: number) => (
@@ -721,9 +721,9 @@ function AutoAgentPanel() {
         </Card>
       )}
 
-      <Card className="bg-white/40 backdrop-blur-md border-white/20 shadow-xl">
+      <Card className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
         <CardContent className="p-4">
-          <h4 className="text-slate-900 font-medium flex items-center gap-2 mb-3">
+          <h4 className="text-white font-medium flex items-center gap-2 mb-3">
             <Bot className="w-4 h-4 text-purple-400" />
             How the Auto Agent Works
           </h4>
@@ -736,11 +736,11 @@ function AutoAgentPanel() {
             ].map((s) => {
               const Icon = s.icon;
               return (
-                <div key={s.step} className="bg-slate-100/60 rounded-lg p-3">
+                <div key={s.step} className="bg-slate-800/40 rounded-sui p-3">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-xs flex items-center justify-center font-bold">{s.step}</span>
                     <Icon className={`w-4 h-4 ${s.color}`} />
-                    <span className="text-sm text-slate-900 font-medium">{s.title}</span>
+                    <span className="text-sm text-white font-medium">{s.title}</span>
                   </div>
                   <p className="text-xs text-slate-400 ml-7">{s.desc}</p>
                 </div>
@@ -757,7 +757,7 @@ export default function VoiceLeadMachine() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-3" data-testid="text-vlm-title">
+        <h1 className="text-2xl font-bold text-white flex items-center gap-3" data-testid="text-vlm-title">
           <Zap className="w-7 h-7 text-purple-400" />
           VoiceLeadMachine
         </h1>
@@ -767,7 +767,7 @@ export default function VoiceLeadMachine() {
       <StatsOverview />
 
       <Tabs defaultValue="auto-agent" className="space-y-4">
-        <TabsList className="bg-white/60 border border-slate-200">
+        <TabsList className="bg-slate-900/60 border border-indigo-500/20">
           <TabsTrigger data-testid="tab-vlm-auto" value="auto-agent" className="data-[state=active]:bg-purple-600 data-[state=active]:text-white">
             <Rocket className="w-4 h-4 mr-2" /> Auto Agent
           </TabsTrigger>

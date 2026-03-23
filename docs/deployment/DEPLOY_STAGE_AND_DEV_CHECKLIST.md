@@ -220,10 +220,76 @@ Ensure Doppler is configured in this directory (`doppler setup` with project/con
 
 ---
 
-## 3. Quick reference
+## 3. Production root (gatewayglobal.ai / www.gatewayglobal.ai)
+
+Use this when the main domain is pointed at the server (e.g. 72.61.4.44). Replace `3004` with your app port if different (e.g. 3002 for prod).
+
+### 3.1 Nginx (HTTP first, for Certbot)
+
+```bash
+sudo nano /etc/nginx/sites-available/gatewayglobal.ai
+```
+
+Paste (then save and exit):
+
+```nginx
+server {
+    listen 80;
+    listen [::]:80;
+    server_name gatewayglobal.ai www.gatewayglobal.ai;
+
+    location / {
+        proxy_pass http://127.0.0.1:3004;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location /ws/ {
+        proxy_pass http://127.0.0.1:3004;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 3600s;
+    }
+}
+```
+
+Enable and reload:
+
+```bash
+sudo ln -sf /etc/nginx/sites-available/gatewayglobal.ai /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 3.2 Run Certbot (SSL)
+
+```bash
+sudo certbot --nginx -d gatewayglobal.ai -d www.gatewayglobal.ai
+```
+
+Follow the prompts (email, agree to terms). Certbot will obtain certificates and update the Nginx config to listen on 443 and redirect HTTP to HTTPS.
+
+Optional: ensure auto-renewal is scheduled:
+
+```bash
+sudo certbot renew --dry-run
+```
+
+---
+
+## 4. Quick reference
 
 | Environment | URL | Port | App path | Deploy script / command |
 |-------------|-----|------|----------|-------------------------|
+| Prod (root) | https://www.gatewayglobal.ai | 3004 or 3002 | same server (72.61.4.44) | Nginx + Certbot: see §3 above |
 | Prod | https://aibizbot.gatewayglobal.ai | 3002 | /opt/gatewayglobal/aibizbot.gatewayglobal.ai | `./script/deploy-server.sh aibizbot.gatewayglobal.ai` |
 | Stage | https://aibizbot-stage.gatewayglobal.ai | 3003 | /opt/gatewayglobal/aibizbot-stage.gatewayglobal.ai | `./script/deploy-staging.sh aibizbot-stage.gatewayglobal.ai` |
 | Dev | https://aibizbot-dev.gatewayglobal.ai | 3004 | /opt/gatewayglobal/aibizbot-dev.gatewayglobal.ai | `./script/deploy-dev.sh aibizbot-dev.gatewayglobal.ai` |

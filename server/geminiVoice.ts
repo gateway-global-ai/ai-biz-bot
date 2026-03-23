@@ -1,11 +1,15 @@
+import { randomUUID } from "crypto";
 import { WebSocket, WebSocketServer } from "ws";
 import { Server } from "http";
 import { IncomingMessage } from "http";
 import { registerWebSocketRoute } from "./websocketRouter";
 import { TOOL_DECLARATIONS } from "./config/geminiToolDeclarations";
+import { getToolsAllowedForMode } from "./config/operationalModes";
 import { handleToolCall } from "./services/toolHandler";
 import { broadcastLiveEvent } from "./services/eventBridge";
 import { storage } from "./storage";
+import { FREE_TIER_SYSTEM_INSTRUCTION } from "./prompts/freeTierPrompt";
+import { buildBehavioralPrompt, type BusinessContext } from "./services/promptCompiler";
 
 /** Gemini Multimodal Live API WebSocket base URL (no key). Same fallback as voiceStream.ts. */
 const GEMINI_LIVE_WS_BASE =
@@ -38,6 +42,10 @@ export function setupGeminiLiveWebSocket(server: Server): void {
   registerWebSocketRoute('/ws/browser-voice', wss, 'GeminiVoice');
   console.log('[BrowserVoice] Route retained and unified under Gemini Native Audio');
 
+  // Unified OS Live route (replacing the standalone osLiveProxy)
+  registerWebSocketRoute('/ws/os-live', wss, 'GeminiVoice');
+  console.log('[OSLive] Route unified under Gemini Native Audio (Governance Enabled)');
+
   wss.on("connection", (clientWs: WebSocket, request: IncomingMessage) => {
     console.log(`[GeminiVoice] New client connected to Gemini Proxy from ${request.socket.remoteAddress}`);
 
@@ -60,6 +68,8 @@ export function setupGeminiLiveWebSocket(server: Server): void {
     // Identity Anchor — captured from the client's setup sessionContext and injected
     // into every MCP tool call so the model never needs to emit the UUID itself.
     let sessionSiteConfigId: string | null = null;
+    // Web session id for conversation_events (browser voice); PSTN uses callSid in voiceStream.
+    let sessionId: string | null = null;
     // Contextual Snap — per-click agentId and metaPrompt from the Dynamic Entry Point Engine.
     let sessionAgentId: string | null = null;
     let sessionMetaPrompt: string | null = null;
@@ -76,6 +86,7 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           // This is the "Identity Anchor" — used to scope all MCP tool calls to the right tenant.
           if (message.sessionContext?.siteConfigId) {
             sessionSiteConfigId = message.sessionContext.siteConfigId;
+            if (!sessionId) sessionId = randomUUID();
             console.log(`[GeminiVoice] Identity anchor set: siteConfigId=${sessionSiteConfigId}`);
           }
           // Contextual Snap: capture agentId and metaPrompt from the entry point click.
@@ -97,56 +108,126 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           message.setup.model = modelId; // Override any model sent by the client.
 
           // --- CONTEXTUAL SNAP: Compile master system instruction server-side ---
-          // Priority: agentPersona + sovereignTruths + metaPrompt → overrides client instruction.
-          if (sessionSiteConfigId && (sessionAgentId || sessionMetaPrompt)) {
+          // Load site config when we have sessionSiteConfigId to apply plan (free vs paid) and context.
+          if (sessionSiteConfigId) {
             try {
               const siteConfig = await storage.getSiteConfigById(sessionSiteConfigId);
               if (siteConfig) {
-                const kl = (siteConfig.knowledgeLibrary as Record<string, any>) ?? {};
+                const plan = (siteConfig as { plan?: string }).plan ?? 'free';
+                const rawKl = siteConfig.knowledgeLibrary;
+                const kl = (rawKl && typeof rawKl === 'object' && !Array.isArray(rawKl)) ? (rawKl as Record<string, any>) : {};
                 const agents = (kl.agents as Record<string, any>) ?? {};
-
-                // Resolve agent persona — fallback to default concierge description
                 const agentDef = (sessionAgentId && sessionAgentId !== 'default')
                   ? (agents[sessionAgentId] ?? null)
                   : null;
-                const agentPersona = agentDef?.persona
-                  ?? 'You are the primary Site Concierge for this business. Be helpful, concise, and friendly.';
+                const systemPromptOverride = (siteConfig as { systemPromptOverride?: string | null }).systemPromptOverride;
+                const assignedAgentId = (siteConfig as { assignedAgentId?: string | null }).assignedAgentId;
+                const pd = (siteConfig as { placeData?: Record<string, unknown> | null }).placeData;
+                const website = pd && (typeof (pd as any).websiteUri === 'string' ? (pd as any).websiteUri : typeof (pd as any).website === 'string' ? (pd as any).website : null);
+                const address = pd && (typeof (pd as any).formattedAddress === 'string' ? (pd as any).formattedAddress : typeof (pd as any).formatted_address === 'string' ? (pd as any).formatted_address : null);
+                const hoursArr = pd && ((pd as any).opening_hours?.weekday_text ?? (pd as any).openingHours?.weekdayDescriptions);
+                const hours = Array.isArray(hoursArr) ? hoursArr.join('; ') : (typeof hoursArr === 'string' ? hoursArr : null);
+                const businessName = pd && typeof (pd as any).name === 'string' ? (pd as any).name : (siteConfig as { name?: string }).name ?? 'this business';
+                const phone = pd && (typeof (pd as any).formatted_phone_number === 'string' ? (pd as any).formatted_phone_number : typeof (pd as any).international_phone_number === 'string' ? (pd as any).international_phone_number : null);
 
-                // Extract sovereign truths for grounding
+                let agentPersona: string;
+                if (assignedAgentId) {
+                  const agent = await storage.getAgent(assignedAgentId);
+                  if (agent) {
+                    const businessContext: BusinessContext = {
+                      name: businessName,
+                      address: address ?? undefined,
+                      hours: hours ?? undefined,
+                      phone: phone ?? undefined,
+                      services: Array.isArray((pd as any)?.types) ? (pd as any).types : undefined,
+                    };
+                    const compiledPersona = buildBehavioralPrompt(agent, businessContext);
+                    agentPersona = systemPromptOverride && systemPromptOverride.trim()
+                      ? `${compiledPersona}\n\n--- USER-DIRECTED ADDITIONS ---\n${systemPromptOverride.trim()}`
+                      : compiledPersona;
+                  } else {
+                    agentPersona = (systemPromptOverride && systemPromptOverride.trim()) || (agentDef?.persona ?? 'You are the primary Site Concierge for this business. Be helpful, concise, and friendly.');
+                  }
+                } else {
+                  agentPersona = (systemPromptOverride && systemPromptOverride.trim())
+                    ? systemPromptOverride.trim()
+                    : (agentDef?.persona ?? 'You are the primary Site Concierge for this business. Be helpful, concise, and friendly.');
+                }
+
                 const sovereignTruths = kl.sovereignTruths
                   ? `\n\nCORE KNOWLEDGE (follow these facts precisely):\n${JSON.stringify(kl.sovereignTruths, null, 2)}`
                   : '';
+                const KNOWLEDGE_CAP = 32000;
+                let knowledgeBlockFromArray = '';
+                if (Array.isArray(rawKl) && rawKl.length > 0) {
+                  const docs = rawKl as Array<{ id?: string; title?: string; content?: string }>;
+                  const combined = docs.map((d) => `## ${d.title ?? 'Untitled'}\n${d.content ?? ''}`).join('\n\n---\n\n');
+                  knowledgeBlockFromArray = '\n\n--- KNOWLEDGE LIBRARY (use this to answer questions accurately) ---\n\n' + combined.slice(0, KNOWLEDGE_CAP) + (combined.length > KNOWLEDGE_CAP ? '\n\n[truncated]' : '');
+                }
 
-                // Resolve allowed tools — empty means all tools remain injected
-                const allowedTools: string[] = agentDef?.allowedTools ?? [];
+                const quickFactsLines: string[] = [];
+                if (website) quickFactsLines.push(`Website: ${website}`);
+                if (address) quickFactsLines.push(`Address: ${address}`);
+                if (hours) quickFactsLines.push(`Hours: ${hours}`);
+                const quickFactsBlock = quickFactsLines.length > 0
+                  ? '\n\n--- QUICK FACTS (use to answer hours, location, website without calling get_business_details) ---\n\n' + quickFactsLines.join('. ') + '\n'
+                  : '';
 
-                // Compile the master instruction
-                const compiledInstruction = `${agentPersona}${sovereignTruths}${
-                  sessionMetaPrompt
-                    ? `\n\nIMMEDIATE DIRECTIVE (execute in your very first response):\n${sessionMetaPrompt}\n\nRULE: You MUST execute the IMMEDIATE DIRECTIVE in your very first spoken response. Do not wait for the user to speak first.`
-                    : ''
-                }`;
+                const INTRODUCTION_PROTOCOL = '\n\n--- INTRODUCTION PROTOCOL ---\nIn your very first response: greet the user, introduce yourself by name and role, say who you represent (company name), and briefly state what you can help with. Be professional.';
 
-                // Override the system_instruction with the compiled version
-                message.setup.system_instruction = { parts: [{ text: compiledInstruction }] };
-                console.log(`[GeminiVoice] Contextual Snap applied: agentId=${sessionAgentId}, metaPrompt=${!!sessionMetaPrompt}`);
+                const RUNTIME_POLICY = '\n\n--- RUNTIME POLICY ---\nDo not offer to book, schedule, or reserve anything. You do not have access to a calendar. Your tools are only for: (1) Google Maps / local search when the user asks for locations or a map, and (2) requesting manual text input when audio is unclear. For pricing, menus, booking, or visiting the business, direct the user to the Links menu in this chat (Website, Online store) or the business phone/website. Do not say you can "look that up" or "check that" via tools.';
 
-                // Filter tools to the agent's allowlist (empty allowedTools = keep all)
-                if (allowedTools.length > 0) {
-                  const filteredDeclarations = Object.values(TOOL_DECLARATIONS).filter(
-                    t => allowedTools.includes(t.name)
-                  );
-                  if (filteredDeclarations.length > 0) {
-                    // Live API expects a single tool object with one functionDeclarations array (all functions).
-                    message.setup.tools = [{
-                      functionDeclarations: filteredDeclarations.map(tool => ({
-                        name: tool.name,
-                        description: tool.description,
-                        parameters: tool.parameters
-                      }))
-                    }];
-                    console.log(`[GeminiVoice] Tool isolation: ${filteredDeclarations.length}/${Object.keys(TOOL_DECLARATIONS).length} tools active for agentId=${sessionAgentId}`);
+                const linksList: string[] = [];
+                if (website) linksList.push(`Website: ${website}`);
+                if (website) linksList.push(`Online store: ${website}`);
+                const LINKS_MENU = linksList.length > 0
+                  ? `\n\n--- LINKS MENU ---\nThe user has a Links menu in this chat. When they ask to visit the website, shop, book, or get more info, tell them to open the Links menu and choose the appropriate link. Available links: ${linksList.join('; ')}.`
+                  : '\n\n--- LINKS MENU ---\nWhen the user asks for the website or to book, direct them to the business phone or suggest they search for the business online.';
+
+                const PRICING_RULE = '\n\nIf the customer asks for prices, menus, or booking: you cannot book or schedule. Direct them to the business website or the Links menu in this chat for current pricing and to book. Do not offer to book or schedule — only point them to the Links menu or website.';
+
+                if (plan === 'free') {
+                  let compiledInstruction = `${agentPersona}${sovereignTruths}${knowledgeBlockFromArray}${quickFactsBlock}${INTRODUCTION_PROTOCOL}${RUNTIME_POLICY}${LINKS_MENU}${PRICING_RULE}${FREE_TIER_SYSTEM_INSTRUCTION}`;
+                  message.setup.system_instruction = { parts: [{ text: compiledInstruction }] };
+                  message.setup.tools = [{ functionDeclarations: [] }];
+                  console.log('[GeminiVoice] Contextual Snap applied: free tier (no tools), compiled persona');
+                } else {
+                  let snapAgent: Awaited<ReturnType<typeof storage.getAgent>> = null;
+                  if (assignedAgentId) snapAgent = await storage.getAgent(assignedAgentId);
+
+                  let compiledInstruction = `${agentPersona}${sovereignTruths}${knowledgeBlockFromArray}${quickFactsBlock}${INTRODUCTION_PROTOCOL}${RUNTIME_POLICY}${LINKS_MENU}${
+                    sessionMetaPrompt
+                      ? `\n\nIMMEDIATE DIRECTIVE (execute in your very first response):\n${sessionMetaPrompt}\n\nRULE: You MUST execute the IMMEDIATE DIRECTIVE in your very first spoken response. Do not wait for the user to speak first.`
+                      : ''
+                  }`;
+                  const emotion = snapAgent?.defaultEmotion;
+                  if (emotion && /^(calm|engaged|focused|energized|empathetic)$/i.test(String(emotion))) {
+                    compiledInstruction += `\n\nDefault emotional tone: ${String(emotion).toUpperCase()}. Maintain this tone in your responses.`;
                   }
+                  compiledInstruction += PRICING_RULE;
+                  message.setup.system_instruction = { parts: [{ text: compiledInstruction }] };
+                  console.log(`[GeminiVoice] Contextual Snap applied: agentId=${sessionAgentId}, metaPrompt=${!!sessionMetaPrompt}, compiled persona`);
+
+                  // Execution plane: filter tools by operational mode first, then by agent allowedTools
+                  const modeAllowlist = getToolsAllowedForMode(snapAgent?.operationalMode ?? null);
+                  const agentAllowed: string[] = agentDef?.allowedTools ?? [];
+                  const effectiveAllowed =
+                    agentAllowed.length > 0
+                      ? agentAllowed.filter((t) => modeAllowlist.includes(t))
+                      : modeAllowlist;
+                  const filteredDeclarations = Object.values(TOOL_DECLARATIONS).filter((t) =>
+                    effectiveAllowed.includes(t.name)
+                  );
+                  message.setup.tools = [{
+                    functionDeclarations: filteredDeclarations.map((tool) => ({
+                      name: tool.name,
+                      description: tool.description,
+                      parameters: tool.parameters
+                    }))
+                  }];
+                  console.log(
+                    `[GeminiVoice] Tool isolation: mode=${snapAgent?.operationalMode ?? "none"} → ${filteredDeclarations.length} tools for agentId=${sessionAgentId}`
+                  );
                 }
               }
             } catch (snapErr) {
@@ -268,7 +349,7 @@ export function setupGeminiLiveWebSocket(server: Server): void {
 
               // Security Interceptor: inject the session-level siteConfigId into site-anchored
               // tool args if missing, preventing the model from hallucinating a UUID.
-              const SITE_ANCHORED_TOOLS = ['mcp_search_drive', 'mcp_read_calendar', 'get_hotel_inventory', 'fetch_city_warrants', 'vine_lookup_and_dispatch'];
+              const SITE_ANCHORED_TOOLS = ['mcp_search_drive', 'mcp_read_calendar', 'get_hotel_inventory', 'fetch_city_warrants', 'vine_lookup_and_dispatch', 'get_booking_and_pricing_info', 'query_knowledge_library'];
               if (SITE_ANCHORED_TOOLS.includes(functionCall.name)) {
                 const args = (functionCall.args as any) ?? {};
                 if (!args.siteConfigId && sessionSiteConfigId) {
@@ -298,6 +379,24 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                 
                 googleWs.send(JSON.stringify(functionResult));
                 console.log(`✅ [TOOL RESULT] ${functionCall.name} completed`);
+
+                // Log conversation event for Cash Board (tool -> event type mapping)
+                const TOOL_TO_EVENT_TYPE: Record<string, string> = {
+                  get_booking_and_pricing_info: "pricing",
+                  get_business_reviews: "reviews",
+                  get_business_details: "business_details",
+                  query_knowledge_library: "knowledge_query",
+                };
+                const eventType = TOOL_TO_EVENT_TYPE[functionCall.name];
+                if (eventType && sessionSiteConfigId) {
+                  storage.logConversationEvent({
+                    siteConfigId: sessionSiteConfigId,
+                    callSid: null,
+                    sessionId,
+                    eventType,
+                    metadata: { tool: functionCall.name },
+                  }).catch((err) => console.warn("[GeminiVoice] logConversationEvent failed:", err?.message));
+                }
 
                 // Send tool metadata to client for UI rendering (for certain tools)
                 if (clientWs.readyState === WebSocket.OPEN) {
@@ -380,6 +479,19 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                       tool_name: functionCall.name,
                       tool_type: 'vine_status',
                       ...(result as object),
+                    };
+                  } else if (functionCall.name === 'show_canvas') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: 'show_canvas',
+                      tool_type: 'shared_canvas',
+                      canvas_type: fcArgs.canvas_type,
+                      title: fcArgs.title,
+                      subtitle: fcArgs.subtitle,
+                      items: fcArgs.items || [],
+                      cta_label: fcArgs.cta_label,
+                      cta_action: fcArgs.cta_action,
+                      accent_color: fcArgs.accent_color || 'indigo',
                     };
                   }
 

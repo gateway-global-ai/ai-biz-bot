@@ -9,6 +9,86 @@ html::-webkit-scrollbar {
   display: none;
 }
 
+/* Hide scrollbar on any scroll container (sidebar, main, panels) — keep scroll behavior */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/**
+ * .telephony-canvas — Sovereign Light Canvas theme
+ *
+ * Applied to the Communication/Telephony panel when embedded inside the
+ * dark ConciergePanel. Keeps white card surfaces (light-mode "canvas" feel)
+ * but replaces the generic blue primary and red destructive with the
+ * platform's sovereign palette: indigo-600 primary, slate accents,
+ * emerald success, slate-700 danger (no harsh red).
+ */
+.telephony-canvas {
+  /* Base surface — clean white canvas */
+  --background:              0 0% 100%;
+  --foreground:              222 47% 11%;       /* slate-900 */
+
+  /* Cards stay white */
+  --card:                    0 0% 100%;
+  --card-foreground:         222 47% 11%;
+  --card-border:             215 20% 88%;       /* slate-200 */
+
+  /* Borders — cool grey, not blue-tinted */
+  --border:                  215 20% 88%;
+  --input:                   215 20% 80%;
+
+  /* Primary → Indigo 600 (matches sovereign-electric #6366F1) */
+  --primary:                 239 84% 67%;       /* indigo-500 */
+  --primary-foreground:      0 0% 100%;
+  --primary-border:          hsl(239 84% 60%);
+
+  /* Secondary — slate-100 */
+  --secondary:               215 20% 95%;
+  --secondary-foreground:    222 47% 11%;
+  --secondary-border:        hsl(215 20% 88%);
+
+  /* Muted — slate-50 */
+  --muted:                   215 20% 96%;
+  --muted-foreground:        215 14% 46%;
+
+  /* Accent — slate-100 hover state */
+  --accent:                  215 20% 94%;
+  --accent-foreground:       222 47% 11%;
+
+  /* Destructive → slate-700 (firm but not alarm-red) */
+  --destructive:             215 25% 27%;       /* slate-700 */
+  --destructive-foreground:  0 0% 100%;
+
+  /* Ring → indigo */
+  --ring:                    239 84% 67%;
+
+  /* Chart tokens */
+  --chart-1:                 239 84% 60%;       /* indigo */
+  --chart-2:                 262 83% 58%;       /* violet */
+  --chart-3:                 158 64% 40%;       /* emerald — success/online */
+  --chart-4:                 215 14% 46%;       /* slate muted */
+  --chart-5:                 215 25% 27%;       /* slate-700 */
+
+  /* Popover */
+  --popover:                 0 0% 100%;
+  --popover-foreground:      222 47% 11%;
+  --popover-border:          215 20% 88%;
+
+  /* Sidebar (not used in embedded panel but scoped anyway) */
+  --sidebar:                 215 20% 97%;
+  --sidebar-foreground:      222 47% 11%;
+  --sidebar-border:          215 20% 88%;
+  --sidebar-primary:         239 84% 67%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent:          215 20% 94%;
+  --sidebar-accent-foreground: 222 47% 11%;
+  --sidebar-ring:            239 84% 67%;
+}
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);
@@ -92,6 +172,12 @@ html::-webkit-scrollbar {
   /* Fallback for older browsers */
   --destructive-border: hsl(var(--destructive));
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+/* Admin platform: Nova Verify–style light theme. Use white/slate-50 BG, white cards (border-slate-200), text-slate-900/600/500. */
+.sidebar-admin {
+  --sidebar-accent: 222 47% 18%;
+  --sidebar-accent-foreground: 210 40% 98%;
 }
 
 .dark {

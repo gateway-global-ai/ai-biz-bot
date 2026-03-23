@@ -1,0 +1,11 @@
+---
+description: Forces OS work to anchor to approved schema entities first
+alwaysApply: true
+---
+
+# Schema Anchor Registry
+
+- Before introducing a domain concept, map it to an approved schema anchor in `docs-governance/SCHEMA_ANCHOR_REGISTRY.md`.
+- Approved anchors currently include: `customerAccounts`, `siteConfigs`, `agents`, `customers`, `novaIdvSessions`, `orders`, `inquiries`, and `chatLogs`.
+- Do not invent canonical entities in routes, views, YAML registries, or policies unless the schema and registry are updated deliberately.
+- Use context keys from `docs-governance/CONTEXT_KEYS.md` to constrain routes and actions.

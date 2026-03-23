@@ -1,0 +1,294 @@
+version: 1
+actions:
+  - actionId: intake.approve
+    entity: intakeChangeRequests
+    allowedEntities: [intakeChangeRequests]
+    requiredContextKeys: [siteConfigId, requestId]
+    requiredPolicy: intake.approve
+    mutationClass: controlled
+    mutationLevel: controlled
+    handler: intake/approveRequest
+    domainHandler: intake/approveRequest
+    requiresConfirmation: true
+    safeModeBehavior: require_human_confirmation
+    auditEvent: intake.approved
+    description: >
+      Approves a pending intake change request.
+  - actionId: form.approve
+    entity: intakeChangeRequests
+    allowedEntities: [intakeChangeRequests]
+    requiredContextKeys: [siteConfigId, requestId]
+    requiredPolicy: form.approve
+    mutationClass: controlled
+    mutationLevel: controlled
+    handler: intake/approveForm
+    domainHandler: intake/approveForm
+    requiresConfirmation: true
+    safeModeBehavior: require_human_confirmation
+    auditEvent: form.approved
+    description: >
+      Approves a submitted form.
+  - actionId: agent.updateBehavior
+    entity: agents
+    allowedEntities: [agents]
+    requiredContextKeys: [siteConfigId, agentId]
+    requiredPolicy: agent_config_access
+    mutationClass: controlled
+    mutationLevel: controlled
+    handler: agents/updateBehavior
+    domainHandler: agents/updateBehavior
+    requiresConfirmation: false
+    safeModeBehavior: block_in_strict
+  - actionId: support.createEnterpriseIntake
+    entity: customerAccounts
+    allowedEntities: [customerAccounts]
+    requiredContextKeys: []
+    requiredPolicy: support_public
+    mutationClass: controlled
+    mutationLevel: controlled
+    handler: support/createEnterpriseIntake
+    domainHandler: support/createEnterpriseIntake
+    requiresConfirmation: false
+    safeModeBehavior: allow
+  - actionId: agent.proposeDominanceChange
+    entity: agents
+    requiredContextKeys: [siteConfigId, agentId]
+    requiredPolicy: agent_behavior_control
+    mutationClass: controlled
+    handler: agents/proposeDominanceChange
+  - actionId: agent.applySafeModeProfile
+    entity: agents
+    requiredContextKeys: [siteConfigId, agentId]
+    requiredPolicy: agent_behavior_control
+    mutationClass: controlled
+    handler: agents/applySafeModeProfile
+  - actionId: agent.applyGroundingImportance
+    entity: agents
+    requiredContextKeys: [siteConfigId, agentId]
+    requiredPolicy: agent_behavior_control
+    mutationClass: controlled
+    handler: agents/applyGroundingImportance
+  - actionId: highlight_ui_element
+    entity: views
+    requiredContextKeys: [siteConfigId, agentId]
+    requiredPolicy: agent_behavior_control
+    mutationClass: controlled
+    handler: shell/highlightUiElement
+  - actionId: focus_behavior_control
+    entity: views
+    requiredContextKeys: [siteConfigId, agentId]
+    requiredPolicy: agent_behavior_control
+    mutationClass: controlled
+    handler: shell/focusBehaviorControl
+  - actionId: request_human_assistance
+    entity: views
+    requiredContextKeys: []
+    requiredPolicy: support_public
+    mutationClass: controlled
+    handler: shell/requestHumanAssistance
+  - actionId: draft_support_ticket
+    entity: views
+    requiredContextKeys: []
+    requiredPolicy: support_public
+    mutationClass: controlled
+    handler: shell/draftSupportTicket
+  - actionId: mutate_agent_behavior
+    entity: agents
+    requiredContextKeys: [siteConfigId, agentId]
+    requiredPolicy: agent_behavior_control
+    mutationClass: controlled
+    handler: agents/mutateAgentBehavior
+  - actionId: mutate_chaos_settings
+    entity: runtime
+    allowedEntities: [runtime]
+    requiredContextKeys: []
+    requiredPolicy: runtime_chaos_mutate
+    mutationClass: controlled
+    mutationLevel: controlled
+    handler: runtime/mutateChaosSettings
+    domainHandler: runtime/mutateChaosSettings
+    requiresConfirmation: true
+    safeModeBehavior: block_in_strict
+  - actionId: ground_business_candidates
+    entity: admin
+    requiredContextKeys: []
+    requiredPolicy: admin.onboarding.read
+    mutationClass: read_only
+    handler: onboarding/groundBusinessCandidates
+    description: >
+      Searches the business registry for matching candidates based on user conversation.
+      Use this BEFORE attempting to stage a new business onboarding draft.
+    arguments:
+      search_name:
+        type: string
+        required: true
+      city:
+        type: string
+        required: false
+      state:
+        type: string
+        required: false
+      zip:
+        type: string
+        required: false
+  - actionId: stage_business_onboarding
+    entity: admin
+    allowedEntities: [customerAccounts, siteConfigs]
+    requiredContextKeys: []
+    requiredPolicy: admin.onboarding.write
+    mutationClass: controlled
+    mutationLevel: controlled
+    handler: onboarding/stageBusinessOnboarding
+    domainHandler: onboarding/stageBusinessOnboarding
+    requiresConfirmation: false
+    safeModeBehavior: allow
+    description: >
+      Extracts business information from the conversation and prepares a draft onboarding profile.
+      CRITICAL: You do not create the account. You only stage the data into the form for the human operator to review, edit, and approve.
+    arguments:
+      business_name:
+        type: string
+        required: true
+        description: The legal or DBA name of the business being onboarded.
+      city:
+        type: string
+        required: false
+      state:
+        type: string
+        required: false
+      zip:
+        type: string
+        required: false
+      contact_email:
+        type: string
+        required: false
+      category:
+        type: string
+        required: false
+  - actionId: telephony.assignPaidNumber
+    entity: siteConfigs
+    allowedEntities: [siteConfigs]
+    requiredContextKeys: [siteConfigId]
+    requiredPolicy: telephony.paid_activation.write
+    mutationClass: sensitive
+    mutationLevel: sensitive
+    handler: telephony/assignPaidNumber
+    domainHandler: telephony/assignPaidNumber
+    requiresConfirmation: true
+    safeModeBehavior: require_human_confirmation
+    auditEvent: telephony.number_assigned
+    description: >
+      Assigns or provisions a phone number only after paid subscription activation.
+      Not available to free-tier workspaces.
+    arguments:
+      subscription_status:
+        type: string
+        required: true
+        description: Must be `paid_active` before assignment can proceed.
+      requested_area_code:
+        type: string
+        required: false
+  - actionId: messaging.sendVerificationOtp
+    entity: novaIdvSessions
+    allowedEntities: [novaIdvSessions]
+    requiredContextKeys: [sessionId]
+    requiredPolicy: messaging.verification_only
+    mutationClass: controlled
+    mutationLevel: controlled
+    handler: messaging/sendVerificationOtp
+    domainHandler: messaging/sendVerificationOtp
+    requiresConfirmation: false
+    safeModeBehavior: allow
+    auditEvent: messaging.verification_sent
+    description: >
+      Sends OTP/magic-link verification messages through the protected verification messaging lane.
+      This action cannot be used for customer care or marketing content.
+    arguments:
+      destination_number:
+        type: string
+        required: true
+      verification_channel:
+        type: string
+        required: true
+        description: Must be OTP or MAGIC_LINK.
+  - actionId: messaging.sendCustomerCare
+    entity: customers
+    allowedEntities: [customers]
+    requiredContextKeys: [siteConfigId, customerId]
+    requiredPolicy: messaging.customer_care
+    mutationClass: controlled
+    mutationLevel: controlled
+    handler: messaging/sendCustomerCare
+    domainHandler: messaging/sendCustomerCare
+    requiresConfirmation: false
+    safeModeBehavior: require_policy_scope
+    auditEvent: messaging.customer_care_sent
+    description: >
+      Sends service-oriented messages to existing customers using the customer care lane.
+      Marketing content must not flow through this action.
+  - actionId: messaging.sendMarketing
+    entity: customers
+    allowedEntities: [customers]
+    requiredContextKeys: [siteConfigId]
+    requiredPolicy: messaging.marketing
+    mutationClass: sensitive
+    mutationLevel: sensitive
+    handler: messaging/sendMarketing
+    domainHandler: messaging/sendMarketing
+    requiresConfirmation: true
+    safeModeBehavior: require_human_confirmation
+    auditEvent: messaging.marketing_sent
+    description: >
+      Sends marketing messages through a dedicated marketing campaign path.
+      Must stay segregated from verification and customer care traffic.
+  - actionId: session.joinAssist
+    entity: chatLogs
+    allowedEntities: [chatLogs]
+    requiredContextKeys: [siteConfigId, sessionId]
+    requiredPolicy: frontdesk.assist.write
+    mutationClass: controlled
+    mutationLevel: controlled
+    handler: frontdesk/sessionJoinAssist
+    domainHandler: frontdesk/sessionJoinAssist
+    requiresConfirmation: false
+    safeModeBehavior: require_policy_scope
+    auditEvent: frontdesk.assist_joined
+    description: >
+      Moves a live customer session from AI-only handling to operator-assisted mode.
+      This transition is policy-gated and auditable.
+  - actionId: session.endAssist
+    entity: chatLogs
+    allowedEntities: [chatLogs]
+    requiredContextKeys: [siteConfigId, sessionId]
+    requiredPolicy: frontdesk.assist.write
+    mutationClass: controlled
+    mutationLevel: controlled
+    handler: frontdesk/sessionEndAssist
+    domainHandler: frontdesk/sessionEndAssist
+    requiresConfirmation: false
+    safeModeBehavior: require_policy_scope
+    auditEvent: frontdesk.assist_ended
+    description: >
+      Returns an operator-assisted session to AI-only mode when human intervention is complete.
+  - actionId: session.resolveOutcome
+    entity: inquiries
+    allowedEntities: [inquiries, chatLogs]
+    requiredContextKeys: [siteConfigId, sessionId]
+    requiredPolicy: frontdesk.outcome.write
+    mutationClass: controlled
+    mutationLevel: controlled
+    handler: frontdesk/sessionResolveOutcome
+    domainHandler: frontdesk/sessionResolveOutcome
+    requiresConfirmation: true
+    safeModeBehavior: require_human_confirmation
+    auditEvent: frontdesk.outcome_captured
+    description: >
+      Captures a governed session outcome and marks the session as resolved.
+    arguments:
+      outcome_type:
+        type: string
+        required: true
+        description: lead|booking|task|resolved_no_action|escalated
+      notes:
+        type: string
+        required: false

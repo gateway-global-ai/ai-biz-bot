@@ -10,6 +10,85 @@ interface ChatMessage {
   timestamp?: Date;
   isUpsell?: boolean;
   upsellData?: UpsellData;
+  secureState?: {
+    identityVerified?: boolean;
+    insuranceCaptured?: boolean;
+    attorneyCaptured?: boolean;
+    consentSigned?: boolean;
+  };
+}
+
+interface SecureInputEnvelope {
+  policyId: string;
+  fieldName: string;
+  classification: string;
+  schemaEndpoint?: string | null;
+  submitEndpoint?: string | null;
+}
+
+interface SecureFormSchema {
+  policyId: string;
+  fieldName: string;
+  fields: Array<{
+    key: string;
+    label: string;
+    type: "text" | "date" | "select" | "number" | "signature";
+    required: boolean;
+    masked?: boolean;
+  }>;
+}
+
+interface IntakeModuleSummary {
+  workflowId: string;
+  title: string;
+  description: string;
+  secureFields: string[];
+  reviewQueueFields: string[];
+  requiredConsents: string[];
+}
+
+interface IntakeModuleField {
+  key: string;
+  label: string;
+  inputType:
+    | "text"
+    | "date"
+    | "email"
+    | "phone"
+    | "address"
+    | "select"
+    | "multiselect"
+    | "number"
+    | "signature"
+    | "file";
+  required: boolean;
+  options?: string[];
+  secureOnly?: boolean;
+  reviewMode?: "direct" | "review" | "secure_only" | "denied";
+  securePolicyId?: string;
+}
+
+interface IntakeModuleDetail {
+  module: {
+    workflowId: string;
+    title: string;
+    description: string;
+    prompts: string[];
+    fields: IntakeModuleField[];
+  };
+}
+
+function workflowStatusKey(workflowId: string): string {
+  const map: Record<string, string> = {
+    "chiropractic.newPatientIntake": "newPatientIntakeComplete",
+    "chiropractic.insuranceInformation": "insuranceInfoPendingReview",
+    "chiropractic.painAssessment": "painAssessmentComplete",
+    "chiropractic.consentForms": "consentFormsPending",
+    "chiropractic.accidentInjuryIntake": "injuryIntakeComplete",
+    "chiropractic.appointmentBooking": "appointmentBookingRequested",
+    "chiropractic.rescheduleCancel": "rescheduleRequested",
+  };
+  return map[workflowId] ?? "intakeModuleComplete";
 }
 
 // ─── Upsell product catalog ────────────────────────────────────────────────────
@@ -151,9 +230,19 @@ export default function StandardizedChatInterface({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [secureInput, setSecureInput] = useState<SecureInputEnvelope | null>(null);
+  const [secureFormSchema, setSecureFormSchema] = useState<SecureFormSchema | null>(null);
+  const [secureFormValues, setSecureFormValues] = useState<Record<string, string>>({});
+  const [secureSubmitting, setSecureSubmitting] = useState(false);
+  const [secureSchemaUnavailable, setSecureSchemaUnavailable] = useState(false);
+  const [intakeModules, setIntakeModules] = useState<IntakeModuleSummary[]>([]);
+  const [activeIntakeModule, setActiveIntakeModule] = useState<IntakeModuleDetail["module"] | null>(null);
+  const [intakeValues, setIntakeValues] = useState<Record<string, string>>({});
+  const [intakeSubmitting, setIntakeSubmitting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const visitorId = useRef(`visitor-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const secureSessionId = useRef(`session-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
   const modeConfig = MODE_CONFIG[currentMode];
   const effectiveGreeting = greetingMessage || modeConfig.greeting;
@@ -171,6 +260,29 @@ export default function StandardizedChatInterface({
       setTimeout(() => inputRef.current?.focus(), 200);
     }
   }, [currentMode]);
+
+  useEffect(() => {
+    if (!siteConfigId || siteConfigId === "platform-landing") return;
+    let cancelled = false;
+    const loadIntakeModules = async () => {
+      try {
+        const res = await fetch(`/api/site-configs/${siteConfigId}/intake/library?industry=chiropractic`, {
+          credentials: "include",
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { modules?: IntakeModuleSummary[] };
+        if (!cancelled && Array.isArray(data.modules)) {
+          setIntakeModules(data.modules);
+        }
+      } catch {
+        // silent fallback for unauth contexts
+      }
+    };
+    void loadIntakeModules();
+    return () => {
+      cancelled = true;
+    };
+  }, [siteConfigId]);
 
   const handleModeChange = (newMode: ChatInterfaceMode) => {
     setCurrentMode(newMode);
@@ -226,6 +338,46 @@ export default function StandardizedChatInterface({
           setIsLoading(false);
           return;
         }
+      }
+
+      if (data.requiresSecureInput && data.secureInput) {
+        const envelope = data.secureInput as SecureInputEnvelope;
+        setSecureInput(envelope);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              data.response ||
+              "For your security, this step must be completed in a secure input form.",
+            timestamp: new Date(),
+          },
+        ]);
+        if (envelope.schemaEndpoint) {
+          try {
+            const schemaRes = await fetch(envelope.schemaEndpoint, { credentials: "include" });
+            if (schemaRes.ok) {
+              const schema = (await schemaRes.json()) as SecureFormSchema;
+              setSecureFormSchema(schema);
+              setSecureSchemaUnavailable(false);
+              const initialValues = Object.fromEntries(
+                (schema.fields ?? []).map((field) => [field.key, ""])
+              );
+              setSecureFormValues(initialValues);
+            } else {
+              setSecureFormSchema(null);
+              setSecureSchemaUnavailable(true);
+            }
+          } catch {
+            setSecureFormSchema(null);
+            setSecureSchemaUnavailable(true);
+          }
+        } else {
+          setSecureFormSchema(null);
+          setSecureSchemaUnavailable(true);
+        }
+        setIsLoading(false);
+        return;
       }
 
       // ── Keyword fallback: detect upsell triggers in plain text responses ───
@@ -284,6 +436,146 @@ export default function StandardizedChatInterface({
       ]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const submitSecureForm = async () => {
+    if (!secureInput?.submitEndpoint) return;
+    setSecureSubmitting(true);
+    try {
+      const payload: Record<string, unknown> = {
+        sessionId: secureSessionId.current,
+        patientId: visitorId.current,
+        policyId: secureInput.policyId,
+        fieldName: secureInput.fieldName,
+        value: secureFormValues,
+        channel: "secure_form",
+      };
+      const res = await fetch(secureInput.submitEndpoint, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Secure submit failed");
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Secure input received. I will continue using only status state, not sensitive values.",
+          timestamp: new Date(),
+          secureState: data?.resultState ?? {},
+        },
+      ]);
+      setSecureInput(null);
+      setSecureFormSchema(null);
+      setSecureFormValues({});
+      setSecureSchemaUnavailable(false);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "I could not complete the secure submission. Please try again or ask staff to assist.",
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setSecureSubmitting(false);
+    }
+  };
+
+  const startIntakeModule = async (workflowId: string) => {
+    if (!siteConfigId || siteConfigId === "platform-landing") return;
+    try {
+      const res = await fetch(
+        `/api/site-configs/${siteConfigId}/intake/library/${encodeURIComponent(
+          workflowId
+        )}?industry=chiropractic`,
+        { credentials: "include" }
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as IntakeModuleDetail;
+      if (!data.module) return;
+      setActiveIntakeModule(data.module);
+      setIntakeValues(
+        Object.fromEntries((data.module.fields ?? []).map((field) => [field.key, ""]))
+      );
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: data.module.prompts?.[0] || `Starting ${data.module.title}.`,
+          timestamp: new Date(),
+        },
+      ]);
+    } catch {
+      // no-op
+    }
+  };
+
+  const submitIntakeModule = async () => {
+    if (!activeIntakeModule || !siteConfigId || siteConfigId === "platform-landing") return;
+    setIntakeSubmitting(true);
+    try {
+      for (const field of activeIntakeModule.fields) {
+        const value = intakeValues[field.key];
+        if (!value) continue;
+        if (field.reviewMode === "denied") continue;
+        if (field.reviewMode === "secure_only" || field.secureOnly) {
+          // secure-only fields use dedicated secure-form renderer per field
+          continue;
+        }
+        await fetch(`/api/site-configs/${siteConfigId}/intake/secure-submit`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: secureSessionId.current,
+            patientId: visitorId.current,
+            fieldName: field.key,
+            value: { [field.key]: value },
+            channel: "staff_assisted",
+          }),
+        });
+      }
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: `${activeIntakeModule.title} captured. Secure-only fields can be completed using the secure steps below.`,
+          timestamp: new Date(),
+        },
+      ]);
+      if (siteConfigId && siteConfigId !== "platform-landing") {
+        await fetch(`/api/site-configs/${siteConfigId}/intake/module-status`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: secureSessionId.current,
+            workflowId: activeIntakeModule.workflowId,
+            statusKey: workflowStatusKey(activeIntakeModule.workflowId),
+            statusValue: true,
+          }),
+        });
+      }
+      setActiveIntakeModule(null);
+      setIntakeValues({});
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "I could not submit this intake module. Please try again.",
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIntakeSubmitting(false);
     }
   };
 
@@ -376,6 +668,30 @@ export default function StandardizedChatInterface({
                 data-testid={`text-chat-message-${i}`}
               >
                 {msg.content}
+                {msg.role === "assistant" && msg.secureState ? (
+                  <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
+                    {msg.secureState.identityVerified ? (
+                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-emerald-200">
+                        identityVerified
+                      </span>
+                    ) : null}
+                    {msg.secureState.insuranceCaptured ? (
+                      <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-indigo-200">
+                        insuranceCaptured
+                      </span>
+                    ) : null}
+                    {msg.secureState.attorneyCaptured ? (
+                      <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-violet-200">
+                        attorneyCaptured
+                      </span>
+                    ) : null}
+                    {msg.secureState.consentSigned ? (
+                      <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-cyan-200">
+                        consentSigned
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
@@ -421,6 +737,168 @@ export default function StandardizedChatInterface({
           )}
         </Button>
       </div>
+      {intakeModules.length > 0 && !activeIntakeModule ? (
+        <div className="border-t border-slate-700/80 px-3 py-3 bg-slate-950/70">
+          <div className="mb-2 text-[11px] text-slate-300">Start Intake Module</div>
+          <div className="flex flex-wrap gap-2">
+            {intakeModules.map((module) => (
+              <button
+                key={module.workflowId}
+                type="button"
+                onClick={() => void startIntakeModule(module.workflowId)}
+                className="rounded border border-slate-600/60 bg-slate-800 px-2 py-1 text-[11px] text-slate-100"
+              >
+                {module.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {activeIntakeModule ? (
+        <div className="border-t border-indigo-500/20 px-3 py-3 bg-slate-950/80">
+          <div className="mb-2 text-xs font-semibold text-indigo-200">
+            {activeIntakeModule.title}
+          </div>
+          <p className="mb-3 text-[11px] text-slate-400">{activeIntakeModule.description}</p>
+          <div className="space-y-2">
+            {activeIntakeModule.fields.map((field) => {
+              const isSecure = field.reviewMode === "secure_only" || field.secureOnly;
+              return (
+                <div key={field.key} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] text-slate-300">
+                      {field.label}
+                      {field.required ? " *" : ""}
+                    </label>
+                    <span className="text-[10px] text-slate-500">
+                      {field.reviewMode || (isSecure ? "secure_only" : "direct")}
+                    </span>
+                  </div>
+                  {isSecure ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSecureInput({
+                          policyId: field.securePolicyId || "sensitive.insurance_member_id",
+                          fieldName: field.key,
+                          classification: "PII",
+                          schemaEndpoint: `/api/site-configs/${siteConfigId}/intake/secure-form/${
+                            field.securePolicyId || "sensitive.insurance_member_id"
+                          }`,
+                          submitEndpoint: `/api/site-configs/${siteConfigId}/intake/secure-submit`,
+                        });
+                      }}
+                      className="rounded border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 text-[11px] text-indigo-100"
+                    >
+                      Complete Secure Step
+                    </button>
+                  ) : (
+                    <input
+                      type={
+                        field.inputType === "date"
+                          ? "date"
+                          : field.inputType === "file"
+                            ? "file"
+                            : "text"
+                      }
+                      value={field.inputType === "file" ? undefined : intakeValues[field.key] ?? ""}
+                      onChange={(event) =>
+                        setIntakeValues((prev) => ({
+                          ...prev,
+                          [field.key]:
+                            field.inputType === "file"
+                              ? event.currentTarget.files?.[0]?.name || ""
+                              : event.target.value,
+                        }))
+                      }
+                      className="w-full rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-100"
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => void submitIntakeModule()}
+              disabled={intakeSubmitting}
+              className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-200 disabled:opacity-50"
+            >
+              {intakeSubmitting ? "Submitting..." : "Submit Module"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveIntakeModule(null);
+                setIntakeValues({});
+              }}
+              className="rounded border border-slate-600/60 bg-slate-800 px-2 py-1 text-[11px] text-slate-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {secureInput ? (
+        <div className="border-t border-indigo-500/20 px-3 py-3 bg-slate-950/80">
+          <div className="mb-2 text-xs font-semibold text-indigo-200">
+            Secure Input Required ({secureInput.classification})
+          </div>
+          {secureFormSchema?.fields?.length ? (
+            <div className="space-y-2">
+              {secureFormSchema.fields.map((field) => (
+                <div key={field.key} className="space-y-1">
+                  <label className="text-[11px] text-slate-300">{field.label}</label>
+                  <input
+                    type={field.masked ? "password" : field.type === "date" ? "date" : "text"}
+                    value={secureFormValues[field.key] ?? ""}
+                    onChange={(event) =>
+                      setSecureFormValues((prev) => ({ ...prev, [field.key]: event.target.value }))
+                    }
+                    className="w-full rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-100"
+                  />
+                </div>
+              ))}
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => void submitSecureForm()}
+                  disabled={secureSubmitting}
+                  className="rounded border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 text-[11px] text-indigo-100 disabled:opacity-50"
+                >
+                  {secureSubmitting ? "Submitting..." : "Submit Secure Form"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSecureInput(null);
+                    setSecureFormSchema(null);
+                    setSecureFormValues({});
+                  }}
+                  className="rounded border border-slate-600/60 bg-slate-800 px-2 py-1 text-[11px] text-slate-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-slate-400">
+                Secure form schema unavailable. Please continue in authenticated admin mode.
+              </p>
+              {secureSchemaUnavailable ? (
+                <a
+                  href={`/platform/settings/support?site=${encodeURIComponent(siteConfigId || "platform-landing")}`}
+                  className="inline-block rounded border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 text-[11px] text-indigo-100"
+                >
+                  Go to Secure Intake
+                </a>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

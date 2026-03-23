@@ -1,14 +1,31 @@
-# Hero background image
+# Hero background images
 
-The home page hero section uses **`hero-bg-gateway.png`** in this folder.
+The platform uses static hero images from `client/public/` so the homepage can reference stable public URLs and later allow admin-managed rotation.
 
-- **Path:** `client/public/hero-bg-gateway.png`
-- **Usage:** Served as-is at `/hero-bg-gateway.png`. No build-time compression or processing.
+## Current structure
 
-To use a clearer or higher-quality hero image:
+- `hero-storefront-lovely-lashes.png`
+- `hero-bg-gateway.png`
+- `hero-qr-demo.png`
+- `hero-joint-demo.png`
+- `hero-carousel/`
+  - `nail-salon-mock-large.png`
+  - `target-qr.jpeg`
+  - `joint.jpeg`
+  - `mcdonalds-qr.png`
 
-1. Replace `hero-bg-gateway.png` in this directory with your new file (same filename).
-2. Use a high-quality PNG or JPEG; the file is served unchanged, so avoid pre-compressing it if you want maximum clarity.
-3. Recommended: at least 1920×1080 for full-width hero; 2400×1350 or larger for retina.
+## Current usage
 
-Do **not** run this image through automated image compression or "98% reduction" pipelines—it is intentionally excluded so the hero stays sharp.
+- `client/src/pages/public/PlatformEntryPage.tsx`
+  - Rotates the `hero-carousel/` images as faded background slides for the public homepage hero.
+- `client/src/pages/customer/BusinessPage.tsx`
+  - Uses a single storefront hero image via `HERO_BG_URL`.
+
+## Management guidance
+
+1. Add new PNG/JPEG files to `client/public/hero-carousel/`.
+2. Reference them via public URL paths like `/hero-carousel/my-image.png`.
+3. For admin-managed rotation later, keep this folder as the canonical source for homepage hero slides.
+4. Recommended size: at least 1920x1080 for full-width hero usage; 2400x1350 or larger is better for retina displays.
+
+Do **not** run hero images through automated compression pipelines. They are intentionally served unchanged so the hero stays sharp.

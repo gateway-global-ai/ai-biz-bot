@@ -1,13 +1,14 @@
 /**
  * Server-side Gemini text generation helper.
- * Used by review analysis, pitch generation, and other BI features.
- * api-lockdown: use GEMINI_MODEL_ID only; set in Doppler.
+ * Used by review analysis, pitch generation, knowledge classification, and other BI features.
+ * Uses GEMINI_MODEL_FALLBACK for text (generateContent). Voice uses GEMINI_MODEL_ID elsewhere.
  */
 
 import axios from 'axios';
 
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_MODEL_ID = process.env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025';
+/** Text-capable model for generateContent (not the voice/native-audio model). */
+const TEXT_MODEL = process.env.GEMINI_MODEL_FALLBACK || process.env.GEMINI_MODEL_ID || 'gemini-2.0-flash';
 
 /**
  * Call Gemini generateContent and return the generated text.
@@ -18,16 +19,31 @@ export async function generateWithGemini(prompt: string): Promise<string> {
     throw new Error('GEMINI_API_KEY is not configured');
   }
 
-  const response = await axios.post(
-    `${BASE_URL}/models/${GEMINI_MODEL_ID}:generateContent?key=${apiKey}`,
-    {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 4096,
-      },
+  const modelSlug = TEXT_MODEL.replace(/^models\//, '');
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 4096,
+    },
+  };
+
+  let response: any;
+  try {
+    response = await axios.post(
+      `${BASE_URL}/models/${modelSlug}:generateContent?key=${apiKey}`,
+      payload
+    );
+  } catch (err: any) {
+    if (err.response?.status === 404 && modelSlug !== 'gemini-2.0-flash') {
+      response = await axios.post(
+        `${BASE_URL}/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        payload
+      );
+    } else {
+      throw err;
     }
-  );
+  }
 
   const text = response.data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   return text;

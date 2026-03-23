@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "description": "Curated docs safe to share with agents and customers. Add only non-sensitive, category-organized entries.",
+  "taxonomy": [
+    "hospitality",
+    "api_guides",
+    "best_practices",
+    "getting_started"
+  ],
+  "items": [
+    {
+      "id": "kb_hospitality_industry_mapping",
+      "title": "Industry Solutions - Hospitality",
+      "category": "hospitality",
+      "description": "Industry-specific voice AI solutions and templates for hospitality.",
+      "source_path": "docs/knowledge-base/hospitality/industry-mapping/README.md"
+    },
+    {
+      "id": "kb_knowledge_base_readme",
+      "title": "Knowledge Base Overview",
+      "category": "getting_started",
+      "description": "Overview of the platform knowledge base structure.",
+      "source_path": "docs/knowledge-base/README.md"
+    }
+  ]
+}

@@ -326,6 +326,19 @@ export interface AIModelSettings {
   maxTokens: number;
 }
 
+/** Structured controls on agent: mirroring + guardrails (always, never, believe). */
+export type StructuredControls = {
+  mirroring?: { enabled?: boolean; intensity?: number };
+  guardrails?: { always?: string[]; never?: string[]; believe?: string[] };
+};
+
+/** User-directed guardrails at site level; merged with agent.structuredControls at compile time. */
+export type StructuredGuardrails = {
+  always?: string[];
+  never?: string[];
+  believe?: string[];
+};
+
 // AI Agents table
 export const agents = pgTable("agents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -335,6 +348,7 @@ export const agents = pgTable("agents", {
   voiceId: text("voice_id").notNull(),
   voiceName: text("voice_name").notNull(),
   status: text("status").notNull().default("active"), // active, paused, inactive
+  visibility: text("visibility").default("private"), // private, internal, public
   dominance: integer("dominance").default(50),
   influence: integer("influence").default(50),
   steadiness: integer("steadiness").default(50),
@@ -355,6 +369,7 @@ export const agents = pgTable("agents", {
   voiceRole: text("voice_role").default("AI Business Assistant"),
   voiceCompanyName: text("voice_company_name").default("AI Biz Bot"),
   voicePersona: text("voice_persona").default("friendly"), // professional, friendly, enthusiastic, calm, authoritative
+  defaultEmotion: text("default_emotion"), // calm | engaged | focused | energized | empathetic — Live Emotion Control
   // Budget Configuration
   budgetAmountUsd: numeric("budget_amount_usd", { precision: 10, scale: 2 }).default("0"),
   budgetPeriod: text("budget_period").default("monthly"), // daily, weekly, monthly
@@ -366,6 +381,17 @@ export const agents = pgTable("agents", {
   longTermMemory: jsonb("long_term_memory"),   // { dominantTrait, years, originStory, unbreakableRule, ruleReason, primaryIntent, happySeeing, sadSeeing, priorityOverMoney, philosophyPeople, philosophyLife, philosophyToday }
   // Layer 3: Conversation Mechanics (how the agent structures dialogue)
   archProfile: jsonb("arch_profile"),          // { acknowledge, reflect, context, handoff } — 0-100 each
+  /** Structured controls: mirroring (enabled, intensity 0–100) and guardrails (always, never, believe). */
+  structuredControls: jsonb("structured_controls").$type<StructuredControls>().default({}),
+  /** Operational mode: SAFE | CONCIERGE | RECEPTIONIST | SALES | CASHIER | CUSTOMER_SUPPORT | MANAGER | RESEARCH | CODING | REVIEW | EMERGENCY | CUSTOMER_SERVICE. Drives prompt directive and tool allowlist. */
+  operationalMode: text("operational_mode").default("SAFE"),
+  /** For CUSTOMER_SUPPORT mode: required verification level (e.g. OTP, magic_link). */
+  verificationLevel: text("verification_level"),
+  /** When true, ARCH sliders are overridden server-side by the mode's hardcoded archOverride.
+   *  Enforced in promptCompiler — the agent cannot drift from its configured behavioral posture. */
+  noDriftMode: boolean("no_drift_mode").default(false),
+  /** Visibility: public (customers), internal (employees), private (owner only). */
+  visibility: text("visibility").default("private"),
   // Startup Script
   startupScript: text("startup_script"),
   startupBudgetUsd: numeric("startup_budget_usd", { precision: 10, scale: 2 }).default("0"),
@@ -689,6 +715,80 @@ export const insertTwilioSubAccountSchema = createInsertSchema(twilioSubAccounts
 
 export type InsertTwilioSubAccount = z.infer<typeof insertTwilioSubAccountSchema>;
 export type TwilioSubAccount = typeof twilioSubAccounts.$inferSelect;
+
+// Per-agent phone number assignments (1 number per agent, max 10 per site)
+export const agentPhoneAssignments = pgTable("agent_phone_assignments", {
+  id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+  siteConfigId: text("site_config_id").notNull().references(() => siteConfigs.id, { onDelete: "cascade" }),
+  agentId: text("agent_id").notNull().references(() => agents.id, { onDelete: "cascade" }),
+  phoneNumber: text("phone_number").notNull(),
+  phoneSid: text("phone_sid").notNull(),
+  subAccountSid: text("sub_account_sid"),
+  friendlyName: text("friendly_name"),
+  voiceUrl: text("voice_url"),
+  smsUrl: text("sms_url"),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  assignedAt: timestamp("assigned_at").notNull().defaultNow(),
+  releasedAt: timestamp("released_at"),
+  releasedBy: text("released_by"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertAgentPhoneAssignmentSchema = createInsertSchema(agentPhoneAssignments).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type AgentPhoneAssignment = typeof agentPhoneAssignments.$inferSelect;
+export type InsertAgentPhoneAssignment = z.infer<typeof insertAgentPhoneAssignmentSchema>;
+
+// Platform-managed number pool (admin provisions from master account, assigns to businesses)
+export const platformNumberPool = pgTable("platform_number_pool", {
+  id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+  phoneNumber: text("phone_number").notNull().unique(),
+  phoneSid: text("phone_sid").notNull().unique(),
+  areaCode: text("area_code"),
+  friendlyName: text("friendly_name"),
+  region: text("region"),
+  locality: text("locality"),
+  accountSid: text("account_sid").notNull(),
+  status: text("status").notNull().default("available"), // available | assigned | reserved
+  assignedToSiteConfigId: text("assigned_to_site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
+  assignedToAgentId: text("assigned_to_agent_id").references(() => agents.id, { onDelete: "set null" }),
+  assignedAt: timestamp("assigned_at"),
+  voiceUrl: text("voice_url"),
+  smsUrl: text("sms_url"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPlatformNumberPoolSchema = createInsertSchema(platformNumberPool).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type PlatformNumberPool = typeof platformNumberPool.$inferSelect;
+export type InsertPlatformNumberPool = z.infer<typeof insertPlatformNumberPoolSchema>;
+
+// Platform Products & Services catalog — per-site, Stripe-synced
+export const platformProducts = pgTable("platform_products", {
+  id: text("id").primaryKey().default(sql`gen_random_uuid()::text`),
+  siteConfigId: text("site_config_id").notNull().references(() => siteConfigs.id, { onDelete: "cascade" }),
+  agentId: text("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  type: text("type").notNull().default("service"), // 'product' | 'service' | 'subscription'
+  priceCents: integer("price_cents").notNull().default(0),
+  billingInterval: text("billing_interval"), // 'month' | 'year' | null (one-time)
+  stripeProductId: text("stripe_product_id"),
+  stripePriceId: text("stripe_price_id"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPlatformProductSchema = createInsertSchema(platformProducts).omit({
+  id: true, createdAt: true, updatedAt: true,
+});
+export type PlatformProduct = typeof platformProducts.$inferSelect;
+export type InsertPlatformProduct = z.infer<typeof insertPlatformProductSchema>;
 
 // A2P 10-DLC Compliance - Brand Registration
 export const a2pBrands = pgTable("a2p_brands", {
@@ -1161,6 +1261,8 @@ export const siteConfigs = pgTable("site_configs", {
   placeholderText: text("placeholder_text").default("Type a message..."),
   /** Knowledge library: array of { id, title, content, addedAt } for agent training. */
   knowledgeLibrary: jsonb("knowledge_library"),
+  /** User-directed guardrails (always, never, believe). Merged with agent structured_controls at compile time. */
+  structuredGuardrails: jsonb("structured_guardrails").$type<StructuredGuardrails>().default({}),
   /** Total reviews harvested via SerpAPI pipeline — used for billing ($0.10/review above 10). */
   reviewsHarvested: integer("reviews_harvested").default(0),
   /** Per-business subscription plan: 'free' | 'pro' | 'voice' | 'enterprise' */
@@ -1186,6 +1288,16 @@ export const siteConfigs = pgTable("site_configs", {
   provisionedPhoneNumber: text("provisioned_phone_number"),
   /** Twilio IncomingPhoneNumber SID for the provisioned number. */
   provisionedPhoneSid: text("provisioned_phone_sid"),
+  /** Voice AI Package ($50/mo): enables sub-account creation and phone number provisioning. */
+  voicePlanActive: boolean("voice_plan_active").notNull().default(false),
+  /** When the voice plan was activated. */
+  voicePlanActivatedAt: timestamp("voice_plan_activated_at"),
+  /** Twilio sub-account SID dedicated to this business for number management. */
+  voiceSubAccountSid: text("voice_sub_account_sid"),
+  /** Auth token for the business's Twilio sub-account (stored securely). */
+  voiceSubAccountAuthToken: text("voice_sub_account_auth_token"),
+  /** Friendly name used when creating the Twilio sub-account. */
+  voiceSubAccountFriendlyName: text("voice_sub_account_friendly_name"),
   /** Reseller (Digital Franchise) who owns this site – for commission attribution. */
   resellerId: varchar("reseller_id").references(() => resellers.id),
   /** When the low-energy SMS nudge was last sent; reset on refill so nudge can fire again. */
@@ -1203,6 +1315,8 @@ export const siteConfigs = pgTable("site_configs", {
   claimCheckoutSessionId:   text("claim_checkout_session_id"),
   /** Tenant and staff list for Receptionist "Employee Awareness" e.g. { tenant_id, staff: [{ name, role, agent_id }] }. */
   metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  /** When custom domain ownership was verified (e.g. via Hostinger API). */
+  domainVerifiedAt: timestamp("domain_verified_at"),
   /** URL-safe slug for the public business page (e.g. "mcdonalds-lafayette-a3f2"). */
   slug: varchar("slug"),
   /** Generated QR code image URL (e.g. /api/qr/image/:slug). Null until first generation. */
@@ -1213,6 +1327,22 @@ export const siteConfigs = pgTable("site_configs", {
   socialSharing: jsonb("social_sharing").$type<Record<string, string>>().default({}),
   /** Storefront demo: static routes (call, text, email, website) — { call: { enabled, value }, text: { enabled, value }, email: { enabled, value }, website: { enabled, value } }. */
   staticRoutes: jsonb("static_routes").$type<StaticRoutesConfig>(),
+  /** Service menu: array of { name, price, duration, description } */
+  serviceMenu: jsonb("service_menu"),
+  /** FAQs: array of { question, answer } */
+  faqs: jsonb("faqs"),
+  /** CRM Config: { statuses: string[], defaultStatus: string } */
+  crmConfig: jsonb("crm_config"),
+  /** Ordered interaction task list: [{ id, label, description?, required }] */
+  taskOrder: jsonb("task_order").$type<{ id: string; label: string; description?: string; required: boolean }[]>().default([]),
+  /** Business type: 'google_maps' for Places-backed sites, 'custom' for non-physical/SaaS businesses. */
+  businessType: text("business_type").default("google_maps"),
+  /** Short description for custom (non-maps) businesses. */
+  businessDescription: text("business_description"),
+  /** Logo URL for custom businesses (not using Google Places photo). */
+  logoUrl: text("logo_url"),
+  /** Primary website URL for custom businesses. */
+  website: text("website"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1232,6 +1362,57 @@ export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
 
 export type InsertSiteConfig = z.infer<typeof insertSiteConfigSchema>;
 export type SiteConfig = typeof siteConfigs.$inferSelect;
+
+// ── Knowledge Artifacts — first-class KB docs with scope, visibility, agent_access_key ─
+export const knowledgeArtifacts = pgTable(
+  "knowledge_artifacts",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
+    scope: text("scope").notNull().default("business"), // platform | franchise | business
+    visibility: text("visibility").notNull().default("public"), // public | private
+    agentAccessKey: varchar("agent_access_key").notNull().unique(),
+    title: text("title").notNull(),
+    content: text("content"),
+    sourcePath: text("source_path"),
+    groupLevel: text("group_level"),
+    ownerId: varchar("owner_id").references(() => customerAccounts.id, { onDelete: "set null" }),
+    resellerId: varchar("reseller_id").references(() => resellers.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_knowledge_artifacts_site_config_id").on(table.siteConfigId),
+    index("idx_knowledge_artifacts_scope_visibility").on(table.scope, table.visibility),
+  ]
+);
+
+export const insertKnowledgeArtifactSchema = createInsertSchema(knowledgeArtifacts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type KnowledgeArtifact = typeof knowledgeArtifacts.$inferSelect;
+export type InsertKnowledgeArtifact = typeof knowledgeArtifacts.$inferInsert;
+
+// Session-scoped active document keys for in-chat KB overlay
+export const artifactSessionActivations = pgTable(
+  "artifact_session_activations",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: varchar("session_id").notNull(),
+    agentAccessKey: varchar("agent_access_key").notNull(),
+    siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }),
+    activatedAt: timestamp("activated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_artifact_session_activations_session_id").on(table.sessionId),
+    index("idx_artifact_session_activations_site_config_id").on(table.siteConfigId),
+    uniqueIndex("artifact_session_activations_session_key_unique").on(table.sessionId, table.agentAccessKey),
+  ]
+);
+
+export type ArtifactSessionActivation = typeof artifactSessionActivations.$inferSelect;
 
 // ── QR Routes — shadow telecom routing table (QR code = virtual phone number) ─
 export const qrRoutes = pgTable("qr_routes", {
@@ -1281,6 +1462,105 @@ export const qrAccess = pgTable("qr_access", {
 });
 export type QrAccessLog = typeof qrAccess.$inferSelect;
 export type InsertQrAccessLog = typeof qrAccess.$inferInsert;
+
+// ── Slug landings — optional tracking for /biz/:slug?from=qr (website QR) ─
+export const slugLandings = pgTable("slug_landings", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  landedAt: timestamp("landed_at", { withTimezone: true }).defaultNow().notNull(),
+  source: text("source").notNull().default("qr"),
+});
+export type SlugLanding = typeof slugLandings.$inferSelect;
+export type InsertSlugLanding = typeof slugLandings.$inferInsert;
+
+// ── Conversation events — actionable routes per call/session (Cash Board) ─
+export const conversationEvents = pgTable("conversation_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  callSid: text("call_sid"),
+  sessionId: text("session_id"),
+  eventType: text("event_type").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+});
+export type ConversationEvent = typeof conversationEvents.$inferSelect;
+export type InsertConversationEvent = typeof conversationEvents.$inferInsert;
+
+// ── Vendor entities + patient/vendor relationships (secure intake domain) ─
+export const vendors = pgTable("vendors", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  vendorType: text("vendor_type").notNull(), // INSURANCE | ATTORNEY | REFERRING_PROVIDER
+  name: text("name").notNull(),
+  normalizedKey: text("normalized_key"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export const insertVendorSchema = createInsertSchema(vendors).omit({
+  id: true,
+  createdAt: true,
+});
+export type Vendor = typeof vendors.$inferSelect;
+export type InsertVendor = z.infer<typeof insertVendorSchema>;
+
+export const patientVendorRelationships = pgTable("patient_vendor_relationships", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  patientId: varchar("patient_id").references(() => customers.id, { onDelete: "cascade" }).notNull(),
+  vendorId: uuid("vendor_id").references(() => vendors.id, { onDelete: "cascade" }).notNull(),
+  vendorType: text("vendor_type").notNull(),
+  relationshipType: text("relationship_type").notNull(),
+  consentGranted: boolean("consent_granted").default(false).notNull(),
+  consentDocumentId: text("consent_document_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export const insertPatientVendorRelationshipSchema = createInsertSchema(patientVendorRelationships).omit({
+  id: true,
+  createdAt: true,
+});
+export type PatientVendorRelationship = typeof patientVendorRelationships.$inferSelect;
+export type InsertPatientVendorRelationship = z.infer<typeof insertPatientVendorRelationshipSchema>;
+
+export const consentRecords = pgTable("consent_records", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  patientId: varchar("patient_id").references(() => customers.id, { onDelete: "cascade" }).notNull(),
+  vendorId: uuid("vendor_id").references(() => vendors.id, { onDelete: "set null" }),
+  consentType: text("consent_type").notNull(),
+  signedAt: timestamp("signed_at", { withTimezone: true }).defaultNow().notNull(),
+  signatureHash: text("signature_hash").notNull(),
+  documentId: text("document_id"),
+  expirationDate: timestamp("expiration_date", { withTimezone: true }),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export const insertConsentRecordSchema = createInsertSchema(consentRecords).omit({
+  id: true,
+  createdAt: true,
+});
+export type ConsentRecord = typeof consentRecords.$inferSelect;
+export type InsertConsentRecord = z.infer<typeof insertConsentRecordSchema>;
+
+export const intakeChangeRequests = pgTable("intake_change_requests", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  patientId: varchar("patient_id").references(() => customers.id, { onDelete: "cascade" }).notNull(),
+  fieldName: text("field_name").notNull(),
+  requestedValue: jsonb("requested_value").$type<Record<string, unknown>>().notNull(),
+  writeMode: text("write_mode").notNull(), // direct | review | secure_only | denied
+  status: text("status").notNull().default("pending"), // pending | approved | rejected | applied
+  reviewerRole: text("reviewer_role"),
+  reviewedBy: text("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export const insertIntakeChangeRequestSchema = createInsertSchema(intakeChangeRequests).omit({
+  id: true,
+  createdAt: true,
+  reviewedAt: true,
+});
+export type IntakeChangeRequest = typeof intakeChangeRequests.$inferSelect;
+export type InsertIntakeChangeRequest = z.infer<typeof insertIntakeChangeRequestSchema>;
 
 // ── Per-site PMS integrations (Cloudbeds, etc.) — one row per site per PMS ─
 export const sitePmsIntegrations = pgTable("site_pms_integrations", {

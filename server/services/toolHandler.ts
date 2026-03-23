@@ -14,6 +14,7 @@ import { isKnowledgeWorkerPlan } from "../prompts/knowledgeWorkerPrompt";
 import { handleGetHotelInventory } from "../tools/hotelInventoryHandler";
 import { handleFetchCityWarrants } from "../tools/fetchCityWarrantsHandler";
 import { handleVineLookupAndDispatch } from "../tools/vineDispatchHandler";
+import { getPlaceDetails } from "../tools/placesHandler";
 
 /**
  * Interface for the tool call structure received from the Gemini v1beta protocol
@@ -398,11 +399,43 @@ export async function handleToolCall(toolCall: ToolCall, context?: ToolCallConte
       case "get_business_details":
         return await getBusinessDetails(toolCall.args.placeId || toolCall.args.place_id);
 
+      case "get_booking_and_pricing_info": {
+        const siteConfigId = toolCall.args.siteConfigId || context?.siteConfigId;
+        if (!siteConfigId) return { error: "Business context is required.", websiteUri: null, message: "I don't have the business website link right now. Please check the business listing or call them directly." };
+        const siteConfig = await storage.getSiteConfig(siteConfigId);
+        if (!siteConfig) return { error: "Business not found.", websiteUri: null, message: "I couldn't find that business's details. Please try calling or searching online." };
+        const placeData = (siteConfig as any).placeData;
+        const placeId = (siteConfig as any).placeId;
+        let websiteUri: string | null = placeData?.websiteUri ?? placeData?.website ?? null;
+        if (!websiteUri && placeId) {
+          try {
+            const details = await getPlaceDetails(placeId);
+            websiteUri = (details as any).websiteUri ?? null;
+          } catch (_) {
+            // ignore
+          }
+        }
+        const message = websiteUri
+          ? `Our current pricing and booking are on our website: ${websiteUri}. I recommend checking there for the latest services and to schedule an appointment.`
+          : "I don't have our website link handy. Please search for us online or call us for pricing and to book.";
+        return { websiteUri, message };
+      }
+
       case "get_business_reviews":
         return await getBusinessReviews(
           toolCall.args.placeId || toolCall.args.place_id,
           toolCall.args.maxReviews || toolCall.args.max_reviews || 5
         );
+
+      case "query_knowledge_library": {
+        const siteConfigIdForLib = toolCall.args.siteConfigId || context?.siteConfigId;
+        if (!siteConfigIdForLib)
+          return { error: "Business context is required.", results: [] };
+        const question = toolCall.args.question?.trim() || "";
+        if (!question) return { error: "A question is required.", results: [] };
+        const results = await storage.searchKnowledgeLibrary(siteConfigIdForLib, question, 5);
+        return { results };
+      }
 
       case "get_business_intelligence":
         return await generateBusinessIntelligence(
@@ -445,6 +478,14 @@ export async function handleToolCall(toolCall: ToolCall, context?: ToolCallConte
 
       case "mcp_read_calendar":
         return await handleMcpReadCalendar(toolCall.args);
+
+      // Canvas display — client renders the UI; server just acknowledges
+      case "show_canvas":
+        return {
+          acknowledged: true,
+          canvas_type: toolCall.args?.canvas_type,
+          items_count: Array.isArray(toolCall.args?.items) ? toolCall.args.items.length : 0,
+        };
 
       default:
         console.warn(`[ToolHandler] ⚠️ Tool not recognized: ${toolCall.name}`);

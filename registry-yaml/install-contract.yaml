@@ -1,0 +1,11 @@
+version: v1
+install:
+  requiredEnv:
+    - GEMINI_API_KEY
+    - GEMINI_MODEL_ID
+    - DATABASE_URL
+  readinessChecks:
+    - server
+    - database
+    - execution_plane
+    - latency_baseline

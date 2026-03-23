@@ -1,0 +1,43 @@
+services:
+  local-voice-sidecar:
+    container_name: local-voice-sidecar
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${LOCAL_VOICE_PORT:-8000}:8000"
+    environment:
+      LOCAL_VOICE_PORT: ${LOCAL_VOICE_PORT:-8000}
+      LOCAL_WHISPER_MODEL: ${LOCAL_WHISPER_MODEL:-small}
+      LOCAL_WHISPER_DEVICE: ${LOCAL_WHISPER_DEVICE:-cpu}
+      LOCAL_WHISPER_COMPUTE_TYPE: ${LOCAL_WHISPER_COMPUTE_TYPE:-int8}
+      LOCAL_TTS_MODEL: ${LOCAL_TTS_MODEL:-kokoro-v1}
+      LOCAL_TTS_VOICE: ${LOCAL_TTS_VOICE:-default}
+      LOCAL_TTS_SAMPLE_RATE: ${LOCAL_TTS_SAMPLE_RATE:-24000}
+      LOCAL_VOICE_WARMUP: ${LOCAL_VOICE_WARMUP:-true}
+      LOCAL_VOICE_LOG_LEVEL: ${LOCAL_VOICE_LOG_LEVEL:-info}
+      LOCAL_VOICE_PRIVACY_MODE: ${LOCAL_VOICE_PRIVACY_MODE:-strict_local}
+      LOCAL_VOICE_ALLOW_CLOUD_FALLBACK: ${LOCAL_VOICE_ALLOW_CLOUD_FALLBACK:-false}
+      LOCAL_MODEL_CACHE_DIR: /models
+      LOCAL_LOG_DIR: /logs
+      HF_HOME: /models/huggingface
+    volumes:
+      - local-voice-model-cache:/models
+      - local-voice-logs:/logs
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status == 200 else 1)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  local-voice-model-cache:
+  local-voice-logs:

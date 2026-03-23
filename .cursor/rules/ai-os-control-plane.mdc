@@ -1,0 +1,13 @@
+---
+description: Governs the AI OS control plane architecture and bounded intelligence model
+alwaysApply: true
+---
+
+# AI OS Control Plane
+
+- Read `docs-governance/SYSTEM_MANIFEST.md` before making OS-core architecture decisions.
+- The model must never invent entities, routes, views, or actions.
+- Control plane artifacts are the source of truth: schema anchors, context keys, policies, routes, views, actions.
+- Browser paths are adapters, not architecture.
+- Prompt logic belongs in the prompt registry/compiler, not in UI, routes, or domain files.
+- Execution-plane files must remain blind to business semantics beyond typed action dispatch.

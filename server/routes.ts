@@ -19,6 +19,7 @@ import onboardingRoutes from "./routes/onboardingRoutes";
 import customerOnboardingRoutes from "./routes/customerOnboardingRoutes";
 import { registerMenuRoutes } from "./routes/menu-routes";
 import healthRoutes from "./routes/healthRoutes";
+import platformMetricsRoutes from "./routes/platformMetricsRoutes";
 import a2pPreflightRoutes from "./routes/a2pPreflightRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import { registerB2bRoutes } from "./routes/b2b-routes";
@@ -36,6 +37,9 @@ import pitchDeckRoutes from "./routes/pitchDeckRoutes"; // Pitch decks — deep 
 import qrCodeRoutes from "./routes/qrCodeRoutes"; // QR code generation (logo center), search businesses, serve image
 import { qrAdminRouter, qrRedirectRouter } from "./routes/qrManagementRoutes"; // QR Routes shadow telecom
 import storefrontRoutes from "./routes/storefrontRoutes"; // Storefronts: industry landing pages, reports, images, demo
+import brandingRoutes from "./routes/brandingRoutes";
+import businessTelephonyRoutes from "./routes/businessTelephonyRoutes"; // Per-business sub-account + number provisioning
+import platformProductRoutes from "./routes/platformProductRoutes"; // Platform products/services catalog with Stripe sync
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -134,6 +138,7 @@ export async function registerRoutes(
 
   // Health check route (public)
   app.use(healthRoutes);
+  app.use(platformMetricsRoutes);
 
   // Platinum Core: Telephony, Voice, SMS, Webhooks, TTS, PTT
   app.use(telephonyRoutes);
@@ -159,6 +164,9 @@ export async function registerRoutes(
   app.use("/api/qr-routes", qrAdminRouter);
   app.use("/qr", qrRedirectRouter);
   app.use("/api/storefronts", storefrontRoutes);
+  app.use("/api/branding", brandingRoutes);
+  app.use("/api/telephony/business", businessTelephonyRoutes);
+  app.use("/api/platform-products", platformProductRoutes);
 
   // Agent System: DISC, Agents, Organizations, Projects, BotTemplates
   app.use(agentSystemRoutes);
@@ -1007,66 +1015,91 @@ export async function registerRoutes(
     res.json({ apiKey });
   });
 
-  // ============ Google Places Details (comprehensive) ============
+  // ============ Google Places Details (Places API (New) v1 — same key as Doppler) ============
   app.get("/api/places/details/:placeId", async (req, res) => {
     try {
       const apiKey = getServerMapsApiKey() || process.env.GOOGLE_CLOUD_API_KEY;
       if (!apiKey) {
         return res.status(500).json({ error: "Google API key not configured" });
       }
-      const { placeId } = req.params;
-      const fields = [
-        'name', 'formatted_address', 'formatted_phone_number', 'international_phone_number',
-        'website', 'url', 'rating', 'user_ratings_total', 'price_level', 'business_status',
-        'types', 'opening_hours', 'geometry', 'vicinity', 'utc_offset',
-        'address_components', 'plus_code', 'icon', 'icon_mask_base_uri', 'icon_background_color',
-        'wheelchair_accessible_entrance', 'delivery', 'dine_in', 'takeout', 'curbside_pickup',
-        'reservable', 'serves_beer', 'serves_wine', 'serves_breakfast', 'serves_lunch',
-        'serves_dinner', 'serves_brunch', 'serves_vegetarian_food',
-        'editorial_summary', 'reviews', 'photos'
-      ].join(',');
+      const placeId = (req.params.placeId || "").replace(/^places\//i, "").trim();
+      if (!placeId) {
+        return res.status(400).json({ error: "placeId required", reviews: [] });
+      }
+      // Use Places API (New) so Doppler key (e.g. Grounding Lite) restricted to places.googleapis.com works
+      const fieldMask = [
+        "id", "displayName", "formattedAddress", "shortFormattedAddress", "location",
+        "rating", "userRatingCount", "regularOpeningHours", "websiteUri",
+        "internationalPhoneNumber", "nationalPhoneNumber", "photos", "reviews",
+        "addressComponents", "plusCode", "priceLevel", "businessStatus", "types",
+        "googleMapsUri",
+      ].join(",");
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=${fields}&key=${apiKey}`
+        `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask": fieldMask,
+          },
+        }
       );
       const data = await response.json();
-      if (data.status !== 'OK') {
-        return res.status(400).json({ error: data.status, reviews: [] });
+      if (!response.ok) {
+        const errMsg = data?.error?.message || data?.status || String(response.status);
+        console.error("[Places Details] Google API error:", response.status, errMsg);
+        return res.status(response.status >= 500 ? 502 : 400).json({ error: errMsg, reviews: [] });
       }
-      const result = data.result || {};
+      const p = data;
+      const openingHours = p.regularOpeningHours
+        ? { weekday_text: p.regularOpeningHours.weekdayDescriptions || [] }
+        : undefined;
+      const geometry = p.location
+        ? { location: { lat: p.location.latitude, lng: p.location.longitude } }
+        : undefined;
+      const reviews = (p.reviews || []).map((r: any) => ({
+        id: r.name || undefined,
+        author_name: r.authorAttribution?.displayName || undefined,
+        profile_photo_url: r.authorAttribution?.photoUri || undefined,
+        rating: r.rating,
+        text: r.text?.text || r.originalText?.text,
+        time: r.publishTime,
+        relative_time_description: r.relativePublishTimeDescription,
+      }));
       res.json({
-        name: result.name,
-        formatted_address: result.formatted_address,
-        geometry: result.geometry,
-        types: result.types,
-        opening_hours: result.opening_hours,
-        photos: result.photos || [],
-        reviews: result.reviews || [],
-        user_ratings_total: result.user_ratings_total || 0,
-        rating: result.rating || 0,
-        price_level: result.price_level,
-        business_status: result.business_status,
-        url: result.url,
-        vicinity: result.vicinity,
-        utc_offset: result.utc_offset,
-        international_phone_number: result.international_phone_number,
-        formatted_phone_number: result.formatted_phone_number,
-        website: result.website,
-        address_components: result.address_components,
-        plus_code: result.plus_code,
-        editorial_summary: result.editorial_summary?.overview || null,
-        wheelchair_accessible_entrance: result.wheelchair_accessible_entrance,
-        delivery: result.delivery,
-        dine_in: result.dine_in,
-        takeout: result.takeout,
-        curbside_pickup: result.curbside_pickup,
-        reservable: result.reservable,
-        serves_beer: result.serves_beer,
-        serves_wine: result.serves_wine,
-        serves_breakfast: result.serves_breakfast,
-        serves_lunch: result.serves_lunch,
-        serves_dinner: result.serves_dinner,
-        serves_brunch: result.serves_brunch,
-        serves_vegetarian_food: result.serves_vegetarian_food,
+        name: p.displayName?.text ?? p.displayName ?? "",
+        formatted_address: p.formattedAddress ?? p.shortFormattedAddress ?? "",
+        geometry,
+        types: p.types || [],
+        opening_hours: openingHours,
+        photos: p.photos || [],
+        reviews,
+        user_ratings_total: p.userRatingCount ?? 0,
+        rating: p.rating ?? 0,
+        price_level: p.priceLevel,
+        business_status: p.businessStatus,
+        url: p.googleMapsUri ?? undefined,
+        vicinity: p.shortFormattedAddress ?? undefined,
+        utc_offset: undefined,
+        international_phone_number: p.internationalPhoneNumber ?? undefined,
+        formatted_phone_number: p.nationalPhoneNumber ?? p.internationalPhoneNumber ?? undefined,
+        website: p.websiteUri ?? undefined,
+        address_components: p.addressComponents,
+        plus_code: p.plusCode ? { global_code: p.plusCode.globalCode, compound_code: p.plusCode.compoundCode } : undefined,
+        editorial_summary: undefined,
+        wheelchair_accessible_entrance: undefined,
+        delivery: undefined,
+        dine_in: undefined,
+        takeout: undefined,
+        curbside_pickup: undefined,
+        reservable: undefined,
+        serves_beer: undefined,
+        serves_wine: undefined,
+        serves_breakfast: undefined,
+        serves_lunch: undefined,
+        serves_dinner: undefined,
+        serves_brunch: undefined,
+        serves_vegetarian_food: undefined,
       });
     } catch (error: any) {
       console.error("[Places Details] Error:", error.message);
@@ -1472,7 +1505,7 @@ export async function registerRoutes(
         const placeTypes = (config.placeData as { types?: string[] } | null)?.types ?? ['establishment'];
         await provisionAgentsForBusiness(config.id, placeTypes, config.name);
       } catch (provisionErr: any) {
-        console.error('[SiteConfig] Agent swarm provisioning failed (site created):', provisionErr?.message ?? provisionErr);
+        console.error('[SiteConfig] Agent provisioning failed (site created):', provisionErr?.message ?? provisionErr);
       }
       res.status(201).json(config);
     } catch (error: any) {

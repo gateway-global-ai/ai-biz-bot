@@ -16,8 +16,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 import type { BusinessContext, AgentConfig, VoiceConfig } from '@/types/voice';
-import { Loader2, ExternalLink } from 'lucide-react';
+import { Loader2, ExternalLink, Power } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
+import AIOSMark from '@/components/public/AIOSMark';
 
 const DEFAULT_AGENT: AgentConfig = {
   role: 'Business Concierge',
@@ -46,6 +47,7 @@ const PLATFORM_BUSINESS: BusinessContext = {
 
 export default function PhonePage() {
   const [location, setLocation] = useLocation();
+  const [isStarted, setIsStarted] = useState(false);
   const [siteConfig, setSiteConfig] = useState<{
     id: string;
     name: string;
@@ -114,17 +116,8 @@ export default function PhonePage() {
       return;
     }
 
-    // No params: use platform landing
-    setSiteConfig({
-      id: PLATFORM_BUSINESS.id,
-      name: PLATFORM_BUSINESS.name,
-      placeId: '',
-      placeData: null,
-      systemPromptOverride: undefined,
-      voiceConfig: undefined,
-      modelName: undefined,
-    });
-    setLoading(false);
+    // No params: redirect to /agents onboarding landing
+    setLocation('/agents');
   }, [params.siteConfigId, params.slug]);
 
   const business: BusinessContext = useMemo(() => {
@@ -169,14 +162,14 @@ export default function PhonePage() {
     );
   }
 
-  if (error) {
+    if (error) {
     return (
       <div className="fixed inset-0 bg-[#0F172A] flex flex-col items-center justify-center gap-4 z-[100] p-6">
         <p className="text-amber-400 text-center">{error}</p>
-        <Link href="/business">
+        <Link href="/agents">
           <a className="text-indigo-400 hover:text-indigo-300 text-sm flex items-center gap-2">
             <ExternalLink className="w-4 h-4" />
-            Open main site
+            Create or demo an agent
           </a>
         </Link>
       </div>
@@ -185,28 +178,54 @@ export default function PhonePage() {
 
   return (
     <div className="fixed inset-0 bg-[#0F172A] z-[100] flex flex-col">
-      <ConciergePanel
-        business={business}
-        agent={DEFAULT_AGENT}
-        voiceConfig={voiceConfig}
-        agentName={siteConfig?.name ?? 'Concierge'}
-        initialView="voice"
-        isOpen={true}
-        layoutMode="fullscreen"
-        onClose={() => setLocation('/business')}
-        onCycleLayout={() => {}}
-        variant="sovereign"
-        zIndex={100}
-      />
+      {isStarted ? (
+        <ConciergePanel
+          business={business}
+          agent={DEFAULT_AGENT}
+          voiceConfig={voiceConfig}
+          agentName={siteConfig?.name ?? 'Concierge'}
+          initialView="voice"
+          isOpen={true}
+          layoutMode="fullscreen"
+          onClose={() => setLocation('/business')}
+          onCycleLayout={() => {}}
+          transferUrl={typeof window !== 'undefined' ? window.location.href : '/phone'}
+          transferTitle="Share This Voice Demo"
+          transferDescription="Open the share menu to send this phone experience to another device."
+          autoStartPttOnOpen={true}
+          variant="sovereign"
+          zIndex={100}
+        />
+      ) : (
+        <div className="flex flex-1 items-center justify-center px-6">
+          <div className="flex flex-col items-center text-center">
+            <div className="mb-8">
+              <AIOSMark />
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsStarted(true)}
+              className="group relative flex h-36 w-36 flex-col items-center justify-center rounded-full border border-slate-700 bg-slate-900/70 text-slate-300 shadow-[0_28px_60px_rgba(15,23,42,0.35)] transition duration-300 hover:scale-[1.02] hover:text-white"
+            >
+              <span className="pointer-events-none absolute inset-[-10px] rounded-full border border-slate-700/70" />
+              <span className="pointer-events-none absolute inset-[-20px] rounded-full border border-slate-800/60 opacity-80 group-hover:shadow-[0_0_28px_rgba(99,102,241,0.22)]" />
+              <Power className="mb-3 h-9 w-9 text-indigo-300 transition group-hover:text-indigo-200" />
+              <span className="text-[11px] font-semibold uppercase tracking-[0.42em]">
+                Start
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
       {/* Minimal exit: top-right link so it doesn't cover PTT */}
       <div className="absolute top-3 right-14 z-[101] pointer-events-none">
-        <Link href="/business">
+        <Link href="/agents">
           <a
             className="pointer-events-auto text-xs text-slate-500 hover:text-slate-400 flex items-center gap-1"
-            aria-label="Open full site"
+            aria-label="Get started with an agent"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            Full site
+            Get started
           </a>
         </Link>
       </div>

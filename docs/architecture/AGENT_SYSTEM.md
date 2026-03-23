@@ -1,5 +1,7 @@
 # Agent System Documentation
 
+**Chat-first control and KB:** For how agents are controlled from the in-chat menu, how system prompts are compiled from structured controls, and how Knowledge Base artifacts and session keys work, see [CHAT_AND_AGENT_CONTROL.md](./CHAT_AND_AGENT_CONTROL.md).
+
 ## Overview
 
 The Gateway Global AI Agent System is a comprehensive framework for managing AI-powered agents across multiple communication channels. The system supports agent swarms, intelligent routing, and automatic business analysis to optimize agent performance.

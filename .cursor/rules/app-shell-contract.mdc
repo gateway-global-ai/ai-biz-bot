@@ -1,0 +1,13 @@
+---
+description: Protects App.tsx and the persistent OS shell contract
+globs: app.tsx,src/app/**,client/src/App.tsx,**/AppShell.tsx,**/ContextBar.tsx
+alwaysApply: false
+---
+
+# App Shell Contract
+
+- `App.tsx` may bootstrap the OS. It may not define the OS.
+- Keep `App.tsx` limited to providers, router mount, and shell mount.
+- Do not place business logic, prompt logic, or giant route trees in `App.tsx`.
+- The shell must preserve a persistent `ContextBar`, breadcrumbs, conversational navigation surface, and primary chat/PTT container.
+- Respect shell modes from `docs-governance/APP_SHELL_CONTRACT.md`: `menu`, `view`, `confirmation`, `refusal`, `ptt_first`.

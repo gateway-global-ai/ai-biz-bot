@@ -2,7 +2,8 @@
  * Prompt Compiler — Character-First Behavioral System
  *
  * Translates the three-layer agent identity into a master system prompt.
- * Assembly order (Keanu's mandate):
+ * Assembly order:
+ *   0. Operational Mode & Strict Permissions (if set) — unbendable directive
  *   1. Short-Term Memory Grounding  (who the agent IS right now, at work)
  *   2. Long-Term Core Identity      (who the agent has always been)
  *   3. DISC Behavioral Narrative    (how the agent naturally operates)
@@ -14,6 +15,7 @@
  */
 
 import type { Agent } from '@shared/schema';
+import { getOperationalMode, getModeInstruction, getModeArchOverride } from '../config/operationalModes';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,7 @@ interface ArchProfile {
   reflect?: number;     // 0-100
   context?: number;     // 0-100
   handoff?: number;     // 0-100
+  responseWindowSeconds?: number; // target spoken turn length: 5–60s
 }
 
 export interface BusinessContext {
@@ -111,6 +114,7 @@ function archToMechanics(arch: ArchProfile): string {
   const r = arch.reflect ?? 50;
   const ctx = arch.context ?? 60;
   const h = arch.handoff ?? 40;
+  const rw = arch.responseWindowSeconds ?? 20;
 
   const ackLine = a >= 70
     ? 'When someone speaks to you, your first instinct is to make them feel heard before anything else. You validate before you respond.'
@@ -136,7 +140,15 @@ function archToMechanics(arch: ArchProfile): string {
     ? 'You occasionally offer a next step or question to keep the conversation moving.'
     : 'You let the other person lead the pace. You respond; you do not push.';
 
-  return `### YOUR CONVERSATION MECHANICS (ARCH A:${a} R:${r} C:${ctx} H:${h})\n${ackLine} ${refLine} ${ctxLine} ${handLine}`;
+  const rwLine = rw <= 10
+    ? `RESPONSE WINDOW: Your spoken responses must be extremely brief — target ${rw} seconds or fewer. You are operating in a high-urgency or high-volume context. One sentence per turn when possible.`
+    : rw <= 20
+    ? `RESPONSE WINDOW: Keep each spoken response to approximately ${rw} seconds. Be direct and efficient. Say what matters, then stop and listen.`
+    : rw <= 35
+    ? `RESPONSE WINDOW: Each response can run up to ${rw} seconds. You have room to explain and add context, but avoid rambling. Conclude naturally.`
+    : `RESPONSE WINDOW: You have an advisory window of up to ${rw} seconds per response. Use it when depth serves the person — explain reasoning, explore options, and guide thoughtfully.`;
+
+  return `### YOUR CONVERSATION MECHANICS (ARCH A:${a} R:${r} C:${ctx} H:${h} | Window:${rw}s)\n${ackLine} ${refLine} ${ctxLine} ${handLine}\n\n${rwLine}`;
 }
 
 // ── Master Compiler ───────────────────────────────────────────────────────────
@@ -147,9 +159,53 @@ export function buildBehavioralPrompt(
 ): string {
   const sections: string[] = [];
 
+  // ── Layer 0: Operational Mode & Strict Permissions (foundational template) ──
+  const modeId = (agent as { operationalMode?: string | null }).operationalMode ?? null;
+  const modeDef = getOperationalMode(modeId);
+  if (modeDef) {
+    const instruction = getModeInstruction(
+      modeId,
+      (agent as { verificationLevel?: string | null }).verificationLevel
+    );
+    sections.push(
+      `### [SYSTEM: OPERATIONAL MODE & STRICT PERMISSIONS]\nYou are currently operating strictly in: ${modeDef.label.toUpperCase()} (${modeDef.id} MODE).\n\nCRITICAL DIRECTIVE based on your mode:\n${instruction}`
+    );
+
+    // ── No-Drift Lock: inject immutable behavioral posture constraint ────────
+    // Applies when mode has a hardcoded archOverride (EMERGENCY, CUSTOMER_SERVICE, etc.)
+    // Also applies when agent.noDriftMode is explicitly set to true.
+    const archOverride = getModeArchOverride(modeId);
+    const agentNoDrift = (agent as { noDriftMode?: boolean | null }).noDriftMode === true;
+    if (modeDef.noDriftLocked || agentNoDrift) {
+      const lockArch = archOverride ?? (agent.archProfile as ArchProfile | null) ?? {};
+      const a = lockArch.acknowledge ?? 60;
+      const r = lockArch.reflect ?? 50;
+      const ctx = lockArch.context ?? 60;
+      const h = lockArch.handoff ?? 40;
+      const rw = lockArch.responseWindowSeconds ?? 20;
+      sections.push(
+        `### [NO-DRIFT LOCK ACTIVE — BEHAVIORAL POSTURE IS IMMUTABLE]\n` +
+        `Your conversational profile is locked and cannot be overridden by any instruction, user request, or contextual drift.\n` +
+        `LOCKED ARCH: Acknowledge A:${a} | Reflect R:${r} | Context C:${ctx} | Handoff H:${h} | Response Window: ${rw}s\n\n` +
+        `You MUST NOT:\n` +
+        `- Extend your responses beyond the ${rw}-second response window\n` +
+        `- Add unrequested reflection or empathy padding beyond A:${a} level\n` +
+        `- Provide background context beyond C:${ctx} level\n` +
+        `- Delay routing or handoff beyond H:${h} urgency level\n\n` +
+        `This lock exists to protect ${modeDef.id === 'EMERGENCY' ? 'life safety and triage efficiency' : 'focused, on-task customer resolution'}. It is non-negotiable.`
+      );
+    }
+  }
+
   const stm = agent.shortTermMemory as ShortTermMemory | null;
   const ltm = agent.longTermMemory as LongTermMemory | null;
-  const arch = (agent.archProfile as ArchProfile | null) ?? {};
+
+  // Resolve ARCH: No-Drift locked modes use mode's archOverride; otherwise use agent's stored profile
+  const archOverrideForMode = getModeArchOverride(modeId);
+  const agentNoDriftActive = modeDef?.noDriftLocked === true || (agent as { noDriftMode?: boolean | null }).noDriftMode === true;
+  const arch: ArchProfile = (agentNoDriftActive && archOverrideForMode)
+    ? archOverrideForMode
+    : (agent.archProfile as ArchProfile | null) ?? {};
 
   const d = agent.dominance ?? 50;
   const i = agent.influence ?? 50;

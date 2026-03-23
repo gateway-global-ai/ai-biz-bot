@@ -99,7 +99,7 @@ interface CallLogEntry {
   startTime: string;
 }
 
-export default function TelephonyPanel() {
+export default function TelephonyPanel({ siteConfigId }: { siteConfigId?: string | null } = {}) {
   const { toast } = useToast();
   const [activeView, setActiveView] = useState<TelephonyView>('provisioning');
   const [areaCode, setAreaCode] = useState('');
@@ -136,6 +136,97 @@ export default function TelephonyPanel() {
     const timestamp = new Date().toLocaleTimeString();
     setConsoleLogs(prev => [`[${timestamp}] ${msg}`, ...prev.slice(0, 99)]);
   };
+
+  // ── Business telephony: sub-account + per-agent number system ─────────────
+  const [bizAreaCode, setBizAreaCode] = useState('');
+  const [bizAvailableNumbers, setBizAvailableNumbers] = useState<AvailableNumber[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+
+  interface BizTelephonyStatus {
+    voicePlanActive: boolean;
+    voicePlanActivatedAt: string | null;
+    hasSubAccount: boolean;
+    subAccountSid: string | null;
+    subAccountFriendlyName: string | null;
+    agentCount: number;
+    maxAgents: number;
+    activeAssignments: Array<{
+      id: string; agentId: string; phoneNumber: string;
+      phoneSid: string; friendlyName: string | null;
+      isPrimary: boolean; assignedAt: string;
+    }>;
+  }
+  interface BizAgent { id: string; name: string; roleType: string | null; }
+
+  const { data: bizStatus, refetch: refetchBizStatus } = useQuery<BizTelephonyStatus>({
+    queryKey: [`/api/telephony/business/status/${siteConfigId}`],
+    enabled: !!siteConfigId,
+  });
+
+  const { data: bizAgents = [] } = useQuery<BizAgent[]>({
+    queryKey: [`/api/agents?siteConfigId=${siteConfigId}`],
+    enabled: !!siteConfigId,
+  });
+
+  const bizAssignedIds = new Set((bizStatus?.activeAssignments ?? []).map(a => a.agentId));
+  const bizUnassignedAgents = (bizAgents as BizAgent[]).filter(a => !bizAssignedIds.has(a.id));
+
+  const createSubAccountMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/telephony/business/create-sub-account/${siteConfigId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed'); }
+      return res.json();
+    },
+    onSuccess: () => { refetchBizStatus(); toast({ title: 'Twilio Sub-Account Created', description: 'Your business now has its own Twilio account.' }); },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const bizSearchMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const res = await fetch(`/api/telephony/business/search-numbers/${siteConfigId}?areaCode=${code}`);
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Search failed'); }
+      return res.json() as Promise<AvailableNumber[]>;
+    },
+    onSuccess: (numbers) => setBizAvailableNumbers(numbers),
+    onError: (e: Error) => toast({ title: 'Search failed', description: e.message, variant: 'destructive' }),
+  });
+
+  const assignNumberMutation = useMutation({
+    mutationFn: async ({ phoneNumber, agentId }: { phoneNumber: string; agentId: string }) => {
+      const res = await fetch(`/api/telephony/business/assign-number/${siteConfigId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber, agentId }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Assign failed'); }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchBizStatus();
+      setBizAvailableNumbers([]);
+      setBizAreaCode('');
+      setSelectedAgentId(null);
+      toast({ title: 'Number Assigned', description: 'Phone number is live and wired to the agent.' });
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const releaseAssignmentMutation = useMutation({
+    mutationFn: async (assignmentId: string) => {
+      const res = await fetch(`/api/telephony/business/release-number/${assignmentId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ releasedBy: 'owner' }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Release failed'); }
+      return res.json();
+    },
+    onSuccess: () => { refetchBizStatus(); toast({ title: 'Number Released' }); },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
 
   const { data: config, isLoading: configLoading, refetch: refetchConfig } = useQuery<TelephonyConfig>({
     queryKey: ['/api/telephony/config'],
@@ -573,7 +664,9 @@ export default function TelephonyPanel() {
                     Number Provisioning
                   </h3>
                   <p className="text-muted-foreground text-sm max-w-xl">
-                    Search and provision phone numbers from Twilio. Numbers are instantly configured with voice and SMS webhooks.
+                    {siteConfigId
+                      ? 'Manage your business Twilio sub-account and assign phone numbers to agents.'
+                      : 'Search and provision phone numbers from Twilio. Numbers are instantly configured with voice and SMS webhooks.'}
                   </p>
                 </div>
                 <Badge variant="secondary" className="font-mono text-xs">
@@ -581,7 +674,217 @@ export default function TelephonyPanel() {
                   Region: US
                 </Badge>
               </div>
-              
+
+              {/* ── BUSINESS SUB-ACCOUNT FLOW (when siteConfigId is provided) ── */}
+              {siteConfigId ? (
+                <div className="space-y-6">
+                  {/* Voice Plan Gate */}
+                  {!bizStatus?.voicePlanActive && (
+                    <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 p-8 text-center space-y-4">
+                      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center border-2 border-primary/20 mx-auto">
+                        <Phone className="w-8 h-8 text-primary" />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-bold text-foreground mb-1">Voice AI Package Required</h4>
+                        <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+                          A <strong>Voice AI Package ($50/mo)</strong> activates your business phone line,
+                          Twilio sub-account, and AI-answered inbound calls. One plan per business,
+                          up to 10 agents, 1 number per agent.
+                        </p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <Button className="gap-2" onClick={() => window.location.href = '/account?tab=billing'}>
+                          <Phone className="w-4 h-4" />
+                          Upgrade — $50/mo
+                        </Button>
+                        <Button variant="outline" className="gap-2" onClick={() => window.location.href = '/account?tab=billing'}>
+                          Learn more
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Includes unlimited inbound AI calls · Sovereign SMS Router · Call transcripts · Caller ID
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Sub-Account Setup */}
+                  {bizStatus?.voicePlanActive && !bizStatus.hasSubAccount && (
+                    <div className="rounded-2xl border border-border bg-accent/30 p-6 space-y-4">
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <Building2 className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-foreground mb-1">Step 1 — Create Your Business Account</h4>
+                          <p className="text-muted-foreground text-sm">
+                            We'll create a dedicated Twilio sub-account for your business. This keeps your numbers
+                            isolated, your billing separate, and your SMS A2P compliance clean.
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => createSubAccountMutation.mutate()}
+                        disabled={createSubAccountMutation.isPending}
+                        className="gap-2 w-full sm:w-auto"
+                      >
+                        {createSubAccountMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Plus className="w-4 h-4" />
+                        )}
+                        Create Business Sub-Account
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Active Sub-Account + Number Management */}
+                  {bizStatus?.voicePlanActive && bizStatus.hasSubAccount && (
+                    <div className="space-y-6">
+                      {/* Sub-Account Badge */}
+                      <div className="flex items-center gap-3 p-4 rounded-xl bg-chart-3/5 border border-chart-3/20">
+                        <div className="w-2.5 h-2.5 rounded-full bg-chart-3 animate-pulse" />
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-foreground">{bizStatus.subAccountFriendlyName || 'Business Sub-Account'}</p>
+                          <p className="text-xs font-mono text-muted-foreground">{bizStatus.subAccountSid}</p>
+                        </div>
+                        <Badge variant="secondary" className="text-chart-3 border-chart-3/30 bg-chart-3/10 text-xs font-bold">
+                          ACTIVE
+                        </Badge>
+                      </div>
+
+                      {/* Assigned Numbers */}
+                      {(bizStatus.activeAssignments.length > 0) && (
+                        <div className="space-y-3">
+                          <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                            Assigned Numbers ({bizStatus.activeAssignments.length} / {bizStatus.maxAgents})
+                          </h4>
+                          {bizStatus.activeAssignments.map(a => (
+                            <div key={a.id} className="flex items-center gap-4 p-4 rounded-sui border border-border bg-background">
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                <Phone className="w-4 h-4 text-primary" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-mono text-foreground font-semibold">{a.phoneNumber}</p>
+                                <p className="text-xs text-muted-foreground truncate">{a.friendlyName || 'Agent'}</p>
+                              </div>
+                              {a.isPrimary && (
+                                <Badge variant="secondary" className="text-xs shrink-0">Primary</Badge>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:bg-destructive/10 shrink-0"
+                                onClick={() => releaseAssignmentMutation.mutate(a.id)}
+                                disabled={releaseAssignmentMutation.isPending}
+                              >
+                                {releaseAssignmentMutation.isPending ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3 h-3" />
+                                )}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Add Number to an Agent */}
+                      {bizStatus.activeAssignments.length < bizStatus.maxAgents && (
+                        <div className="border border-border rounded-sui p-6 space-y-5 bg-accent/20">
+                          <h4 className="font-semibold text-sm flex items-center gap-2">
+                            <Plus className="w-4 h-4 text-primary" />
+                            Assign a Number to an Agent
+                          </h4>
+
+                          {/* Agent selector */}
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Select Agent</label>
+                            {bizUnassignedAgents.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">All agents already have numbers assigned.</p>
+                            ) : (
+                              <div className="grid grid-cols-1 gap-2">
+                                {bizUnassignedAgents.map((ag) => (
+                                  <button
+                                    key={ag.id}
+                                    type="button"
+                                    onClick={() => setSelectedAgentId(ag.id)}
+                                    className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
+                                      selectedAgentId === ag.id
+                                        ? 'border-primary bg-primary/5'
+                                        : 'border-border hover:border-primary/40'
+                                    }`}
+                                  >
+                                    <div className={`w-2.5 h-2.5 rounded-full ${selectedAgentId === ag.id ? 'bg-primary' : 'bg-muted-foreground/30'}`} />
+                                    <div>
+                                      <p className="text-sm font-medium text-foreground">{ag.name}</p>
+                                      {ag.roleType && <p className="text-xs text-muted-foreground">{ag.roleType}</p>}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Area code search */}
+                          {selectedAgentId && (
+                            <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Search Numbers by Area Code</label>
+                              <div className="flex gap-3">
+                                <div className="relative flex-1">
+                                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">+1</span>
+                                  <Input
+                                    type="text"
+                                    placeholder="Area Code (e.g. 702)"
+                                    value={bizAreaCode}
+                                    onChange={(e) => setBizAreaCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                                    className="pl-12 h-11 font-mono"
+                                  />
+                                </div>
+                                <Button
+                                  onClick={() => { if (bizAreaCode.length >= 3) bizSearchMutation.mutate(bizAreaCode); }}
+                                  disabled={bizAreaCode.length < 3 || bizSearchMutation.isPending}
+                                  className="h-11 px-5"
+                                >
+                                  {bizSearchMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                                  <span className="ml-2 hidden sm:inline">Search</span>
+                                </Button>
+                              </div>
+
+                              {bizAvailableNumbers.length > 0 && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 animate-in fade-in">
+                                  {bizAvailableNumbers.map(num => (
+                                    <div key={num.phoneNumber} className="flex justify-between items-center p-3 bg-accent/50 rounded-lg border border-border hover:border-primary/50 hover:bg-accent transition-all">
+                                      <div>
+                                        <span className="font-mono text-foreground block">{num.phoneNumber}</span>
+                                        <span className="text-xs text-muted-foreground">{num.locality}, {num.region}</span>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        onClick={() => assignNumberMutation.mutate({ phoneNumber: num.phoneNumber, agentId: selectedAgentId! })}
+                                        disabled={assignNumberMutation.isPending}
+                                      >
+                                        {assignNumberMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Assign'}
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {bizStatus.activeAssignments.length >= bizStatus.maxAgents && (
+                        <p className="text-sm text-muted-foreground text-center py-4 border border-dashed border-border rounded-sui">
+                          Maximum {bizStatus.maxAgents} agents per business reached.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* ── LEGACY PLATFORM-LEVEL PROVISIONING (no siteConfigId) ── */
+                <>
               {!config?.phoneNumber ? (
                 <div className="max-w-2xl mx-auto space-y-6 py-6">
                   <div className="flex gap-3">
@@ -898,9 +1201,10 @@ export default function TelephonyPanel() {
                   )}
                 </div>
               )}
+              </>
+              )}
             </Card>
           )}
-
           {/* SETTINGS VIEW */}
           {activeView === 'settings' && (
             <Card className="p-6 md:p-8 border-t-4 border-t-primary animate-in fade-in slide-in-from-bottom-2 duration-300">

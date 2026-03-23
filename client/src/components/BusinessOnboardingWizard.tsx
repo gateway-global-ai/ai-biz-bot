@@ -7,6 +7,8 @@ import { Loader2, MapPin, Building, CheckCircle2, TrendingUp, Mail, Calendar } f
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 
+import { GovernanceWizard, GovernanceConfig } from './onboarding/GovernanceWizard';
+
 interface Place {
   placeId: string;
   name: string;
@@ -29,7 +31,7 @@ interface CompetitiveReport {
   };
 }
 
-type OnboardingStep = 'search' | 'select' | 'analysis' | 'integrations' | 'complete';
+type OnboardingStep = 'search' | 'select' | 'analysis' | 'governance' | 'integrations' | 'complete';
 
 interface BusinessOnboardingWizardProps {
   onComplete?: (businessData: any) => void;
@@ -47,6 +49,7 @@ export function BusinessOnboardingWizard({ onComplete }: BusinessOnboardingWizar
     workspace: false,
     voiceAI: false,
   });
+  const [governanceConfig, setGovernanceConfig] = useState<GovernanceConfig | null>(null);
 
   const searchBusinesses = async () => {
     if (!searchQuery.trim()) {
@@ -114,6 +117,15 @@ export function BusinessOnboardingWizard({ onComplete }: BusinessOnboardingWizar
     }
   };
 
+  const proceedToGovernance = () => {
+    setStep('governance');
+  };
+
+  const handleGovernanceComplete = (config: GovernanceConfig) => {
+    setGovernanceConfig(config);
+    setStep('integrations');
+  };
+
   const proceedToIntegrations = () => {
     setStep('integrations');
   };
@@ -126,6 +138,7 @@ export function BusinessOnboardingWizard({ onComplete }: BusinessOnboardingWizar
         place: selectedPlace,
         report: competitiveReport,
         integrations: enabledIntegrations,
+        governance: governanceConfig,
       });
     }
   };
@@ -331,13 +344,21 @@ export function BusinessOnboardingWizard({ onComplete }: BusinessOnboardingWizar
             </AlertDescription>
           </Alert>
 
-          <Button onClick={proceedToIntegrations} className="w-full">
-            Continue to Integrations →
+          <Button onClick={proceedToGovernance} className="w-full">
+            Continue to Governance Setup →
           </Button>
         </CardContent>
       </Card>
     );
   };
+
+  const renderGovernanceStep = () => (
+    <GovernanceWizard 
+      onComplete={handleGovernanceComplete}
+      onBack={() => setStep('analysis')}
+      initialData={governanceConfig || {}}
+    />
+  );
 
   const renderIntegrationsStep = () => (
     <Card className="w-full max-w-2xl mx-auto">
@@ -400,7 +421,7 @@ export function BusinessOnboardingWizard({ onComplete }: BusinessOnboardingWizar
         </Card>
 
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => setStep('analysis')} className="flex-1">
+          <Button variant="outline" onClick={() => setStep('governance')} className="flex-1">
             ← Back
           </Button>
           <Button onClick={completeOnboarding} className="flex-1">
@@ -474,16 +495,16 @@ export function BusinessOnboardingWizard({ onComplete }: BusinessOnboardingWizar
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Progress Indicator */}
         <div className="flex items-center justify-center gap-2">
-          {['search', 'select', 'analysis', 'integrations', 'complete'].map((s, index) => (
+          {['search', 'select', 'analysis', 'governance', 'integrations', 'complete'].map((s, index) => (
             <div key={s} className="flex items-center">
               <div
                 className={`h-2 w-12 rounded-full ${
-                  ['search', 'select', 'analysis', 'integrations', 'complete'].indexOf(step) >= index
+                  ['search', 'select', 'analysis', 'governance', 'integrations', 'complete'].indexOf(step) >= index
                     ? 'bg-primary'
                     : 'bg-muted'
                 }`}
               />
-              {index < 4 && <div className="w-2" />}
+              {index < 5 && <div className="w-2" />}
             </div>
           ))}
         </div>
@@ -492,6 +513,7 @@ export function BusinessOnboardingWizard({ onComplete }: BusinessOnboardingWizar
         {step === 'search' && renderSearchStep()}
         {step === 'select' && renderSelectStep()}
         {step === 'analysis' && renderAnalysisStep()}
+        {step === 'governance' && renderGovernanceStep()}
         {step === 'integrations' && renderIntegrationsStep()}
         {step === 'complete' && renderCompleteStep()}
       </div>

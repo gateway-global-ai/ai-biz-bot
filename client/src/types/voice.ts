@@ -45,9 +45,30 @@ export interface BusinessContext {
   placeId: string;
   name: string;
   address: string;
-  hours?: string;
+  hours?: string | string[];
   services?: string[];
   primaryColor?: string;
+  /** Google Places rating (1–5) */
+  rating?: number;
+  /** Number of Google reviews */
+  userRatingsTotal?: number;
+  /** Formatted phone number */
+  phone?: string;
+  /** Google Places type tags (e.g. ['airport', 'transit_station']) */
+  types?: string[];
+  /** Hero image URL for the business (photo-proxy or manual) */
+  heroImageUrl?: string | null;
+  /** Stored lat/lng from placeData.geometry.location — no live API call needed */
+  lat?: number;
+  lng?: number;
+  /**
+   * Owner agent role — controls which AI advisor the owner is talking to.
+   * Only relevant when showOwnerControls is true.
+   *   • 'concierge'   — the business's voice agent (customer-facing, default)
+   *   • 'biz-bot'     — AI Biz Bot: consulting on strategy, ops, business profile
+   *   • 'bot-builder' — AI Bot Builder: guides owner through configuring this agent
+   */
+  ownerAgentRole?: 'concierge' | 'biz-bot' | 'bot-builder';
   /** DB-backed system prompt from site_configs.system_prompt_override. When present,
    *  takes priority over the enriched or default instruction in GeminiStreamingClient. */
   systemPromptOverride?: string | null;
@@ -58,6 +79,22 @@ export interface BusinessContext {
    */
   entryPointAgentId?: string;
   entryPointMetaPrompt?: string;
+  /**
+   * Workspace lifecycle state from site_configs.workspace_state.
+   * Drives ConciergePanel shell mode:
+   *   'demo'        → customer mode + "Is this your business?" banner
+   *   'provisioned' → customer mode (agents ready, not yet claimed)
+   *   'claimed'     → customer mode + sign-in gate for owner controls
+   *   'active'      → claimed + telephony active
+   *   'archived'    → read-only / retired
+   */
+  workspaceState?: 'demo' | 'provisioned' | 'claimed' | 'active' | 'archived';
+  /** Ownership claim lifecycle from site_configs.claim_status. */
+  claimStatus?: 'unclaimed' | 'invite_sent' | 'payment_pending' | 'claimed' | null;
+  /** Owner's customer account ID — compared against auth user.id to gate owner controls. */
+  ownerId?: string | null;
+  /** Business plan tier from site_configs.plan. */
+  plan?: 'free' | 'pro' | 'voice' | 'enterprise' | null;
 }
 
 export interface AgentConfig {

@@ -11,7 +11,13 @@ export async function setupVite(server: Server, app: Express) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server, path: "/vite-hmr" },
-    allowedHosts: true as const,
+    allowedHosts: [
+      "localhost",
+      "127.0.0.1",
+      "aibizbot-dev.gatewayglobal.ai",
+      "www.gatewayglobal.ai",
+      "gatewayglobal.ai",
+    ],
   };
 
   // Resolve async config so root, plugins, etc. are applied (spreading the raw export would miss them)

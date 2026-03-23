@@ -50,7 +50,7 @@ export default function MyAccount() {
           <img
             src={gatewayLogo}
             alt="Gateway Global AI"
-            className="h-10 w-auto opacity-90"
+            className="h-14 w-auto object-contain opacity-90 min-h-[2.5rem]"
           />
         </div>
         <Button

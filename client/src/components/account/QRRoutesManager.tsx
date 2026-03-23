@@ -21,6 +21,7 @@ import {
   Shield,
   Loader2,
   Search,
+  BarChart3,
 } from "lucide-react";
 
 interface QrRouteRow {
@@ -46,7 +47,33 @@ interface FirewallRule {
   createdAt: string | null;
 }
 
-export function QRRoutesManager() {
+interface QrScanStats {
+  totalScans: number;
+  byRoute: { routeId: number; label: string | null; scans: number }[];
+  last7Days: number;
+  last30Days: number;
+}
+
+async function downloadQrImage(imageUrl: string, filename: string) {
+  try {
+    const res = await fetch(imageUrl, { credentials: "include" });
+    if (!res.ok) throw new Error(res.statusText);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    console.error("QR download failed:", e);
+    window.open(imageUrl, "_blank");
+  }
+}
+
+export function QRRoutesManager({ siteConfigId, siteSlug }: { siteConfigId?: string; siteSlug?: string }) {
   const { toast } = useToast();
   const [activeSubTab, setActiveSubTab] = useState<"routes" | "firewall">("routes");
   const [page, setPage] = useState(1);
@@ -55,12 +82,14 @@ export function QRRoutesManager() {
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [draftDestination, setDraftDestination] = useState<Record<number, string>>({});
   const limit = 50;
+  const scopedToSite = !!siteConfigId;
 
   const { data: routesData, isLoading: routesLoading } = useQuery<{ routes: QrRouteRow[]; total: number }>({
-    queryKey: ["/api/qr-routes", page, limit, search],
+    queryKey: ["/api/qr-routes", page, limit, search, siteConfigId ?? null],
     queryFn: async () => {
       const params = new URLSearchParams({ page: String(page), limit: String(limit) });
       if (search) params.set("search", search);
+      if (siteConfigId) params.set("siteConfigId", siteConfigId);
       const res = await fetch(`/api/qr-routes?${params.toString()}`);
       if (!res.ok) throw new Error(await res.text());
       return res.json();
@@ -75,15 +104,32 @@ export function QRRoutesManager() {
       const list = await res.json();
       return Array.isArray(list) ? list : [];
     },
+    enabled: !scopedToSite,
+  });
+
+  const { data: qrStats, isLoading: qrStatsLoading } = useQuery<QrScanStats>({
+    queryKey: ["/api/site-configs", siteConfigId, "qr-stats"],
+    queryFn: async () => {
+      const res = await fetch(`/api/site-configs/${siteConfigId}/qr-stats`);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    },
+    enabled: !!siteConfigId,
   });
 
   const createRoute = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/qr-routes", {});
+      const body: { siteConfigId?: string; destination?: string } = {};
+      if (siteConfigId) body.siteConfigId = siteConfigId;
+      if (siteConfigId && siteSlug && typeof window !== "undefined") {
+        body.destination = `${window.location.origin}/biz/${siteSlug}`;
+      }
+      const res = await apiRequest("POST", "/api/qr-routes", body);
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/qr-routes"] });
+      if (siteConfigId) queryClient.invalidateQueries({ queryKey: ["/api/site-configs", siteConfigId, "qr-stats"] });
       toast({ title: "Route created" });
     },
     onError: (e: Error) => {
@@ -98,6 +144,7 @@ export function QRRoutesManager() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/qr-routes"] });
+      if (siteConfigId) queryClient.invalidateQueries({ queryKey: ["/api/site-configs", siteConfigId, "qr-stats"] });
       toast({ title: "Route updated" });
     },
     onError: (e: Error) => {
@@ -111,6 +158,7 @@ export function QRRoutesManager() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/qr-routes"] });
+      if (siteConfigId) queryClient.invalidateQueries({ queryKey: ["/api/site-configs", siteConfigId, "qr-stats"] });
       toast({ title: "Route deleted" });
     },
     onError: (e: Error) => {
@@ -179,6 +227,50 @@ export function QRRoutesManager() {
 
       {activeSubTab === "routes" && (
         <div className="space-y-4">
+          {siteConfigId && (
+            <div className="rounded-sui border border-indigo-500/20 bg-slate-800/30 p-4">
+              <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" /> Scan stats for this site
+              </h3>
+              {qrStatsLoading ? (
+                <div className="flex items-center gap-2 text-slate-400 text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+                </div>
+              ) : qrStats && (qrStats.totalScans > 0 || qrStats.byRoute.length > 0) ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                  <div className="rounded-lg bg-slate-900/50 px-3 py-2">
+                    <span className="text-slate-400 block">Total scans</span>
+                    <span className="font-mono font-bold text-white">{qrStats.totalScans}</span>
+                  </div>
+                  <div className="rounded-lg bg-slate-900/50 px-3 py-2">
+                    <span className="text-slate-400 block">Last 7 days</span>
+                    <span className="font-mono font-bold text-white">{qrStats.last7Days}</span>
+                  </div>
+                  <div className="rounded-lg bg-slate-900/50 px-3 py-2">
+                    <span className="text-slate-400 block">Last 30 days</span>
+                    <span className="font-mono font-bold text-white">{qrStats.last30Days}</span>
+                  </div>
+                  {qrStats.byRoute.length > 0 && (
+                    <div className="rounded-lg bg-slate-900/50 px-3 py-2 sm:col-span-2 sm:col-start-1">
+                      <span className="text-slate-400 block mb-1">By route</span>
+                      <ul className="font-mono text-xs text-slate-300 space-y-0.5">
+                        {qrStats.byRoute.slice(0, 5).map((r) => (
+                          <li key={r.routeId}>
+                            {r.label || `Route #${r.routeId}`}: {r.scans}
+                          </li>
+                        ))}
+                        {qrStats.byRoute.length > 5 && (
+                          <li className="text-slate-400">+{qrStats.byRoute.length - 5} more</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-300 text-sm">No scan data yet. Create a route and set this site as destination to see stats.</p>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-3">
             <div className="relative flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[200px] flex items-center gap-1">
@@ -188,7 +280,7 @@ export function QRRoutesManager() {
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), setSearch(searchInput), setPage(1))}
-                  className="pl-8 bg-slate-800/50 border-slate-600 text-white placeholder:text-slate-500"
+                  className="pl-8 bg-slate-800 border-slate-600 text-white placeholder:text-slate-400"
                 />
               </div>
               <Button
@@ -211,7 +303,9 @@ export function QRRoutesManager() {
               )}
             </div>
             <p className="text-slate-400 text-sm">
-              Each route is a virtual phone number. Scan → redirect to destination.
+              {scopedToSite
+                ? "Routes for this agent only. Each route is a virtual phone number; scan → redirect to this business."
+                : "Each route is a virtual phone number. Scan → redirect to destination."}
             </p>
           </div>
           <div className="flex justify-between items-center">
@@ -230,22 +324,22 @@ export function QRRoutesManager() {
               <Loader2 className="w-8 h-8 animate-spin" />
             </div>
           ) : routes.length === 0 ? (
-            <div className="rounded-sui border border-indigo-500/20 bg-slate-800/30 p-8 text-center text-slate-400">
+            <div className="rounded-sui border border-indigo-500/20 bg-slate-800/60 p-8 text-center text-slate-200">
               No routes yet. Click &quot;Add Route&quot; to create one.
             </div>
           ) : (
             <div className="rounded-sui border border-indigo-500/20 overflow-hidden">
-              <table className="w-full text-sm">
+              <table className="w-full text-base">
                 <thead>
                   <tr className="bg-slate-800/60 border-b border-indigo-500/20">
-                    <th className="text-left py-3 px-3 text-slate-300 font-medium">#</th>
-                    <th className="text-left py-3 px-3 text-slate-300 font-medium">Variable</th>
-                    <th className="text-left py-3 px-3 text-slate-300 font-medium">Route URL</th>
-                    <th className="text-left py-3 px-3 text-slate-300 font-medium">Destination</th>
-                    <th className="text-left py-3 px-3 text-slate-300 font-medium">Scans</th>
-                    <th className="text-left py-3 px-3 text-slate-300 font-medium">Active</th>
-                    <th className="text-left py-3 px-3 text-slate-300 font-medium">QR</th>
-                    <th className="text-left py-3 px-3 text-slate-300 font-medium">Actions</th>
+                    <th className="text-left py-3 px-3 text-slate-300 font-medium text-sm">#</th>
+                    <th className="text-left py-3 px-3 text-slate-300 font-medium text-sm">Variable</th>
+                    <th className="text-left py-3 px-3 text-slate-300 font-medium text-sm">Route URL</th>
+                    <th className="text-left py-3 px-3 text-slate-300 font-medium text-sm">Destination</th>
+                    <th className="text-left py-3 px-3 text-slate-300 font-medium text-sm">Scans</th>
+                    <th className="text-left py-3 px-3 text-slate-300 font-medium text-sm">Active</th>
+                    <th className="text-left py-3 px-3 text-slate-300 font-medium text-sm">QR</th>
+                    <th className="text-left py-3 px-3 text-slate-300 font-medium text-sm">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -254,31 +348,31 @@ export function QRRoutesManager() {
                       key={r.id}
                       className="border-b border-slate-700/50 hover:bg-slate-800/30 transition-colors"
                     >
-                      <td className="py-2 px-3 font-mono text-slate-300">{r.id}</td>
-                      <td className="py-2 px-3">
-                        <span className="data-chip font-mono text-xs text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded border border-indigo-500/20">
+                      <td className="py-3 px-3 font-mono text-sm text-slate-300">{r.id}</td>
+                      <td className="py-3 px-3">
+                        <span className="data-chip font-mono text-sm text-slate-400 bg-slate-800/80 px-2 py-1 rounded border border-indigo-500/20">
                           {String(r.variable).slice(0, 8)}…
                         </span>
                       </td>
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-1">
-                          <span className="text-slate-400 truncate max-w-[180px] font-mono text-xs">
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-slate-400 truncate max-w-[200px] font-mono text-sm">
                             {r.routeUrl}
                           </span>
                           <button
                             onClick={() => copyRouteUrl(r)}
-                            className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-white shrink-0"
+                            className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white shrink-0"
                             title="Copy URL"
                           >
                             {copiedId === r.id ? (
-                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <Check className="w-4 h-4 text-emerald-400" />
                             ) : (
-                              <Copy className="w-3.5 h-3.5" />
+                              <Copy className="w-4 h-4" />
                             )}
                           </button>
                         </div>
                       </td>
-                      <td className="py-2 px-3">
+                      <td className="py-3 px-3">
                         <div className="flex flex-col gap-1">
                           <Input
                             value={draftDestination[r.id] ?? r.destination ?? ""}
@@ -297,12 +391,26 @@ export function QRRoutesManager() {
                                 return next;
                               });
                             }}
-                            placeholder="URL or assign below"
-                            className="h-8 text-xs bg-slate-800/80 border-indigo-500/20 text-white placeholder:text-slate-500 max-w-[220px]"
+                            placeholder={scopedToSite ? "URL for this agent" : "URL or assign below"}
+                            className="h-9 text-sm bg-slate-800/80 border-indigo-500/20 text-white placeholder:text-slate-400 max-w-[240px]"
                           />
-                          {siteConfigs && siteConfigs.length > 0 && (
+                          {scopedToSite && siteSlug && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 text-sm text-indigo-400 hover:text-indigo-300 -mt-0.5"
+                              onClick={() => {
+                                const dest = `${baseUrl}/biz/${siteSlug}`;
+                                updateRoute.mutate({ id: r.id, updates: { destination: dest } });
+                              }}
+                            >
+                              Set to this business
+                            </Button>
+                          )}
+                          {!scopedToSite && siteConfigs && siteConfigs.length > 0 && (
                             <select
-                              className="h-7 text-xs bg-slate-800/80 border border-indigo-500/20 rounded text-slate-300 max-w-[220px]"
+                              className="h-8 text-sm bg-slate-800/80 border border-indigo-500/20 rounded text-slate-300 max-w-[240px]"
                               value=""
                               onChange={(e) => {
                                 const slug = e.target.value;
@@ -324,8 +432,8 @@ export function QRRoutesManager() {
                           )}
                         </div>
                       </td>
-                      <td className="py-2 px-3 font-mono text-slate-400">{r.scanCount}</td>
-                      <td className="py-2 px-3">
+                      <td className="py-3 px-3 font-mono text-sm text-slate-400">{r.scanCount}</td>
+                      <td className="py-3 px-3">
                         <Switch
                           checked={r.isActive}
                           onCheckedChange={(checked) =>
@@ -333,32 +441,32 @@ export function QRRoutesManager() {
                           }
                         />
                       </td>
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-1">
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-2">
                           <img
                             src={`/api/qr-routes/${r.id}/image`}
                             alt={`QR ${r.id}`}
-                            className="w-10 h-10 rounded border border-slate-600 object-cover"
+                            className="w-12 h-12 rounded border border-slate-600 object-cover"
                           />
-                          <a
-                            href={`/api/qr-routes/${r.id}/image`}
-                            download={`qr-route-${r.id}.png`}
-                            className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white"
+                          <button
+                            type="button"
+                            onClick={() => downloadQrImage(`/api/qr-routes/${r.id}/image`, `qr-route-${r.id}.png`)}
+                            className="p-2 rounded hover:bg-slate-700 text-slate-400 hover:text-white"
                             title="Download QR"
                           >
-                            <Download className="w-3.5 h-3.5" />
-                          </a>
+                            <Download className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
-                      <td className="py-2 px-3">
-                        <div className="flex items-center gap-1">
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-2">
                           <button
                             onClick={() => regenerateQr.mutate(r.id)}
                             disabled={regenerateQr.isPending}
-                            className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-white"
+                            className="p-2 rounded hover:bg-slate-700 text-slate-400 hover:text-white"
                             title="Regenerate QR"
                           >
-                            <RefreshCw className="w-3.5 h-3.5" />
+                            <RefreshCw className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => {
@@ -366,10 +474,10 @@ export function QRRoutesManager() {
                                 deleteRoute.mutate(r.id);
                               }
                             }}
-                            className="p-1.5 rounded hover:bg-red-500/20 text-slate-400 hover:text-red-400"
+                            className="p-2 rounded hover:bg-red-500/20 text-slate-400 hover:text-red-400"
                             title="Delete"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -487,13 +595,13 @@ function FirewallTab() {
           value={newRuleValue}
           onChange={(e) => setNewRuleValue(e.target.value)}
           placeholder={newRuleType === "rate_limit" ? "e.g. 60" : "IP, CIDR, or pattern"}
-          className="h-9 w-48 bg-slate-800 border-indigo-500/20 text-white placeholder:text-slate-500 text-sm"
+          className="h-9 w-48 bg-slate-800 border-indigo-500/20 text-white placeholder:text-slate-400 text-sm"
         />
         <Input
           value={newRouteId}
           onChange={(e) => setNewRouteId(e.target.value)}
           placeholder="Route ID (optional)"
-          className="h-9 w-24 bg-slate-800 border-indigo-500/20 text-white placeholder:text-slate-500 text-sm"
+          className="h-9 w-24 bg-slate-800 border-indigo-500/20 text-white placeholder:text-slate-400 text-sm"
         />
         <Button
           onClick={() => {
@@ -521,7 +629,7 @@ function FirewallTab() {
           <Loader2 className="w-6 h-6 animate-spin" />
         </div>
       ) : rules.length === 0 ? (
-        <div className="rounded-sui border border-indigo-500/20 bg-slate-800/30 p-6 text-center text-slate-400">
+        <div className="rounded-sui border border-indigo-500/20 bg-slate-800/50 p-6 text-center text-slate-300">
           No firewall rules. Add one above.
         </div>
       ) : (
@@ -548,7 +656,7 @@ function FirewallTab() {
                     {rule.isActive ? (
                       <span className="text-emerald-400 text-xs">Yes</span>
                     ) : (
-                      <span className="text-slate-500 text-xs">No</span>
+                      <span className="text-slate-400 text-xs">No</span>
                     )}
                   </td>
                   <td className="py-2 px-3">

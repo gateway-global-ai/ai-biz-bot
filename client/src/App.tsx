@@ -14,16 +14,14 @@ import AgentChat from "@/pages/agents/AgentChat";
 import DiscVisualizer from "@/pages/showcase/DiscVisualizer";
 import DeveloperPage from "@/pages/developer/DeveloperPage";
 import BusinessPage from "@/pages/customer/BusinessPage";
+import PlatformHomePage from "@/pages/public/PlatformHomePage";
 import GoogleApiAnalyst from "@/pages/integrations/GoogleApiAnalyst";
 import OnboardingFlow from "@/pages/agents/OnboardingFlow";
 import DiscAssessment from "@/pages/showcase/DiscAssessment";
 import MockConversation from "@/pages/showcase/MockConversation";
 import AgentManager from "@/pages/agents/AgentManager";
 import AgentDashboard from "@/pages/agents/AgentDashboard";
-import TheVibe from "@/pages/agents/TheVibe";
-import TheOffice from "@/pages/agents/TheOffice";
-import TheLab from "@/pages/agents/TheLab";
-import TheClassroom from "@/pages/agents/TheClassroom";
+import AgentsLandingPage from "@/pages/public/AgentsLandingPage";
 import ImmersiveClassroom from "@/pages/agents/classroom/ImmersiveClassroom";
 import CustomerManager from "@/pages/biz-dashboard/CustomerManager";
 import TwilioAccountManager from "@/pages/developer/TwilioAccountManager";
@@ -46,11 +44,17 @@ import GooglePlacesSdk from "@/pages/integrations/GooglePlacesSdk";
 import MyAccount from "@/pages/account/MyAccount";
 import CustomerSiteManager from "@/pages/owner/CustomerSiteManager";
 import PublicBusinessPage from "@/pages/public/PublicBusinessPage";
+import AgentPage from "@/pages/agents/AgentPage";
+import KioskPage from "@/pages/public/KioskPage";
 import SovereignNetworkPage from "@/pages/public/SovereignNetworkPage";
 import PhonePage from "@/pages/public/PhonePage";
+import ClearVoiceLogoCenteredPage from "@/pages/public/ClearVoiceLogoCenteredPage";
+import PlatformBuyPage from "@/pages/public/PlatformBuyPage";
+import PlatformInfoPage from "@/pages/public/PlatformInfoPage";
 import VoiceLeadMachine from "@/pages/biz-dashboard/VoiceLeadMachine";
 import SitesAndLeads from "@/pages/owner/SitesAndLeads";
 import MixingBoard from "@/pages/reseller/MixingBoard";
+import ResellerDashboard from "@/pages/reseller/ResellerDashboard";
 import ResellerApplyPage from "@/pages/ResellerApplyPage";
 import CommandChat from "@/pages/agents/CommandChat";
 import InquiryManagement from "@/pages/owner/InquiryManagement";
@@ -74,6 +78,8 @@ import StorefrontsIndex from "@/pages/storefronts/StorefrontsIndex";
 import StorefrontCategoryPage from "@/pages/storefronts/StorefrontCategoryPage";
 import BrandAdminPage from "@/pages/brand-admin";
 import NotFound from "@/pages/admin/not-found";
+import { AdminShell } from "@/pages/admin/AdminShell";
+import MissionControlRuntime from "../../os-core/src/app/MissionControlRuntime";
 import { Loader2 } from "lucide-react";
 import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Clock, Phone, Smartphone } from 'lucide-react';
 
@@ -282,12 +288,8 @@ function AppRouter() {
     <Switch>
       <Route path="/">{() => <Redirect to="/dashboard" />}</Route>
       <Route path="/onboard" component={OnboardingFlow} />
-      <Route path="/agents" component={AgentDashboard} />
+      <Route path="/agents" component={AgentsLandingPage} />
       <Route path="/dashboard" component={AgentDashboard} />
-      <Route path="/agent/:agentId/vibe" component={TheVibe} />
-      <Route path="/agent/:agentId/office" component={TheOffice} />
-      <Route path="/agent/:agentId/lab" component={TheLab} />
-      <Route path="/agent/:agentId/classroom" component={TheClassroom} />
       <Route path="/nexus-classroom" component={ImmersiveClassroom} />
       <Route path="/agent/:agentId/telephony" component={AgentTelephony} />
       <Route path="/brand-admin" component={BrandAdminPage} />
@@ -378,19 +380,22 @@ function AppWithSidebar() {
 
   return (
     <ProtectedRoute>
-      <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-        <div className="flex h-screen w-full bg-slate-950 text-slate-200">
-          <AppSidebar />
-          <div className="flex flex-col flex-1">
-            <header className="flex items-center gap-2 p-2 border-b border-slate-800 bg-slate-900">
-              <SidebarTrigger data-testid="button-sidebar-toggle" />
-            </header>
-            <main className="flex-1 overflow-y-auto">
-              <AppRouter />
-            </main>
+      {/* Force dark theme so sidebar and main use sovereign palette (no light/grey mix). */}
+      <div className="dark">
+        <SidebarProvider style={sidebarStyle as React.CSSProperties}>
+          <div className="flex h-screen w-full bg-slate-950 text-slate-200">
+            <AppSidebar />
+            <div className="flex flex-col flex-1 min-w-0">
+              <header className="flex items-center gap-2 p-2 border-b border-indigo-500/20 bg-slate-900/80 backdrop-blur-xl shrink-0">
+                <SidebarTrigger data-testid="button-sidebar-toggle" className="text-slate-300 hover:text-white hover:bg-slate-800" />
+              </header>
+              <main className="flex-1 overflow-y-auto min-h-0 scrollbar-hide">
+                <AppRouter />
+              </main>
+            </div>
           </div>
-        </div>
-      </SidebarProvider>
+        </SidebarProvider>
+      </div>
     </ProtectedRoute>
   );
 }
@@ -403,9 +408,11 @@ function App() {
           <CustomerAuthProvider>
             <Switch>
               {/* Public routes */}
-              <Route path="/" component={BusinessPage} />
+              <Route path="/" component={PlatformHomePage} />
               <Route path="/business" component={BusinessPage} />
               <Route path="/demo" component={BusinessPage} />
+              <Route path="/buy" component={PlatformBuyPage} />
+              <Route path="/more-info" component={PlatformInfoPage} />
               <Route path="/login" component={Login} />
               <Route path="/contact" component={ContactForm} />
               <Route path="/v2" component={LandingV2} />
@@ -437,8 +444,13 @@ function App() {
               <Route path="/test-b2b-wireframe" component={TestB2b} />
               {/* Public business pages — shareable, no auth required */}
               <Route path="/biz/:slug" component={PublicBusinessPage} />
+              <Route path="/agent/:slug" component={AgentPage} />
+              <Route path="/kiosk/:slug" component={KioskPage} />
               {/* Standalone Clear Voice phone UI — QR-codeable, no app shell. Params: ?siteConfigId=uuid | ?slug=url-slug */}
               <Route path="/phone" component={PhonePage} />
+              <Route path="/clearvoice-logo" component={ClearVoiceLogoCenteredPage} />
+              <Route path="/mission-control" component={MissionControlRuntime} />
+              <Route path="/mission-control/*" component={MissionControlRuntime} />
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
               <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />
@@ -446,9 +458,31 @@ function App() {
               <Route path="/app/my-account" component={MyAccount} />
               <Route path="/app/my-account/site/:siteId" component={CustomerSiteManager} />
               <Route path="/app/billing" component={BillingPage} />
+              <Route path="/app/reseller" component={ResellerDashboard} />
               <Route path="/app/mixing-board" component={MixingBoard} />
               <Route path="/app/aibizbot" component={AiBizBotAdmin} />
               <Route path="/app/compliance-gateway" component={OnboardingGateway} />
+              {/* Sovereign admin shell — /platform and /me (dark mode). Use splat so /platform/tools/qr-codes etc. match. */}
+              <Route path="/platform">
+                <ProtectedRoute>
+                  <AdminShell />
+                </ProtectedRoute>
+              </Route>
+              <Route path="/platform/*">
+                <ProtectedRoute>
+                  <AdminShell />
+                </ProtectedRoute>
+              </Route>
+              <Route path="/me">
+                <ProtectedRoute>
+                  <AdminShell />
+                </ProtectedRoute>
+              </Route>
+              <Route path="/me/*">
+                <ProtectedRoute>
+                  <AdminShell />
+                </ProtectedRoute>
+              </Route>
               {/* Protected admin routes with sidebar */}
               <Route component={AppWithSidebar} />
             </Switch>

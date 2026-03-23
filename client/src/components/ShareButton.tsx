@@ -10,6 +10,11 @@ interface ShareButtonProps {
   referrerUserId?: string;
   variant?: 'light' | 'dark';
   testIdPrefix?: string;
+  /** When set, show only the dropdown (no trigger button). Use inside overlays. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** When set, show QR code section at bottom of menu (scan to open page). */
+  publicSlug?: string | null;
 }
 
 export default function ShareButton({ 
@@ -19,9 +24,15 @@ export default function ShareButton({
   siteConfigId,
   referrerUserId,
   variant = 'light',
-  testIdPrefix = 'share'
+  testIdPrefix = 'share',
+  open: controlledOpen,
+  onOpenChange,
+  publicSlug,
 }: ShareButtonProps) {
-  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined && onOpenChange !== undefined;
+  const isShareOpen = isControlled ? controlledOpen : internalOpen;
+  const setIsShareOpen = isControlled ? (v: boolean) => onOpenChange!(v) : setInternalOpen;
   const [linkCopied, setLinkCopied] = useState(false);
   // SMS sub-panel state
   const [showSmsPanel, setShowSmsPanel] = useState(false);
@@ -162,9 +173,13 @@ export default function ShareButton({
   const buttonClass = isDark 
     ? "p-2 sm:px-4 sm:py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors flex items-center gap-2 border border-slate-700 rounded-full hover:bg-slate-800"
     : "p-2 sm:px-4 sm:py-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors flex items-center gap-2 border border-slate-200 rounded-full hover:bg-slate-50";
-  const dropdownClass = isDark
-    ? "absolute right-0 top-full mt-2 w-64 bg-slate-900 rounded-xl shadow-xl border border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200"
-    : "absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200";
+  const dropdownClass = isControlled
+    ? (isDark
+        ? "w-full max-w-sm bg-slate-900 rounded-xl shadow-xl border border-slate-700 py-2"
+        : "w-full max-w-sm bg-white rounded-xl shadow-xl border border-slate-100 py-2")
+    : (isDark
+        ? "absolute right-0 top-full mt-2 w-64 bg-slate-900 rounded-xl shadow-xl border border-slate-700 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200"
+        : "absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200");
   const menuItemClass = isDark
     ? "w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
     : "w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors";
@@ -210,23 +225,8 @@ export default function ShareButton({
     }
   }
 
-  return (
-    <div className="relative" ref={shareRef}>
-      <button
-        onClick={() => { setIsShareOpen(!isShareOpen); setShowSmsPanel(false); }}
-        aria-expanded={isShareOpen}
-        aria-haspopup="true"
-        aria-controls={`${testIdPrefix}-menu`}
-        className={buttonClass}
-        data-testid={`button-${testIdPrefix}`}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
-        </svg>
-        <span className="hidden sm:inline">Share</span>
-      </button>
-      {isShareOpen && (
-        <div id={`${testIdPrefix}-menu`} role="menu" className={dropdownClass} data-testid={`${testIdPrefix}-dropdown`}>
+  const dropdownContent = (
+    <div id={`${testIdPrefix}-menu`} role="menu" className={dropdownClass} data-testid={`${testIdPrefix}-dropdown`}>
           {/* SMS inline sub-panel */}
           {showSmsPanel ? (
             <div className="px-4 py-3">
@@ -301,8 +301,48 @@ export default function ShareButton({
               );
             })
           )}
+          {publicSlug && (
+            <div className={isDark ? 'border-t border-slate-700 px-4 py-3' : 'border-t border-slate-100 px-4 py-3'}>
+              <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>QR code — scan to open page</p>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block rounded-lg overflow-hidden border border-slate-500/50 bg-white/5 w-24 h-24"
+                aria-label="QR code to open this page"
+              >
+                <img
+                  src={`/qr/img/${encodeURIComponent(publicSlug)}`}
+                  alt="QR code to open this page"
+                  className="w-full h-full object-contain"
+                />
+              </a>
+            </div>
+          )}
         </div>
-      )}
+  );
+
+  if (isControlled) {
+    if (!isShareOpen) return null;
+    return <div ref={shareRef}>{dropdownContent}</div>;
+  }
+
+  return (
+    <div className="relative" ref={shareRef}>
+      <button
+        onClick={() => { setIsShareOpen(!isShareOpen); setShowSmsPanel(false); }}
+        aria-expanded={isShareOpen}
+        aria-haspopup="true"
+        aria-controls={`${testIdPrefix}-menu`}
+        className={buttonClass}
+        data-testid={`button-${testIdPrefix}`}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+        </svg>
+        <span className="hidden sm:inline">Share</span>
+      </button>
+      {isShareOpen && dropdownContent}
     </div>
   );
 }

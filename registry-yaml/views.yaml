@@ -1,0 +1,152 @@
+version: 1
+views:
+  - viewId: chat_os_container
+    category: view
+    viewType: view
+    viewStateType: view
+    lazyImportKey: OSHomeView
+    allowedModes: [ptt_first, view]
+    requiredContextKeys: []
+    allowedActions: []
+    policyGate: os_boot_ready
+  - viewId: os-home-view
+    category: ptt_first
+    viewType: ptt_first
+    viewStateType: ptt_first
+    lazyImportKey: OSHomeView
+    allowedModes: [ptt_first]
+    requiredContextKeys: []
+    allowedActions: []
+    policyGate: os_boot_ready
+  - viewId: admin-home-view
+    category: menu
+    viewType: menu
+    viewStateType: menu
+    lazyImportKey: AdminHomeView
+    allowedModes: [menu]
+    requiredContextKeys: []
+    allowedActions: [admin.onboarding.read, admin.onboarding.write]
+    policyGate: admin_access
+  - viewId: admin-onboarding-view
+    category: form
+    viewType: view
+    viewStateType: view
+    lazyImportKey: AdminOnboardingView
+    allowedModes: [view]
+    requiredContextKeys: []
+    allowedActions: [stage_business_onboarding]
+    policyGate: admin_access
+  - viewId: admin-candidate-selection-view
+    category: inspector
+    viewType: view
+    viewStateType: view
+    lazyImportKey: AdminCandidateSelectionView
+    allowedModes: [view]
+    requiredContextKeys: []
+    allowedActions: [ground_business_candidates]
+    policyGate: admin_access
+  - viewId: employee-dashboard-view
+    category: view
+    viewType: view
+    viewStateType: view
+    lazyImportKey: EmployeeDashboardView
+    allowedModes: [view]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [session.joinAssist, session.endAssist]
+    policyGate: employee_access
+  - viewId: manager-dashboard-view
+    category: view
+    viewType: view
+    viewStateType: view
+    lazyImportKey: ManagerDashboardView
+    allowedModes: [view]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [mutate_agent_behavior, agent.updateBehavior]
+    policyGate: manager_access
+  - viewId: verification-view
+    category: view
+    viewType: view
+    viewStateType: view
+    lazyImportKey: VerificationView
+    allowedModes: [view]
+    requiredContextKeys: [sessionId]
+    allowedActions: [messaging.sendVerificationOtp]
+    policyGate: verification_access
+  - viewId: intake-view
+    category: form
+    viewType: view
+    viewStateType: view
+    lazyImportKey: IntakeView
+    allowedModes: [view]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [intake.approve]
+    policyGate: intake_access
+  - viewId: workspace-router-view
+    category: view
+    viewType: view
+    viewStateType: view
+    lazyImportKey: WorkspaceRouterView
+    allowedModes: [view]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [session.joinAssist, session.endAssist, session.resolveOutcome]
+    policyGate: workspace_access
+  - viewId: agent-config-view
+    category: controller
+    viewType: controller
+    viewStateType: view
+    lazyImportKey: AgentConfigView
+    allowedModes: [view]
+    requiredContextKeys: [siteConfigId, agentId]
+    allowedActions:
+      - agent.updateBehavior
+      - mutate_agent_behavior
+      - focus_behavior_control
+    policyGate: agent_config_access
+  - viewId: behavior-controller-view
+    category: confirmation
+    viewType: controller
+    viewStateType: confirmation
+    lazyImportKey: BehaviorControllerView
+    allowedModes: [view, confirmation]
+    requiredContextKeys: [siteConfigId, agentId]
+    allowedActions:
+      - agent.proposeDominanceChange
+      - agent.applySafeModeProfile
+      - agent.applyGroundingImportance
+    policyGate: agent_behavior_control
+  - viewId: support-entry-view
+    category: menu
+    viewType: menu
+    viewStateType: menu
+    lazyImportKey: SupportEntryView
+    allowedModes: [menu]
+    requiredContextKeys: []
+    allowedActions: [request_human_assistance, draft_support_ticket]
+    policyGate: support_public
+  - viewId: system-support-view
+    category: view
+    viewType: view
+    viewStateType: view
+    lazyImportKey: SystemSupportView
+    allowedModes: [view]
+    requiredContextKeys: []
+    allowedActions: [request_human_assistance, draft_support_ticket]
+    policyGate: support_public
+  - viewId: system-telemetry-view
+    category: inspector
+    viewType: view
+    viewStateType: view
+    lazyImportKey: SystemTelemetryView
+    allowedModes: [view]
+    requiredContextKeys: []
+    allowedActions: [mutate_chaos_settings]
+    policyGate: os_boot_ready
+  - viewId: behavioral_controls_view
+    category: controller
+    viewType: controller
+    viewStateType: view
+    lazyImportKey: AgentConfigView
+    allowedModes: [view]
+    requiredContextKeys: [siteConfigId, agentId]
+    allowedActions: [mutate_agent_behavior]
+    policyGate: agent_behavior_control

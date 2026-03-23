@@ -1,0 +1,50 @@
+version: 1
+elements:
+  - elementId: behavior.dominance.slider
+    semantic_aliases: [dominance, creativity_control]
+    required_route: agent.behavior
+  - elementId: behavior.safeMode.profile
+    semantic_aliases: [safe_mode, safety_profile]
+    required_route: agent.behavior
+  - elementId: behavior.grounding.slider
+    semantic_aliases: [grounding, grounding_importance]
+    required_route: agent.behavior
+  - elementId: support.contact_human.button
+    semantic_aliases: [human_agent, live_chat, support_ticket]
+    required_route: system.support
+  - elementId: support.ticket_input.textarea
+    semantic_aliases: [support_form, ticket_body, complaint_box]
+    required_route: system.support
+  - elementId: telemetry.chaos.toggle
+    semantic_aliases: [network_stress, chaos_engine]
+    required_route: system.telemetry
+  - elementId: telemetry.chaos.latency_slider
+    semantic_aliases: [latency_controls]
+    required_route: system.telemetry
+  - elementId: onboarding.business_name.input
+    semantic_aliases: [business_name_input, company_name]
+    required_route: admin.onboarding
+  - elementId: onboarding.city.input
+    semantic_aliases: [city_input, business_city]
+    required_route: admin.onboarding
+  - elementId: onboarding.state.input
+    semantic_aliases: [state_input, business_state]
+    required_route: admin.onboarding
+  - elementId: onboarding.zip.input
+    semantic_aliases: [zip_input, zip_code, postal_code]
+    required_route: admin.onboarding
+  - elementId: onboarding.contact_email.input
+    semantic_aliases: [contact_email_input, contact_email, business_email]
+    required_route: admin.onboarding
+  - elementId: onboarding.category.input
+    semantic_aliases: [category_input, category_dropdown, business_type, industry]
+    required_route: admin.onboarding
+  - elementId: onboarding.submit.button
+    semantic_aliases: [submit_onboarding, create_business, approve_onboarding, submit_profile]
+    required_route: admin.onboarding
+  - elementId: onboarding.candidate_list
+    semantic_aliases: [candidate_list, business_candidates]
+    required_route: admin.candidate_selection
+  - elementId: onboarding.candidate_item
+    semantic_aliases: [candidate_item, select_business]
+    required_route: admin.candidate_selection

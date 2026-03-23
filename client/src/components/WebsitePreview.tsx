@@ -165,17 +165,22 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
           businessName: place.name,
           businessAddress: place.formatted_address,
           businessPhone: place.formatted_phone_number,
+          siteConfigId: siteConfigId ?? undefined,
           history: chatMessages.slice(-10),
         }),
       });
       const data = await res.json();
-      setChatMessages(prev => [...prev, { role: 'assistant', content: data.response || 'Sorry, I could not process that. Please try again.' }]);
+      if (!res.ok) {
+        setChatMessages(prev => [...prev, { role: 'assistant', content: (data?.error || `Error ${res.status}. Please try again.`) }]);
+      } else {
+        setChatMessages(prev => [...prev, { role: 'assistant', content: data.response || 'Sorry, I could not process that. Please try again.' }]);
+      }
     } catch {
       setChatMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]);
     }
     setChatLoading(false);
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-  }, [chatInput, chatLoading, chatMessages, place]);
+  }, [chatInput, chatLoading, chatMessages, place, siteConfigId]);
 
   useEffect(() => {
     return () => {
@@ -358,10 +363,13 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
                 }}
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900" />
+              <div
+                className="w-full h-full bg-slate-900 bg-cover bg-center"
+                style={{ backgroundImage: 'url(/hero-storefront-lovely-lashes.png)' }}
+              />
             )}
-            <div className="absolute inset-0 bg-slate-950/70" aria-hidden />
-            <div className="absolute inset-0 bg-gradient-to-b from-slate-900/30 via-slate-900/60 to-slate-900" aria-hidden />
+            <div className="absolute inset-0 bg-slate-950/45" aria-hidden />
+            <div className="absolute inset-0 bg-gradient-to-b from-slate-900/20 via-slate-900/40 to-slate-900" aria-hidden />
           </div>
           <div className="relative h-full max-w-7xl mx-auto px-6 flex flex-col items-center justify-center text-center z-10">
             <div className="flex flex-col items-center">
@@ -651,22 +659,24 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
                   </span>
                   What People Say
                 </h3>
-                <div className="space-y-6 flex-1 overflow-y-auto pr-2 max-h-[300px]">
-                  {reviews.slice(0, 5).map((review: any, i: number) => (
-                    <div key={i} className="flex gap-4 group">
+                <div className="space-y-6 flex-1 overflow-y-auto pr-2 max-h-[420px]">
+                  {(reviews.slice(0, 5)).map((review: any, i: number) => (
+                    <div key={review.id || `review-${i}`} className="flex gap-4 group">
                       <div className="shrink-0">
                         {review.profile_photo_url ? (
-                          <img src={review.profile_photo_url} alt={review.author_name} className="w-10 h-10 rounded-full border border-slate-100" />
+                          <img src={review.profile_photo_url} alt={review.author_name || 'Reviewer'} className="w-10 h-10 rounded-full border border-slate-100" />
                         ) : (
                           <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 text-sm font-bold">
                             {(review.author_name || 'A').charAt(0)}
                           </div>
                         )}
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-sm text-slate-900">{review.author_name}</span>
-                          <span className="text-amber-400 flex">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          {review.author_name && (
+                            <span className="font-semibold text-sm text-slate-900">{review.author_name}</span>
+                          )}
+                          <span className="text-amber-400 flex shrink-0">
                             {[...Array(5)].map((_, stars) => (
                               <svg key={stars} className={`w-3 h-3 ${stars < Math.round(review.rating) ? 'fill-current' : 'text-slate-200 fill-current'}`} viewBox="0 0 20 20">
                                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
@@ -678,7 +688,7 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
                           )}
                         </div>
                         <p className="text-slate-600 text-sm leading-relaxed">
-                          "{review.text}"
+                          {review.text ? `"${review.text}"` : ''}
                         </p>
                       </div>
                     </div>
@@ -959,7 +969,7 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
                     {reviews.length > 0 ? (
                       <div className="divide-y divide-slate-100">
                         {reviews.map((review: any, idx: number) => (
-                          <div key={idx} className="p-4 hover:bg-slate-50/50 transition-colors">
+                          <div key={review.id || `review-${idx}`} className="p-4 hover:bg-slate-50/50 transition-colors">
                             <div className="flex items-start gap-3">
                               <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden shrink-0">
                                 {review.profile_photo_url ? (
@@ -972,7 +982,9 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                  <span className="font-semibold text-sm text-slate-900">{review.author_name}</span>
+                                  {review.author_name && (
+                                    <span className="font-semibold text-sm text-slate-900">{review.author_name}</span>
+                                  )}
                                   <span className="text-amber-400 flex">
                                     {[...Array(5)].map((_, s) => (
                                       <svg key={s} className={`w-3 h-3 ${s < Math.round(review.rating) ? 'fill-current' : 'text-slate-200 fill-current'}`} viewBox="0 0 20 20">
@@ -1088,6 +1100,7 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
           setChatLayout(nextMode);
         }}
         onOpenAdmin={() => setIsAdminOpen(true)}
+        publicSlug={publicSlug ?? null}
         zIndex={50}
       />
 
@@ -1337,36 +1350,23 @@ export default function WebsitePreview({ place, onBack, heroImageUrl: heroImageU
       )}
 
       {!isChatOpen && !isAdminOpen && (
-        <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
-          {/* Voice FAB */}
+        <div className="fixed bottom-6 right-6 z-40">
+          {/* Single Voice FAB — opens Concierge (voice-first); Clear Voice AI style: green mic + VOICE label */}
           <button
             onClick={() => {
               setInitialView('voice');
               setIsChatOpen(true);
             }}
-            className="w-14 h-14 bg-gradient-to-br from-purple-600 to-blue-600 text-white rounded-full shadow-xl hover:shadow-2xl transition-all hover:scale-105 flex items-center justify-center"
+            className="w-[68px] rounded-2xl bg-slate-800/95 border border-slate-600/50 shadow-xl hover:shadow-2xl transition-all hover:scale-105 flex flex-col items-center justify-center py-3 px-2 text-white"
+            style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.05) 1px, transparent 0)', backgroundSize: '8px 8px' }}
             data-testid="button-preview-voice-fab"
-            title="Start voice conversation"
+            title="Voice — Start conversation"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7 text-lime-400 mb-1" aria-hidden>
               <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
               <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
             </svg>
-          </button>
-          
-          {/* Chat FAB */}
-          <button
-            onClick={() => {
-              setInitialView('chat');
-              setIsChatOpen(true);
-            }}
-            className="w-14 h-14 bg-blue-600 text-white rounded-full shadow-xl hover:bg-blue-500 transition-transform hover:scale-105 flex items-center justify-center"
-            data-testid="button-preview-chat-fab"
-            title="Start text chat"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-            </svg>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-white">Voice</span>
           </button>
         </div>
       )}

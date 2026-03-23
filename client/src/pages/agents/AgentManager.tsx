@@ -50,6 +50,26 @@ const ARCH_COLORS = {
   H: '#ef4444',
 };
 
+/** Operational modes: match server config/operationalModes.ts. UI-only (id, label, permissions, constraint). */
+const OPERATIONAL_MODES_UI: Array<{ id: string; label: string; permissions: string; constraint: string }> = [
+  { id: 'SAFE', label: 'Safe Mode', permissions: 'Discussion Only.', constraint: 'Cannot offer to perform tasks. Cannot prompt for or save Customer PII (Personally Identifiable Information).' },
+  { id: 'CONCIERGE', label: 'Concierge Mode', permissions: 'Routing Only.', constraint: 'Can only assess user intent and route customers to provided internal destinations/agents.' },
+  { id: 'RECEPTIONIST', label: 'Receptionist Mode', permissions: 'Intake & Data Collection.', constraint: 'Can take customer information and save inquiries/tickets for others to handle. Cannot resolve complex issues.' },
+  { id: 'SALES', label: 'Sales Mode', permissions: 'Commerce Generation.', constraint: 'Can assist with locating products/services from a catalog, create an invoice, order, or fill a shopping cart. (No payment capture).' },
+  { id: 'CASHIER', label: 'Cashier Mode', permissions: 'Payment Capture.', constraint: 'Has access to shopping cart info and customer details. Can accept payments or provide secure payment links.' },
+  { id: 'CUSTOMER_SUPPORT', label: 'Customer Support Mode', permissions: 'Account Access & Resolution.', constraint: 'Requires active Customer Verification (OTP/Magic Link).' },
+  { id: 'MANAGER', label: 'Manager Mode', permissions: 'Oversight & Approval.', constraint: 'Has access to customer data, chat logs, and guidelines. Can approve execute-with-approval decisions for other agents.' },
+  { id: 'RESEARCH', label: 'Research Mode', permissions: 'Read-Only Discovery.', constraint: 'Restricted to internet/internal KB research. Cannot edit or modify external systems. Operates strictly in an isolated sandbox/owner folder.' },
+  { id: 'CODING', label: 'Coding Mode', permissions: 'Write/Execute Access.', constraint: 'Can work on systems and coding in designated working folders. Can make changes and edits.' },
+  { id: 'REVIEW', label: 'Review Mode', permissions: 'Read/Annotate.', constraint: 'Can review code/work previously done. Can comment, but strictly cannot modify, delete, or commit code changes.' },
+];
+
+const VERIFICATION_LEVELS = [
+  { value: 'otp', label: 'OTP' },
+  { value: 'magic_link', label: 'Magic Link' },
+  { value: 'biometric', label: 'Biometric' },
+];
+
 type Sentiment = 'calm' | 'engaged' | 'alert';
 
 const SENTIMENT_COLORS: Record<Sentiment, { primary: string; glow: string; label: string }> = {
@@ -192,7 +212,7 @@ interface SystemPromptState {
   discReinforcement: string;
 }
 
-export default function AgentManager() {
+export default function AgentManager({ siteConfigId }: { siteConfigId?: string }) {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -215,6 +235,9 @@ export default function AgentManager() {
     context: 50,
     handoff: 30,
   });
+
+  const [operationalMode, setOperationalMode] = useState<string>('SAFE');
+  const [verificationLevel, setVerificationLevel] = useState<string>('');
   
   const [systemPrompt, setSystemPrompt] = useState<SystemPromptState>({
     ownerIdentity: '',
@@ -230,23 +253,25 @@ export default function AgentManager() {
     voiceId: 'kore',
     voiceName: 'Kore',
     status: 'active',
+    visibility: 'private',
     dominance: 50,
     influence: 50,
     steadiness: 50,
     conscientiousness: 50,
     avatarId: 'avatar1',
+    siteConfigId: siteConfigId, // Initialize with prop
   });
 
   const { data: agents = [], isLoading, refetch } = useQuery<Agent[]>({
-    queryKey: ['/api/agents'],
+    queryKey: [siteConfigId ? `/api/agents?siteConfigId=${siteConfigId}` : '/api/agents'],
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof newAgent) => apiRequest('POST', '/api/agents', data),
+    mutationFn: (data: typeof newAgent) => apiRequest('POST', '/api/agents', { ...data, siteConfigId }), // Ensure siteConfigId is sent
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
+      queryClient.invalidateQueries({ queryKey: [siteConfigId ? `/api/agents?siteConfigId=${siteConfigId}` : '/api/agents'] });
       setIsCreateOpen(false);
-      setNewAgent({ name: '', voiceId: 'kore', voiceName: 'Kore', status: 'active', dominance: 50, influence: 50, steadiness: 50, conscientiousness: 50, avatarId: 'avatar1' });
+      setNewAgent({ name: '', voiceId: 'kore', voiceName: 'Kore', status: 'active', visibility: 'private', dominance: 50, influence: 50, steadiness: 50, conscientiousness: 50, avatarId: 'avatar1', siteConfigId });
       toast({ title: 'Agent created successfully' });
     },
     onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
@@ -256,7 +281,7 @@ export default function AgentManager() {
     mutationFn: ({ id, data }: { id: string; data: Partial<Agent> }) => 
       apiRequest('PATCH', `/api/agents/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
+      queryClient.invalidateQueries({ queryKey: [siteConfigId ? `/api/agents?siteConfigId=${siteConfigId}` : '/api/agents'] });
       setEditingId(null);
       toast({ title: 'Agent updated successfully' });
     },
@@ -266,7 +291,7 @@ export default function AgentManager() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiRequest('DELETE', `/api/agents/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
+      queryClient.invalidateQueries({ queryKey: [siteConfigId ? `/api/agents?siteConfigId=${siteConfigId}` : '/api/agents'] });
       if (selectedAgent) setSelectedAgent(null);
       toast({ title: 'Agent deleted successfully' });
     },
@@ -281,6 +306,8 @@ export default function AgentManager() {
         steadiness: selectedAgent.steadiness || 50,
         conscientiousness: selectedAgent.conscientiousness || 50,
       });
+      setOperationalMode((selectedAgent as { operationalMode?: string }).operationalMode ?? 'SAFE');
+      setVerificationLevel((selectedAgent as { verificationLevel?: string }).verificationLevel ?? '');
     }
   }, [selectedAgent]);
 
@@ -324,6 +351,8 @@ export default function AgentManager() {
       steadiness: agent.steadiness || 50,
       conscientiousness: agent.conscientiousness || 50,
     });
+    setOperationalMode((agent as { operationalMode?: string }).operationalMode ?? 'SAFE');
+    setVerificationLevel((agent as { verificationLevel?: string }).verificationLevel ?? '');
   };
 
   const saveAgentConfig = () => {
@@ -336,10 +365,12 @@ export default function AgentManager() {
         influence: agentDisc.influence,
         steadiness: agentDisc.steadiness,
         conscientiousness: agentDisc.conscientiousness,
+        operationalMode,
+        verificationLevel: verificationLevel || undefined,
       }
     });
     
-    toast({ title: 'Agent personality saved!' });
+    toast({ title: 'Agent configuration saved!' });
   };
 
   const getStatusBadge = (status: string) => {
@@ -409,6 +440,63 @@ export default function AgentManager() {
               </Button>
             </div>
           </div>
+
+          {/* Operational Mode & Permissions — foundational template, top of config */}
+          <Card className="bg-slate-900 border-slate-700 mb-6">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-slate-400 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                Operational Mode & Permissions
+              </CardTitle>
+              <p className="text-xs text-slate-500 mt-1">Select primary mode. Defines system constraint and which tools the agent can use.</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[420px] overflow-y-auto pr-2">
+                {OPERATIONAL_MODES_UI.map((mode) => (
+                  <label
+                    key={mode.id}
+                    className={`flex gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      operationalMode === mode.id
+                        ? 'border-indigo-500/50 bg-indigo-500/10'
+                        : 'border-slate-600 bg-slate-800/50 hover:bg-slate-800'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="operationalMode"
+                      value={mode.id}
+                      checked={operationalMode === mode.id}
+                      onChange={() => setOperationalMode(mode.id)}
+                      className="mt-1 rounded-full border-slate-500 text-indigo-500"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-white">{mode.label}</span>
+                      <p className="text-[10px] text-slate-400 mt-0.5">Permissions: {mode.permissions}</p>
+                      <p className="text-xs text-slate-500 mt-1">System Constraint: {mode.constraint}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              {operationalMode === 'CUSTOMER_SUPPORT' && (
+                <div className="pt-2 border-t border-slate-700">
+                  <Label className="text-xs text-slate-400">Required Verification Level</Label>
+                  <Select value={verificationLevel || '_default'} onValueChange={(v) => setVerificationLevel(v === '_default' ? '' : v)}>
+                    <SelectTrigger className="bg-slate-800 border-slate-600 mt-1 w-48">
+                      <SelectValue placeholder="Select level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_default">Select level</SelectItem>
+                      {VERIFICATION_LEVELS.map((v) => (
+                        <SelectItem key={v.value} value={v.value}>
+                          {v.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Card className="bg-slate-900 border-slate-700">
@@ -799,6 +887,19 @@ export default function AgentManager() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <label className="text-sm text-slate-400 mb-1 block">Visibility</label>
+                  <Select value={newAgent.visibility} onValueChange={(value) => setNewAgent({ ...newAgent, visibility: value })}>
+                    <SelectTrigger className="bg-slate-800 border-slate-600" data-testid="select-agent-visibility">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="private">Private</SelectItem>
+                      <SelectItem value="internal">Internal</SelectItem>
+                      <SelectItem value="public">Public</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button 
                   onClick={() => createMutation.mutate(newAgent)} 
                   disabled={!newAgent.name || createMutation.isPending}
@@ -849,6 +950,7 @@ export default function AgentManager() {
                       <th className="text-left p-4 text-sm font-medium text-slate-400">Agent Name</th>
                       <th className="text-left p-4 text-sm font-medium text-slate-400">Voice</th>
                       <th className="text-left p-4 text-sm font-medium text-slate-400">Status</th>
+                      <th className="text-left p-4 text-sm font-medium text-slate-400">Visibility</th>
                       <th className="text-left p-4 text-sm font-medium text-slate-400">DISC Profile</th>
                       <th className="text-right p-4 text-sm font-medium text-slate-400">Actions</th>
                     </tr>
@@ -931,6 +1033,25 @@ export default function AgentManager() {
                             </Select>
                           ) : (
                             getStatusBadge(agent.status)
+                          )}
+                        </td>
+                        <td className="p-4">
+                          {editingId === agent.id ? (
+                            <Select 
+                              value={editData.visibility || (agent as any).visibility || 'private'} 
+                              onValueChange={(value) => setEditData({ ...editData, visibility: value })}
+                            >
+                              <SelectTrigger className="bg-slate-800 border-slate-600 h-8" onClick={(e) => e.stopPropagation()}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="private">Private</SelectItem>
+                                <SelectItem value="internal">Internal</SelectItem>
+                                <SelectItem value="public">Public</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Badge variant="outline" className="text-slate-400 border-slate-600 capitalize">{(agent as any).visibility || 'private'}</Badge>
                           )}
                         </td>
                         <td className="p-4">

@@ -87,7 +87,9 @@ function CallDetailDialog({
             Call Details
           </DialogTitle>
           <DialogDescription className="text-slate-400">
-            {call.timestamp && format(new Date(call.timestamp), "PPpp")}
+            {(call.timestamp || call.callStart || call.callEnd)
+              ? format(new Date(call.timestamp || call.callStart || call.callEnd), "PPpp")
+              : "No date recorded"}
           </DialogDescription>
         </DialogHeader>
 
@@ -111,6 +113,11 @@ function CallDetailDialog({
               <div className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-slate-400" />
                 <span className="text-white">{call.phoneNumber}</span>
+                {call.customerName ? (
+                  <Badge className="bg-emerald-600 border-emerald-500">Known Customer</Badge>
+                ) : (
+                  <Badge className="bg-amber-600 border-amber-500">Unknown Caller</Badge>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-slate-400" />
@@ -133,6 +140,9 @@ function CallDetailDialog({
                   </a>
                 </div>
               )}
+              {typeof call.notes === "string" && call.notes.startsWith("[Twilio Caller]") ? (
+                <div className="mt-2 text-xs text-slate-300">{call.notes}</div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -198,8 +208,7 @@ export default function CallTracking() {
   const { data: calls = [], isLoading, refetch } = useQuery<any[]>({
     queryKey: ["/api/call-tracking"],
     queryFn: async () => {
-      // Use the existing telephony/calls endpoint
-      const res = await apiRequest("GET", "/api/telephony/calls?limit=100");
+      const res = await apiRequest("GET", "/api/call-tracking?limit=100");
       return res.json();
     },
   });
@@ -335,9 +344,10 @@ export default function CallTracking() {
                             {call.customerEmail && (
                               <p className="text-xs text-slate-400">{call.customerEmail}</p>
                             )}
+                            <Badge className="mt-1 bg-emerald-600 border-emerald-500">Known Customer</Badge>
                           </div>
                         ) : (
-                          <p className="text-slate-500 text-sm">-</p>
+                          <Badge className="bg-amber-600 border-amber-500">Unknown Caller</Badge>
                         )}
                       </td>
                       <td className="p-4 text-slate-300">
@@ -347,9 +357,9 @@ export default function CallTracking() {
                         <CallStatusBadge status={call.status} />
                       </td>
                       <td className="p-4 text-slate-400 text-sm">
-                        {call.timestamp
-                          ? format(new Date(call.timestamp), "MMM d, yyyy h:mm a")
-                          : "Unknown"}
+                        {(call.timestamp || call.callStart || call.callEnd)
+                          ? format(new Date(call.timestamp || call.callStart || call.callEnd), "MMM d, yyyy h:mm a")
+                          : "—"}
                       </td>
                       <td className="p-4">
                         {call.notes ? (

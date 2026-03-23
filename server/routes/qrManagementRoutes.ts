@@ -7,6 +7,11 @@ import { Router, Request, Response } from "express";
 import path from "path";
 import fs from "fs";
 import { storage } from "../storage";
+import { requireAuth } from "../auth";
+import {
+  assertAdminSessionActor,
+  assertSiteScopedAccess,
+} from "../utils/siteScopedAccess";
 import {
   getQrBaseUrl,
   buildRouteUrl,
@@ -15,9 +20,19 @@ import {
   checkFirewall,
   logQrAccess,
 } from "../services/qrRoutingService";
+import { generateBusinessQR, getQRFilePath } from "../services/qrCodeService";
 
 const qrAdminRouter = Router();
 const qrRedirectRouter = Router();
+
+qrAdminRouter.use(requireAuth);
+
+function getBaseUrl(req: Request): string {
+  return (
+    process.env.APP_URL ||
+    (req.protocol && req.get("host") ? `${req.protocol}://${req.get("host")}` : "https://aibizbot-dev.gatewayglobal.ai")
+  );
+}
 
 // ─── Admin: list routes (paginated, optional search, with routeUrl) ───────
 qrAdminRouter.get("/", async (req: Request, res: Response) => {
@@ -25,7 +40,22 @@ qrAdminRouter.get("/", async (req: Request, res: Response) => {
     const page = Math.max(1, parseInt(String(req.query.page), 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit), 10) || 50));
     const search = typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined;
-    const { routes, total } = await storage.getQrRoutes(page, limit, search);
+    const siteConfigId = typeof req.query.siteConfigId === "string" ? req.query.siteConfigId.trim() || undefined : undefined;
+    if (siteConfigId) {
+      const access = await assertSiteScopedAccess({
+        req,
+        siteConfigId,
+        requiredPolicy: "qr.routes.read",
+      });
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
+    } else {
+      const actor = await assertAdminSessionActor(req);
+      if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+      if (!["global_admin", "support"].includes(actor.actor.accessClass)) {
+        return res.status(403).json({ error: "Global QR listing requires elevated role scope." });
+      }
+    }
+    const { routes, total } = await storage.getQrRoutes(page, limit, search, siteConfigId ?? null);
     const baseUrl = getQrBaseUrl();
     const items = routes.map((r) => ({
       ...r,
@@ -42,6 +72,20 @@ qrAdminRouter.get("/", async (req: Request, res: Response) => {
 qrAdminRouter.post("/", async (req: Request, res: Response) => {
   try {
     const body = req.body as { label?: string; destination?: string; siteConfigId?: string };
+    if (body.siteConfigId) {
+      const access = await assertSiteScopedAccess({
+        req,
+        siteConfigId: body.siteConfigId,
+        requiredPolicy: "qr.routes.write",
+      });
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
+    } else {
+      const actor = await assertAdminSessionActor(req);
+      if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+      if (!["global_admin", "support"].includes(actor.actor.accessClass)) {
+        return res.status(403).json({ error: "Creating unscoped QR routes requires elevated role scope." });
+      }
+    }
     const created = await storage.createQrRoute({
       label: body.label ?? null,
       destination: body.destination ?? null,
@@ -71,6 +115,31 @@ qrAdminRouter.get("/firewall/rules", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Invalid routeId" });
       return;
     }
+    if (routeId) {
+      const route = await storage.getQrRoute(routeId);
+      if (!route) return res.status(404).json({ error: "Route not found" });
+      if (route.siteConfigId) {
+        const access = await assertSiteScopedAccess({
+          req,
+          siteConfigId: route.siteConfigId,
+          requiredPolicy: "qr.routes.read",
+        });
+        if (!access.ok) return res.status(access.status).json({ error: access.error });
+      } else {
+        const actor = await assertAdminSessionActor(req);
+        if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+        if (!["global_admin", "support"].includes(actor.actor.accessClass)) {
+          return res.status(403).json({ error: "Unscoped firewall reads require elevated role scope." });
+        }
+      }
+    } else {
+      const actor = await assertAdminSessionActor(req);
+      if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+      if (!["global_admin", "support"].includes(actor.actor.accessClass)) {
+        return res.status(403).json({ error: "Global firewall listing requires elevated role scope." });
+      }
+    }
+
     const rules = await storage.getQrFirewallRules(routeId);
     res.json({ rules });
   } catch (e: unknown) {
@@ -86,6 +155,31 @@ qrAdminRouter.post("/firewall/rules", async (req: Request, res: Response) => {
       res.status(400).json({ error: "ruleType and value required" });
       return;
     }
+    if (body.qrRouteId) {
+      const existingRoute = await storage.getQrRoute(body.qrRouteId);
+      if (!existingRoute) return res.status(404).json({ error: "Route not found" });
+      if (existingRoute.siteConfigId) {
+        const access = await assertSiteScopedAccess({
+          req,
+          siteConfigId: existingRoute.siteConfigId,
+          requiredPolicy: "qr.firewall.write",
+        });
+        if (!access.ok) return res.status(access.status).json({ error: access.error });
+      } else {
+        const actor = await assertAdminSessionActor(req);
+        if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+        if (actor.actor.accessClass !== "global_admin") {
+          return res.status(403).json({ error: "Global firewall mutations require global admin access." });
+        }
+      }
+    } else {
+      const actor = await assertAdminSessionActor(req);
+      if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+      if (actor.actor.accessClass !== "global_admin") {
+        return res.status(403).json({ error: "Global firewall mutations require global admin access." });
+      }
+    }
+
     const rule = await storage.createQrFirewallRule({
       qrRouteId: body.qrRouteId ?? null,
       ruleType: body.ruleType,
@@ -104,6 +198,11 @@ qrAdminRouter.delete("/firewall/rules/:id", async (req: Request, res: Response) 
     if (Number.isNaN(id)) {
       res.status(400).json({ error: "Invalid rule id" });
       return;
+    }
+    const actor = await assertAdminSessionActor(req);
+    if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+    if (actor.actor.accessClass !== "global_admin") {
+      return res.status(403).json({ error: "Firewall rule deletion requires global admin access." });
     }
     await storage.deleteQrFirewallRule(id);
     res.status(204).send();
@@ -126,6 +225,21 @@ qrAdminRouter.get("/:id", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Route not found" });
       return;
     }
+    if (route.siteConfigId) {
+      const access = await assertSiteScopedAccess({
+        req,
+        siteConfigId: route.siteConfigId,
+        requiredPolicy: "qr.routes.read",
+      });
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
+    } else {
+      const actor = await assertAdminSessionActor(req);
+      if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+      if (!["global_admin", "support"].includes(actor.actor.accessClass)) {
+        return res.status(403).json({ error: "Unscoped route reads require elevated role scope." });
+      }
+    }
+
     const baseUrl = getQrBaseUrl();
     res.json({
       ...route,
@@ -151,6 +265,26 @@ qrAdminRouter.patch("/:id", async (req: Request, res: Response) => {
       isActive?: boolean;
       variable?: string;
     };
+    const existingRoute = await storage.getQrRoute(id);
+    if (!existingRoute) {
+      res.status(404).json({ error: "Route not found" });
+      return;
+    }
+    const targetSiteConfigId = body.siteConfigId ?? existingRoute.siteConfigId;
+    if (targetSiteConfigId) {
+      const access = await assertSiteScopedAccess({
+        req,
+        siteConfigId: targetSiteConfigId,
+        requiredPolicy: "qr.routes.write",
+      });
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
+    } else {
+      const actor = await assertAdminSessionActor(req);
+      if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+      if (actor.actor.accessClass !== "global_admin") {
+        return res.status(403).json({ error: "Unscoped route mutations require global admin access." });
+      }
+    }
     const updates: Record<string, unknown> = {};
     if (body.destination !== undefined) updates.destination = body.destination;
     if (body.siteConfigId !== undefined) updates.siteConfigId = body.siteConfigId;
@@ -181,6 +315,24 @@ qrAdminRouter.delete("/:id", async (req: Request, res: Response) => {
       return;
     }
     const route = await storage.getQrRoute(id);
+    if (!route) {
+      res.status(404).json({ error: "Route not found" });
+      return;
+    }
+    if (route.siteConfigId) {
+      const access = await assertSiteScopedAccess({
+        req,
+        siteConfigId: route.siteConfigId,
+        requiredPolicy: "qr.routes.write",
+      });
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
+    } else {
+      const actor = await assertAdminSessionActor(req);
+      if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+      if (actor.actor.accessClass !== "global_admin") {
+        return res.status(403).json({ error: "Unscoped route deletions require global admin access." });
+      }
+    }
     if (route?.qrCodePath && fs.existsSync(route.qrCodePath)) {
       try {
         fs.unlinkSync(route.qrCodePath);
@@ -209,6 +361,21 @@ qrAdminRouter.get("/:id/image", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Route not found" });
       return;
     }
+    if (route.siteConfigId) {
+      const access = await assertSiteScopedAccess({
+        req,
+        siteConfigId: route.siteConfigId,
+        requiredPolicy: "qr.routes.read",
+      });
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
+    } else {
+      const actor = await assertAdminSessionActor(req);
+      if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+      if (!["global_admin", "support"].includes(actor.actor.accessClass)) {
+        return res.status(403).json({ error: "Unscoped route image reads require elevated role scope." });
+      }
+    }
+
     const filePath = getRouteQrFilePath(id);
     if (!fs.existsSync(filePath)) {
       await generateQrForRoute(id);
@@ -241,6 +408,21 @@ qrAdminRouter.post("/:id/regenerate", async (req: Request, res: Response) => {
       res.status(404).json({ error: "Route not found" });
       return;
     }
+    if (route.siteConfigId) {
+      const access = await assertSiteScopedAccess({
+        req,
+        siteConfigId: route.siteConfigId,
+        requiredPolicy: "qr.routes.write",
+      });
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
+    } else {
+      const actor = await assertAdminSessionActor(req);
+      if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+      if (actor.actor.accessClass !== "global_admin") {
+        return res.status(403).json({ error: "Unscoped QR regeneration requires global admin access." });
+      }
+    }
+
     await generateQrForRoute(id);
     await storage.updateQrRoute(id, { qrCodePath: getRouteQrFilePath(id) });
     const updated = await storage.getQrRoute(id);
@@ -265,11 +447,66 @@ qrAdminRouter.get("/:id/access-log", async (req: Request, res: Response) => {
     }
     const page = Math.max(1, parseInt(String(req.query.page), 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit), 10) || 50));
+    const route = await storage.getQrRoute(id);
+    if (!route) {
+      res.status(404).json({ error: "Route not found" });
+      return;
+    }
+    if (route.siteConfigId) {
+      const access = await assertSiteScopedAccess({
+        req,
+        siteConfigId: route.siteConfigId,
+        requiredPolicy: "qr.routes.read",
+      });
+      if (!access.ok) return res.status(access.status).json({ error: access.error });
+    } else {
+      const actor = await assertAdminSessionActor(req);
+      if (!actor.ok) return res.status(actor.status).json({ error: actor.error });
+      if (!["global_admin", "support"].includes(actor.actor.accessClass)) {
+        return res.status(403).json({ error: "Unscoped access logs require elevated role scope." });
+      }
+    }
     const { logs, total } = await storage.getQrAccessLog(id, page, limit);
     res.json({ logs, total });
   } catch (e: unknown) {
     console.error("[QR Routes] access-log error:", e);
     res.status(500).json({ error: "Failed to get access log" });
+  }
+});
+
+// ─── Public: GET /qr/img/:slug — serve business QR PNG (no auth; for embedding and printing)
+qrRedirectRouter.get("/img/:slug", async (req: Request, res: Response) => {
+  try {
+    const { slug } = req.params;
+    if (!slug) {
+      res.status(400).send("Slug required");
+      return;
+    }
+    const config = await storage.getSiteConfigBySlug(slug);
+    if (!config) {
+      res.status(404).send("Not found");
+      return;
+    }
+    const baseUrl = getBaseUrl(req);
+    const publicUrl = `${baseUrl}/biz/${slug}`;
+    const filePath = getQRFilePath(slug);
+
+    if (!fs.existsSync(filePath)) {
+      await generateBusinessQR(publicUrl, slug);
+      await storage.updateSiteConfig(config.id, { qrCodeUrl: `/qr/img/${slug}` }); // public URL for future reference
+    }
+
+    if (!fs.existsSync(filePath)) {
+      res.status(500).send("QR generation failed");
+      return;
+    }
+
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(path.resolve(filePath));
+  } catch (e: unknown) {
+    console.error("[QR] public image serve error:", e);
+    res.status(500).send("Failed to serve QR image");
   }
 });
 
@@ -343,7 +580,25 @@ qrRedirectRouter.get("/:id", async (req: Request, res: Response) => {
     wasBlocked: false,
     responseMs,
   });
-  res.redirect(302, destination);
+
+  // If this QR links to a /biz/:slug page and the route has a siteConfigId,
+  // append ?from=qr&mode=<workspaceState> so the landing page can skip a DB call.
+  let finalDestination = destination;
+  if (route.siteConfigId && destination.includes('/biz/')) {
+    try {
+      const siteRow = await storage.getSiteConfigById(route.siteConfigId);
+      if (siteRow) {
+        const workspaceState = (siteRow as any).workspaceState ?? 'demo';
+        const sep = destination.includes('?') ? '&' : '?';
+        const alreadyHasFrom = destination.includes('from=qr');
+        finalDestination = `${destination}${alreadyHasFrom ? '' : `${sep}from=qr`}&mode=${workspaceState}`;
+      }
+    } catch {
+      // Non-blocking — fall through to plain destination
+    }
+  }
+
+  res.redirect(302, finalDestination);
 });
 
 export { qrAdminRouter, qrRedirectRouter };

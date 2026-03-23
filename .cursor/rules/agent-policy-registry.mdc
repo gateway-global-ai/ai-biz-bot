@@ -1,0 +1,11 @@
+---
+description: Governs agent jurisdiction, Safe Mode, escalation, and allowed action boundaries
+alwaysApply: true
+---
+
+# Agent Policy Registry
+
+- Read `docs-governance/AGENT_POLICY_REGISTRY.md` and `docs-governance/SAFE_MODE_CONTRACT.md` before changing agent behavior architecture.
+- Every agent change must declare jurisdiction, allowed entities, allowed actions, and escalation/refusal behavior.
+- Safe Mode is a runtime contract, not a soft prompt instruction.
+- No agent may be treated as universally capable by default.

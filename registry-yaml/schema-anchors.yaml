@@ -1,0 +1,18 @@
+version: v1
+anchors:
+  - id: customerAccounts
+    primaryKey: customerAccountId
+  - id: siteConfigs
+    primaryKey: siteConfigId
+  - id: agents
+    primaryKey: agentId
+  - id: customers
+    primaryKey: customerId
+  - id: novaIdvSessions
+    primaryKey: sessionId
+  - id: orders
+    primaryKey: orderId
+  - id: inquiries
+    primaryKey: inquiryId
+  - id: chatLogs
+    primaryKey: chatLogId

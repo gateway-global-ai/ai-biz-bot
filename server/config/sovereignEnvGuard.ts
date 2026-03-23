@@ -73,9 +73,9 @@ export function checkSovereignEnv(): {
 }
 
 /**
- * Verifies DOPPLER_TOKEN matches expected environment (dev/stg/prod).
- * Tokens typically contain the env name; this detects wrong-token copy (e.g. dev token on stg).
- * Does not log or expose the token. Optional: set DOPPLER_EXPECT_ENV=dev|stg|prod to enable.
+ * Verifies DOPPLER_TOKEN is present and optionally matches expected environment (dev/stg/prod).
+ * With only DOPPLER_TOKEN set: reports ok. With DOPPLER_EXPECT_ENV set: verifies token string
+ * contains the env name to detect wrong-token copy (e.g. dev token on stg). Does not log or expose the token.
  */
 export function checkDopplerTokenEnv(): {
   status: "ok" | "error" | "skip";
@@ -84,11 +84,12 @@ export function checkDopplerTokenEnv(): {
 } {
   const token = process.env.DOPPLER_TOKEN?.trim();
   const expectEnv = process.env.DOPPLER_EXPECT_ENV?.trim().toLowerCase();
-  if (!expectEnv) {
-    return { status: "skip", message: "DOPPLER_EXPECT_ENV not set; Doppler token env check skipped." };
-  }
+
   if (!token) {
     return { status: "skip", message: "DOPPLER_TOKEN not set; Doppler token env check skipped." };
+  }
+  if (!expectEnv) {
+    return { status: "ok", message: "Doppler token is set." };
   }
   const hint = expectEnv === "prod" ? "prod" : expectEnv === "stg" ? "stg" : "dev";
   const matches = token.toLowerCase().includes(hint);

@@ -1,0 +1,50 @@
+,method,path,operationId,summary,params,security,tags
+7,DELETE,/deleteGuestNote,,deleteGuestNote,"propertyID, guestID, noteID","[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+8,DELETE,/deleteReservationNote,,deleteReservationNote,"propertyID, reservationID, reservationNoteID","[{""api_key"": [""write:reservation""]}, {""OAuth2"": [""write:reservation""]}]",Reservation
+9,DELETE,/deleteRoomBlock,,deleteRoomBlock,"propertyID, roomBlockID","[{""api_key"": [""delete:roomblock""]}, {""OAuth2"": [""delete:roomblock""]}]",Room
+22,GET,/getGroupNotes,,getGroupNotes,"propertyID, groupCode, pageSize, pageNumber","[{""api_key"": [""read:group""]}, {""OAuth2"": [""read:group""]}]",Groups
+24,GET,/getGuest,,getGuest,"propertyID, reservationID, guestID, includeGuestRequirements","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+25,GET,/getGuestList,,getGuestList,"propertyIDs, resultsFrom, resultsTo, checkInFrom, checkInTo, checkOutFrom, checkOutTo, guestFirstName, guestLastName, guestEmail, guestPhone, guestCellPhone, status, sortBy, includeGuestInfo, excludeSecondaryGuests, includeGuestRequirements, pageNumber, pageSize","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+26,GET,/getGuestNotes,,getGuestNotes,"propertyID, guestID","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+27,GET,/getGuestsByFilter,,getGuestsByFilter,"propertyIDs, status, reservationID, roomID, guestName, checkInFrom, checkInTo, checkOutFrom, checkOutTo","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+28,GET,/getGuestsByStatus,,getGuestsByStatus,"status, propertyID, resultsFrom, resultsTo, pageNumber, pageSize","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+29,GET,/getGuestsModified,,getGuestsModified,"propertyIDs, inHouse, resultsFrom, resultsTo, checkInFrom, checkInTo, checkOutFrom, checkOutTo, includeGuestRequirements, pageNumber, pageSize","[{""api_key"": [""read:guest""]}, {""OAuth2"": [""read:guest""]}]",Guest
+33,GET,/getHousekeepers,,getHousekeepers,"propertyID, pageNumber, pageSize","[{""api_key"": [""read:housekeeping""]}, {""OAuth2"": [""read:housekeeping""]}]",Housekeeping
+34,GET,/getHousekeepingStatus,,getHousekeepingStatus,"propertyID, roomTypeIDs, housekeeperIDs, roomCondition, roomOccupied, pageNumber, pageSize","[{""api_key"": [""read:housekeeping""]}, {""OAuth2"": [""read:housekeeping""]}]",Housekeeping
+40,GET,/getPaymentMethods,,getPaymentMethods,"propertyID, lang","[{""api_key"": [""read:payment""]}, {""OAuth2"": [""read:payment""]}]",Payment
+41,GET,/getPaymentsCapabilities,,getPaymentsCapabilities,propertyID,"[{""api_key"": [""read:payment""]}, {""OAuth2"": [""read:payment""]}]",Payment
+45,GET,/getReservation,,getReservation,"propertyID, reservationID, includeGuestRequirements","[{""api_key"": [""read:reservation""]}, {""OAuth2"": [""read:reservation""]}]",Reservation
+46,GET,/getReservationAssignments,,getReservationAssignments,"propertyID, date","[{""api_key"": [""read:reservation""]}, {""OAuth2"": [""read:reservation""]}]",Reservation
+47,GET,/getReservationNotes,,getReservationNotes,"propertyID, reservationID","[{""api_key"": [""read:reservation""]}, {""OAuth2"": [""read:reservation""]}]",Reservation
+48,GET,/getReservationRoomDetails,,getReservationRoomDetails,"propertyID, subReservationID","[{""api_key"": [""read:room""]}, {""OAuth2"": [""read:room""]}]",Room
+49,GET,/getReservations,,getReservations,"propertyID, status, resultsFrom, resultsTo, modifiedFrom, modifiedTo, checkInFrom, checkInTo, checkOutFrom, checkOutTo, datesQueryMode, roomID, roomName, roomTypeID, includeGuestsDetails, includeGuestRequirements, includeCustomFields, includeAllRooms, sourceId, sourceReservationId, ratePlanId, firstName, lastName, guestID, allotmentBlockCode, groupCode, sortByRecent, pageNumber, pageSize","[{""api_key"": [""read:reservation""]}, {""OAuth2"": [""read:reservation""]}]",Reservation
+51,GET,/getRoomBlocks,,getRoomBlocks,"propertyID, roomBlockID, roomTypeID, roomID, startDate, endDate, pageNumber, pageSize","[{""api_key"": [""read:roomblock""]}, {""OAuth2"": [""read:roomblock""]}]",Room
+53,GET,/getRooms,,getRooms,"propertyIDs, roomTypeID, roomTypeNameShort, startDate, endDate, includeRoomRelations, pageNumber, pageSize, sort","[{""api_key"": [""read:room""]}, {""OAuth2"": [""read:room""]}]",Room
+54,GET,/getRoomsFeesAndTaxes,,getRoomsFeesAndTaxes,"propertyID, startDate, endDate, roomsTotal, roomsCount","[{""api_key"": [""read:room""]}, {""OAuth2"": [""read:room""]}]",Room
+55,GET,/getRoomsUnassigned,,getRoomsUnassigned,propertyIDs,"[{""api_key"": [""read:room""]}, {""OAuth2"": [""read:room""]}]",Room
+68,POST,/postCharge,,postCharge,,"[{""api_key"": [""write:payment""]}, {""OAuth2"": [""write:payment""]}]",Payment
+72,POST,/postCustomPaymentMethod,,postCustomPaymentMethod,,"[{""api_key"": [""write:payment""]}, {""OAuth2"": [""write:payment""]}]",Payment
+77,POST,/postGroupNote,,postGroupNote,,"[{""api_key"": [""write:group""]}, {""OAuth2"": [""write:group""]}]",Groups
+78,POST,/postGuest,,postGuest,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+79,POST,/postGuestDocument,,postGuestDocument,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+80,POST,/postGuestNote,,postGuestNote,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+81,POST,/postGuestPhoto,,postGuestPhoto,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+82,POST,/postGuestsToRoom,,postGuestsToRoom,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+83,POST,/postHousekeeper,,postHousekeeper,,"[{""api_key"": [""write:housekeeping""]}, {""OAuth2"": [""write:housekeeping""]}]",Housekeeping
+84,POST,/postHousekeepingAssignment,,postHousekeepingAssignment,,"[{""api_key"": [""write:housekeeping""]}, {""OAuth2"": [""write:housekeeping""]}]",Housekeeping
+85,POST,/postHousekeepingStatus,,postHousekeepingStatus,,"[{""api_key"": [""write:housekeeping""]}, {""OAuth2"": [""write:housekeeping""]}]",Housekeeping
+90,POST,/postPayment,,postPayment,,"[{""api_key"": [""write:payment""]}, {""OAuth2"": [""write:payment""]}]",Payment
+91,POST,/postReservation,,postReservation,,"[{""api_key"": [""write:reservation""]}, {""OAuth2"": [""write:reservation""]}]",Reservation
+92,POST,/postReservationDocument,,postReservationDocument,,"[{""api_key"": [""write:reservation""]}, {""OAuth2"": [""write:reservation""]}]",Reservation
+93,POST,/postReservationNote,,postReservationNote,,"[{""api_key"": [""write:reservation""]}, {""OAuth2"": [""write:reservation""]}]",Reservation
+94,POST,/postRoomAssign,,postRoomAssign,,"[{""api_key"": [""write:room""]}, {""OAuth2"": [""write:room""]}]",Room
+95,POST,/postRoomBlock,,postRoomBlock,,"[{""api_key"": [""write:roomblock""]}, {""OAuth2"": [""write:roomblock""]}]",Room
+96,POST,/postRoomCheckIn,,postRoomCheckIn,,"[{""api_key"": [""write:room""]}, {""OAuth2"": [""write:room""]}]",Room
+97,POST,/postRoomCheckOut,,postRoomCheckOut,,"[{""api_key"": [""write:room""]}, {""OAuth2"": [""write:room""]}]",Room
+99,POST,/postVoidPayment,,postVoidPayment,,"[{""api_key"": [""write:payment""]}, {""OAuth2"": [""write:payment""]}]",Payment
+103,PUT,/putGuest,,putGuest,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+104,PUT,/putGuestNote,,putGuestNote,,"[{""api_key"": [""write:guest""]}, {""OAuth2"": [""write:guest""]}]",Guest
+106,PUT,/putHousekeeper,,putHousekeeper,,"[{""api_key"": [""write:housekeeping""]}, {""OAuth2"": [""write:housekeeping""]}]",Housekeeping
+109,PUT,/putReservation,,putReservation,,"[{""api_key"": [""write:reservation""]}, {""OAuth2"": [""write:reservation""]}]",Reservation
+110,PUT,/putReservationNote,,putReservationNote,,"[{""api_key"": [""write:reservation""]}, {""OAuth2"": [""write:reservation""]}]",Reservation
+111,PUT,/putRoomBlock,,putRoomBlock,,"[{""api_key"": [""write:roomblock""]}, {""OAuth2"": [""write:roomblock""]}]",Room
