@@ -79,9 +79,26 @@ export interface BusinessContext {
    */
   entryPointAgentId?: string;
   entryPointMetaPrompt?: string;
+  /**
+   * Workspace lifecycle state from site_configs.workspace_state.
+   * Drives ConciergePanel shell mode:
+   *   'demo'        → customer mode + "Is this your business?" banner
+   *   'provisioned' → customer mode (agents ready, not yet claimed)
+   *   'claimed'     → customer mode + sign-in gate for owner controls
+   *   'active'      → claimed + telephony active
+   *   'archived'    → read-only / retired
+   */
+  workspaceState?: 'demo' | 'provisioned' | 'claimed' | 'active' | 'archived';
+  /** Ownership claim lifecycle from site_configs.claim_status. */
+  claimStatus?: 'unclaimed' | 'invite_sent' | 'payment_pending' | 'claimed' | null;
+  /** Owner's customer account ID — compared against auth user.id to gate owner controls. */
+  ownerId?: string | null;
+  /** Business plan tier from site_configs.plan. */
+  plan?: 'free' | 'pro' | 'voice' | 'enterprise' | null;
 }
 
 export interface AgentConfig {
+  name?: string;
   role: string;
   personality: string;
   objectives: string[];

@@ -29,6 +29,10 @@ export interface IVoiceClient {
   onMessage(callback: (message: VoiceMessage) => void): void;
   onVolumeChange(callback: (volume: number) => void): void;
   onConnectionChange(callback: (connected: boolean) => void): void;
+  onOutputVolumeChange?: (callback: (volume: number) => void) => void;
+  
+  // Mute control
+  setMuted?: (muted: boolean) => void;
   
   // State
   isConnected(): boolean;

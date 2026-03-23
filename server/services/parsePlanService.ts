@@ -43,9 +43,9 @@ export async function parseWebsitePlan(planText: string): Promise<ParsedPlan> {
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured");
 
   const modelId = process.env.GEMINI_MODEL_ID ?? "models/gemini-2.5-flash-native-audio-preview-12-2025";
-  // Use the text-only preview suffix if the live audio model is configured
-  const textModelId = modelId.includes("native-audio") || modelId.includes("live")
-    ? "gemini-2.5-flash-preview-05-20"
+  // For text-only tasks, use GEMINI_MODEL_FALLBACK; the voice/native-audio model cannot do generateContent
+  const textModelId = (modelId.includes("native-audio") || modelId.includes("live"))
+    ? (process.env.GEMINI_MODEL_FALLBACK || (console.error('[GOVERNANCE] GEMINI_MODEL_FALLBACK not set in Doppler'), "gemini-2.0-flash"))
     : modelId;
 
   const genAI = new GoogleGenerativeAI(apiKey);

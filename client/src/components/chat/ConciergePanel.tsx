@@ -27,7 +27,9 @@ import {
   Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield, MessageSquare, Menu,
   User, Activity, CreditCard, Building2, Users, ArrowLeft, Bot, ChevronRight, ChevronDown, Phone, Share2, QrCode, History,
   LayoutDashboard, Globe, Sliders, FileText, BookOpen, Search, Upload, Lock, X, Check,
-  Zap, Map, Link2, Cpu, Network, Radio, MessageCircle, ChevronUp, Copy, Download, ExternalLink, Sparkles
+  Zap, Map, Link2, Cpu, Network, Radio, MessageCircle, ChevronUp, Copy, Download, ExternalLink, Sparkles,
+  Volume2, VolumeX,
+  Loader2
 } from 'lucide-react';
 import { VoiceClientFactory } from '../../services/voice/VoiceClientFactory';
 import { IVoiceClient } from '../../services/voice/IVoiceClient';
@@ -44,17 +46,29 @@ import { BillingContentWithStripe } from '@/pages/account/BillingPage';
 import { MixingBoardContent } from '@/pages/reseller/MixingBoard';
 import ShareButton from '@/components/ShareButton';
 import AIOSMark from '@/components/public/AIOSMark';
+import { OSMenuList } from '@/components/os/OSMenuList';
+import type { OSMenuItem } from '@/hooks/useOSMenu';
+import { BRAND } from '@/config/brand';
+
+// Thin wrapper: renders OSMenuList inside the idle canvas without triggering hook violations
+function OSMenuListIdle({ role, isAuthenticated, capabilities, onSelect }: { role: any; isAuthenticated: boolean; capabilities?: import('@/hooks/useOSMenu').OSCapabilities; onSelect: (item: OSMenuItem) => void }) {
+  const items = useOSMenu(role, isAuthenticated, capabilities);
+  return <OSMenuList items={items} onSelect={onSelect} />;
+}
 import { KnowledgeManager } from '../voice/tools/KnowledgeManager';
 import { TaskOrderEditor } from '../voice/tools/TaskOrderEditor';
 import { QRRoutesManager } from '../account/QRRoutesManager';
 import TelephonyPanelFull from '../../pages/developer/TelephonyPanel';
-import { DiscRadar, ArchBreakdown } from '@/components/agent-charts/AgentProfileCharts';
+import { DiscRadar, ArchBreakdown } from '@/ui/charts';
 import VoiceSelector from '../voice/VoiceSelector';
+import { NovaGate } from '../nova/NovaGate';
 
 interface ConciergePanelProps {
   business: BusinessContext;
   agent: AgentConfig;
   voiceConfig: VoiceConfig;
+  /** Optional override for site config UUID (defaults to `business.id`). */
+  siteConfigId?: string | null;
   agentName?: string;
   initialView?: 'chat' | 'voice';
   isOpen: boolean;
@@ -93,6 +107,8 @@ interface ConciergePanelProps {
   transferTitle?: string;
   transferDescription?: string;
   autoStartPttOnOpen?: boolean;
+  /** When true, sends a hidden greeting trigger text to the AI once connected, causing it to introduce itself without opening the mic. Used on /biz/:slug pages when the user taps "Voice AI". */
+  autoGreetOnConnect?: boolean;
   /** When false, hide the Controls section (Identity, Voice, DISC, ARCH, Sys prompt). Use on public/customer pages so visitors are not sent to the owner app. */
   showOwnerControls?: boolean;
   /** Optional business website URL for the Links menu (Website, Online store). When set, menu shows quick links without leaving chat. */
@@ -100,6 +116,14 @@ interface ConciergePanelProps {
   className?: string;
   zIndex?: number;
   initialMessages?: ChatMessage[];
+  /** Optional: called when the voice connection status changes */
+  onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
+  /** Optional: custom content to render in the canvas when there are no messages yet. Replaces the default idle state. */
+  idleContent?: React.ReactNode;
+  /** Optional: called once after siteCapabilities are derived from the DB site config. Lets parent components mirror the capabilities without a second fetch. */
+  onCapabilitiesReady?: (caps: import('@/hooks/useOSMenu').OSCapabilities) => void;
+  /** Optional: external trigger to open a specific embedded view by viewId. Used by idleContent (e.g. BusinessHeroIdle menu drawer) to activate a view inside the panel. */
+  onMenuActionRef?: React.MutableRefObject<((viewId: string) => void) | null>;
 }
 
 interface ChatMessage {
@@ -264,7 +288,7 @@ const KnowledgeOverlay: React.FC<{
 };
 
 /** Collapsible owner menu sections — Identity, Behavior, Intelligence, etc. */
-type MenuSubViewOut = 'identity' | 'id_name_voice' | 'id_business' | 'id_role' | 'id_tasks' | 'id_skills' | 'disc' | 'system_prompt' | 'knowledge' | 'task_order' | 'voice' | 'integrations' | 'routing' | 'communication' | null;
+type MenuSubViewOut = 'identity' | 'id_name_voice' | 'id_business' | 'id_role' | 'id_tasks' | 'id_skills' | 'disc' | 'system_prompt' | 'knowledge' | 'documents' | 'task_order' | 'voice' | 'integrations' | 'routing' | 'communication' | null;
 
 function OwnerMenuSections({ expandedSection, toggleSection, setMenuSubView }: {
   expandedSection: string | null;
@@ -290,8 +314,12 @@ function OwnerMenuSections({ expandedSection, toggleSection, setMenuSubView }: {
       ],
     },
     {
-      id: 'intelligence', label: 'Intelligence', color: 'emerald', singleView: 'knowledge' as MenuSubViewOut,
-      items: [{ label: 'Knowledge Library', view: 'knowledge' as MenuSubViewOut }],
+      id: 'intelligence', label: 'Intelligence', color: 'emerald', singleView: null as MenuSubViewOut | null,
+      items: [
+        { label: 'Knowledge Library', view: 'knowledge'   as MenuSubViewOut },
+        { label: 'Documents',         view: 'documents'   as MenuSubViewOut },
+        { label: 'Task Order',        view: 'task_order'  as MenuSubViewOut },
+      ],
     },
     {
       id: 'integrations', label: 'Integrations', color: 'amber', singleView: 'integrations' as MenuSubViewOut,
@@ -348,9 +376,9 @@ function OwnerMenuSections({ expandedSection, toggleSection, setMenuSubView }: {
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${c.item}`}
                   >
                     <span className="text-slate-200 text-sm flex-1">{item.label}</span>
-                    {'badge' in item && item.badge && (
+                    {'badge' in item && item.badge != null && item.badge !== '' && (
                       <span className="px-1.5 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/30 text-rose-300 text-[9px] font-semibold uppercase tracking-wider mr-1">
-                        {item.badge}
+                        {String(item.badge)}
                       </span>
                     )}
                     <ChevronRight size={12} className="text-slate-600 shrink-0" />
@@ -435,6 +463,84 @@ function BusinessMapEmbed({ lat, lng, name, address }: { lat?: number; lng?: num
   );
 }
 
+/** Documents panel — fetches industry-specific document templates via Nova document service */
+function DocumentsPanel({ siteConfigId, onBack }: { siteConfigId?: string; onBack: () => void }) {
+  const [profile, setProfile] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!siteConfigId) { setLoading(false); return; }
+    fetch(`/api/nova/documents/${siteConfigId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { setProfile(data); setLoading(false); })
+      .catch(() => { setError('Failed to load document templates'); setLoading(false); });
+  }, [siteConfigId]);
+
+  if (loading) return (
+    <div className="flex-1 flex items-center justify-center">
+      <Loader2 size={20} className="animate-spin text-emerald-400" />
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col h-full overflow-y-auto">
+      <div className="px-4 pt-4 pb-3 border-b border-slate-700/50 flex items-center gap-3 shrink-0">
+        <button type="button" onClick={onBack} className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10">
+          <ArrowLeft size={15} />
+        </button>
+        <FileText size={16} className="text-emerald-400" />
+        <span className="text-white font-semibold text-sm">Industry Documents</span>
+        {profile && (
+          <span className="ml-auto text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-2 py-0.5">
+            Level {profile.protocolLevel}
+          </span>
+        )}
+      </div>
+      <div className="flex-1 p-4 flex flex-col gap-4">
+        {error && <p className="text-xs text-red-400">{error}</p>}
+        {profile && (
+          <>
+            <div className="rounded-sui bg-slate-800/60 border border-slate-700/60 p-3">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-1">{profile.protocolName} Protocol</p>
+              <p className="text-xs text-slate-400">{profile.protocolDescription}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-2">Required Documents</p>
+              <div className="flex flex-col gap-2">
+                {profile.documents?.map((doc: any) => (
+                  <div key={doc.id} className="flex items-center justify-between rounded-xl bg-slate-800/40 border border-slate-700/40 px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <FileText size={13} className="text-emerald-400 shrink-0" />
+                      <span className="text-sm text-white">{doc.label}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 bg-slate-700/50 rounded px-2 py-0.5">Available</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {profile.invoiceItems?.length > 0 && (
+              <div>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-2">Invoice Line Items</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {profile.invoiceItems.map((item: string) => (
+                    <span key={item} className="text-[11px] text-slate-400 bg-slate-800/60 border border-slate-700/40 rounded-full px-2 py-0.5">
+                      {item.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        {!profile && !error && (
+          <p className="text-sm text-slate-500 text-center mt-8">No document profile found.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TelephonyInlinePanel({ siteConfigId }: { siteConfigId?: string | null }) {
   const [config, setConfig] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
@@ -506,6 +612,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   business,
   agent,
   voiceConfig,
+  siteConfigId: siteConfigIdProp,
   agentName,
   isOpen,
   layoutMode = 'floating',
@@ -513,6 +620,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   onCycleLayout,
   onOpenAdmin,
   onOpenBizBotChat,
+  onOpenSettings,
   ownerMode = false,
   onExitOwnerMode,
   onNavigate,
@@ -528,13 +636,18 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   transferTitle = 'Demo Handoff',
   transferDescription = 'Scan to open this experience on your phone.',
   autoStartPttOnOpen = false,
-  showOwnerControls = true,
+  autoGreetOnConnect = false,
+  showOwnerControls = false,
   websiteUrl = null,
   className = '',
   zIndex = 50,
-  initialMessages = []
+  initialMessages = [],
+  idleContent,
+  onCapabilitiesReady,
+  onMenuActionRef,
+  onConnectionStatusChange
 }) => {
-  const siteConfigId = business.id;
+  const siteConfigId = siteConfigIdProp ?? business.id;
   const isSovereign = variant === 'sovereign';
   const shareUrl =
     publicSlug && typeof window !== 'undefined'
@@ -553,7 +666,12 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const clientRef = useRef<IVoiceClient | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  /** Feature capabilities derived from the site's active skill registry — controls which menu items appear. */
+  const [siteCapabilities, setSiteCapabilities] = useState<{ booking: boolean; account: boolean; sms: boolean; payments: boolean; reviews: boolean; loyalty: boolean }>({ booking: false, account: false, sms: false, payments: false, reviews: false, loyalty: false });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [aiOutputVolume, setAiOutputVolume] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
@@ -574,7 +692,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     // Behavior group
     'disc' | 'system_prompt' |
     // Intelligence group
-    'knowledge' | 'task_order' |
+    'knowledge' | 'documents' | 'task_order' |
     // Voice (legacy direct)
     'voice' |
     // Integrations
@@ -589,19 +707,22 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const toggleSection = (s: string) => setExpandedSection(prev => prev === s ? null : s);
   /** Agent data loaded for inline menu editing */
   const [menuAgent, setMenuAgent] = useState<any>(null);
-  const [menuAgentDisc, setMenuAgentDisc] = useState({ dominance: 50, influence: 50, steadiness: 50, conscientiousness: 50 });
-  const [menuAgentArch, setMenuAgentArch] = useState({ acknowledge: 75, reflect: 60, context: 50, handoff: 30, responseWindowSeconds: 20 });
+  const [menuAgentDisc, setMenuAgentDisc] = useState({ dominance: 20, influence: 45, steadiness: 80, conscientiousness: 75 });
+  const [menuAgentArch, setMenuAgentArch] = useState({ acknowledge: 30, reflect: 30, context: 60, handoff: 20, responseWindowSeconds: 10 });
   const [menuAgentVoiceName, setMenuAgentVoiceName] = useState<string>('Kore');
   const [menuSysPrompt, setMenuSysPrompt] = useState({ ownerIdentity: '', loyaltyStatement: '', ownerPriorities: '', operationalMode: 'SAFE' });
+  const [menuNoDriftMode, setMenuNoDriftMode] = useState(false);
   const [menuSaving, setMenuSaving] = useState(false);
   const [menuSaved, setMenuSaved] = useState(false);
+  /** Local admin mode — activated from the panel header admin toggle on public pages. */
+  const [localAdminMode, setLocalAdminMode] = useState(false);
   /** First-level drill: null = home (Admin | User | Public Agents); then 'admin' | 'user' | 'public'. */
   /** Flattened menu: no drill-down; single list with section headers. */
-  type EmbeddedViewId = 'profile' | 'billing' | 'my-businesses' | 'reseller' | 'operations' | 'agent-manager' | 'financials' | 'team' | 'front-desk' | 'internal-agents' | 'public-agents' | 'booking-view' | 'reschedule-view' | 'profile-view' | 'insurance-view' | 'concierge-view' | 'employee-dashboard-view' | 'live-queue-view' | 'session-monitor-view' | 'calendar-view' | 'customer-list-view' | 'verification-view' | 'intake-view' | 'communications-view' | 'manager-dashboard-view' | 'operations-view' | 'customer-db-view' | 'schedule-rules-view' | 'staff-view' | 'comms-config-view' | 'reports-view' | 'system-health-view' | 'locations-view' | 'billing-view' | 'identity-view' | 'behavior-view' | 'guardrails-view' | 'audit-view' | 'welcome-view' | 'login-view';
+  type EmbeddedViewId = 'profile' | 'billing' | 'my-businesses' | 'reseller' | 'operations' | 'agent-manager' | 'financials' | 'team' | 'front-desk' | 'internal-agents' | 'public-agents' | 'booking-view' | 'reschedule-view' | 'profile-view' | 'insurance-view' | 'concierge-view' | 'employee-dashboard-view' | 'live-queue-view' | 'session-monitor-view' | 'calendar-view' | 'customer-list-view' | 'verification-view' | 'intake-view' | 'communications-view' | 'manager-dashboard-view' | 'operations-view' | 'customer-db-view' | 'schedule-rules-view' | 'staff-view' | 'comms-config-view' | 'reports-view' | 'system-health-view' | 'locations-view' | 'billing-view' | 'identity-view' | 'behavior-view' | 'guardrails-view' | 'audit-view' | 'welcome-view' | 'login-view' | 'getting-started-view' | 'brand-profile-view' | 'offer-stack-view' | 'market-strategy-view' | 'sales-funnels-view' | 'preflight-view';
   const [embeddedView, setEmbeddedView] = useState<EmbeddedViewId | null>(null);
 
   const handleMenuAction = (viewId: string) => {
-     if (['profile', 'billing', 'my-businesses', 'reseller', 'operations', 'agent-manager', 'financials', 'team', 'front-desk', 'internal-agents', 'public-agents', 'booking-view', 'reschedule-view', 'profile-view', 'insurance-view', 'concierge-view', 'employee-dashboard-view', 'live-queue-view', 'session-monitor-view', 'calendar-view', 'customer-list-view', 'verification-view', 'intake-view', 'communications-view', 'manager-dashboard-view', 'operations-view', 'customer-db-view', 'schedule-rules-view', 'staff-view', 'comms-config-view', 'reports-view', 'system-health-view', 'locations-view', 'billing-view', 'identity-view', 'behavior-view', 'guardrails-view', 'audit-view', 'welcome-view', 'login-view'].includes(viewId)) {
+     if (['profile', 'billing', 'my-businesses', 'reseller', 'operations', 'agent-manager', 'financials', 'team', 'front-desk', 'internal-agents', 'public-agents', 'booking-view', 'reschedule-view', 'profile-view', 'insurance-view', 'concierge-view', 'employee-dashboard-view', 'live-queue-view', 'session-monitor-view', 'calendar-view', 'customer-list-view', 'verification-view', 'intake-view', 'communications-view', 'manager-dashboard-view', 'operations-view', 'customer-db-view', 'schedule-rules-view', 'staff-view', 'comms-config-view', 'reports-view', 'system-health-view', 'locations-view', 'billing-view', 'identity-view', 'behavior-view', 'guardrails-view', 'audit-view', 'welcome-view', 'login-view', 'getting-started-view', 'brand-profile-view', 'offer-stack-view', 'market-strategy-view', 'sales-funnels-view', 'preflight-view'].includes(viewId)) {
          setEmbeddedView(viewId as EmbeddedViewId);
      } else {
          onNavigate?.(viewId);
@@ -609,7 +730,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
      setShowMenuOverlay(false);
   };
 
-  const osMenuItems = useOSMenu(ownerMode ? 'manager' : isAuthenticated ? 'employee' : 'customer', isAuthenticated);
+  // Expose handleMenuAction externally via ref so idleContent (e.g. BusinessHeroIdle) can open views
+  if (onMenuActionRef) onMenuActionRef.current = handleMenuAction;
+
+  const osMenuItems = useOSMenu((showOwnerControls || localAdminMode || ownerMode) ? 'manager' : isAuthenticated ? 'employee' : 'customer', isAuthenticated, siteCapabilities);
 
   // Helper: build fetch headers with auth token from localStorage
   const authHeaders = (): HeadersInit => {
@@ -627,7 +751,58 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   type OwnerAgentRole = 'concierge' | 'biz-bot' | 'bot-builder';
   const [ownerAgentRole, setOwnerAgentRole] = useState<OwnerAgentRole>('concierge');
 
-  // ── Canvas context injection ──────────────────────────────────────────────
+  // ── Shell mode derivation ─────────────────────────────────────────────────
+  // Determines which experience to render based on auth state + workspace lifecycle.
+  // 'owner'          → full management controls (showOwnerControls=true from parent, or localAdminMode)
+  // 'customer'       → voice concierge only — the default public experience
+  // 'demo_claimable' → customer + slim "Is this your business?" claim banner
+  // 'locked'         → customer + Nova IDV gate triggers when owner menu is attempted
+  type ShellMode = 'owner' | 'customer' | 'demo_claimable' | 'locked';
+  const shellMode: ShellMode = (() => {
+    if (showOwnerControls || localAdminMode) return 'owner';
+    const ws = business.workspaceState;
+    if (ws === 'demo' || ws === 'provisioned') return 'demo_claimable';
+    if (ws === 'claimed' || ws === 'active') return 'locked';
+    return 'customer';
+  })();
+
+  // Effective owner controls flag — true when parent forces it OR local admin mode is active
+  const effectiveOwnerControls = showOwnerControls || localAdminMode;
+
+  // Nova Gate: shown inline when a non-owner taps to claim or sign in
+  const [showNovaGate, setShowNovaGate] = useState(false);
+  const [novaGateMode, setNovaGateMode] = useState<'claim' | 'signin' | 'guest_phone' | 'guest_checkin'>('claim');
+  const [claimBannerDismissed, setClaimBannerDismissed] = useState(false);
+  /** Track why NovaGate was opened: 'claim' | 'signin' | 'admin_toggle' */
+  const novaGateReasonRef = useRef<'claim' | 'signin' | 'admin_toggle'>('claim');
+
+  // On successful Nova verification — store token and signal parent to re-evaluate ownership
+  const handleNovaVerified = (token: string, userId: string) => {
+    if (userId === 'guest') {
+      setShowNovaGate(false);
+      return;
+    }
+    localStorage.setItem('gateway_auth_token', token);
+    setShowNovaGate(false);
+    if (novaGateReasonRef.current === 'admin_toggle') {
+      // Opened via the admin toggle — activate local admin mode, no full reload
+      setLocalAdminMode(true);
+    } else {
+      // Reload so AgentPage re-evaluates isOwner with the new token
+      window.location.reload();
+    }
+  };
+
+  useEffect(() => {
+    const onGuestVerify = (e: Event) => {
+      const ce = e as CustomEvent<{ mode?: 'guest_phone' | 'guest_checkin' }>;
+      const mode = ce.detail?.mode ?? 'guest_phone';
+      setNovaGateMode(mode);
+      setShowNovaGate(true);
+    };
+    window.addEventListener('nova-guest-verify', onGuestVerify as EventListener);
+    return () => window.removeEventListener('nova-guest-verify', onGuestVerify as EventListener);
+  }, []);
   // When the owner navigates to a panel, inject a silent realtime_input text
   // event so the connected Gemini agent knows what's on the screen.
   // This mirrors the Gemini Live API's RealtimeInput event pattern — discrete
@@ -685,11 +860,11 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   voiceId: 'Kore',
                   voiceName: 'Kore',
                   systemPrompt: `You are a helpful AI concierge for ${business?.name ?? 'this business'}. Be friendly, professional, and assist customers with their needs.`,
-                  dominance: 30,
-                  influence: 60,
-                  steadiness: 70,
-                  conscientiousness: 50,
-                  archProfile: { acknowledge: 75, reflect: 60, context: 50, handoff: 30 },
+                  dominance: 20,
+                  influence: 45,
+                  steadiness: 80,
+                  conscientiousness: 75,
+                  archProfile: { acknowledge: 30, reflect: 30, context: 60, handoff: 20, responseWindowSeconds: 10 },
                   visibility: 'private',
                   status: 'active',
                   operationalMode: 'CONCIERGE',
@@ -704,17 +879,17 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           setMenuAgent(agent);
           if (agent) {
             setMenuAgentDisc({
-              dominance: agent.dominance ?? 30,
-              influence: agent.influence ?? 60,
-              steadiness: agent.steadiness ?? 70,
-              conscientiousness: agent.conscientiousness ?? 50,
+              dominance: agent.dominance ?? 20,
+              influence: agent.influence ?? 45,
+              steadiness: agent.steadiness ?? 80,
+              conscientiousness: agent.conscientiousness ?? 75,
             });
             setMenuAgentArch({
-              acknowledge: agent.archProfile?.acknowledge ?? 75,
-              reflect: agent.archProfile?.reflect ?? 60,
-              context: agent.archProfile?.context ?? 50,
-              handoff: agent.archProfile?.handoff ?? 30,
-              responseWindowSeconds: agent.archProfile?.responseWindowSeconds ?? 20,
+              acknowledge: agent.archProfile?.acknowledge ?? 30,
+              reflect: agent.archProfile?.reflect ?? 30,
+              context: agent.archProfile?.context ?? 60,
+              handoff: agent.archProfile?.handoff ?? 20,
+              responseWindowSeconds: agent.archProfile?.responseWindowSeconds ?? 10,
             });
             setMenuAgentVoiceName(agent.voiceName ?? 'Kore');
             setMenuSysPrompt({
@@ -723,6 +898,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               ownerPriorities: agent.ownerPriorities ?? '',
               operationalMode: agent.operationalMode ?? 'CONCIERGE',
             });
+            setMenuNoDriftMode(agent.noDriftMode ?? false);
           }
         })
         .catch(() => {});
@@ -782,6 +958,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const processingStartedAtRef = useRef<number>(0);
   const processingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoStartedPttRef = useRef(false);
+  const autoGreetedRef = useRef(false);
   const initAttemptedForIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -849,10 +1026,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
   // Animation tick for visualizer — fixed interval so bar heights don't flicker on every re-render (e.g. volume)
   useEffect(() => {
-    if (!isRecording && !isProcessing) return;
+    if (!isRecording && !isProcessing && !isAISpeaking) return;
     const id = setInterval(() => setAnimationTick((t) => t + 1), 80);
     return () => clearInterval(id);
-  }, [isRecording, isProcessing]);
+  }, [isRecording, isProcessing, isAISpeaking]);
 
   // Clear embedded view when leaving Command Center (owner mode)
   useEffect(() => {
@@ -901,12 +1078,18 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
     const initEngine = async () => {
       setConnectionStatus('connecting');
+      onConnectionStatusChange?.('connecting');
       try {
         // --- HANDOVER SERVICE LOGIC ---
         // Guard: only call the Handover Service when we have a real DB UUID.
         // WebsitePreview (demo/preview mode) passes business.id = '' — in that
         // case we skip the fetch and initialise directly from the props config.
-        const hasValidId = Boolean(siteConfigId) && siteConfigId !== 'undefined' && siteConfigId !== '';
+        const hasValidId = Boolean(siteConfigId) && 
+          siteConfigId !== 'undefined' && 
+          siteConfigId !== '' &&
+          siteConfigId !== 'platform_landing' &&
+          siteConfigId !== 'platform-landing' &&
+          siteConfigId !== 'platform';
 
         // Resolved DB record (only populated when hasValidId === true)
         let dbSiteConfig: Record<string, any> | null = null;
@@ -925,6 +1108,21 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
           }
           dbSiteConfig = await response.json();
+
+          // Derive feature capabilities from the skill registry (config.skills)
+          // A skill's menu card only appears when its status is "active".
+          // Fallback: legacy bookingEngineUrl still activates booking for backward compat.
+          const skills = (dbSiteConfig!.config as any)?.skills ?? {};
+          const derivedCaps = {
+            booking:  skills.booking?.status  === 'active' || !!(dbSiteConfig!.bookingEngineUrl || (dbSiteConfig!.config as any)?.calendarConnected),
+            account:  true, // always available once the site is claimed
+            sms:      skills.sms?.status      === 'active',
+            payments: skills.payments?.status === 'active',
+            reviews:  skills.reviews?.status  === 'active',
+            loyalty:  skills.loyalty?.status  === 'active',
+          };
+          setSiteCapabilities(derivedCaps);
+          onCapabilitiesReady?.(derivedCaps);
 
           // 2. Merge validated model, voice name, and analysis — Backend Config > Prop > Fallback
           const dbVoiceConfig = dbSiteConfig!.voiceConfig as {
@@ -947,10 +1145,13 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           };
 
           // Check if we need to update state (to reflect DB values in UI)
-          // We only update if it's significantly different to avoid loops
+          // We only update if it's significantly different to avoid loops.
+          // Normalize model strings: strip leading "models/" for comparison so
+          // "models/gemini-x" and "gemini-x" don't cause an infinite re-init loop.
+          const normalizeModel = (m?: string) => (m || '').replace(/^models\//, '');
           const isDifferent = 
             mergedConfig.voiceName !== currentVoiceConfig.voiceName ||
-            mergedConfig.model !== currentVoiceConfig.model ||
+            normalizeModel(mergedConfig.model) !== normalizeModel(currentVoiceConfig.model) ||
             JSON.stringify(mergedConfig.enableAnalysis) !== JSON.stringify(currentVoiceConfig.enableAnalysis);
 
           if (isDifferent) {
@@ -1021,6 +1222,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             }
           } else if (msg.type === 'response') {
             setProcessingOff();
+            setIsAISpeaking(false);
             if (msg.text) {
               addMessage('assistant', msg.text, msg.metadata);
             } else if (msg.metadata?.tool_type) {
@@ -1029,6 +1231,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             }
           } else if (msg.type === 'error') {
             setProcessingOff();
+            setIsAISpeaking(false);
             addMessage('system', msg.text || 'An error occurred with the voice engine.');
           }
         });
@@ -1037,8 +1240,23 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           startTransition(() => setVolumeLevel(volume));
         });
 
+        // Track AI speaking state via output analyser volume
+        if (newClient.onOutputVolumeChange) {
+          newClient.onOutputVolumeChange((vol) => {
+            startTransition(() => {
+              setAiOutputVolume(vol);
+              setIsAISpeaking(vol > 0.01);
+            });
+          });
+        }
+
         newClient.onConnectionChange((connected) => {
-          setConnectionStatus(connected ? 'connected' : 'disconnected');
+          const status = connected ? 'connected' : 'disconnected';
+          setConnectionStatus(status);
+          onConnectionStatusChange?.(status);
+          if (!connected) {
+            setIsAISpeaking(false);
+          }
         });
 
         // 4. Connect — enrich context with DB-validated systemPromptOverride when
@@ -1046,8 +1264,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         //    CRITICAL: Always pass the resolved siteConfigId (UUID) into sessionContext so
         //    the voice proxy and MCP tools receive the Business UUID, not place_id or empty string.
         const handoverBusinessContext = dbSiteConfig
-          ? { ...business, id: siteConfigId, systemPromptOverride: dbSiteConfig.systemPromptOverride, ownerAgentRole: showOwnerControls ? ownerAgentRole : undefined }
-          : { ...business, ownerAgentRole: showOwnerControls ? ownerAgentRole : undefined };
+          ? { ...business, id: siteConfigId, systemPromptOverride: dbSiteConfig.systemPromptOverride, ownerAgentRole: effectiveOwnerControls ? ownerAgentRole : undefined }
+          : { ...business, ownerAgentRole: effectiveOwnerControls ? ownerAgentRole : undefined };
 
         await newClient.connect(handoverBusinessContext, activeAgent, validatedVoiceConfig);
         clientRef.current = newClient;
@@ -1142,6 +1360,11 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       console.warn('[ConciergePanel] Cannot start PTT: client not ready');
       return;
     }
+
+    // If AI is currently speaking, user is interrupting — clear that state immediately
+    if (isAISpeaking) {
+      setIsAISpeaking(false);
+    }
     
     console.log('[ConciergePanel] Starting PTT session');
     setIsRecording(true);
@@ -1186,6 +1409,21 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     startPTT();
   }, [autoStartPttOnOpen, connectionStatus, isOpen, isRecording]);
 
+  // Auto-greet: when autoGreetOnConnect is true and the connection becomes ready,
+  // send a hidden text prompt to trigger the AI's intro — no mic opened.
+  useEffect(() => {
+    if (!isOpen || !autoGreetOnConnect) {
+      autoGreetedRef.current = false;
+      return;
+    }
+    if (connectionStatus !== 'connected' || autoGreetedRef.current) return;
+    if (!clientRef.current) return;
+
+    autoGreetedRef.current = true;
+    const greeting = `[SYSTEM — silent, do not surface this text in the UI]: Please introduce yourself now. Greet the user warmly, state your name and that you represent ${business.name}. Briefly explain that you can answer questions about the ${business.name} and that they can hold the "Hold to speak" button at the bottom to ask questions. Keep the introduction friendly and under 10 seconds.`;
+    clientRef.current.sendText(greeting);
+  }, [autoGreetOnConnect, connectionStatus, isOpen, business.name]);
+
   // --- Layout Classes (Nova Verify style: white panel, dark header/footer, rounded-sui) ---
   const getContainerClasses = () => {
     const base = isSovereign
@@ -1220,9 +1458,9 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
   // In fullscreen, header/footer must never collapse — use flex basis
   const isFullscreen = layoutMode === 'fullscreen';
-  const headerStyle = isFullscreen ? { flex: '0 0 56px', minHeight: 56 } : undefined;
-  const visualizerStyle = isFullscreen ? { flex: '0 0 100px', minHeight: 100 } : undefined;
-  const footerStyle = isFullscreen ? { flex: '0 0 120px', minHeight: 120 } : undefined;
+  const headerStyle = isFullscreen ? { flex: '0 0 56px', minHeight: 56, maxHeight: 56 } : undefined;
+  const visualizerStyle = isFullscreen ? { flex: '0 0 64px', minHeight: 64, maxHeight: 64 } : undefined;
+  const footerStyle = isFullscreen ? { flex: '0 0 110px', minHeight: 110, maxHeight: 110 } : undefined;
 
   return (
     <PanelWrapper
@@ -1253,40 +1491,76 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           ) : (
             <button
               type="button"
-              onClick={() => setShowMenuOverlay((v) => !v)}
+              onClick={() => {
+                if (shellMode === 'locked') {
+                  // Not authenticated on a claimed site — show Nova sign-in gate
+                  setNovaGateMode('signin');
+                  setShowNovaGate(true);
+                } else {
+                  setShowMenuOverlay((v) => !v);
+                }
+              }}
               className={isSovereign ? "p-2 hover:bg-white/10 rounded-xl text-white transition-colors" : "p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors"}
-              title="Menu"
+              title={shellMode === 'locked' ? 'Sign In' : 'Menu'}
               data-concierge-menu="overlay"
               aria-expanded={showMenuOverlay}
               aria-haspopup="dialog"
               aria-controls="concierge-menu-overlay"
             >
-              <Menu size={20} aria-hidden="true" />
+              {shellMode === 'locked' ? <Lock size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
             </button>
           )}
         </div>
-        {/* Center: Command Center title when owner mode, else Clear Voice logo + status */}
+        {/* Center: ClearVoice AI logo + connection dot — always, unconditionally */}
         <div className="flex items-center justify-center gap-2 flex-1 min-w-0">
-          {ownerMode ? (
-            <span className="text-white font-semibold flex items-center gap-2">
-              <Bot size={20} className="text-indigo-400" />
-              Command Center
-            </span>
-          ) : (
-            <>
-              <img src={headerLogo} alt="Clear Voice AI" className={isSovereign ? 'h-10 w-auto object-contain' : 'h-11 w-auto object-contain'} />
-              <div className={`w-2 h-2 rounded-full shrink-0 ${
-                connectionStatus === 'connected'
-                  ? (isSovereign ? 'bg-emerald-400 animate-pulse shadow-lg shadow-emerald-400/50' : 'bg-green-400 animate-pulse shadow-lg shadow-green-400/50')
-                  : connectionStatus === 'connecting'
-                  ? 'bg-yellow-400 animate-pulse'
-                  : 'bg-red-400'
-              }`} />
-            </>
-          )}
+          <img src={headerLogo} alt="Clear Voice AI" className="h-10 w-auto object-contain" />
+          <div className={`w-2 h-2 rounded-full shrink-0 ${
+            connectionStatus === 'connected'
+              ? 'bg-emerald-400 animate-pulse shadow-lg shadow-emerald-400/50'
+              : connectionStatus === 'connecting'
+              ? 'bg-yellow-400 animate-pulse'
+              : 'bg-red-400'
+          }`} />
         </div>
-        {/* Right: layout cycle + explicit close */}
+        {/* Right: admin toggle (public pages) + layout cycle + explicit close */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* Admin mode toggle — only shown when parent hasn't forced showOwnerControls; allows owner to switch mode in-panel */}
+          {!showOwnerControls && (
+            <button
+              type="button"
+              onClick={() => {
+                // If parent wires onOpenSettings, use it for navigation (e.g. → /platform or /login)
+                if (onOpenSettings) {
+                  onOpenSettings();
+                  return;
+                }
+                if (localAdminMode) {
+                  // Exit admin mode
+                  setLocalAdminMode(false);
+                  setShowMenuOverlay(false);
+                } else if (shellMode === 'locked' || isSovereign) {
+                  // Claimed/active site OR sovereign panel — must authenticate first
+                  novaGateReasonRef.current = 'admin_toggle';
+                  setNovaGateMode('signin');
+                  setShowNovaGate(true);
+                } else {
+                  // Demo/unclaimed customer site — enter admin preview directly
+                  setLocalAdminMode(true);
+                }
+              }}
+              className={`p-2 rounded-xl transition-colors ${
+                localAdminMode
+                  ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+                  : isSovereign
+                  ? 'hover:bg-white/10 text-slate-400 hover:text-white'
+                  : 'hover:bg-slate-50/20 text-white/60 hover:text-white'
+              }`}
+              title={localAdminMode ? 'Exit Admin Mode' : 'Admin'}
+              aria-label={localAdminMode ? 'Exit admin mode' : 'Admin mode'}
+            >
+              <Settings size={16} />
+            </button>
+          )}
           {onCycleLayout && (
             <button
               onClick={onCycleLayout}
@@ -1308,71 +1582,131 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         </div>
       </div>
 
-      {/* 2. VISUALIZER (Nova Verify: solid dark band) */}
+      {/* 2. VISUALIZER (always dark shell zone) */}
       <div
         style={visualizerStyle}
-        className={`flex flex-col items-center justify-center flex-shrink-0 min-h-[100px] relative overflow-hidden ${
-          isSovereign ? 'bg-slate-900 border-b border-slate-700/80' : 'bg-gradient-to-b from-gray-900 to-gray-800'
-        }`}
+        className="flex flex-col items-center justify-center flex-shrink-0 relative overflow-hidden isolate bg-[#0f172a] border-b border-slate-700/60"
       >
-        {/* Voice Wave Visualization with Tier-Based Colors */}
-        <div className="flex items-center gap-1 h-16 mb-2">
+        {/* Voice Wave Visualization — brand green always, per brand-tokens.mdc */}
+        <div className="flex items-center gap-0.5 h-8">
           {[...Array(32)].map((_, i) => {
-            const clearVoice = currentVoiceConfig.mode === 'clear_voice';
-            const baseColor = isSovereign
-              ? (clearVoice ? (isRecording ? 'bg-emerald-400' : isProcessing ? 'bg-emerald-400' : 'bg-slate-600') : (isRecording ? 'bg-indigo-400' : isProcessing ? 'bg-indigo-400' : 'bg-slate-600'))
-              : (clearVoice ? (isRecording ? 'bg-green-400' : isProcessing ? 'bg-emerald-400' : 'bg-gray-600') : (isRecording ? 'bg-blue-400' : isProcessing ? 'bg-purple-400' : 'bg-gray-600'));
+            // Bar color: brand green when active, muted when idle
+            // AI speaking uses greenLight, recording uses green, processing pulses green, idle is slate
+            const barColor = isAISpeaking
+              ? BRAND.greenLight   // #10b981 — emerald for AI output
+              : isRecording
+              ? BRAND.green        // #008a3e — brand green for mic input
+              : isProcessing
+              ? BRAND.greenLight   // #10b981 — emerald pulse while thinking
+              : '#475569';         // slate-600 — idle/rest state
             return (
               <div
                 key={i}
-                className={`w-1 rounded-full transition-all duration-100 ${baseColor}`}
+                className="w-0.5 rounded-full transition-all duration-100"
                 style={{
-                  height: isRecording
-                    ? `${Math.max(4, volumeLevel * 200 * (1 + Math.sin((i + animationTick) / 2)))}px`
+                  backgroundColor: barColor,
+                  height: isAISpeaking
+                    ? `${Math.min(28, Math.max(2, aiOutputVolume * 60 * (1 + Math.sin((i + animationTick * 1.2) / 1.8))))}px`
+                    : isRecording
+                    ? `${Math.min(28, Math.max(2, volumeLevel * 150 * (1 + Math.sin((i + animationTick) / 2))))}px`
                     : isProcessing
-                    ? `${20 + Math.sin((i + animationTick * 0.5) * 0.5) * 16}px`
-                    : '8px',
-                  opacity: isRecording || isProcessing ? 0.8 : 0.3
+                    ? `${10 + Math.sin((i + animationTick * 0.5) * 0.5) * 8}px`
+                    : '3px',
+                  opacity: isAISpeaking || isRecording || isProcessing ? 0.9 : 0.35
                 }}
               />
             );
           })}
         </div>
-        <div className="relative">
-          {(isRecording || isProcessing) && (
-            <div className={`absolute inset-0 blur-xl opacity-60 ${
-              isSovereign
-                ? (currentVoiceConfig.mode === 'clear_voice' ? 'bg-emerald-500' : 'bg-indigo-500')
-                : currentVoiceConfig.mode === 'clear_voice'
-                ? (isRecording ? 'bg-green-500' : 'bg-emerald-500')
-                : (isRecording ? 'bg-blue-500' : 'bg-purple-500')
-            }`} />
-          )}
-          <p className={`text-[10px] font-semibold tracking-widest uppercase relative z-10 ${
-            isSovereign
-              ? (isRecording || isProcessing ? 'text-indigo-300' : 'text-slate-400')
-              : isRecording
-              ? (currentVoiceConfig.mode === 'clear_voice' ? 'text-green-300' : 'text-blue-300')
-              : isProcessing
-              ? (currentVoiceConfig.mode === 'clear_voice' ? 'text-emerald-300' : 'text-purple-300')
-              : 'text-slate-500'
-          }`}>
-            {isRecording ? '● LISTENING' : isProcessing ? '◐ THINKING' : 'READY'}
-          </p>
-        </div>
+        <p className="text-[9px] font-semibold tracking-widest uppercase mt-1" style={{ color: isAISpeaking || isRecording || isProcessing ? BRAND.greenLight : '#475569' }}>
+          {isAISpeaking ? 'AI Speaking' : isRecording ? 'Listening…' : isProcessing ? 'Processing…' : connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'connected' ? 'Ready' : 'Initializing'}
+        </p>
       </div>
 
-      {/* 3. CONTENT WINDOW: outer constrains height so overlay never covers header/footer. Inner is the only scroll container. */}
+      {/* Demo "Is this your business?" claim banner — only for demo/provisioned sites when not dismissed */}
+      {(shellMode === 'demo_claimable') && !claimBannerDismissed && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 1.5 }}
+          className="shrink-0 flex items-center justify-between gap-2 px-4 py-2 bg-indigo-600/10 border-b border-indigo-500/20"
+        >
+          <span className="text-xs text-indigo-300">
+            Is this your business? <span className="text-indigo-200 font-medium">Claim it and activate your AI agent.</span>
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => { setNovaGateMode('claim'); setShowNovaGate(true); setShowMenuOverlay(false); }}
+              className="px-3 py-1 text-xs font-medium bg-indigo-500 hover:bg-indigo-400 text-white rounded-full transition-colors"
+            >
+              Claim →
+            </button>
+            <button
+              onClick={() => setClaimBannerDismissed(true)}
+              className="text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* 3. CONTENT WINDOW: transparent when idleContent owns bg (hero image), white for message canvas */}
       <div
-        className={`flex-1 min-h-0 flex flex-col border-t overflow-hidden relative ${
-          isSovereign ? 'bg-white border-slate-200' : 'bg-slate-50 border-gray-200'
-        }`}
+        className={`flex-1 min-h-0 flex flex-col border-t overflow-hidden relative border-slate-200 ${idleContent ? 'bg-transparent' : 'bg-white'}`}
         style={{ minHeight: 0 }}
       >
+        {/* ── Persistent OS Index Bar — always visible, never scrolls away ── */}
+        {effectiveOwnerControls && (
+          <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b overflow-x-auto scrollbar-hide bg-slate-50 border-slate-200">
+            {[
+              { key: 'id_name_voice', label: 'Identity', icon: '◈' },
+              { key: 'disc',          label: 'Behavior', icon: '◉' },
+              { key: 'knowledge',     label: 'Intel',    icon: '◎' },
+              { key: 'routing',       label: 'Routing',  icon: '⌘' },
+              { key: 'communication', label: 'Comms',    icon: '◷' },
+              { key: 'integrations',  label: 'Integrations', icon: '⊕' },
+            ].map(item => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => {
+                  setMenuSubView(item.key as any);
+                  setShowMenuOverlay(true);
+                }}
+                className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors text-slate-500 hover:text-slate-900 hover:bg-white"
+              >
+                <span className="text-indigo-400">{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden concierge-content-scroll relative"
+          className={`flex-1 min-h-0 overflow-x-hidden concierge-content-scroll relative${idleContent && messages.length === 0 ? ' overflow-hidden' : ' overflow-y-auto'}`}
           style={{ WebkitOverflowScrolling: 'touch', minHeight: 0 }}
         >
+        {/* Nova Gate overlay: claim or sign-in IDV flow */}
+        {showNovaGate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 z-50 flex flex-col overflow-hidden bg-white"
+          >
+            <NovaGate
+              siteConfigId={business.id}
+              businessName={business.name}
+              placeTypes={business.types ?? []}
+              mode={novaGateMode}
+              surface="embedded"
+              onVerified={handleNovaVerified}
+              onCancel={() => setShowNovaGate(false)}
+            />
+          </motion.div>
+        )}
+
         {/* Menu overlay: strictly inside this content box so panel header and footer stay visible. */}
         {showMenuOverlay && (
           <motion.div
@@ -1533,7 +1867,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                         if (!menuAgent) return;
                         setMenuSaving(true);
                         try {
-                          await fetch(`/api/agents/${menuAgent.id}`, { method: 'PATCH', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ systemPrompt: menuSysPrompt.ownerIdentity, operationalMode: menuSysPrompt.operationalMode }) });
+                          await fetch(`/api/agents/${menuAgent.id}`, { method: 'PATCH', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ systemPrompt: menuSysPrompt.ownerIdentity, operationalMode: menuSysPrompt.operationalMode, noDriftMode: menuNoDriftMode }) });
                           setMenuSaved(true); setTimeout(() => setMenuSaved(false), 2000);
                         } finally { setMenuSaving(false); }
                       }} className={`px-3 py-1.5 rounded-sui text-xs font-medium transition-colors ${menuSaved ? 'bg-emerald-500/20 border border-emerald-500/30 text-emerald-300' : 'bg-indigo-500 text-white hover:bg-indigo-400 disabled:opacity-40'}`}>
@@ -1542,36 +1876,137 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                       {!menuAgent && <div className="flex items-center justify-center py-10"><div className="w-8 h-8 rounded-full border-2 border-indigo-500/40 border-t-indigo-500 animate-spin" /></div>}
-                      {menuAgent && (
-                        <>
-                          <div>
-                            <label className="text-xs text-slate-400 mb-1.5 block font-medium">Role Type</label>
-                            <select value={menuSysPrompt.operationalMode} onChange={e => setMenuSysPrompt(p => ({ ...p, operationalMode: e.target.value }))}
-                              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50">
-                              {['CONCIERGE','SALES','SUPPORT','INTAKE','RECEPTION','CUSTOM'].map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-xs text-slate-400 mb-1.5 block font-medium">Agent Identity &amp; Purpose</label>
-                            <p className="text-[11px] text-slate-500 mb-2">Describe who this agent is, who they represent, and their primary job.</p>
-                            <textarea value={menuSysPrompt.ownerIdentity} onChange={e => setMenuSysPrompt(p => ({ ...p, ownerIdentity: e.target.value }))} rows={5}
-                              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
-                              placeholder={`e.g. You are Aria, the AI Concierge for ${business.name}. You represent the airport and assist travelers with gates, delays, lounges, and amenities.`} />
-                          </div>
-                          <div>
-                            <label className="text-xs text-slate-400 mb-1.5 block font-medium">Loyalty Statement</label>
-                            <textarea value={menuSysPrompt.loyaltyStatement} onChange={e => setMenuSysPrompt(p => ({ ...p, loyaltyStatement: e.target.value }))} rows={3}
-                              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
-                              placeholder="What makes this business special and worth recommending?" />
-                          </div>
-                          <div>
-                            <label className="text-xs text-slate-400 mb-1.5 block font-medium">Owner Priorities</label>
-                            <textarea value={menuSysPrompt.ownerPriorities} onChange={e => setMenuSysPrompt(p => ({ ...p, ownerPriorities: e.target.value }))} rows={3}
-                              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
-                              placeholder="Top 3 things this agent must always accomplish in every conversation." />
-                          </div>
-                        </>
-                      )}
+                      {menuAgent && (() => {
+                        // No-Drift locked modes have hardcoded ARCH profiles
+                        const NO_DRIFT_MODES = new Set(['EMERGENCY', 'CUSTOMER_SERVICE']);
+                        const ARCH_OVERRIDES: Record<string, { acknowledge: number; reflect: number; context: number; handoff: number; responseWindowSeconds: number }> = {
+                          EMERGENCY:        { acknowledge: 2,  reflect: 0, context: 0, handoff: 3, responseWindowSeconds: 7  },
+                          CUSTOMER_SERVICE: { acknowledge: 3,  reflect: 1, context: 2, handoff: 2, responseWindowSeconds: 15 },
+                        };
+                        const selectedMode = menuSysPrompt.operationalMode;
+                        const isNoDriftMode = NO_DRIFT_MODES.has(selectedMode);
+                        const lockedArch = ARCH_OVERRIDES[selectedMode];
+                        const MODE_OPTIONS = [
+                          { value: 'SAFE',             label: 'Safe Mode',           desc: 'Discussion only. No tasks, no PII.' },
+                          { value: 'CONCIERGE',        label: 'Concierge',           desc: 'Assess intent and route customers.' },
+                          { value: 'RECEPTIONIST',     label: 'Receptionist',        desc: 'Intake & data collection.' },
+                          { value: 'SALES',            label: 'Sales',               desc: 'Catalog, quotes, shopping cart.' },
+                          { value: 'CASHIER',          label: 'Cashier',             desc: 'Payment capture & secure links.' },
+                          { value: 'CUSTOMER_SUPPORT', label: 'Customer Support',    desc: 'Account access — requires OTP.' },
+                          { value: 'MANAGER',          label: 'Manager',             desc: 'Oversight & cross-agent approval.' },
+                          { value: 'RESEARCH',         label: 'Research',            desc: 'Read-only discovery.' },
+                          { value: 'CODING',           label: 'Coding',              desc: 'Write/execute in designated folders.' },
+                          { value: 'REVIEW',           label: 'Review',              desc: 'Read/annotate — no commits.' },
+                          { value: 'EMERGENCY',        label: '🚨 Emergency Response', desc: 'No-Drift locked. A:2 R:0 C:0 H:3 · 7s window.' },
+                          { value: 'CUSTOMER_SERVICE', label: '🎯 Customer Service', desc: 'No-Drift locked. A:3 R:1 C:2 H:2 · 15s window.' },
+                        ];
+                        return (
+                          <>
+                            {/* Mode selector */}
+                            <div>
+                              <label className="text-xs text-slate-400 mb-1.5 block font-medium">Operational Mode</label>
+                              <select
+                                value={selectedMode}
+                                onChange={e => {
+                                  const v = e.target.value;
+                                  setMenuSysPrompt(p => ({ ...p, operationalMode: v }));
+                                  // Auto-enable No-Drift when a locked mode is selected
+                                  if (NO_DRIFT_MODES.has(v)) setMenuNoDriftMode(true);
+                                }}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                              >
+                                {MODE_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                              </select>
+                              {/* Mode description */}
+                              {(() => {
+                                const m = MODE_OPTIONS.find(x => x.value === selectedMode);
+                                return m ? <p className="text-[11px] text-slate-500 mt-1">{m.desc}</p> : null;
+                              })()}
+                            </div>
+
+                            {/* No-Drift Lock section */}
+                            <div className={`rounded-sui border p-3 transition-colors ${isNoDriftMode ? 'bg-red-500/10 border-red-500/30' : 'bg-slate-800/40 border-slate-700/60'}`}>
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                  <Lock size={13} className={isNoDriftMode ? 'text-red-400' : 'text-slate-500'} />
+                                  <span className={`text-xs font-semibold ${isNoDriftMode ? 'text-red-300' : 'text-slate-300'}`}>
+                                    No-Drift Mode
+                                  </span>
+                                  {isNoDriftMode && (
+                                    <span className="text-[10px] font-mono bg-red-500/20 text-red-300 border border-red-500/30 rounded px-1.5 py-0.5">LOCKED BY MODE</span>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={isNoDriftMode}
+                                  onClick={() => setMenuNoDriftMode(v => !v)}
+                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${menuNoDriftMode ? 'bg-red-500' : 'bg-slate-600'} ${isNoDriftMode ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+                                >
+                                  <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${menuNoDriftMode ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                                </button>
+                              </div>
+                              <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                                {isNoDriftMode
+                                  ? 'This mode always locks the ARCH profile. The agent cannot drift from the settings below.'
+                                  : 'When enabled, locks this agent to its current ARCH profile. Prevents behavioral drift from contextual or conversational pressure.'}
+                              </p>
+
+                              {/* Locked ARCH preview — shown for No-Drift locked modes */}
+                              {isNoDriftMode && lockedArch && (
+                                <div className="mt-3 pt-3 border-t border-red-500/20">
+                                  <p className="text-[10px] font-black text-red-400/70 uppercase tracking-[0.3em] mb-2">Locked ARCH Profile</p>
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    {([
+                                      { key: 'acknowledge', label: 'A — Acknowledge', val: lockedArch.acknowledge, color: 'bg-indigo-500' },
+                                      { key: 'reflect',     label: 'R — Reflect',     val: lockedArch.reflect,     color: 'bg-violet-500' },
+                                      { key: 'context',     label: 'C — Context',     val: lockedArch.context,     color: 'bg-emerald-500' },
+                                      { key: 'handoff',     label: 'H — Handoff',     val: lockedArch.handoff,     color: 'bg-amber-500' },
+                                    ] as const).map(({ key, label, val, color }) => (
+                                      <div key={key} className="flex flex-col gap-1">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[10px] text-slate-500">{label}</span>
+                                          <span className="font-mono text-[10px] text-slate-400">{val}</span>
+                                        </div>
+                                        <div className="h-1 rounded-full bg-slate-700 overflow-hidden">
+                                          <div className={`h-full ${color} rounded-full opacity-70`} style={{ width: `${val}%` }} />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <div className="mt-2 flex items-center gap-2">
+                                    <span className="text-[10px] text-slate-500">Response Window</span>
+                                    <span className="font-mono text-[11px] font-bold text-red-300">{lockedArch.responseWindowSeconds}s</span>
+                                    {selectedMode === 'EMERGENCY' && (
+                                      <span className="text-[10px] text-red-400/80 italic">— triage speed</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Identity fields */}
+                            <div>
+                              <label className="text-xs text-slate-400 mb-1.5 block font-medium">Agent Identity &amp; Purpose</label>
+                              <p className="text-[11px] text-slate-500 mb-2">Describe who this agent is, who they represent, and their primary job.</p>
+                              <textarea value={menuSysPrompt.ownerIdentity} onChange={e => setMenuSysPrompt(p => ({ ...p, ownerIdentity: e.target.value }))} rows={5}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
+                                placeholder={`e.g. You are Aria, the AI Concierge for ${business.name}. You represent the airport and assist travelers with gates, delays, lounges, and amenities.`} />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-400 mb-1.5 block font-medium">Loyalty Statement</label>
+                              <textarea value={menuSysPrompt.loyaltyStatement} onChange={e => setMenuSysPrompt(p => ({ ...p, loyaltyStatement: e.target.value }))} rows={3}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
+                                placeholder="What makes this business special and worth recommending?" />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-400 mb-1.5 block font-medium">Owner Priorities</label>
+                              <textarea value={menuSysPrompt.ownerPriorities} onChange={e => setMenuSysPrompt(p => ({ ...p, ownerPriorities: e.target.value }))} rows={3}
+                                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 resize-none"
+                                placeholder="Top 3 things this agent must always accomplish in every conversation." />
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -1788,7 +2223,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                       <span className="ml-auto px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] font-semibold">Paid</span>
                     </div>
                     <div className="flex-1 overflow-y-auto telephony-canvas">
-                      <TelephonyPanelFull siteConfigId={siteConfigId} />
+                      <TelephonyPanelFull params={{}} siteConfigId={siteConfigId} />
                     </div>
                   </div>
                 )}
@@ -2024,6 +2459,14 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   />
                 )}
 
+                {/* Documents sub-panel — industry document templates from Nova Sovereign ruleset */}
+                {menuSubView === 'documents' && (
+                  <DocumentsPanel
+                    siteConfigId={siteConfigId}
+                    onBack={() => setMenuSubView(null)}
+                  />
+                )}
+
                 {/* Task Order sub-panel */}
                 {menuSubView === 'task_order' && siteConfigId && (
                   <TaskOrderEditor
@@ -2081,7 +2524,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             )}
             <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
               {/* ── OWNER ADVISOR SWITCHER ─────────────────────────── */}
-              {showOwnerControls && (
+              {effectiveOwnerControls && (
                 <section>
                   <div className="space-y-1">
                     {([
@@ -2123,7 +2566,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               )}
 
               {/* ── OWNER CONTROLS ─────────────────────────────────── */}
-              {showOwnerControls && (
+              {effectiveOwnerControls && (
                 <OwnerMenuSections
                   expandedSection={expandedSection}
                   toggleSection={toggleSection}
@@ -2161,6 +2604,45 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   ))}
                 </div>
               </section>
+              {/* ── CUSTOMER WORKFLOW MENU (from useOSMenu) ─── Only when not in owner mode */}
+              {!effectiveOwnerControls && osMenuItems.length > 0 && (
+                <section>
+                  <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 mb-2 border-b border-slate-500/60 pb-1">
+                    {shellMode === 'locked' ? 'Services' : 'Quick Access'}
+                  </h3>
+                  <div className="space-y-1">
+                    {osMenuItems.map((item) => (
+                      <div key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => item.action === 'switch_view' && item.viewId ? handleMenuAction(item.viewId) : undefined}
+                          className="w-full flex items-center gap-3 rounded-sui border border-slate-600/50 p-3 text-left text-white hover:bg-white/10 transition-colors"
+                        >
+                          <item.icon className="w-4 h-4 text-slate-400 shrink-0" />
+                          <span className="text-sm font-medium">{item.label}</span>
+                          {item.children ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" /> : <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500" />}
+                        </button>
+                        {item.children && (
+                          <div className="ml-4 mt-0.5 space-y-0.5 border-l border-slate-700/60 pl-3">
+                            {item.children.map((child) => (
+                              <button
+                                key={child.id}
+                                type="button"
+                                onClick={() => child.action === 'switch_view' && child.viewId ? handleMenuAction(child.viewId) : undefined}
+                                className="w-full text-left py-2 text-sm text-slate-400 hover:text-white flex items-center gap-2 transition-colors"
+                              >
+                                <child.icon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                                {child.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {/* KNOWLEDGE BASE — single auth-gated menu item */}
               <section>
                 <button
@@ -2324,13 +2806,25 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   Back to Command Center
                 </button>
               </div>
-              <div className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-b-sui ${embeddedView === 'billing' ? 'bg-white' : 'bg-slate-950'}`}>
+              <div className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-b-sui ${embeddedView === 'billing' ? 'bg-white' : embeddedView && ['getting-started-view', 'brand-profile-view', 'offer-stack-view', 'market-strategy-view', 'sales-funnels-view', 'preflight-view', 'manager-dashboard-view', 'operations-view', 'customer-db-view', 'schedule-rules-view', 'staff-view', 'comms-config-view', 'reports-view', 'system-health-view', 'locations-view', 'identity-view', 'behavior-view', 'guardrails-view', 'audit-view', 'welcome-view', 'login-view', 'booking-view', 'reschedule-view', 'profile-view', 'insurance-view', 'concierge-view', 'employee-dashboard-view', 'live-queue-view', 'session-monitor-view', 'calendar-view', 'customer-list-view', 'verification-view', 'intake-view', 'communications-view'].includes(embeddedView) ? 'bg-white' : 'bg-slate-950'}`}>
                 {embeddedView === 'profile' && <ProfileContent section="profile" />}
                 {embeddedView === 'operations' && <ProfileContent section="operations" />}
                 {embeddedView === 'billing' && <BillingContentWithStripe />}
                 {embeddedView === 'my-businesses' && <ProfileContent section="my-businesses" />}
                 {embeddedView === 'reseller' && <MixingBoardContent />}
-                {embeddedView === 'agent-manager' && <AgentManager siteConfigId={siteConfigId} />}
+                {embeddedView === 'agent-manager' && <AgentManager params={{}} siteConfigId={siteConfigId} />}
+                {/* New OS menu views — placeholder until full views are built */}
+                {embeddedView && ['getting-started-view', 'brand-profile-view', 'offer-stack-view', 'market-strategy-view', 'sales-funnels-view', 'preflight-view', 'manager-dashboard-view', 'operations-view', 'customer-db-view', 'schedule-rules-view', 'staff-view', 'comms-config-view', 'reports-view', 'system-health-view', 'locations-view', 'identity-view', 'behavior-view', 'guardrails-view', 'audit-view', 'welcome-view', 'login-view', 'booking-view', 'reschedule-view', 'profile-view', 'insurance-view', 'concierge-view', 'employee-dashboard-view', 'live-queue-view', 'session-monitor-view', 'calendar-view', 'customer-list-view', 'verification-view', 'intake-view', 'communications-view'].includes(embeddedView) && (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
+                      <span className="text-2xl">🔧</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-800 capitalize">{embeddedView.replace(/-view$/, '').replace(/-/g, ' ')}</p>
+                      <p className="text-sm text-slate-500 mt-1">This view is being built. Check back soon.</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -2375,8 +2869,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           </div>
           )
         ) : messages.length === 0 ? (
-          <div className={`min-h-full flex flex-col items-center justify-center text-center px-8 py-8 ${isSovereign ? 'text-slate-600' : 'text-slate-400'}`}>
-            {canShowTransferQr && isTransferPromoVisible ? (
+          <div className={idleContent ? "h-full flex flex-col" : "min-h-full flex flex-col text-slate-600"}>
+            {idleContent ? (
+              idleContent
+            ) : canShowTransferQr && isTransferPromoVisible ? (
               <>
                 <a
                   href={qrTargetUrl}
@@ -2397,25 +2893,13 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                 <p className="text-xs mt-2 text-slate-500 max-w-xs">
                   {transferDescription}
                 </p>
+                <div className="w-full mt-4">
+                  <OSMenuListIdle role={effectiveOwnerControls ? 'manager' : 'customer'} isAuthenticated={isAuthenticated} capabilities={siteCapabilities} onSelect={(item) => item.viewId && handleMenuAction(item.viewId)} />
+                </div>
               </>
-            ) : canShowTransferQr ? (
-              <div className="py-4">
-                <AIOSMark compact />
-              </div>
             ) : (
-              <>
-                <Mic className={`w-12 h-12 mb-3 ${isSovereign ? 'text-slate-400' : 'text-slate-300'}`} />
-                <p className={isSovereign ? 'text-sm font-medium text-slate-700' : 'text-sm font-medium text-slate-600'}>
-                  Start talking whenever you're ready
-                </p>
-                <p className="text-xs mt-2 text-slate-500">
-                  Voice input and AI responses appear here
-                </p>
-              </>
+              <OSMenuListIdle role={effectiveOwnerControls ? 'manager' : 'customer'} isAuthenticated={isAuthenticated} capabilities={siteCapabilities} onSelect={(item) => item.viewId && handleMenuAction(item.viewId)} />
             )}
-            <p className={`text-[10px] mt-4 max-w-xs uppercase tracking-wider ${isSovereign ? 'text-slate-400' : 'text-slate-300'}`}>
-              Multimodal: maps, forms, catalogs
-            </p>
           </div>
         ) : (
           <div className="space-y-3 p-4">
@@ -2548,55 +3032,52 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         </div>
       )}
 
-      {/* 4. BOTTOM FOOTER — carbon texture background; solid fallback when image 404 */}
+      {/* 4. BOTTOM FOOTER — always dark shell zone, carbon texture overlay */}
       <div
         style={{
           ...footerStyle,
-          ...(isSovereign ? {
-            backgroundColor: 'rgb(15 23 42)',
-            backgroundImage: `linear-gradient(to bottom, rgba(15,23,42,0.85) 0%, rgba(15,23,42,0.92) 100%), url(${chatFooterCarbon})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          } : undefined),
+          backgroundColor: '#0f172a',
+          backgroundImage: `linear-gradient(to bottom, rgba(15,23,42,0.85) 0%, rgba(15,23,42,0.92) 100%), url(${chatFooterCarbon})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
         }}
-        className={`flex flex-col items-center justify-center gap-3 px-4 py-3 flex-shrink-0 min-h-[120px] border-t ${
-          isSovereign ? 'border-slate-700/50' : 'bg-gradient-to-b from-gray-50 to-white border-gray-200'
-        }`}
+        className="flex flex-col items-center justify-center gap-3 px-4 py-3 flex-shrink-0 min-h-[120px] border-t border-slate-700/50"
       >
         <div className="flex items-center justify-center gap-3 w-full">
-          <button
-            type="button"
-            onClick={() => {
-              if (canShowTransferQr) {
-                setIsTransferPromoVisible((visible) => !visible);
-                return;
-              }
+          {/* LEFT SLOT (20%): Mute + Share — both permanent footer residents */}
+          <div className="flex items-center gap-2 w-[20%] justify-start">
+            {/* Mute / Unmute AI audio */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !isMuted;
+                setIsMuted(next);
+                clientRef.current?.setMuted?.(next);
+              }}
+              className={`flex-1 h-12 flex items-center justify-center rounded-xl transition-colors ${
+                isMuted
+                  ? 'text-red-400 bg-red-500/10 hover:bg-red-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-white/10'
+              }`}
+              title={isMuted ? 'Unmute AI' : 'Mute AI'}
+              aria-label={isMuted ? 'Unmute AI audio' : 'Mute AI audio'}
+            >
+              {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+            </button>
 
-              if (isAuthenticated) {
-                onHistoryClick?.() ?? onNavigate?.('/compliance-gateway');
-              } else {
-                onSmsConsentClick?.() ?? onNavigate?.('/login');
-              }
-            }}
-            className={isSovereign
-              ? 'relative w-[20%] h-12 flex items-center justify-center text-xs font-medium text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors'
-              : 'relative w-[20%] h-12 flex items-center justify-center text-xs font-medium text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors border border-gray-200'
-            }
-            title={canShowTransferQr ? (isTransferPromoVisible ? 'Hide demo handoff' : 'Show demo handoff') : (isAuthenticated ? 'Call history' : 'Sign in or register for SMS')}
-            aria-label={canShowTransferQr ? (isTransferPromoVisible ? 'Hide demo handoff' : 'Show demo handoff') : (isAuthenticated ? 'Call history' : 'Sign in or register for SMS')}
-          >
-            {canShowTransferQr ? (
-              <>
-                <Menu size={16} />
-                {!isTransferPromoVisible && (
-                  <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-emerald-400" />
-                )}
-              </>
-            ) : (
-              <History size={16} />
-            )}
-          </button>
+            {/* Share / QR button — permanent slot resident */}
+            <button
+              type="button"
+              onClick={() => onShareClick ? onShareClick() : setShowMenuOverlay(true)}
+              className="flex-1 h-12 flex items-center justify-center rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+              title="Open share options"
+              aria-label="Open share options"
+            >
+              <Share2 size={18} />
+            </button>
+          </div>
 
+          {/* CENTER SLOT (50%): PTT button — 3D depth, always present */}
           <button
             onMouseDown={startPTT}
             onMouseUp={stopPTT}
@@ -2604,22 +3085,13 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             onTouchStart={(e) => { e.preventDefault(); startPTT(); }}
             onTouchEnd={(e) => { e.preventDefault(); stopPTT(); }}
             disabled={connectionStatus !== 'connected'}
-            className={isSovereign
-              ? `relative w-[50%] min-w-[140px] max-w-[220px] h-14 rounded-2xl font-semibold text-sm transition-all duration-200 transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed select-none overflow-hidden ${
-                  isRecording
-                    ? 'bg-indigo-500 text-white shadow-[0_0_24px_rgba(99,102,241,0.5)] ring-2 ring-indigo-400/50'
-                    : isProcessing
-                    ? 'bg-indigo-500/90 text-white shadow-[0_0_20px_rgba(99,102,241,0.35)]'
-                    : 'bg-slate-800/80 text-slate-200 border border-slate-600/80 hover:bg-slate-700/80 hover:border-indigo-500/40 hover:shadow-[0_0_20px_rgba(99,102,241,0.2)] backdrop-blur-sm'
-                }`
-              : `w-[50%] h-14 rounded-2xl font-semibold text-sm transition-all transform active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed select-none ${
-                  isRecording
-                    ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/50 ring-2 ring-blue-300/50'
-                    : isProcessing
-                    ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white'
-                    : 'bg-gradient-to-r from-gray-800 to-gray-900 text-white hover:from-blue-600 hover:to-blue-700'
-                }`
-            }
+            className={`relative w-[50%] min-w-[140px] max-w-[220px] h-14 rounded-2xl font-semibold text-sm transition-all duration-200 transform active:scale-[0.98] active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed select-none overflow-hidden ${
+              isRecording
+                ? 'bg-indigo-500 text-white shadow-[0_0_24px_rgba(99,102,241,0.5),0_4px_0_rgba(0,0,0,0.5)] ring-2 ring-indigo-400/50'
+                : isProcessing
+                ? 'bg-indigo-500/90 text-white shadow-[0_0_20px_rgba(99,102,241,0.35),0_4px_0_rgba(0,0,0,0.4)]'
+                : 'bg-slate-800 text-slate-200 border border-slate-600/80 hover:bg-slate-700 hover:border-indigo-500/40 shadow-[0_4px_0_rgba(0,0,0,0.5),0_0_0_rgba(99,102,241,0)] hover:shadow-[0_4px_0_rgba(0,0,0,0.5),0_0_20px_rgba(99,102,241,0.2)] backdrop-blur-sm'
+            }`}
           >
             <span className="flex items-center justify-center gap-2">
               <Mic size={20} className={isRecording ? 'animate-pulse' : ''} />
@@ -2629,6 +3101,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             </span>
           </button>
 
+          {/* RIGHT SLOT (20%): Reconnect */}
           <button
             onClick={() => {
               if (clientRef.current) {
@@ -2637,10 +3110,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               }
               setTimeout(() => window.location.reload(), 300);
             }}
-            className={isSovereign
-              ? 'w-[20%] h-12 flex items-center justify-center text-xs font-medium text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors'
-              : 'w-[20%] h-12 flex items-center justify-center text-xs font-medium text-slate-600 hover:text-green-600 hover:bg-green-50 rounded-xl transition-colors border border-gray-200'
-            }
+            className="w-[20%] h-12 flex items-center justify-center text-xs font-medium text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
             title="Restart Connection"
             aria-label="Restart connection"
           >
@@ -2649,17 +3119,13 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         </div>
 
 
-        <div className={`flex items-center justify-between w-full text-[10px] font-medium uppercase tracking-wider ${isSovereign ? 'text-slate-400' : 'text-slate-400'}`}>
+        <div className="flex items-center justify-between w-full text-[10px] font-medium uppercase tracking-wider text-slate-400">
           <span>
             {currentAgent.name
               ? (currentVoiceConfig.mode === 'clear_voice' ? `⚡ ${currentAgent.name}` : `💬 ${currentAgent.name}`)
               : (currentVoiceConfig.mode === 'clear_voice' ? '⚡ Clear Voice' : '💬 Standard PTT')}
           </span>
-          <span className={
-            isSovereign
-              ? (connectionStatus === 'connected' ? 'text-emerald-400' : connectionStatus === 'connecting' ? 'text-yellow-400' : 'text-red-400')
-              : (connectionStatus === 'connected' ? 'text-green-600' : connectionStatus === 'connecting' ? 'text-yellow-600' : 'text-red-600')
-          }>
+          <span className={connectionStatus === 'connected' ? 'text-emerald-400' : connectionStatus === 'connecting' ? 'text-yellow-400' : 'text-red-400'}>
             {connectionStatus === 'connected' ? '● CONNECTED' : connectionStatus === 'connecting' ? '◐ CONNECTING' : '○ DISCONNECTED'}
           </span>
         </div>

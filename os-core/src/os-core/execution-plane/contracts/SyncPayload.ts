@@ -1,6 +1,7 @@
 export type GeminiSyncUpdateType =
   | "BEHAVIORAL_SLIDER"
   | "SAFE_MODE_PROFILE"
+  | "NO_DRIFT_PROFILE"
   | "GROUNDING_POLICY"
   | "ROUTE_NAVIGATION";
 

@@ -1,6 +1,5 @@
 /**
- * toolHandler.ts - Server-side tool execution for Gemini Multimodal Live
- * Location: /opt/gatewayglobal/aibizbot-dev.gatewayglobal.ai/server/services/voice/toolHandler.ts
+ * toolHandler.ts — Server-side tool execution for Gemini Multimodal Live (`server/services/toolHandler.ts`).
  */
 import { getBusinessDetails, getBusinessReviews } from "./mapsService";
 import { generateBusinessIntelligence } from "./intelligenceService";
@@ -12,9 +11,17 @@ import { eq } from "drizzle-orm";
 import { createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "../mcp/googleWorkspace";
 import { isKnowledgeWorkerPlan } from "../prompts/knowledgeWorkerPrompt";
 import { handleGetHotelInventory } from "../tools/hotelInventoryHandler";
+import {
+  handlePmsGetHotelDashboard,
+  handlePmsGetHousekeepingStatus,
+  handlePmsLookupGuestJourney,
+} from "../tools/cloudbedsSwarmTools";
+import { toolGuestPhoneVerification } from "./novaGuestVerification";
 import { handleFetchCityWarrants } from "../tools/fetchCityWarrantsHandler";
 import { handleVineLookupAndDispatch } from "../tools/vineDispatchHandler";
 import { getPlaceDetails } from "../tools/placesHandler";
+import { resolveIntakePolicyConfig } from "./intakePolicyService";
+import { assertKnowledgeToolForSession } from "./knowledgeCertificationContext";
 
 /**
  * Interface for the tool call structure received from the Gemini v1beta protocol
@@ -29,20 +36,58 @@ export interface ToolCallContext {
   siteConfigId?: string | null;
 }
 
+async function handleGetInboundCallerIdentity(context?: ToolCallContext) {
+  const siteConfigId = context?.siteConfigId;
+  if (!siteConfigId) {
+    return {
+      skill_enabled: false,
+      message: "No site context — caller identity metadata is unavailable.",
+      identity_verification_still_required: true,
+    };
+  }
+  const site = await storage.getSiteConfig(siteConfigId);
+  if (!site) {
+    return { skill_enabled: false, message: "Site not found.", identity_verification_still_required: true };
+  }
+  const policy = resolveIntakePolicyConfig(site);
+  const cl = policy.callerIdLookup;
+  const skillEnabled = cl?.skillEnabled === true;
+  if (!skillEnabled) {
+    return {
+      skill_enabled: false,
+      message:
+        "The Caller ID (Twilio CNAM) skill is not enabled for this business. The owner can enable it in Platform Settings (Intake Governance).",
+      identity_verification_still_required: true,
+    };
+  }
+  if (!cl?.pricingAcknowledged) {
+    return {
+      skill_enabled: false,
+      message:
+        "Caller ID skill is pending: the owner must acknowledge Twilio per-lookup pricing in Platform Settings before agents can use this tool.",
+      identity_verification_still_required: true,
+    };
+  }
+  return {
+    skill_enabled: true,
+    message:
+      "For inbound PSTN calls, Twilio may deliver Caller ID / Caller Name (CNAM) when the number has the feature enabled in Twilio Console. Twilio may bill per lookup (verify current pricing; stakeholder estimate ~$0.01/call). Browser / web voice sessions do not receive PSTN caller ID through this tool. Caller Name is not proof of identity — complete guest_phone_verification / OTP before PMS or guest account data.",
+    browser_voice_note: "Browser voice has no PSTN Caller ID channel here; use collected phone + verification flows for identity.",
+    identity_verification_still_required: true,
+  };
+}
+
 // ── Lead Qualifier tool handlers ─────────────────────────────────────────────
 
 async function handleSearchCrm(args: any) {
-  const callerId: string = args.caller_id || '';
-  const email: string = args.email || '';
+  const raw = String(args.caller_id || "").trim();
+  const emailArg = String(args.email || "").trim();
+  const looksEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw);
 
-  // Search by phone (primary) then email (secondary)
-  let account = null;
-  if (callerId) {
-    account = await storage.getCustomerAccountByPhone(callerId).catch(() => null);
-  }
-  if (!account && email) {
-    account = await storage.getCustomerAccountByEmail?.(email).catch(() => null);
-  }
+  const account = await storage.findCustomerAccount({
+    phone: !looksEmail && raw ? raw : undefined,
+    email: emailArg || (looksEmail ? raw : undefined) || undefined,
+  });
 
   if (account) {
     return {
@@ -378,12 +423,58 @@ export async function handleToolCall(toolCall: ToolCall, context?: ToolCallConte
   console.log(`[ToolHandler] 🛠️ Executing tool: ${toolCall.name} with args:`, toolCall.args);
 
   try {
+    const gate = await assertKnowledgeToolForSession(toolCall.name, context);
+    if (!gate.ok) {
+      return {
+        error: "knowledge_certification",
+        message: gate.message,
+        knowledge_certification_blocked: true,
+      };
+    }
+
     switch (toolCall.name) {
-      case "get_hotel_inventory":
+      case "get_hotel_inventory": {
+        const sid = context?.siteConfigId ?? toolCall.args?.siteConfigId;
         return await handleGetHotelInventory({
           ...toolCall.args,
-          _sessionSiteConfigId: context?.siteConfigId ?? undefined,
+          _sessionSiteConfigId: sid ?? undefined,
         });
+      }
+
+      case "guest_phone_verification": {
+        const sid = context?.siteConfigId ?? toolCall.args?.siteConfigId;
+        return await toolGuestPhoneVerification({
+          action: toolCall.args?.action,
+          phone: toolCall.args?.phone,
+          otp_code: toolCall.args?.otp_code,
+          _sessionSiteConfigId: sid ?? undefined,
+        });
+      }
+
+      case "pms_lookup_guest_journey": {
+        const sid = context?.siteConfigId ?? toolCall.args?.siteConfigId;
+        return await handlePmsLookupGuestJourney({
+          phone: toolCall.args?.phone,
+          _sessionSiteConfigId: sid ?? undefined,
+        });
+      }
+
+      case "pms_get_housekeeping_status": {
+        const sid = context?.siteConfigId ?? toolCall.args?.siteConfigId;
+        return await handlePmsGetHousekeepingStatus({
+          roomCondition: toolCall.args?.roomCondition,
+          pageSize: toolCall.args?.pageSize,
+          _sessionSiteConfigId: sid ?? undefined,
+        });
+      }
+
+      case "pms_get_hotel_dashboard": {
+        const sid = context?.siteConfigId ?? toolCall.args?.siteConfigId;
+        return await handlePmsGetHotelDashboard({
+          date: toolCall.args?.date,
+          _sessionSiteConfigId: sid ?? undefined,
+        });
+      }
 
       case "fetch_city_warrants":
         return await handleFetchCityWarrants({
@@ -486,6 +577,9 @@ export async function handleToolCall(toolCall: ToolCall, context?: ToolCallConte
           canvas_type: toolCall.args?.canvas_type,
           items_count: Array.isArray(toolCall.args?.items) ? toolCall.args.items.length : 0,
         };
+
+      case "get_inbound_caller_identity":
+        return await handleGetInboundCallerIdentity(context);
 
       default:
         console.warn(`[ToolHandler] ⚠️ Tool not recognized: ${toolCall.name}`);

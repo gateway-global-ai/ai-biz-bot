@@ -23,6 +23,10 @@ export interface GatewayChatOptions {
 
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/';
 
+if (!process.env.GEMINI_MODEL_FALLBACK) {
+  console.error('[GOVERNANCE] GEMINI_MODEL_FALLBACK is not set in Doppler — ai-gateway text model is degraded. Add GEMINI_MODEL_FALLBACK to Doppler immediately.');
+}
+
 /** Single model alias for all text/chat. */
 export const GEMINI_MODELS = {
   FALLBACK: process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash',

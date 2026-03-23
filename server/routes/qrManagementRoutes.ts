@@ -580,7 +580,31 @@ qrRedirectRouter.get("/:id", async (req: Request, res: Response) => {
     wasBlocked: false,
     responseMs,
   });
-  res.redirect(302, destination);
+
+  // If this QR links to a /biz/:slug page and the route has a siteConfigId,
+  // append ?from=qr&mode=<workspaceState> so the landing page can skip a DB call.
+  let finalDestination = destination;
+  if (route.siteConfigId && destination.includes('/biz/')) {
+    try {
+      const siteRow = await storage.getSiteConfigById(route.siteConfigId);
+      if (siteRow) {
+        const workspaceState = (siteRow as any).workspaceState ?? 'demo';
+        const sep = destination.includes('?') ? '&' : '?';
+        const alreadyHasFrom = destination.includes('from=qr');
+        finalDestination = `${destination}${alreadyHasFrom ? '' : `${sep}from=qr`}&mode=${workspaceState}`;
+      }
+    } catch {
+      // Non-blocking — fall through to plain destination
+    }
+  }
+  // If this QR route targets a specific canvas view, append ?view=<viewId>
+  // so PublicBusinessPage can deep-link directly into that menu section.
+  if ((route as any).viewId) {
+    const sep = finalDestination.includes('?') ? '&' : '?';
+    finalDestination = `${finalDestination}${sep}view=${encodeURIComponent((route as any).viewId)}`;
+  }
+
+  res.redirect(302, finalDestination);
 });
 
 export { qrAdminRouter, qrRedirectRouter };

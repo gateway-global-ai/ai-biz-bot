@@ -133,6 +133,10 @@ export default function AgentPage() {
     heroImageUrl,
     lat: placeData.geometry?.location?.lat,
     lng: placeData.geometry?.location?.lng,
+    workspaceState: siteData.workspaceState ?? 'demo',
+    claimStatus: siteData.claimStatus ?? null,
+    ownerId: siteData.ownerId ?? null,
+    plan: siteData.plan ?? 'free',
   };
 
   const agentConfig = {

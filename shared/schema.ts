@@ -348,7 +348,8 @@ export const agents = pgTable("agents", {
   voiceId: text("voice_id").notNull(),
   voiceName: text("voice_name").notNull(),
   status: text("status").notNull().default("active"), // active, paused, inactive
-  visibility: text("visibility").default("private"), // private, internal, public
+  /** Agent visibility: private | internal | public (who may interact with this agent in the OS). */
+  visibility: text("visibility").default("private"),
   dominance: integer("dominance").default(50),
   influence: integer("influence").default(50),
   steadiness: integer("steadiness").default(50),
@@ -383,12 +384,13 @@ export const agents = pgTable("agents", {
   archProfile: jsonb("arch_profile"),          // { acknowledge, reflect, context, handoff } — 0-100 each
   /** Structured controls: mirroring (enabled, intensity 0–100) and guardrails (always, never, believe). */
   structuredControls: jsonb("structured_controls").$type<StructuredControls>().default({}),
-  /** Operational mode: SAFE | CONCIERGE | RECEPTIONIST | SALES | CASHIER | CUSTOMER_SUPPORT | MANAGER | RESEARCH | CODING | REVIEW. Drives prompt directive and tool allowlist. */
+  /** Operational mode: SAFE | CONCIERGE | RECEPTIONIST | SALES | CASHIER | CUSTOMER_SUPPORT | MANAGER | RESEARCH | CODING | REVIEW | EMERGENCY | CUSTOMER_SERVICE. Drives prompt directive and tool allowlist. */
   operationalMode: text("operational_mode").default("SAFE"),
   /** For CUSTOMER_SUPPORT mode: required verification level (e.g. OTP, magic_link). */
   verificationLevel: text("verification_level"),
-  /** Visibility: public (customers), internal (employees), private (owner only). */
-  visibility: text("visibility").default("private"),
+  /** When true, ARCH sliders are overridden server-side by the mode's hardcoded archOverride.
+   *  Enforced in promptCompiler — the agent cannot drift from its configured behavioral posture. */
+  noDriftMode: boolean("no_drift_mode").default(false),
   // Startup Script
   startupScript: text("startup_script"),
   startupBudgetUsd: numeric("startup_budget_usd", { precision: 10, scale: 2 }).default("0"),
@@ -776,6 +778,7 @@ export const platformProducts = pgTable("platform_products", {
   billingInterval: text("billing_interval"), // 'month' | 'year' | null (one-time)
   stripeProductId: text("stripe_product_id"),
   stripePriceId: text("stripe_price_id"),
+  imageUrl: text("image_url"), // local path or CDN URL for product image
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -1268,6 +1271,8 @@ export const siteConfigs = pgTable("site_configs", {
   heroImageUrl: text("hero_image_url"),
   /** Prompt used to generate the hero image (stored for regeneration) */
   heroImagePrompt: text("hero_image_prompt"),
+  /** Brand theme preset key — references BRAND_THEMES in brand.ts. Default: 'gateway-dark'. */
+  brandTheme: text("brand_theme").default("gateway-dark"),
   /** Agent Persona config: { name, role, discProfile, basePrompt } */
   agentConfig: jsonb("agent_config"),
   /** Audio / voice settings: { voiceName, language, isPushToTalk } */
@@ -1419,6 +1424,7 @@ export const qrRoutes = pgTable("qr_routes", {
   siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
   label: text("label"),
   qrCodePath: text("qr_code_path"),
+  viewId: text("view_id"),
   isActive: boolean("is_active").default(true).notNull(),
   scanCount: integer("scan_count").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1584,6 +1590,72 @@ export const insertSitePmsIntegrationSchema = createInsertSchema(sitePmsIntegrat
 
 export type InsertSitePmsIntegration = z.infer<typeof insertSitePmsIntegrationSchema>;
 export type SitePmsIntegration = typeof sitePmsIntegrations.$inferSelect;
+
+/** Guest OTP verification (per site + phone) — NOVA platform plane; Twilio behind server service */
+export const guestVerificationSessions = pgTable("guest_verification_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  siteConfigId: varchar("site_config_id")
+    .references(() => siteConfigs.id, { onDelete: "cascade" })
+    .notNull(),
+  phoneE164: text("phone_e164").notNull(),
+  otpVerified: boolean("otp_verified").notNull().default(false),
+  verificationTokenHash: text("verification_token_hash"),
+  tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }),
+  flowType: text("flow_type").notNull().default("guest_phone"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type GuestVerificationSession = typeof guestVerificationSessions.$inferSelect;
+
+/**
+ * Remote installation / ISV API keys — Bearer auth for POST /api/v1/verification/*.
+ * Full key is shown once at creation; only key_prefix + secret_hash are stored.
+ */
+export const verificationInstallationApiKeys = pgTable(
+  "verification_installation_api_keys",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    siteConfigId: varchar("site_config_id")
+      .references(() => siteConfigs.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull().default("Installation"),
+    keyPrefix: varchar("key_prefix", { length: 24 }).notNull(),
+    secretHash: text("secret_hash").notNull(),
+    permissions: jsonb("permissions").$type<string[]>().notNull().default(["verification.guest"]),
+    isActive: boolean("is_active").notNull().default(true),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+);
+
+export type VerificationInstallationApiKey = typeof verificationInstallationApiKeys.$inferSelect;
+
+/**
+ * Append-only log of every HTTP passage through verification routes (auth success, failure, or anonymous).
+ * Supports transparency statistics and rate-limit accounting — not PII (hashed fingerprint only).
+ */
+export const verificationGatePassageEvents = pgTable("verification_gate_passage_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
+  route: text("route").notNull(),
+  httpMethod: text("http_method").notNull(),
+  passageKind: text("passage_kind").notNull(),
+  authState: text("auth_state").notNull(),
+  installationKeyId: uuid("installation_key_id").references(() => verificationInstallationApiKeys.id, {
+    onDelete: "set null",
+  }),
+  httpStatus: integer("http_status").notNull(),
+  clientFingerprintHash: text("client_fingerprint_hash").notNull(),
+  durationMs: integer("duration_ms"),
+  rateLimited: boolean("rate_limited").notNull().default(false),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export type VerificationGatePassageEvent = typeof verificationGatePassageEvents.$inferSelect;
 
 // ── Share Events — tracks every share action with optional referrer UUID ─────
 export const shareEvents = pgTable("share_events", {
@@ -2934,3 +3006,17 @@ export const reviewArtifacts = pgTable("review_artifacts", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// ── Onboarding Sessions — 5-step AI Biz Bot business onboarding flow ──────────
+export const onboardingSessions = pgTable("onboarding_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  currentStep: integer("current_step").default(1).notNull(),
+  collectedData: jsonb("collected_data").$type<Record<string, unknown>>().default({}).notNull(),
+  status: text("status").default("in_progress").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type OnboardingSession = typeof onboardingSessions.$inferSelect;
+export type InsertOnboardingSession = typeof onboardingSessions.$inferInsert;

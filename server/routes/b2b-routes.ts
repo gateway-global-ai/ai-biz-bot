@@ -5,6 +5,13 @@
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import { b2bStorage } from "../b2b-storage";
+import { firstRouteParam } from "../utils/expressParams";
+import type {
+  InsertB2bCurationEvent,
+  InsertB2bFlight,
+  InsertB2bHotel,
+  InsertB2bItinerary,
+} from "@shared/schema";
 
 export function registerB2bRoutes(app: Express) {
   // --- Orchestrator: get or create in-progress itinerary for client + optional trip anchor ---
@@ -44,7 +51,12 @@ export function registerB2bRoutes(app: Express) {
       const schema = z.object({ status: z.enum(["in_progress", "completed"]).optional(), thoughtState: z.unknown().optional() });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const updated = await b2bStorage.updateItinerary(req.params.id, parsed.data);
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing itinerary id" });
+      const updated = await b2bStorage.updateItinerary(id, {
+        status: parsed.data.status,
+        thoughtState: parsed.data.thoughtState as InsertB2bItinerary["thoughtState"],
+      });
       if (!updated) return res.status(404).json({ error: "Itinerary not found" });
       return res.json(updated);
     } catch (e: unknown) {
@@ -55,9 +67,11 @@ export function registerB2bRoutes(app: Express) {
 
   app.get("/api/b2b/itineraries/:id", async (req: Request, res: Response) => {
     try {
-      const itinerary = await b2bStorage.getItinerary(req.params.id);
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing itinerary id" });
+      const itinerary = await b2bStorage.getItinerary(id);
       if (!itinerary) return res.status(404).json({ error: "Itinerary not found" });
-      const items = await b2bStorage.getItineraryItems(req.params.id);
+      const items = await b2bStorage.getItineraryItems(id);
       return res.json({ itinerary, items });
     } catch (e: unknown) {
       console.error("[B2B] getItinerary:", e);
@@ -82,7 +96,10 @@ export function registerB2bRoutes(app: Express) {
       const schema = z.object({ hotelCode: z.string(), googlePlaceId: z.string().optional(), name: z.string().optional(), rawResponse: z.unknown().optional() });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const hotel = await b2bStorage.createHotel(parsed.data);
+      const hotel = await b2bStorage.createHotel({
+        ...parsed.data,
+        rawResponse: parsed.data.rawResponse as InsertB2bHotel["rawResponse"],
+      });
       return res.status(201).json(hotel);
     } catch (e: unknown) {
       console.error("[B2B] createHotel:", e);
@@ -181,7 +198,10 @@ export function registerB2bRoutes(app: Express) {
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const flight = await b2bStorage.createFlight(parsed.data);
+      const flight = await b2bStorage.createFlight({
+        ...parsed.data,
+        rawResponse: parsed.data.rawResponse as InsertB2bFlight["rawResponse"],
+      });
       return res.status(201).json(flight);
     } catch (e: unknown) {
       console.error("[B2B] createFlight:", e);
@@ -204,8 +224,10 @@ export function registerB2bRoutes(app: Express) {
       const { leadType, hotelId, flightId, markupApplied, sortOrder } = parsed.data;
       if (leadType === "hotel" && !hotelId) return res.status(400).json({ error: "hotelId required for hotel lead" });
       if (leadType === "flight" && !flightId) return res.status(400).json({ error: "flightId required for flight lead" });
+      const itineraryId = firstRouteParam(req.params.id);
+      if (!itineraryId) return res.status(400).json({ error: "Missing itinerary id" });
       const item = await b2bStorage.addItineraryItem({
-        itineraryId: req.params.id,
+        itineraryId,
         leadType,
         hotelId: hotelId ?? null,
         flightId: flightId ?? null,
@@ -221,7 +243,9 @@ export function registerB2bRoutes(app: Express) {
 
   app.delete("/api/b2b/itinerary-items/:id", async (req: Request, res: Response) => {
     try {
-      const ok = await b2bStorage.removeItineraryItem(req.params.id);
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing item id" });
+      const ok = await b2bStorage.removeItineraryItem(id);
       if (!ok) return res.status(404).json({ error: "Item not found" });
       return res.status(204).send();
     } catch (e: unknown) {
@@ -235,7 +259,9 @@ export function registerB2bRoutes(app: Express) {
       const schema = z.object({ markupApplied: z.string() });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const item = await b2bStorage.updateItineraryItemMarkup(req.params.id, parsed.data.markupApplied);
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing item id" });
+      const item = await b2bStorage.updateItineraryItemMarkup(id, parsed.data.markupApplied);
       if (!item) return res.status(404).json({ error: "Item not found" });
       return res.json(item);
     } catch (e: unknown) {
@@ -257,7 +283,10 @@ export function registerB2bRoutes(app: Express) {
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const event = await b2bStorage.recordCurationEvent(parsed.data);
+      const event = await b2bStorage.recordCurationEvent({
+        ...parsed.data,
+        payload: parsed.data.payload as InsertB2bCurationEvent["payload"],
+      });
       return res.status(201).json(event);
     } catch (e: unknown) {
       console.error("[B2B] recordCurationEvent:", e);
@@ -280,7 +309,9 @@ export function registerB2bRoutes(app: Express) {
   // --- Agent markups (for AgentMarkupComponent / Whitelabel selling price) ---
   app.get("/api/b2b/markups/agent/:agentId", async (req: Request, res: Response) => {
     try {
-      const markup = await b2bStorage.getMarkupForAgent(req.params.agentId);
+      const agentId = firstRouteParam(req.params.agentId);
+      if (!agentId) return res.status(400).json({ error: "Missing agent id" });
+      const markup = await b2bStorage.getMarkupForAgent(agentId);
       return res.json({ markup: markup ?? null });
     } catch (e: unknown) {
       console.error("[B2B] getMarkupForAgent:", e);

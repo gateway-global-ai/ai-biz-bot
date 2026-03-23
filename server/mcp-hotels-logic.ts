@@ -413,6 +413,10 @@ export async function getGooglePlaceDetails(
   return {
     placeId: place.id,
     displayName: place.displayName?.text,
+    editorialSummary:
+      typeof place.editorialSummary === "string"
+        ? place.editorialSummary
+        : place.editorialSummary?.text ?? undefined,
     formattedAddress: place.formattedAddress,
     location: place.location,
     types: place.types,

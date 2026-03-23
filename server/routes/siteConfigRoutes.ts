@@ -19,10 +19,12 @@ import multer from 'multer';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { createHash } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
+import sharp from 'sharp';
 import { storage } from '../storage';
 import { requireAuth } from '../auth';
 import { assertSiteScopedAccess, type SitePolicyKey } from '../utils/siteScopedAccess';
-import { provisionAgentsForBusiness } from '../services/agentProvisioning';
 import { preloadBusinessAndReviews } from '../services/preloadBusinessKnowledge';
 import { handleGetHotelInventory } from '../tools/hotelInventoryHandler';
 import { classifyKnowledgeDocument } from '../services/knowledgeClassificationService';
@@ -230,14 +232,23 @@ router.post('/', async (req, res) => {
     data.slug = generateSlug(data.name);
     const config = await storage.createSiteConfig(data as any);
     try {
-      // For custom (non-Google-Maps) businesses, use empty placeTypes so provisioning
-      // defaults to the 'professional_services' industry pack.
-      const placeTypes = data.businessType === 'custom'
-        ? []
-        : (config.placeData as { types?: string[] } | null)?.types ?? ['establishment'];
-      await provisionAgentsForBusiness(config.id, placeTypes, config.name);
+      // Bootstrap a single Voice Concierge in strict safe mode.
+      // Additional agents are created only via the AI Bot Builder flow after
+      // the owner completes all 5 onboarding steps and approves deployment.
+      const concierge = await storage.createAgent({
+        siteConfigId: config.id,
+        name: `${config.name} Concierge`,
+        roleType: 'concierge',
+        safeMode: 'strict',
+        dominance: '20', influence: '45', steadiness: '80', conscientiousness: '75',
+        acknowledge: '30', reflect: '30', context: '60', handoff: '20',
+        responseWindowSeconds: 10,
+        isActive: true,
+      } as any);
+      // Set this concierge as the assigned agent for the site
+      await storage.updateSiteConfig(config.id, { assignedAgentId: concierge.id });
     } catch (provisionErr: any) {
-      console.error('[SiteConfig] Agent provisioning failed (site created):', provisionErr?.message ?? provisionErr);
+      console.error('[SiteConfig] Concierge bootstrap failed (site created):', provisionErr?.message ?? provisionErr);
     }
     if (config.placeId || config.placeData) {
       preloadBusinessAndReviews(config.id).catch((err) =>
@@ -261,7 +272,7 @@ router.post('/', async (req, res) => {
  * Ledger (voicePhoneAiMinutes, voiceWebAiMinutes, smsMessages, chatBotMessages)
  * and plan so the owner dashboard 4-card panel works correctly.
  */
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', requireAuth, async (req, res) => {
   try {
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -387,7 +398,7 @@ router.post('/:id/refresh-hero-image', async (req, res) => {
 /**
  * DELETE /api/site-configs/:id
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
     await storage.deleteSiteConfig(req.params.id);
     res.json({ success: true });
@@ -1754,4 +1765,425 @@ router.patch('/:id/task-order', async (req: any, res: Response) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Brand Governance Routes
+// See: docs-governance/BRAND_IDENTITY_SPEC.md
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute preflight completeness from a site config record.
+ */
+function computePreflightComplete(site: any): boolean {
+  const brand = site.brand_governance ?? (site as any).brandGovernance ?? {};
+  const funnels: any[] = site.sales_funnels ?? (site as any).salesFunnels ?? [];
+  const score = Number(brand.completionScore ?? 0);
+  const approved = brand.ownerApproved === true;
+  const hasRoute = funnels.length > 0 &&
+    funnels[0].fallbackRoutes &&
+    (funnels[0].fallbackRoutes.website || funnels[0].fallbackRoutes.booking);
+  return score >= 80 && approved && hasRoute;
+}
+
+/**
+ * GET /api/site-configs/:id/brand
+ * Returns brand_governance + sales completion metadata.
+ */
+router.get('/:id/brand', async (req: any, res: Response) => {
+  const { id } = req.params;
+  try {
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+
+    const brand = (site as any).brand_governance ?? {};
+    const preflightComplete = computePreflightComplete(site);
+    res.json({ brand_governance: brand, preflightComplete });
+  } catch (error: any) {
+    console.error('[SiteConfigRoutes] GET brand error:', error);
+    res.status(500).json({ error: error.message ?? 'Failed to fetch brand governance' });
+  }
+});
+
+/**
+ * PATCH /api/site-configs/:id/brand
+ * Merge-update brand_governance. Recomputes completionScore.
+ * Body: Partial<BrandGovernance>
+ */
+router.patch('/:id/brand', async (req: any, res: Response) => {
+  const { id } = req.params;
+  const updates = req.body ?? {};
+
+  try {
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+
+    const existing = (site as any).brand_governance ?? {};
+    const merged = { ...existing, ...updates };
+
+    // Recompute completion score
+    const stringFields = [
+      'brandName', 'brandSlogan', 'brandLogoUrl', 'primaryColor', 'accentColor',
+      'claim', 'differentiator', 'irresistibleOffer', 'targetMarket'
+    ];
+    const toggleFields = ['freeTrial', 'guarantee'];
+    const arrayFields = ['channelPartners', 'coreProducts', 'productUpsells', 'coreServices', 'serviceUpsells'];
+
+    let filled = 0;
+    for (const f of stringFields) {
+      if (merged[f] && typeof merged[f] === 'string' && merged[f].trim().length > 2) filled++;
+    }
+    for (const f of toggleFields) {
+      if (merged[f]?.defined === true && merged[f]?.description?.length > 5) filled++;
+    }
+    for (const f of arrayFields) {
+      if (Array.isArray(merged[f]) && merged[f].length > 0) filled++;
+    }
+    merged.completionScore = Math.round((filled / 15) * 100);
+
+    // If owner is approving, set timestamp
+    if (updates.ownerApproved === true && !existing.approvedAt) {
+      merged.approvedAt = new Date().toISOString();
+    }
+
+    await storage.updateSiteConfig(id, { brand_governance: merged } as any);
+    const preflightComplete = computePreflightComplete({ ...site, brand_governance: merged });
+    res.json({ brand_governance: merged, preflightComplete });
+  } catch (error: any) {
+    console.error('[SiteConfigRoutes] PATCH brand error:', error);
+    res.status(500).json({ error: error.message ?? 'Failed to update brand governance' });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/brand/generate
+ * Auto-populate brand_governance from placeData already on the site config.
+ * No external calls — uses ingested data only.
+ */
+router.post('/:id/brand/generate', async (req: any, res: Response) => {
+  const { id } = req.params;
+  try {
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+
+    const place = (site as any).placeData ?? {};
+    const existing = (site as any).brand_governance ?? {};
+
+    const populated: Record<string, any> = { ...existing };
+
+    // Auto-map from placeData
+    if (!populated.brandName && place.name) populated.brandName = place.name;
+    if (!populated.brandLogoUrl && place.photos?.[0]?.photo_reference) {
+      populated.brandLogoUrl = `/api/place-photo?ref=${place.photos[0].photo_reference}`;
+    }
+    if (!populated.coreServices?.length && place.types?.length) {
+      populated.coreServices = place.types
+        .filter((t: string) => !['point_of_interest', 'establishment'].includes(t))
+        .map((t: string) => t.replace(/_/g, ' '));
+    }
+    if (!populated.targetMarket && place.editorial_summary?.overview) {
+      populated.targetMarket = `Customers looking for: ${place.editorial_summary.overview}`;
+    }
+    // Extract claim from top review themes if available
+    if (!populated.claim && place.reviews?.length) {
+      const topReview = place.reviews[0]?.text ?? '';
+      if (topReview.length > 20) {
+        populated.claim = topReview.substring(0, 120).trim();
+      }
+    }
+    if (!populated.coreProducts?.length && place.menus) {
+      populated.coreProducts = [];
+    }
+
+    // Recompute score via the PATCH endpoint logic (inline here)
+    const stringFields = [
+      'brandName', 'brandSlogan', 'brandLogoUrl', 'primaryColor', 'accentColor',
+      'claim', 'differentiator', 'irresistibleOffer', 'targetMarket'
+    ];
+    const toggleFields = ['freeTrial', 'guarantee'];
+    const arrayFields = ['channelPartners', 'coreProducts', 'productUpsells', 'coreServices', 'serviceUpsells'];
+    let filled = 0;
+    for (const f of stringFields) {
+      if (populated[f] && typeof populated[f] === 'string' && populated[f].trim().length > 2) filled++;
+    }
+    for (const f of toggleFields) {
+      if (populated[f]?.defined === true && populated[f]?.description?.length > 5) filled++;
+    }
+    for (const f of arrayFields) {
+      if (Array.isArray(populated[f]) && populated[f].length > 0) filled++;
+    }
+    populated.completionScore = Math.round((filled / 15) * 100);
+    populated.lastAutoPopulatedAt = new Date().toISOString();
+
+    await storage.updateSiteConfig(id, { brand_governance: populated } as any);
+
+    const gapFields = [
+      ...stringFields.filter(f => !populated[f] || populated[f].trim().length <= 2),
+      ...toggleFields.filter(f => !populated[f]?.defined),
+      ...arrayFields.filter(f => !populated[f]?.length)
+    ];
+
+    res.json({
+      brand_governance: populated,
+      gapFields,
+      filledCount: filled,
+      completionScore: populated.completionScore
+    });
+  } catch (error: any) {
+    console.error('[SiteConfigRoutes] brand/generate error:', error);
+    res.status(500).json({ error: error.message ?? 'Failed to auto-populate brand' });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/brand/deep-research-prompt
+ * Generate a structured ChatGPT deep-research meta-prompt.
+ * Requires paid plan (voicePlanActive or plan !== 'free').
+ */
+router.post('/:id/brand/deep-research-prompt', async (req: any, res: Response) => {
+  const { id } = req.params;
+  try {
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+
+    // Paid plan gate
+    if ((site as any).plan === 'free' && !(site as any).voicePlanActive) {
+      return res.status(403).json({
+        error: 'Deep research prompt generation requires a paid plan.',
+        upgradeRequired: true
+      });
+    }
+
+    const brand = (site as any).brand_governance ?? {};
+    const place = (site as any).placeData ?? {};
+    const services = (brand.coreServices ?? []).join(', ') || 'Not specified';
+    const address = place.formatted_address ?? place.vicinity ?? 'Not specified';
+
+    const prompt = `You are a senior brand strategist. Conduct a comprehensive research analysis for the following business.
+
+Business Name: ${brand.brandName || site.name}
+Location: ${address}
+Industry / Services: ${services}
+Current Brand Claim: ${brand.claim || 'Not yet defined'}
+Current Irresistible Offer: ${brand.irresistibleOffer || 'Not yet defined'}
+Target Market (owner description): ${brand.targetMarket || 'Not yet defined'}
+
+Please research and provide the following:
+
+1. SWOT Analysis
+   - Strengths (what the business likely does well based on reviews and market position)
+   - Weaknesses (common gaps in this industry)
+   - Opportunities (market trends, underserved segments)
+   - Threats (competitive landscape, market risks)
+
+2. Competitive Landscape
+   - Top 3 direct competitors in the same market
+   - Their positioning and key differentiators
+   - Where this business has a clear advantage
+
+3. Ideal Customer Profile (ICP)
+   - Demographics (age range, income, geography)
+   - Psychographics (values, pain points, motivations)
+   - Buying triggers (what causes them to search for this service)
+
+4. Messaging Recommendations
+   - 3 messaging angles ranked by estimated conversion potential
+   - Suggested headline for each angle
+
+5. Irresistible Offer Improvements
+   - Critique of current offer
+   - 2-3 alternative offer structures with higher conversion potential
+
+6. Guarantee Structure
+   - Recommended guarantee type for this industry
+   - Example guarantee language
+
+7. Channel Partner Recommendations
+   - 3-5 categories of referral partners relevant to this business
+
+Output Format: Return as structured JSON matching this schema exactly:
+{
+  "swot": { "strengths": [], "weaknesses": [], "opportunities": [], "threats": [] },
+  "competitors": [{ "name": "", "positioning": "", "ourAdvantage": "" }],
+  "icp": { "demographics": "", "psychographics": "", "buyingTriggers": "" },
+  "messagingAngles": [{ "angle": "", "headline": "", "conversionRank": 1 }],
+  "offerImprovements": [{ "structure": "", "rationale": "" }],
+  "guaranteeRecommendation": { "type": "", "exampleLanguage": "" },
+  "channelPartners": []
+}`;
+
+    // Mark that the prompt was generated
+    const updatedBrand = { ...brand, deepResearchPromptGenerated: true };
+    await storage.updateSiteConfig(id, { brand_governance: updatedBrand } as any);
+
+    res.json({ prompt, generatedAt: new Date().toISOString() });
+  } catch (error: any) {
+    console.error('[SiteConfigRoutes] deep-research-prompt error:', error);
+    res.status(500).json({ error: error.message ?? 'Failed to generate deep research prompt' });
+  }
+});
+
+/**
+ * GET /api/site-configs/:id/funnels
+ * Returns the sales_funnels array.
+ */
+router.get('/:id/funnels', async (req: any, res: Response) => {
+  const { id } = req.params;
+  try {
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+    res.json({ sales_funnels: (site as any).sales_funnels ?? [] });
+  } catch (error: any) {
+    console.error('[SiteConfigRoutes] GET funnels error:', error);
+    res.status(500).json({ error: error.message ?? 'Failed to fetch funnels' });
+  }
+});
+
+/**
+ * PATCH /api/site-configs/:id/funnels
+ * Upsert sales_funnels array. Replaces entire array.
+ * Body: { funnels: SalesFunnel[] }
+ */
+router.patch('/:id/funnels', async (req: any, res: Response) => {
+  const { id } = req.params;
+  const { funnels } = req.body;
+
+  if (!Array.isArray(funnels)) return res.status(400).json({ error: 'funnels must be an array' });
+
+  try {
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+
+    await storage.updateSiteConfig(id, { sales_funnels: funnels } as any);
+    res.json({ sales_funnels: funnels });
+  } catch (error: any) {
+    console.error('[SiteConfigRoutes] PATCH funnels error:', error);
+    res.status(500).json({ error: error.message ?? 'Failed to update funnels' });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/generate-hero-image
+ *
+ * Generates a hero image for a site using Imagen 3, saves it as a WebP file,
+ * and updates heroImageUrl on the site config. Idempotent unless ?force=true.
+ *
+ * If the site already has a heroImageUrl (e.g. Google Places photo proxy),
+ * returns it immediately. Pass { force: true } in the body to regenerate.
+ */
+router.post('/:id/generate-hero-image', async (req: any, res: any) => {
+  try {
+    const site = await storage.getSiteConfigById(req.params.id) as any;
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+
+    // Idempotent: return existing url unless force is requested
+    if (site.heroImageUrl && !req.body?.force) {
+      return res.json({ heroImageUrl: site.heroImageUrl, generated: false });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+
+    const place = site.placeData ?? {};
+    const name: string = place.name ?? site.name ?? 'Business';
+    const types: string = (place.types ?? []).slice(0, 3).join(', ');
+    const address: string = place.formatted_address ?? place.vicinity ?? '';
+    const editorialSummary: string = place.editorial_summary?.overview ?? place.editorial_summary ?? '';
+
+    const prompt: string = site.heroImagePrompt ?? `
+Photorealistic hero image for a business called "${name}".
+Business type: ${types || 'local business'}.
+${address ? `Located in ${address}.` : ''}
+${editorialSummary ? `Description: ${editorialSummary}` : ''}
+Style: Wide-format exterior or interior shot, professional photography, warm inviting atmosphere,
+high quality, natural light, no text, no logos, 16:9 aspect ratio.
+    `.trim();
+
+    const imagenRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instances: [{ prompt }],
+          parameters: { sampleCount: 1, aspectRatio: '16:9', outputMimeType: 'image/png' },
+        }),
+      }
+    );
+
+    if (!imagenRes.ok) {
+      const errText = await imagenRes.text();
+      console.error('[generate-hero-image] Imagen 3 error:', errText);
+      return res.status(502).json({ error: 'Imagen 3 generation failed', detail: errText });
+    }
+
+    const imagenData = await imagenRes.json() as any;
+    const base64Image: string | undefined = imagenData?.predictions?.[0]?.bytesBase64Encoded;
+    if (!base64Image) {
+      return res.status(502).json({ error: 'No image returned from Imagen 3' });
+    }
+
+    // Optimize and save as WebP
+    const imageBuffer = Buffer.from(base64Image, 'base64');
+    const optimized = await sharp(imageBuffer)
+      .resize(1200, 675, { fit: 'cover', position: 'center' })
+      .webp({ quality: 82 })
+      .toBuffer();
+
+    const uploadDir = path.join(process.cwd(), 'server', 'uploads', 'heroes');
+    fs.mkdirSync(uploadDir, { recursive: true });
+    const filename = `${req.params.id}.webp`;
+    fs.writeFileSync(path.join(uploadDir, filename), optimized);
+
+    const heroImageUrl = `/uploads/heroes/${filename}`;
+    await storage.updateSiteConfig(req.params.id, { heroImageUrl, heroImagePrompt: prompt } as any);
+
+    res.json({ heroImageUrl, generated: true });
+  } catch (error: any) {
+    console.error('[generate-hero-image] Error:', error);
+    res.status(500).json({ error: error.message ?? 'Failed to generate hero image' });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/go-live
+ * Enforces 5 preflight conditions before transitioning workspaceState to 'live'.
+ */
+router.post('/:id/go-live', requireAuth, async (req: any, res) => {
+  try {
+    const config = await storage.getSiteConfig(req.params.id);
+    if (!config) return res.status(404).json({ error: 'Site config not found' });
+
+    const agents = await storage.getAgentsBySiteConfigId(req.params.id);
+    const activeAgent = agents.find((a: any) => a.isActive);
+    const assignedAgent = config.assignedAgentId
+      ? agents.find((a: any) => a.id === config.assignedAgentId)
+      : null;
+
+    const preflight = {
+      hasActiveAgent:       !!activeAgent,
+      hasAssignedAgent:     !!config.assignedAgentId,
+      hasBusinessIdentity:  !!(config.name && config.businessType),
+      hasSystemPrompt:      !!(assignedAgent?.systemPrompt && assignedAgent.systemPrompt.trim().length > 0),
+      hasSafeMode:          assignedAgent?.safeMode != null,
+    };
+
+    const failures = Object.entries(preflight)
+      .filter(([, passed]) => !passed)
+      .map(([key]) => key);
+
+    if (failures.length > 0) {
+      return res.status(422).json({
+        error: 'Preflight checks failed. Complete all requirements before going live.',
+        failures,
+        preflight,
+      });
+    }
+
+    const updated = await storage.updateSiteConfig(req.params.id, { workspaceState: 'live' });
+    res.json({ success: true, workspaceState: 'live', config: updated });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
+

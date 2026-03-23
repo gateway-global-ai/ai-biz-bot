@@ -15,7 +15,7 @@ Protect the Gemini Live voice runtime as a latency-sensitive execution plane.
 - maintain bidirectional session state
 - detect and handle interruptions
 - dispatch typed action requests outward
-- emit runtime metrics
+- emit runtime metrics (observability must be **async** or **enqueue-only** — no synchronous DB on the hot path; see [`VOICE_SESSION_TRANSPARENCY.md`](VOICE_SESSION_TRANSPARENCY.md))
 - expose bridge implementations behind governed execution-plane interfaces
 
 ## Forbidden responsibilities

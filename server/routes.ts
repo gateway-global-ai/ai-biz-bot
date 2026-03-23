@@ -15,11 +15,17 @@ import bailRescueRoutes from "./routes/bailRescueRoutes";
 import shareRoutes from "./routes/shareRoutes";
 import agentResearchRoutes from "./routes/agentResearch";
 import novaSovereignRouter from "./routes/novaSovereignRoutes";
+import novaGuestVerifyRouter from "./routes/novaGuestVerifyRoutes";
+import verificationApiV1Routes from "./routes/verificationApiV1Routes";
+import verificationSessionHeartbeatRoutes from "./routes/verificationSessionHeartbeatRoutes";
+import verificationInstallationKeysRoutes from "./routes/verificationInstallationKeysRoutes";
 import onboardingRoutes from "./routes/onboardingRoutes";
 import customerOnboardingRoutes from "./routes/customerOnboardingRoutes";
 import { registerMenuRoutes } from "./routes/menu-routes";
 import healthRoutes from "./routes/healthRoutes";
 import platformMetricsRoutes from "./routes/platformMetricsRoutes";
+import adminAnalyticsRoutes from "./routes/adminAnalyticsRoutes";
+import knowledgeGapRoutes from "./routes/knowledgeGapRoutes";
 import a2pPreflightRoutes from "./routes/a2pPreflightRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import { registerB2bRoutes } from "./routes/b2b-routes";
@@ -139,6 +145,8 @@ export async function registerRoutes(
   // Health check route (public)
   app.use(healthRoutes);
   app.use(platformMetricsRoutes);
+  app.use(adminAnalyticsRoutes);
+  app.use(knowledgeGapRoutes);
 
   // Platinum Core: Telephony, Voice, SMS, Webhooks, TTS, PTT
   app.use(telephonyRoutes);
@@ -1618,12 +1626,7 @@ export async function registerRoutes(
     }
   });
 
-  // AI Hero Image — not configured (image generation decommissioned)
-  app.post("/api/site-configs/:id/generate-hero-image", async (req, res) => {
-    const siteConfig = await storage.getSiteConfig(req.params.id);
-    if (!siteConfig) return res.status(404).json({ error: "Site not found" });
-    res.status(503).json({ error: "Image generation not configured" });
-  });
+  // AI Hero Image — handled by siteConfigRoutes (POST /:id/generate-hero-image)
 
   app.get("/api/site-configs/:id/chat-logs", async (req, res) => {
     try {
@@ -2257,6 +2260,10 @@ ${businessContext}`;
   // Register Knowledge Base routes
   app.use("/api/knowledge", knowledgeRoutes);
   app.use("/api/business", businessRoutes);
+  // Remote OS: installation API keys + v1 guest verification (mount keys router before siteConfigRoutes)
+  app.use("/api/v1/verification", verificationApiV1Routes);
+  app.use("/api/v1/verification", verificationSessionHeartbeatRoutes);
+  app.use("/api/site-configs", verificationInstallationKeysRoutes);
   app.use("/api/site-configs", siteConfigRoutes);
   app.use("/api/share", shareRoutes);
   app.use("/api/cloudbeds", cloudbedsRoutes);
@@ -2277,6 +2284,8 @@ ${businessContext}`;
 
   // NOVA Sovereign Billing: POST /api/nova/billing/push, POST /api/nova/billing/receive
   app.use("/api/nova", novaSovereignRouter);
+  // NOVA guest verification: POST /api/nova/guest/verify/start|complete
+  app.use("/api/nova", novaGuestVerifyRouter);
 
   // Register Menu and Cart routes
   registerMenuRoutes(app);

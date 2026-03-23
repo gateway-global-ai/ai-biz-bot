@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import type { RouteComponentProps } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
@@ -41,7 +42,8 @@ import {
   X,
   Key,
   Check,
-  Webhook
+  Webhook,
+  Building2,
 } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 
@@ -99,7 +101,9 @@ interface CallLogEntry {
   startTime: string;
 }
 
-export default function TelephonyPanel({ siteConfigId }: { siteConfigId?: string | null } = {}) {
+type TelephonyPanelProps = RouteComponentProps & { siteConfigId?: string | null };
+
+export default function TelephonyPanel({ siteConfigId, params: _params }: TelephonyPanelProps) {
   const { toast } = useToast();
   const [activeView, setActiveView] = useState<TelephonyView>('provisioning');
   const [areaCode, setAreaCode] = useState('');
@@ -1623,7 +1627,7 @@ export default function TelephonyPanel({ siteConfigId }: { siteConfigId?: string
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <Button 
-                    onClick={() => simulateWebhookMutation.mutate({ type: 'sms', from: testNumber || undefined, body: 'Hello from webhook simulator!' })}
+                    onClick={() => simulateWebhookMutation.mutate({ type: 'sms', from: testNumber.trim() || '+15555550100', body: 'Hello from webhook simulator!' })}
                     variant="outline" 
                     className="gap-2"
                     disabled={simulateWebhookMutation.isPending}
@@ -1633,7 +1637,7 @@ export default function TelephonyPanel({ siteConfigId }: { siteConfigId?: string
                     Simulate SMS
                   </Button>
                   <Button 
-                    onClick={() => simulateWebhookMutation.mutate({ type: 'voice', from: testNumber || undefined })}
+                    onClick={() => simulateWebhookMutation.mutate({ type: 'voice', from: testNumber.trim() || '+15555550100' })}
                     variant="outline" 
                     className="gap-2"
                     disabled={simulateWebhookMutation.isPending}
@@ -1643,7 +1647,7 @@ export default function TelephonyPanel({ siteConfigId }: { siteConfigId?: string
                     Simulate Voice
                   </Button>
                   <Button 
-                    onClick={() => simulateWebhookMutation.mutate({ type: 'status', from: testNumber || undefined, callStatus: 'completed' })}
+                    onClick={() => simulateWebhookMutation.mutate({ type: 'status', from: testNumber.trim() || '+15555550100', callStatus: 'completed' })}
                     variant="outline" 
                     className="gap-2"
                     disabled={simulateWebhookMutation.isPending}

@@ -5,6 +5,7 @@ import { getDefaultTemplate } from "./default-templates";
 import { agentTestingService } from "./agent-testing";
 import { z } from "zod";
 import { storage } from "../storage";
+import { firstRouteParam } from "../utils/expressParams";
 
 /**
  * Resolves {placeholder} tokens in a system prompt using live business data
@@ -63,7 +64,9 @@ export function registerAgentRoutes(app: Express) {
    */
   app.get("/api/agents/templates/:id", async (req: Request, res: Response) => {
     try {
-      const template = agentSwarmManager.getTemplate(req.params.id);
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing template id" });
+      const template = agentSwarmManager.getTemplate(id);
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
@@ -128,7 +131,9 @@ export function registerAgentRoutes(app: Express) {
    */
   app.get("/api/agents/business/:businessId", async (req: Request, res: Response) => {
     try {
-      const agents = agentSwarmManager.getBusinessAgents(req.params.businessId);
+      const businessId = firstRouteParam(req.params.businessId);
+      if (!businessId) return res.status(400).json({ error: "Missing business id" });
+      const agents = agentSwarmManager.getBusinessAgents(businessId);
       res.json(agents);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -140,7 +145,9 @@ export function registerAgentRoutes(app: Express) {
    */
   app.get("/api/agents/:id", async (req: Request, res: Response) => {
     try {
-      const agent = agentSwarmManager.getAgent(req.params.id);
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing agent id" });
+      const agent = agentSwarmManager.getAgent(id);
       if (!agent) {
         return res.status(404).json({ error: "Agent not found" });
       }
@@ -155,13 +162,15 @@ export function registerAgentRoutes(app: Express) {
    */
   app.patch("/api/agents/:id/configuration", async (req: Request, res: Response) => {
     try {
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing agent id" });
       const { configuration } = req.body;
       if (!configuration) {
         return res.status(400).json({ error: "Configuration is required" });
       }
 
-      agentSwarmManager.updateAgentConfiguration(req.params.id, configuration);
-      const updatedAgent = agentSwarmManager.getAgent(req.params.id);
+      agentSwarmManager.updateAgentConfiguration(id, configuration);
+      const updatedAgent = agentSwarmManager.getAgent(id);
       res.json(updatedAgent);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -173,13 +182,15 @@ export function registerAgentRoutes(app: Express) {
    */
   app.patch("/api/agents/:id/status", async (req: Request, res: Response) => {
     try {
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing agent id" });
       const { isActive } = req.body;
       if (typeof isActive !== 'boolean') {
         return res.status(400).json({ error: "isActive must be a boolean" });
       }
 
-      agentSwarmManager.setAgentActive(req.params.id, isActive);
-      const updatedAgent = agentSwarmManager.getAgent(req.params.id);
+      agentSwarmManager.setAgentActive(id, isActive);
+      const updatedAgent = agentSwarmManager.getAgent(id);
       res.json(updatedAgent);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -191,13 +202,15 @@ export function registerAgentRoutes(app: Express) {
    */
   app.patch("/api/agents/:id/performance", async (req: Request, res: Response) => {
     try {
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing agent id" });
       const { performance } = req.body;
       if (!performance) {
         return res.status(400).json({ error: "Performance metrics are required" });
       }
 
-      agentSwarmManager.updateAgentPerformance(req.params.id, performance);
-      const updatedAgent = agentSwarmManager.getAgent(req.params.id);
+      agentSwarmManager.updateAgentPerformance(id, performance);
+      const updatedAgent = agentSwarmManager.getAgent(id);
       res.json(updatedAgent);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -264,7 +277,10 @@ export function registerAgentRoutes(app: Express) {
         return res.status(400).json({ error: parsed.error.message });
       }
 
-      const insights = await businessResearchService.performDeepResearch(parsed.data);
+      const insights = await businessResearchService.performDeepResearch({
+        ...parsed.data,
+        contact: parsed.data.contact ?? {},
+      });
       res.json(insights);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -367,12 +383,14 @@ export function registerAgentRoutes(app: Express) {
    */
   app.get("/api/agents/:id/serp-tools", (req: Request, res: Response) => {
     try {
-      const agent = agentSwarmManager.getAgent(req.params.id);
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing agent id" });
+      const agent = agentSwarmManager.getAgent(id);
       if (!agent) {
         return res.status(404).json({ error: "Agent not found" });
       }
       const tools: string[] = agent.configuration?.serpApiTools ?? [];
-      res.json({ agentId: req.params.id, serpApiTools: tools });
+      res.json({ agentId: id, serpApiTools: tools });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -390,6 +408,8 @@ export function registerAgentRoutes(app: Express) {
    */
   app.patch("/api/agents/:id/serp-tools", (req: Request, res: Response) => {
     try {
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing agent id" });
       const schema = z.object({
         serpApiTools: z.array(z.string()),
       });
@@ -397,17 +417,17 @@ export function registerAgentRoutes(app: Express) {
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.message });
       }
-      const agent = agentSwarmManager.getAgent(req.params.id);
+      const agent = agentSwarmManager.getAgent(id);
       if (!agent) {
         return res.status(404).json({ error: "Agent not found" });
       }
-      agentSwarmManager.updateAgentConfiguration(req.params.id, {
+      agentSwarmManager.updateAgentConfiguration(id, {
         ...(agent.configuration ?? {}),
         serpApiTools: parsed.data.serpApiTools,
       });
-      const updated = agentSwarmManager.getAgent(req.params.id);
+      const updated = agentSwarmManager.getAgent(id);
       res.json({
-        agentId: req.params.id,
+        agentId: id,
         serpApiTools: updated?.configuration?.serpApiTools ?? [],
       });
     } catch (error: any) {
@@ -464,7 +484,9 @@ export function registerAgentRoutes(app: Express) {
    */
   app.get("/api/agents/test/:templateId", async (req: Request, res: Response) => {
     try {
-      const template = agentSwarmManager.getTemplate(req.params.templateId);
+      const templateId = firstRouteParam(req.params.templateId);
+      if (!templateId) return res.status(400).json({ error: "Missing template id" });
+      const template = agentSwarmManager.getTemplate(templateId);
       if (!template) {
         return res.status(404).json({ error: "Template not found" });
       }
@@ -481,7 +503,9 @@ export function registerAgentRoutes(app: Express) {
    */
   app.get("/api/agents/:id/test", async (req: Request, res: Response) => {
     try {
-      const agent = agentSwarmManager.getAgent(req.params.id);
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Missing agent id" });
+      const agent = agentSwarmManager.getAgent(id);
       if (!agent) {
         return res.status(404).json({ error: "Agent not found" });
       }
