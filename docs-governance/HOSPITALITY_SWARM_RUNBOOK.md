@@ -81,6 +81,22 @@ Cloudbeds and similar PMSs often **email** payment links; those messages are eas
 - **Pipe:** [`dispatchSms`](../server/services/smsRouter.ts) with **`CUSTOMER_CARE`** (A2P transactional — confirmations / links). No marketing STOP footer.
 - **OTP** flows remain on Twilio Verify; this endpoint is for **payment URL delivery** only.
 
+### PayByLink email — deliverability audit (Cloudbeds-aligned)
+
+When guests still receive **Cloudbeds PayByLink** (or similar) via **email**, filters often flag **external links**, **missing SPF**, or **damaged domain reputation**. Use this as an **operational audit**, not a code path in this repo:
+
+| Check | Action |
+|--------|--------|
+| **SPF (DNS)** | Ensure the property’s sending domain SPF includes SendGrid (Cloudbeds uses SendGrid for mail). Example record pattern: `v=spf1 include:sendgrid.net ~all` — **verify** against your registrar/DNS and [Cloudbeds](https://www.cloudbeds.com) / SendGrid docs for the exact hostname they specify for your tenant. |
+| **DKIM / DMARC** | Follow Cloudbeds (and DNS host) guidance for aligned authentication; weak or missing alignment increases spam placement. |
+| **Links** | **Do not** use URL shorteners in guest-facing payment flows — they are high-risk for spam scoring. Prefer full **https** URLs from Cloudbeds. Any **Sovereign** redirect or deeplink should also avoid shortener services. |
+| **Sender identity** | Train staff and email copy so guests recognize mail from the property’s **official domain** and branded templates, not only generic third-party From addresses. |
+| **Subject & body** | Use clear, transactional wording (dates, reservation context) — avoid “spammy” promotional patterns. |
+| **Guest-side** | Document for front desk: ask guests to check **Spam/Junk**, **whitelist** the property or Cloudbeds sender, and escalate to Cloudbeds support if links are consistently blocked. |
+| **Reputation** | If the domain or IP was previously flagged, deliverability may require **Cloudbeds support** and DNS remediation — not prompt changes. |
+
+**Split strategy:** Use **SMS** (`send-payment-link`) for time-critical payment URLs when the guest phone is verified; use the **DNS / email checklist** above when email must remain in the mix.
+
 ## OAuth scopes
 
 Cloudbeds OAuth tokens must include scopes for guest, reservation, housekeeping, and dashboard reads used above (`read:guest`, `read:reservation`, `read:housekeeping`, `read:dashboard`, etc.). See OpenAPI `components.securitySchemes.OAuth2`.
@@ -89,4 +105,4 @@ Cloudbeds OAuth tokens must include scopes for guest, reservation, housekeeping,
 
 - **No new routes** in `server/routes.ts` for this feature; tools are server-side only.  
 - **Voice** changes in `geminiVoice.ts` follow hospitality policy alignment; do not weaken the voice lockdown for unrelated edits.  
-- **SMS** for OTP uses Twilio Verify only — not the Sovereign SMS Router marketing pipes.
+- **SMS:** OTP uses Twilio Verify only. **Payment link SMS** uses the Sovereign SMS Router **`CUSTOMER_CARE`** pipe ([`shareRoutes`](../server/routes/shareRoutes.ts) `send-payment-link`); do not use marketing pipes for checkout. Marketing blasts remain on their registered A2P intents only.
