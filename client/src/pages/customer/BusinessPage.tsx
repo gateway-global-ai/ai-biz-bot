@@ -497,7 +497,7 @@ export default function BusinessPage() {
       const { PlaceAutocompleteElement } = await loadPlacesLibrary();
       if (cancelled) return;
 
-      const autocomplete = new PlaceAutocompleteElement();
+      const autocomplete = new PlaceAutocompleteElement({});
       autocomplete.setAttribute('placeholder', 'What is your business name?');
       autocomplete.setAttribute('data-testid', 'input-place-search');
       autocomplete.style.cssText = 'width:100%;display:block;';

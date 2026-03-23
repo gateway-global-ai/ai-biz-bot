@@ -15,6 +15,7 @@ interface ChatMessage {
 // Default configs for fallback
 const DEFAULT_BUSINESS: BusinessContext = {
   id: '',
+  placeId: '',
   name: 'Gateway Global AI',
   address: 'Platform HQ',
   phone: '',
@@ -31,9 +32,9 @@ const DEFAULT_AGENT: AgentConfig = {
 };
 
 const DEFAULT_VOICE: VoiceConfig = {
-  provider: 'gemini',
+  latency: 'ultra-low',
   voiceName: 'Puck',
-  model: 'gemini-2.0-flash-exp', // Will be overridden by server env
+  model: process.env.GEMINI_MODEL_ID || 'models/gemini-2.5-flash-native-audio-preview-12-2025', // Will be overridden by server env
   mode: 'clear_voice',
   enableAnalysis: {
     emotion: true,
@@ -71,6 +72,7 @@ export default function KioskPage() {
   // Construct business context from site config or defaults
   const business = React.useMemo<BusinessContext>(() => siteConfig ? {
     id: siteConfig.id,
+    placeId: siteConfig.googlePlaceId || siteConfig.placeData?.place_id || siteConfig.placeData?.id || '',
     name: siteConfig.name,
     address: siteConfig.placeData?.formatted_address || siteConfig.placeData?.address || '',
     phone: siteConfig.placeData?.formatted_phone_number || siteConfig.placeData?.phone || '',

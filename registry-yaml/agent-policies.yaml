@@ -36,3 +36,100 @@ agents:
     allowedActions: [route.navigate, shell.presentMenu, shell.presentNextActions, ui.highlight, behavior.mutate, runtime.chaos.mutate, admin.onboarding.read, admin.onboarding.write]
     allowedTools: []
     mayInventRoutes: false
+  - agentId: BrandGovernanceAgent
+    agentType: brand_strategist
+    safeModeProfile: balanced
+    communicationWindowProfile: ar_4_4_c_8_h_2
+    emotionProfile: consultative
+    groundingImportance: 85
+    filterTransparency: 75
+    persistenceProfile: structured
+    jurisdiction: brand_governance
+    allowedEntities: [siteConfigs]
+    allowedActions:
+      - brand.read_place_data
+      - brand.serp_research
+      - brand.interview_owner
+      - brand.write_brand_governance
+      - brand.generate_deep_research_prompt
+    allowedTools: [serpapi_search, place_lookup]
+    mayInventRoutes: false
+    requiresPaidPlan: [brand.generate_deep_research_prompt]
+    policyDoc: docs-governance/BRAND_AGENT_POLICY.md
+
+  # ── Business-facing agent class policies ──────────────────────────────────────
+  # These govern agents deployed inside a business's AI OS (not platform shell agents).
+  # Each agent class maps to the Agent Policy Registry in docs-governance/AGENT_POLICY_REGISTRY.md.
+
+  - agentId: VoiceConciergeAgent
+    agentType: concierge
+    safeModeProfile: strict
+    communicationWindowProfile: ar_3_3_c_6_h_2
+    emotionProfile: warm_professional
+    groundingImportance: 85
+    filterTransparency: 80
+    persistenceProfile: balanced
+    allowedEntities: [siteConfigs, customerAccounts, inquiries]
+    allowedActions: [shell.presentMenu, shell.presentNextActions, support.collectIntake, route.navigate]
+    allowedTools: []
+    mayInventRoutes: false
+    jurisdiction: front_desk_voice
+    responseWindowSeconds: 10
+
+  - agentId: SalesAgent
+    agentType: sales
+    safeModeProfile: balanced
+    communicationWindowProfile: ar_2_2_c_10_h_2
+    emotionProfile: confident_helpful
+    groundingImportance: 90
+    filterTransparency: 75
+    persistenceProfile: persistent
+    allowedEntities: [siteConfigs, platformProducts, orders, customerAccounts]
+    allowedActions: [sales.presentProduct, sales.collectLead, sales.routeToCheckout, shell.presentMenu]
+    allowedTools: []
+    mayInventRoutes: false
+    jurisdiction: product_service_sales
+    requiresCapability: products
+
+  - agentId: SupportAgent
+    agentType: support
+    safeModeProfile: strict
+    communicationWindowProfile: ar_5_4_c_8_h_2
+    emotionProfile: calm_empathetic
+    groundingImportance: 90
+    filterTransparency: 90
+    persistenceProfile: balanced
+    allowedEntities: [siteConfigs, customerAccounts, inquiries]
+    allowedActions: [support.collectIntake, support.routeToStaff, shell.presentMenu]
+    allowedTools: []
+    mayInventRoutes: false
+    jurisdiction: customer_support_intake
+
+  - agentId: BookingAgent
+    agentType: booking
+    safeModeProfile: balanced
+    communicationWindowProfile: ar_3_3_c_8_h_3
+    emotionProfile: efficient_friendly
+    groundingImportance: 92
+    filterTransparency: 85
+    persistenceProfile: structured
+    allowedEntities: [siteConfigs, customerAccounts, orders]
+    allowedActions: [booking.checkAvailability, booking.confirmAppointment, booking.sendConfirmation, shell.presentMenu]
+    allowedTools: []
+    mayInventRoutes: false
+    jurisdiction: appointment_scheduling
+    requiresCapability: booking
+
+  - agentId: ReceptionistAgent
+    agentType: receptionist
+    safeModeProfile: strict
+    communicationWindowProfile: ar_4_3_c_7_h_2
+    emotionProfile: warm_professional
+    groundingImportance: 80
+    filterTransparency: 80
+    persistenceProfile: balanced
+    allowedEntities: [siteConfigs, customerAccounts, inquiries]
+    allowedActions: [support.collectIntake, route.navigate, shell.presentMenu, shell.presentNextActions]
+    allowedTools: []
+    mayInventRoutes: false
+    jurisdiction: front_desk_routing

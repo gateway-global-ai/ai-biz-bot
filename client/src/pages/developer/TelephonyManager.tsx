@@ -100,10 +100,10 @@ export default function TelephonyManager() {
   const provisionMutation = useMutation({
     mutationFn: async (phoneNumber: string) => {
       const baseUrl = window.location.origin;
-      return apiRequest('/api/telephony/numbers/provision', {
-        method: 'POST',
-        body: JSON.stringify({ phoneNumber, voiceUrl: `${baseUrl}/webhook/voice`, smsUrl: `${baseUrl}/webhook/sms` }),
-        headers: { 'Content-Type': 'application/json' },
+      return apiRequest('POST', '/api/telephony/numbers/provision', {
+        phoneNumber,
+        voiceUrl: `${baseUrl}/webhook/voice`,
+        smsUrl: `${baseUrl}/webhook/sms`,
       });
     },
     onSuccess: () => {
@@ -117,11 +117,7 @@ export default function TelephonyManager() {
 
   const updateConfigMutation = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest('/api/telephony/config', {
-        method: 'PATCH',
-        body: JSON.stringify(data),
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return apiRequest('PATCH', '/api/telephony/config', data);
     },
     onSuccess: () => {
       toast({ title: 'Settings updated' });
@@ -133,17 +129,13 @@ export default function TelephonyManager() {
   const applyWebhooksMutation = useMutation({
     mutationFn: async () => {
       if (!config?.phoneSid) throw new Error('No phone SID — provision a number first');
-      return apiRequest('/api/telephony/webhooks', {
-        method: 'PATCH',
-        body: JSON.stringify({
-          phoneSid: config.phoneSid,
-          voiceUrl: config.voiceUrl || null,
-          voiceFallbackUrl: config.voiceFallbackUrl || null,
-          statusCallback: config.statusCallbackUrl || null,
-          smsUrl: config.smsUrl || null,
-          smsFallbackUrl: config.smsFallbackUrl || null,
-        }),
-        headers: { 'Content-Type': 'application/json' },
+      return apiRequest('PATCH', '/api/telephony/webhooks', {
+        phoneSid: config.phoneSid,
+        voiceUrl: config.voiceUrl || null,
+        voiceFallbackUrl: config.voiceFallbackUrl || null,
+        statusCallback: config.statusCallbackUrl || null,
+        smsUrl: config.smsUrl || null,
+        smsFallbackUrl: config.smsFallbackUrl || null,
       });
     },
     onSuccess: () => toast({ title: 'Webhooks applied to Twilio' }),
@@ -152,11 +144,7 @@ export default function TelephonyManager() {
 
   const createSubAccountMutation = useMutation({
     mutationFn: async (name: string) => {
-      return apiRequest('/api/twilio/sub-accounts', {
-        method: 'POST',
-        body: JSON.stringify({ friendlyName: name }),
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return apiRequest('POST', '/api/twilio/sub-accounts', { friendlyName: name });
     },
     onSuccess: () => {
       toast({ title: 'Sub-account created' });

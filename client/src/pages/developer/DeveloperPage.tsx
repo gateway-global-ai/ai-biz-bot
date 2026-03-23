@@ -178,6 +178,19 @@ export default function DeveloperPage() {
             Access SDKs, MCP Specs, and direct API tools before public launch.
           </p>
 
+          <div className="flex flex-wrap justify-center gap-3 mt-8">
+            <Link href="/dev/ui-kit">
+              <Button
+                variant="outline"
+                className="border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10"
+                data-testid="link-ui-kit"
+              >
+                <Layout className="w-4 h-4 mr-2" />
+                Developer UI Kit
+              </Button>
+            </Link>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto mt-12">
             <Card className="bg-slate-900/50 border-slate-800 hover:border-violet-500/30 transition-colors group">
               <CardContent className="p-6">

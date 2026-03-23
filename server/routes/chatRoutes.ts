@@ -9,9 +9,18 @@ import { buildRichSystemInstruction } from "../services/systemInstructionBuilder
 import { buildBehavioralPrompt } from "../services/promptCompiler";
 import { compileFullSystemPrompt } from "../services/systemPromptCompiler";
 import type { BusinessContext } from "../services/promptCompiler";
+import {
+  getCachedKnowledgeGapReport,
+  certificationFromGapReport,
+} from "../services/knowledgeCertificationContext";
 import { PLATFORM_GATEWAY_SYSTEM_PROMPT } from "../prompts/platformGatewayPrompt";
 import { FREE_TIER_SYSTEM_INSTRUCTION } from "../prompts/freeTierPrompt";
-import { analyticsLogs, smsConversations, smsMessages } from "@shared/schema";
+import {
+  analyticsLogs,
+  insertCustomerSchema,
+  smsConversations,
+  smsMessages,
+} from "@shared/schema";
 import { detectSensitiveInput } from "../services/sensitiveInputGuard";
 import {
   resolveFieldWriteMode,
@@ -100,20 +109,52 @@ const router = Router();
         return res.status(200).json(buildSecureInputResponse(sensitiveCheck.policy, siteConfigId));
       }
 
+      const isPlatformChat = siteConfigId === "platform-landing";
       let siteConfig: any = null;
-      let resolvedProvider: any = 'gemini';
+      if (siteConfigId && !isPlatformChat) {
+        siteConfig = await storage.getSiteConfig(siteConfigId);
+      }
+
+      const sensitiveCheck = detectSensitiveInput(message);
+      if (sensitiveCheck.requiresSecureForm && sensitiveCheck.policy) {
+        if (siteConfig) {
+          const intakePolicy = resolveIntakePolicyConfig(siteConfig);
+          const writeMode = resolveFieldWriteMode(
+            intakePolicy,
+            sensitiveCheck.matchedFieldName ?? sensitiveCheck.policy.fieldName
+          );
+          if (writeMode === "denied") {
+            return res.status(200).json({
+              deniedInput: true,
+              response:
+                "This field cannot be updated through customer conversation. Please contact your receptionist.",
+            });
+          }
+          if (writeMode === "review") {
+            return res.status(200).json({
+              requiresReviewQueue: true,
+              reviewQueue: {
+                fieldName: sensitiveCheck.policy.fieldName,
+                reviewerRole:
+                  intakePolicy.fields[sensitiveCheck.policy.fieldName]?.reviewerRole ??
+                  "receptionist",
+              },
+              response:
+                "I captured your request and queued it for staff review before any account updates are committed.",
+            });
+          }
+        }
+        return res.status(200).json(buildSecureInputResponse(sensitiveCheck.policy, siteConfigId));
+      }
+
+      let resolvedProvider: any = "gemini";
       let resolvedModel: string | undefined;
       let customSystemPrompt: string | undefined;
 
-      const isPlatformChat = siteConfigId === 'platform-landing';
-
-      if (siteConfigId && !isPlatformChat) {
-        siteConfig = await storage.getSiteConfig(siteConfigId);
-        if (siteConfig) {
-          resolvedProvider = siteConfig.modelProvider || 'gemini';
-          resolvedModel = siteConfig.modelName || undefined;
-          customSystemPrompt = siteConfig.systemPromptOverride || undefined;
-        }
+      if (siteConfig) {
+        resolvedProvider = siteConfig.modelProvider || "gemini";
+        resolvedModel = siteConfig.modelName || undefined;
+        customSystemPrompt = siteConfig.systemPromptOverride || undefined;
       }
 
       const knowledgeLibrary = Array.isArray((siteConfig as any)?.knowledgeLibrary) ? (siteConfig as any).knowledgeLibrary as Array<{ id: string; title: string; content: string }> : [];
@@ -131,13 +172,21 @@ const router = Router();
         const assignedAgentId = (siteConfig as { assignedAgentId?: string | null })?.assignedAgentId;
         const pd = (siteConfig as { placeData?: Record<string, unknown> | null })?.placeData as Record<string, unknown> | null | undefined;
         const defaultBasePrompt = `You are the AI Biz Bot, a friendly AI assistant for ${businessName || "this business"}. You help website visitors with questions about the business.\n\nBusiness details:\n- Name: ${businessName || "N/A"}\n- Address: ${businessAddress || "N/A"}\n- Phone: ${businessPhone || "N/A"}\n\nYou are helpful, concise, and conversational. Keep responses brief since this is a chat widget.`;
-        let agent: Awaited<ReturnType<typeof storage.getAgent>> = null;
+        let agent: Awaited<ReturnType<typeof storage.getAgent>> | null = null;
         if (assignedAgentId) agent = await storage.getAgent(assignedAgentId);
         if (agent) {
+          let knowledgeCertification: BusinessContext["knowledgeCertification"];
+          if (siteConfigId) {
+            const gapReport = await getCachedKnowledgeGapReport(siteConfigId);
+            if (gapReport) {
+              knowledgeCertification = certificationFromGapReport(gapReport);
+            }
+          }
           const businessContext: BusinessContext = {
             name: businessName ?? (pd && typeof pd.name === "string" ? pd.name : undefined) ?? (siteConfig as { name?: string }).name ?? "this business",
             address: businessAddress ?? (pd && typeof (pd as any).formattedAddress === "string" ? (pd as any).formattedAddress : typeof (pd as any).formatted_address === "string" ? (pd as any).formatted_address : undefined),
             phone: businessPhone ?? (pd && typeof (pd as any).formatted_phone_number === "string" ? (pd as any).formatted_phone_number : undefined),
+            knowledgeCertification,
           };
           systemPrompt = compileFullSystemPrompt(agent, siteConfig as any, businessContext) + knowledgeBlock;
         } else {
@@ -154,7 +203,7 @@ const router = Router();
 
       const gatewayMessages = [
         { role: 'system' as const, content: systemPrompt },
-        ...history.map(h => ({ role: h.role as 'user' | 'assistant' as const, content: h.content })),
+        ...history.map((h) => ({ role: h.role as "user" | "assistant", content: h.content })),
         { role: 'user' as const, content: message },
       ];
 
@@ -285,6 +334,7 @@ const router = Router();
       const agentTemp = agent.aiTemperature ? agent.aiTemperature / 100 : 0.7;
       const agentMaxTokens = agent.aiMaxTokens || 4096;
       // Sovereign: Gemini is the sole AI provider. Model from Doppler.
+      if (!process.env.GEMINI_MODEL_FALLBACK) console.error('[GOVERNANCE] GEMINI_MODEL_FALLBACK not set in Doppler');
       const modelToUse = process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash';
 
       // Retry once on transient failures

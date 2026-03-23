@@ -3,6 +3,7 @@
  * Uses @react-google-maps/api and the Maps key from /api/config/maps-key.
  */
 import { useMemo, useState, useEffect, useCallback } from "react";
+import type { Library } from "@googlemaps/js-api-loader";
 import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api";
 
 const DEFAULT_CENTER = { lat: 45.4642, lng: 9.19 };
@@ -26,11 +27,11 @@ type B2bMapProps = {
   className?: string;
 };
 
-const LIBRARIES: ("geometry" | "places")[] = ["places"];
+const LIBRARIES: Library[] = ["places"];
 
 function B2bMapInner({
   mapsApiKey,
-  markers,
+  markers = [],
   height,
   className,
 }: B2bMapProps & { mapsApiKey: string }) {

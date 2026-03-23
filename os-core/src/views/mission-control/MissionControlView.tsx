@@ -500,6 +500,7 @@ export default function MissionControlView() {
 
   const business: BusinessContext = {
     id: '4e1f25ba-09f0-4a69-9914-ec29b073fb75',
+    placeId: 'ChIJ_mock_place_id',
     name: 'The Joint Chiropractic',
     address: '123 Spine St',
     phone: '(555) 555-5555',
@@ -516,9 +517,11 @@ export default function MissionControlView() {
   };
 
   const voiceConfig: VoiceConfig = {
-    provider: 'gemini',
+    latency: 'ultra-low',
     voiceName: 'Puck',
-    model: 'gemini-2.0-flash-exp',
+    model: typeof process !== 'undefined' && process.env.GEMINI_MODEL_ID
+      ? process.env.GEMINI_MODEL_ID
+      : 'models/gemini-2.5-flash-native-audio-preview-12-2025',
     mode: 'clear_voice',
     enableAnalysis: { emotion: true, sentiment: true, disc: true }
   };

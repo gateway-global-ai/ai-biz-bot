@@ -14,8 +14,8 @@ Deployment is **script-only**. Do not leave "run this SQL then restart" or "if p
 | Environment | Directory | Command |
 |-------------|-----------|---------|
 | **Prod** | `/opt/gatewayglobal/aibizbot.gatewayglobal.ai` | `./script/deploy-server.sh aibizbot.gatewayglobal.ai` |
-| **Stage** | `/opt/gatewayglobal/aibizbot-stage.gatewayglobal.ai` | `./script/deploy-staging.sh aibizbot-stage.gatewayglobal.ai` |
 | **Dev** | `/opt/gatewayglobal/aibizbot-dev.gatewayglobal.ai` | `./script/deploy-dev.sh aibizbot-dev.gatewayglobal.ai` |
+| **Stage** (optional) | `/opt/gatewayglobal/aibizbot-stage.gatewayglobal.ai` | `./script/deploy-staging.sh` |
 
 ## Prerequisites on the server
 
@@ -35,3 +35,22 @@ Deployment is **script-only**. Do not leave "run this SQL then restart" or "if p
 
 - `npm run db:migrate` — runs all `migrations/*.sql` in order (Doppler supplies `DATABASE_URL`).
 - `npm run kill-port` — stops the PM2 app for the current PORT and kills any process on that port (Doppler supplies `PORT`).
+- `npm run integration:readiness` — after deploy, optional smoke check (Doppler; prints env lengths + PMS row status — no secrets logged).
+
+## PM2 and `ecosystem.config.cjs`
+
+- **`ecosystem.config.cjs`** lists **stage** (stg), **dev** (dev), **prod** (prd) — each server only runs the app whose `cwd` matches that machine.
+- Deploy scripts use **`script/lib/pm2-reload-app.sh`**: restart, or first-time **`pm2 start ecosystem.config.cjs --only <name>`**.
+- Set **`DOPPLER_TOKEN`** (or **`DOPPLER_TOKEN_DEV`** / **`_STG`** / **`_PRD`**) in `.env` so PM2 can run `doppler run`.
+
+## Deploy to dev (where you test)
+
+On the dev server, from the dev app directory:
+
+```bash
+./script/deploy-dev.sh aibizbot-dev.gatewayglobal.ai
+```
+
+Your **Cloudbeds redirect URI** in Doppler should match this host, e.g.  
+`https://aibizbot-dev.gatewayglobal.ai/api/cloudbeds/oauth/callback`  
+(whatever URL you registered). After deploy, optional: **`npm run integration:readiness`**.

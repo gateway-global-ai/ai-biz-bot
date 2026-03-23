@@ -7,6 +7,8 @@
 set -e
 APP_NAME="${1:-aibizbot-dev.gatewayglobal.ai}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib/pm2-reload-app.sh
+source "$REPO_ROOT/script/lib/pm2-reload-app.sh"
 cd "$REPO_ROOT"
 
 echo "==> Deploying DEV..."
@@ -27,11 +29,5 @@ echo "==> Installing deps and building..."
 npm ci
 npm run build
 
-if command -v pm2 &>/dev/null; then
-  echo "==> Restarting PM2 app: $APP_NAME"
-  pm2 restart "$APP_NAME" --update-env
-  pm2 save
-  echo "==> Done. Dev app started."
-else
-  echo "==> Build complete. Start the app manually (e.g. doppler run -- npm run dev or pm2 start ...)."
-fi
+pm2_reload_app "$APP_NAME" "$REPO_ROOT"
+echo "==> Done. Dev app started."

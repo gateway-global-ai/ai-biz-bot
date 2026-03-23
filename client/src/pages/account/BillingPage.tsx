@@ -50,11 +50,7 @@ function AddCardForm({ customerId, onSuccess }: { customerId: string; onSuccess:
 
   const setupMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest('/api/billing/setup-intent', {
-        method: 'POST',
-        body: JSON.stringify({ customerId }),
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const res = await apiRequest('POST', '/api/billing/setup-intent', { customerId });
       return res.json();
     },
   });
@@ -121,10 +117,8 @@ function PaymentMethodCard({ pm, customerId, onUpdate }: { pm: PaymentMethod; cu
 
   const setDefaultMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest(`/api/billing/payment-methods/${customerId}/default`, {
-        method: 'POST',
-        body: JSON.stringify({ paymentMethodId: pm.id }),
-        headers: { 'Content-Type': 'application/json' },
+      await apiRequest('POST', `/api/billing/payment-methods/${customerId}/default`, {
+        paymentMethodId: pm.id,
       });
     },
     onSuccess: () => {
@@ -136,9 +130,7 @@ function PaymentMethodCard({ pm, customerId, onUpdate }: { pm: PaymentMethod; cu
 
   const removeMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest(`/api/billing/payment-methods/${customerId}/${pm.id}`, {
-        method: 'DELETE',
-      });
+      await apiRequest('DELETE', `/api/billing/payment-methods/${customerId}/${pm.id}`);
     },
     onSuccess: () => {
       toast({ title: 'Card removed' });

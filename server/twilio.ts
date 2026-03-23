@@ -50,6 +50,11 @@ function getCredentialsOrNull(): { accountSid: string; authToken: string; phoneN
 export async function getTwilioClient() {
   if (cachedClient) return cachedClient;
   const { accountSid, authToken } = getCredentials();
+  // Never use a local proxy/tunnel (Twilio CLI sets TWILIO_HTTP_CLIENT_DEFAULT_TIMEOUT
+  // or TWILIO_PROXY_URL; unset them to force direct API calls to api.twilio.com).
+  delete process.env.TWILIO_PROXY_URL;
+  delete process.env.HTTP_PROXY;
+  delete process.env.http_proxy;
   cachedClient = twilio(accountSid, authToken);
   return cachedClient;
 }

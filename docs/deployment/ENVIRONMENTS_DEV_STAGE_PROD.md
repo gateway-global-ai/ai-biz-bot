@@ -78,6 +78,8 @@ Use one subdomain per environment. Each has its own port, app directory, and `.e
 
 **DNS:** Point each subdomain (A record) to the VPS IP (e.g. 72.61.4.44). Then add an Nginx server block and run Certbot for each hostname.
 
+**PM2:** **`ecosystem.config.cjs`** lists stage / dev / prod app names (each server runs the matching `cwd`); deploy scripts use **`script/lib/pm2-reload-app.sh`**.
+
 - **Prod:** Deploy from `main`. This is the current stable app (see [DEPLOY_VPS_AIBIZBOT.md](DEPLOY_VPS_AIBIZBOT.md)).
 - **Stage:** Deploy from `stage`. In staging `.env`: `PORT=3003`, `WEBHOOK_BASE_URL=https://aibizbot-stage.gatewayglobal.ai`, staging DB and test Twilio if desired.
 - **Dev:** Either (1) local only — run `npm run dev` on your machine (e.g. localhost:5000), or (2) optional shared dev server on VPS — deploy any branch to aibizbot-dev; in `.env`: `PORT=3004`, `WEBHOOK_BASE_URL=https://aibizbot-dev.gatewayglobal.ai`.

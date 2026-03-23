@@ -40,6 +40,7 @@ export default function PlatformBuyPage() {
       activeLane="buy"
       title="Choose your activation path."
       description="AI Biz Bot is sold as licensed software plus metered communications and optional data/intelligence services. Start with the core platform, then add voice, industry packs, and funded data as needed."
+      autoOpenChatOnDesktop={false}
     >
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         {offers.map(({ title, price, description, icon: Icon, emphasized }) => (

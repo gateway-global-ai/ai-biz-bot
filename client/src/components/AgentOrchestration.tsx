@@ -42,7 +42,7 @@ export default function AgentOrchestration({
   });
 
   const { data: swarm } = useQuery({
-    queryKey: swarmId ? [`/api/swarms/${swarmId}`] : null,
+    queryKey: ['swarm', swarmId ?? 'none'],
     enabled: !!swarmId,
   });
 

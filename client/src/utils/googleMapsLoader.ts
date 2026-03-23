@@ -81,7 +81,7 @@ export function ensureApiLoader(apiKey: string): void {
  *
  * Usage:
  *   const { PlaceAutocompleteElement } = await loadPlacesLibrary();
- *   const el = new PlaceAutocompleteElement();
+ *   const el = new PlaceAutocompleteElement({});
  */
 export async function loadPlacesLibrary(): Promise<google.maps.PlacesLibrary> {
   const deadline = Date.now() + 10_000;
