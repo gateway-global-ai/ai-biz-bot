@@ -1378,6 +1378,10 @@ export const knowledgeArtifacts = pgTable(
     content: text("content"),
     sourcePath: text("source_path"),
     groupLevel: text("group_level"),
+    /** KAP trust weight 0–10; platform governance anchors use 10. */
+    trustWeight: integer("trust_weight"),
+    /** Tags, provenance notes, etc. */
+    artifactMetadata: jsonb("artifact_metadata").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     ownerId: varchar("owner_id").references(() => customerAccounts.id, { onDelete: "set null" }),
     resellerId: varchar("reseller_id").references(() => resellers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow(),
@@ -1386,6 +1390,7 @@ export const knowledgeArtifacts = pgTable(
   (table) => [
     index("idx_knowledge_artifacts_site_config_id").on(table.siteConfigId),
     index("idx_knowledge_artifacts_scope_visibility").on(table.scope, table.visibility),
+    index("idx_knowledge_artifacts_scope_trust").on(table.scope, table.trustWeight),
   ]
 );
 
@@ -1396,6 +1401,59 @@ export const insertKnowledgeArtifactSchema = createInsertSchema(knowledgeArtifac
 });
 export type KnowledgeArtifact = typeof knowledgeArtifacts.$inferSelect;
 export type InsertKnowledgeArtifact = typeof knowledgeArtifacts.$inferInsert;
+
+/** Phase 5E — superadmin manual certification for a dimension (heuristic override, audited, expiring). */
+export const knowledgeCertificationOverrides = pgTable(
+  "knowledge_certification_overrides",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    siteConfigId: varchar("site_config_id")
+      .notNull()
+      .references(() => siteConfigs.id, { onDelete: "cascade" }),
+    dimensionId: text("dimension_id").notNull(),
+    overrideScore: integer("override_score").notNull(),
+    reasonText: text("reason_text").notNull(),
+    createdByAdminUserId: varchar("created_by_admin_user_id")
+      .notNull()
+      .references(() => adminUsers.id),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    /** Deterministic Sentinel audit: true = needs human review on platform. */
+    reviewRequired: boolean("review_required").notNull().default(false),
+    auditDetail: jsonb("audit_detail").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  },
+  (table) => [
+    uniqueIndex("knowledge_cert_override_site_dim").on(table.siteConfigId, table.dimensionId),
+    index("idx_knowledge_cert_overrides_site_expires").on(table.siteConfigId, table.expiresAt),
+    index("idx_knowledge_cert_overrides_review").on(table.siteConfigId, table.reviewRequired),
+  ]
+);
+
+export type KnowledgeCertificationOverride = typeof knowledgeCertificationOverrides.$inferSelect;
+export type InsertKnowledgeCertificationOverride = typeof knowledgeCertificationOverrides.$inferInsert;
+
+/** Zero-LLM vault handoff — opaque token/refs from upstream vaults; never chat_logs. */
+export const secureVaultRefs = pgTable(
+  "secure_vault_refs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    siteConfigId: varchar("site_config_id")
+      .notNull()
+      .references(() => siteConfigs.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    opaqueReference: text("opaque_reference").notNull(),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    attestedAt: timestamp("attested_at").notNull(),
+    createdByAdminUserId: varchar("created_by_admin_user_id")
+      .notNull()
+      .references(() => adminUsers.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("idx_secure_vault_refs_site").on(table.siteConfigId)]
+);
+
+export type SecureVaultRef = typeof secureVaultRefs.$inferSelect;
+export type InsertSecureVaultRef = typeof secureVaultRefs.$inferInsert;
 
 // Session-scoped active document keys for in-chat KB overlay
 export const artifactSessionActivations = pgTable(

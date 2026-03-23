@@ -122,8 +122,11 @@ import {
   smsLogs,
   smsOptOuts,
   knowledgeArtifacts,
+  knowledgeCertificationOverrides,
+  secureVaultRefs,
   artifactSessionActivations,
   type KnowledgeArtifact,
+  type KnowledgeCertificationOverride,
   type ArtifactSessionActivation,
   type InsertKnowledgeArtifact,
   qrRoutes,
@@ -329,6 +332,29 @@ export interface IStorage {
   getKnowledgeArtifactById(id: string): Promise<KnowledgeArtifact | undefined>;
   createKnowledgeArtifact(data: InsertKnowledgeArtifact): Promise<KnowledgeArtifact>;
   deleteKnowledgeArtifact(id: string): Promise<void>;
+  /** Non-expired overrides for gap analysis and tool gates (Phase 5E). */
+  listActiveKnowledgeCertificationOverrides(siteConfigId: string): Promise<KnowledgeCertificationOverride[]>;
+  upsertKnowledgeCertificationOverride(row: {
+    siteConfigId: string;
+    dimensionId: string;
+    overrideScore: number;
+    reasonText: string;
+    createdByAdminUserId: string;
+    expiresAt: Date;
+    reviewRequired?: boolean;
+    auditDetail?: Record<string, unknown>;
+  }): Promise<KnowledgeCertificationOverride>;
+  /** All overrides for a site (admin / Sentinel), newest expiry first. */
+  listKnowledgeCertificationOverridesForSite(siteConfigId: string): Promise<KnowledgeCertificationOverride[]>;
+  /** Zero-LLM vault: idempotent on idempotency_key; same key must target same site. */
+  upsertSecureVaultRef(input: {
+    siteConfigId: string;
+    category: string;
+    opaqueReference: string;
+    idempotencyKey: string;
+    attestedAt: Date;
+    createdByAdminUserId: string;
+  }): Promise<{ id: string; category: string }>;
   activateArtifactForSession(sessionId: string, agentAccessKey: string, siteConfigId?: string): Promise<void>;
   deactivateArtifactForSession(sessionId: string, agentAccessKey: string): Promise<void>;
   getActiveArtifactKeysForSession(sessionId: string): Promise<string[]>;
@@ -1439,6 +1465,102 @@ export class DatabaseStorage implements IStorage {
 
   async deleteKnowledgeArtifact(id: string): Promise<void> {
     await db.delete(knowledgeArtifacts).where(eq(knowledgeArtifacts.id, id));
+  }
+
+  async listActiveKnowledgeCertificationOverrides(siteConfigId: string): Promise<KnowledgeCertificationOverride[]> {
+    return db
+      .select()
+      .from(knowledgeCertificationOverrides)
+      .where(
+        and(
+          eq(knowledgeCertificationOverrides.siteConfigId, siteConfigId),
+          gt(knowledgeCertificationOverrides.expiresAt, new Date()),
+        ),
+      );
+  }
+
+  async upsertKnowledgeCertificationOverride(row: {
+    siteConfigId: string;
+    dimensionId: string;
+    overrideScore: number;
+    reasonText: string;
+    createdByAdminUserId: string;
+    expiresAt: Date;
+    reviewRequired?: boolean;
+    auditDetail?: Record<string, unknown>;
+  }): Promise<KnowledgeCertificationOverride> {
+    const reviewRequired = row.reviewRequired ?? false;
+    const auditDetail = row.auditDetail ?? {};
+    const [out] = await db
+      .insert(knowledgeCertificationOverrides)
+      .values({
+        siteConfigId: row.siteConfigId,
+        dimensionId: row.dimensionId,
+        overrideScore: row.overrideScore,
+        reasonText: row.reasonText,
+        createdByAdminUserId: row.createdByAdminUserId,
+        expiresAt: row.expiresAt,
+        reviewRequired,
+        auditDetail,
+      })
+      .onConflictDoUpdate({
+        target: [knowledgeCertificationOverrides.siteConfigId, knowledgeCertificationOverrides.dimensionId],
+        set: {
+          overrideScore: row.overrideScore,
+          reasonText: row.reasonText,
+          createdByAdminUserId: row.createdByAdminUserId,
+          expiresAt: row.expiresAt,
+          reviewRequired,
+          auditDetail,
+          createdAt: new Date(),
+        },
+      })
+      .returning();
+    return out;
+  }
+
+  async listKnowledgeCertificationOverridesForSite(siteConfigId: string): Promise<KnowledgeCertificationOverride[]> {
+    return db
+      .select()
+      .from(knowledgeCertificationOverrides)
+      .where(eq(knowledgeCertificationOverrides.siteConfigId, siteConfigId))
+      .orderBy(desc(knowledgeCertificationOverrides.expiresAt));
+  }
+
+  async upsertSecureVaultRef(input: {
+    siteConfigId: string;
+    category: string;
+    opaqueReference: string;
+    idempotencyKey: string;
+    attestedAt: Date;
+    createdByAdminUserId: string;
+  }): Promise<{ id: string; category: string }> {
+    const [existing] = await db
+      .select()
+      .from(secureVaultRefs)
+      .where(eq(secureVaultRefs.idempotencyKey, input.idempotencyKey))
+      .limit(1);
+    if (existing) {
+      if (existing.siteConfigId !== input.siteConfigId) {
+        throw new Error("IDEMPOTENCY_KEY_CONFLICT");
+      }
+      return { id: existing.id, category: existing.category };
+    }
+    const [row] = await db
+      .insert(secureVaultRefs)
+      .values({
+        siteConfigId: input.siteConfigId,
+        category: input.category,
+        opaqueReference: input.opaqueReference,
+        idempotencyKey: input.idempotencyKey,
+        attestedAt: input.attestedAt,
+        createdByAdminUserId: input.createdByAdminUserId,
+      })
+      .returning({ id: secureVaultRefs.id, category: secureVaultRefs.category });
+    if (!row) {
+      throw new Error("SECURE_VAULT_INSERT_FAILED");
+    }
+    return row;
   }
 
   async activateArtifactForSession(sessionId: string, agentAccessKey: string, siteConfigId?: string): Promise<void> {

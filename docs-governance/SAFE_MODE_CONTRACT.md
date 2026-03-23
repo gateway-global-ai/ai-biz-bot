@@ -134,8 +134,27 @@ Phase 5B **layers on top of** the core Safe Mode controls in §Safe Mode control
 - Dimension thresholds, trigger combinations, and fallback skill IDs are **versioned** alongside KAP weights (see [Knowledge Plan Orchestrator §Versioning](./KNOWLEDGE_PLAN_ORCHESTRATOR.md)).
 - Changes require **review** and **migration** notes for existing businesses.
 
+### Phase 5E — Human-in-the-loop certification overrides (Sovereign Sentinel audit)
+
+Superadmins may **override** a per-dimension heuristic score for a **bounded time** (`knowledge_certification_overrides` rows: reason, actor, expiry). This is **not** a bypass of the audit plane: every override is **logged and auditable**.
+
+- **Deterministic reason review:** `server/services/securitySentinel.ts` classifies each `reason_text` as **`ok`** or **`review_required`** (no LLM on the POST path). Results persist on the row (`review_required`, `audit_detail`) and return in the API response for admin UI.
+- **No automated agent** may call `POST /api/v1/admin/knowledge-gap/override`; only **human superadmin** sessions. The **Sovereign Sentinel** agent class explains posture and risk using the platform governance artifact and certification state—see [`SOVEREIGN_SENTINEL_POLICY.md`](./SOVEREIGN_SENTINEL_POLICY.md).
+- **Cross-links:** Execution-plane gating remains in [`toolHandler`](../server/services/toolHandler.ts) and [`knowledgeCertificationContext`](../server/services/knowledgeCertificationContext.ts); trust-weighted retrieval is defined in [Knowledge Plan Orchestrator §Trust weight](./KNOWLEDGE_PLAN_ORCHESTRATOR.md); non-repudiation and identity binding align with Nova / verification governance (see [`AGENT_POLICY_REGISTRY.md`](./AGENT_POLICY_REGISTRY.md) Verification Agent).
+
+### Phase 5G — Zero-LLM vault handoff (physical PEP)
+
+Sensitive **opaque references** (vault tokens, tokenized IDs, PMS connection refs) must **not** traverse chat, voice transcripts, or model tool JSON as the authoritative source of truth. Phase 5G is the **physical** enforcement path: a **modular HTTP route** the model cannot call without a **human Bearer session**, **site-scoped RBAC** (`secure.vault.write`), and **structural validation** before storage.
+
+- **Entry point:** `POST /api/v1/secure-vault/submit` — [`server/routes/secureVaultRoutes.ts`](../server/routes/secureVaultRoutes.ts).
+- **PEP:** [`parseSecureVaultBody`](../server/skills/secureVaultSkill.ts) (Zod); persistence `secure_vault_refs` with **idempotency key** (replay-safe per key; conflict if reused across sites).
+- **Feedback to automation:** API returns **`vaultHandoffToken`** (opaque UUID) and **category** only—no echo of the submitted reference. Downstream flows may resume on that token without exposing secret material to the LLM.
+- **Registry:** See [SKILL_REGISTRY §Vault-first verification](./SKILL_REGISTRY.md#vault-first-verification-secure_vault) and [`EXECUTION_PLANE_BOUNDARY_SPEC.md`](./EXECUTION_PLANE_BOUNDARY_SPEC.md) for boundary discipline.
+
 ### References
 
 - [`KNOWLEDGE_PLAN_ORCHESTRATOR.md`](./KNOWLEDGE_PLAN_ORCHESTRATOR.md) — KAP, trust weights, gap analysis, certification narrative.
 - [`AGENT_POLICY_REGISTRY.md`](./AGENT_POLICY_REGISTRY.md) — jurisdiction, retrieval, refusal.
 - [`PROMPT_RUNTIME_GOVERNANCE.md`](./PROMPT_RUNTIME_GOVERNANCE.md) — compiler fragments and structured inputs.
+- [`SOVEREIGN_SENTINEL_POLICY.md`](./SOVEREIGN_SENTINEL_POLICY.md) — platform Sentinel posture (Phase 5E alignment).
+- [`SKILL_REGISTRY.md`](./SKILL_REGISTRY.md) — `secure_vault` registry entry and Zero-LLM vault path (Phase 5G).

@@ -221,6 +221,18 @@ Map choreography, boundary-locked search, and itinerary playback are **not** ful
 
 ---
 
+## Vault-first verification (`secure_vault`)
+
+**Label:** Secure vault / Tier-2 secret ingestion (PMS refs, token refs, integration token refs)
+
+**Server path (implemented):** Canonical HTTP entry point **`POST /api/v1/secure-vault/submit`** — modular router [`server/routes/secureVaultRoutes.ts`](../server/routes/secureVaultRoutes.ts), mounted from `server/routes.ts`. **Policy:** [`assertSiteScopedAccess`](../server/utils/siteScopedAccess.ts) with **`secure.vault.write`** (session auth + site/reseller scope; not model-managed). **PEP:** [`parseSecureVaultBody`](../server/skills/secureVaultSkill.ts) (Zod) → [`storage.upsertSecureVaultRef`](../server/storage.ts) (`secure_vault_refs`). Response returns **`vaultHandoffToken`** (opaque row id) only—never the submitted opaque reference in JSON.
+
+**Pattern:** Secrets enter only via **authenticated** routes + **validated** JSON → **direct persistence**. They **must not** pass through chat logs, voice transcripts, or LLM tool output as authoritative.
+
+**Productization (future):** Bot Builder / `siteConfigs.config.skills.secure_vault` activation and menu cards when governed; optional alignment with uncertified dimensions per Safe Mode.
+
+---
+
 ## Rules
 
 - NEVER activate a skill by directly setting `status = "active"` in code without all steps passing.

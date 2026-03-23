@@ -26,6 +26,7 @@ import healthRoutes from "./routes/healthRoutes";
 import platformMetricsRoutes from "./routes/platformMetricsRoutes";
 import adminAnalyticsRoutes from "./routes/adminAnalyticsRoutes";
 import knowledgeGapRoutes from "./routes/knowledgeGapRoutes";
+import secureVaultRoutes from "./routes/secureVaultRoutes";
 import a2pPreflightRoutes from "./routes/a2pPreflightRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import { registerB2bRoutes } from "./routes/b2b-routes";
@@ -147,6 +148,7 @@ export async function registerRoutes(
   app.use(platformMetricsRoutes);
   app.use(adminAnalyticsRoutes);
   app.use(knowledgeGapRoutes);
+  app.use(secureVaultRoutes);
 
   // Platinum Core: Telephony, Voice, SMS, Webhooks, TTS, PTT
   app.use(telephonyRoutes);
