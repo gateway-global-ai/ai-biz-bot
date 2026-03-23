@@ -151,8 +151,10 @@ export async function generatePitchWithGemini(businessData: string): Promise<{
   const prompt = PITCH_GENERATION_PROMPT.replace('{INPUT_DATA}', businessData);
 
   try {
+    if (!process.env.GEMINI_MODEL_FALLBACK) console.error('[GOVERNANCE] GEMINI_MODEL_FALLBACK not set in Doppler');
+    const textModel = process.env.GEMINI_MODEL_FALLBACK || 'gemini-2.0-flash';
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${textModel}:generateContent?key=${apiKey}`,
       {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {

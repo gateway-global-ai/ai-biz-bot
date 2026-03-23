@@ -47,16 +47,16 @@ export const PlaceDetailsPanel: React.FC<PlaceDetailsPanelProps> = ({ placeId, o
 
       {/* Places UI Kit container */}
       <div className="flex-1 overflow-y-auto p-4">
-        <gmp-place-details place={placeId}>
+        <gmp-place-details>
           <gmp-place-details-place-request place={placeId}></gmp-place-details-place-request>
           <gmp-place-content-config>
             <gmp-place-attribution light-scheme-color="black" dark-scheme-color="white"></gmp-place-attribution>
             <gmp-place-media lightbox-preferred></gmp-place-media>
             <gmp-place-rating></gmp-place-rating>
-            <gmp-place-price-level></gmp-place-price-level>
+            <gmp-place-price></gmp-place-price>
             <gmp-place-opening-hours></gmp-place-opening-hours>
             <gmp-place-website></gmp-place-website>
-            <gmp-place-formatted-address></gmp-place-formatted-address>
+            <gmp-place-address></gmp-place-address>
             <gmp-place-reviews></gmp-place-reviews>
           </gmp-place-content-config>
         </gmp-place-details>

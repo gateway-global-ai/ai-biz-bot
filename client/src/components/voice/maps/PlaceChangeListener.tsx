@@ -24,7 +24,7 @@ export const PlaceChangeListener: React.FC<PlaceChangeListenerProps> = ({
       const { PlaceAutocompleteElement } = await loadPlacesLibrary();
       if (cancelled || !container) return;
 
-      const autocomplete = new PlaceAutocompleteElement();
+      const autocomplete = new PlaceAutocompleteElement({});
       autocomplete.setAttribute('placeholder', 'Type to search or correct location...');
       autocomplete.style.cssText = 'width:100%;display:block;';
 

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
+import type { RouteComponentProps } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { UIButton } from '@/ui/foundation';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -16,7 +17,7 @@ import {
   Server, Zap, Cpu, Radio, ChevronLeft, Save, Eye, EyeOff,
   Fingerprint, Heart, ShieldCheck, Database, Lock, Sparkles
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Cell, ResponsiveContainer } from 'recharts';
+import { ArchBarChart } from '@/ui/charts';
 import type { Agent } from '@shared/schema';
 import type { DiscScores, ArchProfile } from '@shared/schema';
 
@@ -42,13 +43,6 @@ const VOICES = [
   { id: 'aoede', name: 'Aoede', description: 'Clear & Articulate' },
   { id: 'leda', name: 'Leda', description: 'Soft & Gentle' },
 ];
-
-const ARCH_COLORS = {
-  A: '#10b981',
-  R: '#3b82f6',
-  Cx: '#f59e0b',
-  H: '#ef4444',
-};
 
 /** Operational modes: match server config/operationalModes.ts. UI-only (id, label, permissions, constraint). */
 const OPERATIONAL_MODES_UI: Array<{ id: string; label: string; permissions: string; constraint: string }> = [
@@ -174,35 +168,6 @@ const BotAvatar = ({ scores, sentiment }: { scores: DiscScores; sentiment: Senti
   );
 };
 
-const ArchBreakdown = ({ data }: { data: ArchProfile }) => {
-  const barData = [
-    { name: 'Acknowledge', short: 'A', value: data.acknowledge, color: ARCH_COLORS.A },
-    { name: 'Reflect', short: 'R', value: data.reflect, color: ARCH_COLORS.R },
-    { name: 'Context', short: 'Cx', value: data.context, color: ARCH_COLORS.Cx },
-    { name: 'Handoff', short: 'H', value: data.handoff, color: ARCH_COLORS.H },
-  ];
-
-  return (
-    <div className="h-32 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 20, top: 5, bottom: 0 }}>
-          <XAxis type="number" hide domain={[0, 100]} />
-          <YAxis dataKey="name" type="category" width={80} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: '500' }} />
-          <Tooltip 
-            cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-            contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', fontSize: '11px' }}
-          />
-          <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={14}>
-            {barData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-};
-
 interface SystemPromptState {
   ownerIdentity: string;
   loyaltyStatement: string;
@@ -212,7 +177,9 @@ interface SystemPromptState {
   discReinforcement: string;
 }
 
-export default function AgentManager({ siteConfigId }: { siteConfigId?: string }) {
+type AgentManagerProps = RouteComponentProps & { siteConfigId?: string };
+
+export default function AgentManager({ siteConfigId, params: _params }: AgentManagerProps) {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -402,7 +369,7 @@ export default function AgentManager({ siteConfigId }: { siteConfigId?: string }
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <Button 
+              <UIButton 
                 variant="ghost" 
                 size="icon"
                 onClick={() => setSelectedAgent(null)}
@@ -410,7 +377,7 @@ export default function AgentManager({ siteConfigId }: { siteConfigId?: string }
                 data-testid="button-back-to-agents"
               >
                 <ChevronLeft className="w-6 h-6" />
-              </Button>
+              </UIButton>
               <div className="w-12 h-12 rounded-lg overflow-hidden border-2 border-indigo-500">
                 <img src={agentAvatar.src} alt={agentAvatar.name} className="w-full h-full object-cover" />
               </div>
@@ -420,7 +387,7 @@ export default function AgentManager({ siteConfigId }: { siteConfigId?: string }
               </div>
             </div>
             <div className="flex gap-2">
-              <Button
+              <UIButton
                 variant="outline"
                 size="sm"
                 onClick={() => setShowSystemPrompts(!showSystemPrompts)}
@@ -429,15 +396,15 @@ export default function AgentManager({ siteConfigId }: { siteConfigId?: string }
               >
                 {showSystemPrompts ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
                 {showSystemPrompts ? 'Hide' : 'Show'} System Prompts
-              </Button>
-              <Button 
+              </UIButton>
+              <UIButton 
                 onClick={saveAgentConfig}
                 className="bg-indigo-600 hover:bg-indigo-500"
                 data-testid="button-save-agent-config"
               >
                 <Save className="w-4 h-4 mr-2" />
                 Save Configuration
-              </Button>
+              </UIButton>
             </div>
           </div>
 
@@ -657,7 +624,7 @@ export default function AgentManager({ siteConfigId }: { siteConfigId?: string }
                     data-testid="slider-handoff"
                   />
                 </div>
-                <ArchBreakdown data={agentArch} />
+                <ArchBarChart data={agentArch} variant="compact" />
               </CardContent>
             </Card>
           </div>
@@ -797,9 +764,9 @@ export default function AgentManager({ siteConfigId }: { siteConfigId?: string }
           </div>
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-indigo-600 hover:bg-indigo-500" data-testid="button-add-agent">
+              <UIButton className="bg-indigo-600 hover:bg-indigo-500" data-testid="button-add-agent">
                 <Plus className="w-4 h-4 mr-2" /> Add New Agent
-              </Button>
+              </UIButton>
             </DialogTrigger>
             <DialogContent className="bg-slate-900 border-slate-700 max-w-2xl">
               <DialogHeader>
@@ -900,14 +867,14 @@ export default function AgentManager({ siteConfigId }: { siteConfigId?: string }
                     </SelectContent>
                   </Select>
                 </div>
-                <Button 
+                <UIButton 
                   onClick={() => createMutation.mutate(newAgent)} 
                   disabled={!newAgent.name || createMutation.isPending}
                   className="w-full bg-indigo-600 hover:bg-indigo-500"
                   data-testid="button-create-agent"
                 >
                   {createMutation.isPending ? 'Creating...' : 'Create Agent'}
-                </Button>
+                </UIButton>
               </div>
             </DialogContent>
           </Dialog>
@@ -926,9 +893,9 @@ export default function AgentManager({ siteConfigId }: { siteConfigId?: string }
                   data-testid="input-search-agents"
                 />
               </div>
-              <Button variant="outline" onClick={() => refetch()} className="border-slate-600" data-testid="button-refresh-agents">
+              <UIButton variant="outline" onClick={() => refetch()} className="border-slate-600" data-testid="button-refresh-agents">
                 <RefreshCw className="w-4 h-4 mr-2" /> Refresh
-              </Button>
+              </UIButton>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -1066,16 +1033,16 @@ export default function AgentManager({ siteConfigId }: { siteConfigId?: string }
                           <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                             {editingId === agent.id ? (
                               <>
-                                <Button size="sm" onClick={saveEdit} disabled={updateMutation.isPending} className="bg-emerald-600 hover:bg-emerald-500">
+                                <UIButton size="sm" onClick={saveEdit} disabled={updateMutation.isPending} className="bg-emerald-600 hover:bg-emerald-500">
                                   Save
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={cancelEdit} className="border-slate-600">
+                                </UIButton>
+                                <UIButton size="sm" variant="outline" onClick={cancelEdit} className="border-slate-600">
                                   Cancel
-                                </Button>
+                                </UIButton>
                               </>
                             ) : (
                               <>
-                                <Button 
+                                <UIButton 
                                   size="sm" 
                                   variant="outline" 
                                   onClick={(e) => { e.stopPropagation(); startEditing(agent); }}
@@ -1083,8 +1050,8 @@ export default function AgentManager({ siteConfigId }: { siteConfigId?: string }
                                   data-testid={`button-edit-agent-${agent.id}`}
                                 >
                                   <Pencil className="w-3 h-3" />
-                                </Button>
-                                <Button 
+                                </UIButton>
+                                <UIButton 
                                   size="sm" 
                                   variant="outline" 
                                   onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(agent.id); }}
@@ -1092,7 +1059,7 @@ export default function AgentManager({ siteConfigId }: { siteConfigId?: string }
                                   data-testid={`button-delete-agent-${agent.id}`}
                                 >
                                   <Trash2 className="w-3 h-3" />
-                                </Button>
+                                </UIButton>
                               </>
                             )}
                           </div>

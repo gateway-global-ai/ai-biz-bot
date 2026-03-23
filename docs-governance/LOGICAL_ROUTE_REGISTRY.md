@@ -17,6 +17,8 @@ Each route definition should declare:
 - `optionalBrowserPath`
 
 ## Example route ids
+- `admin.analytics.voice_activation` — read-only aggregates from `verification_gate_passage_events` (`voice_client_heartbeat`); API `GET /api/v1/admin/analytics/voice-activation`; requires platform admin session; optional browser adapter on `/platform/businesses/:id` (Overview tab widget).
+- `dev.ui_kit` — developer UI component kit (`/dev/ui-kit`); optional browser path; requires dev or `VITE_UI_KIT`; see [UI_KIT.md](./UI_KIT.md)
 - `os.home`
 - `admin.home`
 - `admin.accounts.list`

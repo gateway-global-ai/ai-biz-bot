@@ -26,7 +26,7 @@ export const PlacePickerComponent: React.FC<PlacePickerProps> = ({
       const { PlaceAutocompleteElement } = await loadPlacesLibrary();
       if (cancelled || !container) return;
 
-      const autocomplete = new PlaceAutocompleteElement();
+      const autocomplete = new PlaceAutocompleteElement({});
       autocomplete.setAttribute('placeholder', placeholder);
       autocomplete.style.cssText = 'width:100%;display:block;';
 

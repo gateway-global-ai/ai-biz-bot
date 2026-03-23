@@ -182,7 +182,7 @@ export async function runDemoEnrichment(input: EnrichmentInput): Promise<Enrichm
 
   if (GEMINI_KEY) {
     const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL_FALLBACK || (console.error('[GOVERNANCE] GEMINI_MODEL_FALLBACK not set in Doppler'), 'gemini-2.0-flash') });
 
     const competitorBlock = competitorSummary
       ? `

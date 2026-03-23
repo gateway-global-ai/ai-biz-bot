@@ -294,7 +294,7 @@ const router = Router();
   // Stripe webhook for A2P payment completion
   router.post("/api/stripe/webhook/a2p", async (req, res) => {
     try {
-      const { getUncachableStripeClient } = await import('./stripeClient');
+      const { getUncachableStripeClient } = await import('../stripeClient');
       const stripe = await getUncachableStripeClient();
       
       const sig = req.headers['stripe-signature'];
@@ -385,7 +385,7 @@ const router = Router();
         return res.status(400).json({ error: "Payment already processed for this brand" });
       }
 
-      const { getUncachableStripeClient, getStripePublishableKey } = await import('./stripeClient');
+      const { getUncachableStripeClient, getStripePublishableKey } = await import('../stripeClient');
       const stripe = await getUncachableStripeClient();
       const { getPricingConfig, toCents } = await import('../utils/pricing');
       const pricing = getPricingConfig();
@@ -474,7 +474,7 @@ const router = Router();
 
       const { sessionId, vettingType = 'standard' } = req.body;
 
-      const { getUncachableStripeClient } = await import('./stripeClient');
+      const { getUncachableStripeClient } = await import('../stripeClient');
       const stripe = await getUncachableStripeClient();
 
       const session = await stripe.checkout.sessions.retrieve(sessionId);

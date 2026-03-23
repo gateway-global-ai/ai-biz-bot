@@ -211,7 +211,8 @@ export async function synthesizeGeminiTTS(
     return null;
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+  const ttsModel = process.env.GEMINI_TTS_MODEL_ID || 'gemini-2.5-flash-preview-tts';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${apiKey}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -23,7 +23,7 @@ import { S4ArchitectureSlide } from "./S4ArchitectureSlide";
 import { InvestorDemoFooter } from "./InvestorDemoFooter";
 import gatewayLogo from "@assets/gatewaylogo_header_left_1770354860467.png";
 import QuantumScene from "@/components/QuantumScene";
-import { DiscRadar, ArchBreakdown } from "@/components/agent-charts/AgentProfileCharts";
+import { DiscRadar, ArchBreakdown } from "@/ui/charts";
 import { Slider } from "@/components/ui/slider";
 import type { DiscScores, ArchProfile } from "@shared/schema";
 

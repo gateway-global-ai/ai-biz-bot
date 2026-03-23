@@ -1,6 +1,8 @@
 export interface ConversationMessage { role: 'user' | 'assistant'; type: 'audio' | 'text'; content: string; }
 
 
+import type { VoiceKnowledgeSnapshot } from "./services/voiceKnowledgeBridge";
+
 export interface VoiceSession {
   callSid: string;
   streamSid: string | null;
@@ -20,6 +22,8 @@ export interface VoiceSession {
   actualSeconds: number | null;
   /** The site/business this call belongs to – used for billing attribution. */
   siteConfigId: string | null;
+  /** Phase 5D: gap-analysis snapshot for observability / future PSTN Live setup parity. */
+  knowledgeSnapshot?: VoiceKnowledgeSnapshot | null;
 }
 
 class VoiceSessionManager {
@@ -47,6 +51,7 @@ class VoiceSessionManager {
       callEnd: null,
       actualSeconds: null,
       siteConfigId: siteConfigId ?? null,
+      knowledgeSnapshot: null,
     };
     this.sessions.set(callSid, session);
     console.log(`[VoiceSession] Created session for call ${callSid}`);
