@@ -1,14 +1,17 @@
 /**
- * Storefront hero images: 5 Flux-generated images per category via Replicate.
+ * Storefront hero images: optional Flux-based generation via third-party image API.
+ * Token: STOREFRONT_IMAGE_GEN_TOKEN (set in Doppler; not an alternate LLM key).
  */
-import Replicate from 'replicate';
 import { db } from '../db.js';
 import { storefrontCategories, storefrontCategoryImages } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
-const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN ?? process.env.REPLICATE_API_KEY;
 const FLUX_MODEL = 'black-forest-labs/flux-schnell';
 const IMAGES_PER_CATEGORY = 5;
+
+function getImageGenToken(): string | undefined {
+  return process.env.STOREFRONT_IMAGE_GEN_TOKEN?.trim() || undefined;
+}
 
 const PROMPTS_BY_INDEX = [
   'Professional storefront exterior, modern and inviting, natural daylight, clean signage, high quality photo',
@@ -27,23 +30,27 @@ function buildPrompt(displayName: string, location: string, index: number): stri
 }
 
 /**
- * Generate 5 images for a storefront category using Replicate Flux. Persists URLs to storefront_category_images.
- * Requires REPLICATE_API_TOKEN. Returns array of image URLs (or throws if token missing).
+ * Generate 5 images for a storefront category. Persists URLs to storefront_category_images.
+ * Requires STOREFRONT_IMAGE_GEN_TOKEN. Returns array of image URLs (or throws if token missing).
  */
 export async function generateCategoryImages(categorySlug: string): Promise<string[]> {
-  if (!REPLICATE_API_TOKEN) {
-    throw new Error('Image generation not configured (set REPLICATE_API_TOKEN)');
+  const token = getImageGenToken();
+  if (!token) {
+    throw new Error('Image generation not configured (set STOREFRONT_IMAGE_GEN_TOKEN)');
   }
 
   const [cat] = await db.select().from(storefrontCategories).where(eq(storefrontCategories.slug, categorySlug)).limit(1);
   if (!cat) throw new Error(`Category not found: ${categorySlug}`);
 
-  const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+  const { default: ClientCtor } = await import('replicate');
+  const client = new ClientCtor({ auth: token });
+  const runModel = client.run.bind(client);
+
   const urls: string[] = [];
 
   for (let i = 0; i < IMAGES_PER_CATEGORY; i++) {
     const prompt = buildPrompt(cat.displayName, cat.location, i);
-    const output = await replicate.run(FLUX_MODEL as `${string}/${string}`, {
+    const output = await runModel(FLUX_MODEL as `${string}/${string}`, {
       input: { prompt },
     });
     const url = Array.isArray(output) ? output[0] : typeof output === 'string' ? output : (output as { url?: string })?.url;
