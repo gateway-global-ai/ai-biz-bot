@@ -64,7 +64,7 @@ export function AgentRosterPanel({
 
   const { data: agents = [], isLoading } = useQuery<Agent[]>({
     queryKey: ['/api/agents', 'roster'],
-    queryFn: () => fetch('/api/agents?excludeProvider=kimi').then((r) => r.json()),
+    queryFn: () => fetch("/api/agents?excludeNonGemini=1").then((r) => r.json()),
   });
 
   const { data: sites = [] } = useQuery<SiteConfig[]>({
@@ -161,7 +161,7 @@ export function AgentRosterPanel({
       <Card key={agent.id} className="bg-slate-800/60 border border-slate-600 border-indigo-500/20">
         <CardContent className="p-3 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-sui bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
               <Bot className="w-4 h-4 text-indigo-400" />
             </div>
             <div className="min-w-0">
