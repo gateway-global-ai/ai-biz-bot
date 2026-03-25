@@ -5,7 +5,7 @@ alwaysApply: true
 
 # AI OS Control Plane
 
-- Read `docs-governance/SYSTEM_MANIFEST.md` before making OS-core architecture decisions.
+- Read `docs-governance/canonical/SYSTEM_MANIFEST.md` before making OS-core architecture decisions.
 - The model must never invent entities, routes, views, or actions.
 - Control plane artifacts are the source of truth: schema anchors, context keys, policies, routes, views, actions.
 - Browser paths are adapters, not architecture.

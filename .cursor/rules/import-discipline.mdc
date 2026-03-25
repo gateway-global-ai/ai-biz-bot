@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Import Discipline
 
-- Read `docs-governance/IMPORT_DISCIPLINE_MATRIX.md` before introducing new cross-module imports.
+- Read `docs-governance/archive/IMPORT_DISCIPLINE_MATRIX.md` (archived — reference only) before introducing new cross-module imports.
 - `views` may not import execution-plane internals.
 - execution-plane code may not import domain modules directly.
 - `storage` may not import UI, prompt, or policy logic.

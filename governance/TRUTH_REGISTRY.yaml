@@ -59,7 +59,7 @@ voice_lockdown:
 # All other docs are in docs-governance/archive/ and are NOT authoritative.
 
 canonical_docs:
-  count: 28
+  count: 32
   path: docs-governance/canonical/
   documents:
     - file: SYSTEM_MANIFEST.md
@@ -202,12 +202,33 @@ canonical_docs:
       enforced_by: none
       backed_by: { schema: true, service: true, route: true }
 
+    # Promoted from archive — cursor rule enforcement backing
+    - file: KNOWLEDGE_VOLATILITY_GOVERNANCE.md
+      truth_domain: governance
+      enforced_by: knowledge-volatility.mdc
+      backed_by: { schema: false, service: false, route: false }
+
+    - file: LOGICAL_ROUTE_REGISTRY.md
+      truth_domain: governance
+      enforced_by: logical-route-registry.mdc
+      backed_by: { schema: false, service: false, route: false }
+
+    - file: FILE_SYSTEM_GOVERNANCE.md
+      truth_domain: governance
+      enforced_by: file-system-governance.mdc
+      backed_by: { schema: false, service: false, route: false }
+
+    - file: GOVERNANCE_REVIEW_ENGINE.md
+      truth_domain: governance
+      enforced_by: preflight-review-required.mdc
+      backed_by: { schema: false, service: false, route: false }
+
 # ─── ARCHIVED DOCS ─────────────────────────────────────────────────────────
 # 57 documents. NOT authoritative. NOT retrievable by agents as system truth.
 # Located in: docs-governance/archive/
 
 archived_docs:
-  count: 57
+  count: 53
   path: docs-governance/archive/
   status: NOT_AUTHORITATIVE
   rule: >

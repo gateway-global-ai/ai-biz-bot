@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Preflight Review Required
 
-- Read `docs-governance/GOVERNANCE_REVIEW_ENGINE.md` and `docs-governance/REVIEW_REPORT_SCHEMA.md` before implementing architecture-affecting work.
+- Read `docs-governance/canonical/GOVERNANCE_REVIEW_ENGINE.md` and `docs-governance/archive/REVIEW_REPORT_SCHEMA.md` (archived — reference only) before implementing architecture-affecting work.
 - Plans, specs, route changes, view changes, policy changes, YAML registry changes, and execution-plane changes should go through governance review first.
 - Do not treat code review after implementation as sufficient for AI OS governance.
 - If a proposal introduces new entities, routes, views, actions, or prompt/runtime patterns, review it against the System Manifest before coding.
