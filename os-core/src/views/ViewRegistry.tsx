@@ -7,7 +7,6 @@ export const ViewRegistry = {
   AdminCandidateSelectionView: lazy(
     () => import("./admin/AdminCandidateSelectionView")
   ),
-  WorkspaceRouterView: lazy(() => import("./mission-control/MissionControlView")),
   AgentConfigView: lazy(() => import("./agent-builder/AgentConfigView")),
   BehaviorControllerView: lazy(
     () => import("./agent-builder/BehaviorControllerView")

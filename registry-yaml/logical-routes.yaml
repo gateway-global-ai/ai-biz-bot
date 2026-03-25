@@ -48,7 +48,7 @@ routes:
     requiredRoleScope: location
     requiredVerificationState: verified
     policyGate: workspace_access
-    linkedViewId: workspace-router-view
+    linkedViewId: mission-control-view
     allowedActions: [session.joinAssist, session.endAssist, session.resolveOutcome]
     optionalBrowserPath: /workspace/:siteId
   - routeId: agent.config

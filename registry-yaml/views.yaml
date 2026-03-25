@@ -81,15 +81,6 @@ views:
     requiredContextKeys: [siteConfigId]
     allowedActions: [intake.approve]
     policyGate: intake_access
-  - viewId: workspace-router-view
-    category: view
-    viewType: view
-    viewStateType: view
-    lazyImportKey: WorkspaceRouterView
-    allowedModes: [view]
-    requiredContextKeys: [siteConfigId]
-    allowedActions: [session.joinAssist, session.endAssist, session.resolveOutcome]
-    policyGate: workspace_access
   - viewId: agent-config-view
     category: controller
     viewType: controller
