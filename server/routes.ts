@@ -26,17 +26,24 @@ import healthRoutes from "./routes/healthRoutes";
 import platformMetricsRoutes from "./routes/platformMetricsRoutes";
 import adminAnalyticsRoutes from "./routes/adminAnalyticsRoutes";
 import knowledgeGapRoutes from "./routes/knowledgeGapRoutes";
+import analyticsHintRoutes from "./routes/analyticsHintRoutes";
 import secureVaultRoutes from "./routes/secureVaultRoutes";
 import a2pPreflightRoutes from "./routes/a2pPreflightRoutes";
+import twilioWebhooks from "./routes/twilioWebhooks";
+import demoEligibilityRoutes from "./routes/demoEligibilityRoutes";
+import placesImageRoutes from "./routes/placesImageRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import { registerB2bRoutes } from "./routes/b2b-routes";
 import telephonyRoutes from "./routes/telephonyRoutes"; // Platinum Core: Telephony, Voice, SMS, Webhooks, TTS, PTT
 import billingRoutes from "./routes/billingRoutes";       // Support Spine: Reseller, Stripe, Subscription, Billing
+import platformLicenseRoutes from "./routes/platformLicenseRoutes"; // Platform software license keys (admin + customer redeem)
 import a2pRoutes from "./routes/a2pRoutes";             // Support Spine: A2P 10-DLC Compliance
 import workspaceRoutes from "./routes/workspaceRoutes"; // Google Workspace + Drive + Calendar + Tasks + Analyst
 import intelligenceRoutes from "./routes/intelligenceRoutes"; // Business Intelligence: SerpAPI data mining pipeline
 import agentSystemRoutes from "./routes/agentSystemRoutes"; // DISC + Agents + Orgs + Projects + BotTemplates
 import chatRoutes from "./routes/chatRoutes";           // Website Chat + Chat + Conversations
+import localLlmBatchRoutes from "./routes/localLlmBatchRoutes";
+import gptActionsOpenApiRoutes from "./routes/gptActionsOpenApiRoutes";
 import investorDemoRoutes from "./routes/investorDemoRoutes"; // Investor report SMS gate + view tracking
 import aiStudioRoutes from "./routes/aiStudioRoutes"; // AI Studio OAuth/Webhook + PTT session initiation
 import affiliateRoutes from "./routes/affiliateRoutes"; // Reseller & Affiliate program signup (phone → registration link)
@@ -145,19 +152,29 @@ export async function registerRoutes(
 
   // Health check route (public)
   app.use(healthRoutes);
+  // ChatGPT Custom GPT — OpenAPI schema for Actions ("Import from URL")
+  app.use(gptActionsOpenApiRoutes);
   app.use(platformMetricsRoutes);
   app.use(adminAnalyticsRoutes);
   app.use(knowledgeGapRoutes);
+  app.use(analyticsHintRoutes);
   app.use(secureVaultRoutes);
 
   // Platinum Core: Telephony, Voice, SMS, Webhooks, TTS, PTT
   app.use(telephonyRoutes);
+  app.use(twilioWebhooks); // A2P opt-out compliance — TCPA/CTIA STOP keyword receiver
 
   // Support Spine: Billing, Reseller, Stripe, Subscription
   app.use(billingRoutes);
+  app.use(platformLicenseRoutes);
 
   // Support Spine: A2P 10-DLC Compliance
   app.use(a2pRoutes);
+  app.use('/api/a2p/preflight', a2pPreflightRoutes);
+
+  // Demo eligibility gate + Places image stub
+  app.use('/api/demo/check-eligibility', demoEligibilityRoutes);
+  app.use('/api/places/generate-image', placesImageRoutes);
 
   // Google Workspace, Drive, Calendar, Tasks, Analyst
   app.use(workspaceRoutes);
@@ -183,6 +200,7 @@ export async function registerRoutes(
 
   // AI Chat: website-chat, chat, conversations
   app.use(chatRoutes);
+  app.use("/api/local-llm-batch", localLlmBatchRoutes);
 
   app.use(async (req, res, next) => {
     const ua = req.headers["user-agent"] || "";
@@ -1722,9 +1740,9 @@ export async function registerRoutes(
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "minutes must be a positive integer" });
 
-      const current = site.minuteBalance ?? 0;
+      const current = site.voicePhoneAiMinutes ?? 0;
       const newBalance = current + parsed.data.minutes;
-      await storage.updateSiteConfig(req.params.id, { minuteBalance: newBalance } as any);
+      await storage.updateSiteConfig(req.params.id, { voicePhoneAiMinutes: newBalance });
       res.json({ success: true, minuteBalance: newBalance, added: parsed.data.minutes });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
