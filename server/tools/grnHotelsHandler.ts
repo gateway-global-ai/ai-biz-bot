@@ -14,7 +14,6 @@ import {
   toGrnApiCode,
   getGrnAvailability,
 } from '../mcp-hotels-logic.js';
-import { smallBusinessInjector } from './smallBusinessInjector.js';
 import { b2bStorage } from '../b2b-storage.js';
 
 /**
@@ -163,45 +162,3 @@ export async function handleEnrichHotelsWithRates(args: {
   }
 }
 
-/**
- * Enriched search with Small Business priority injection
- */
-export async function handleEnrichedSearchWithSmallBiz(args: {
-  location: string;
-  query?: string;
-  checkin: string;
-  checkout: string;
-  cityCode?: string;
-  currency?: string;
-  rooms?: Array<{ adults: number; childrenAges?: number[] }>;
-}): Promise<unknown> {
-  // STEP A: The Priority Injection
-  const featuredPartners = await smallBusinessInjector(
-    args.query || '',
-    args.cityCode || args.location
-  );
-
-  // STEP B: The General Google + GRN Sweep
-  const generalResults = (await handleEnrichHotelsWithRates({
-    location: args.location,
-    query: args.query,
-    checkin: args.checkin,
-    checkout: args.checkout,
-    currency: args.currency,
-    rooms: args.rooms,
-  })) as { hotels?: any[] };
-
-  // STEP C: De-duplicate and Concatenate
-  const filteredGeneral = (generalResults.hotels || []).filter(
-    (gh) =>
-      !featuredPartners.some(
-        (fp: any) => fp.grn_hotel_id === gh.grn?.grn_hotel_id
-      )
-  );
-
-  return {
-    success: true,
-    featured: featuredPartners, // Render these with the "WOW" touchdown first
-    general: filteredGeneral,
-  };
-}

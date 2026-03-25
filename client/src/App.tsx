@@ -31,7 +31,6 @@ const MockConversation      = lazy(() => import("@/pages/showcase/MockConversati
 const AgentManager          = lazy(() => import("@/pages/agents/AgentManager"));
 const AgentDashboard        = lazy(() => import("@/pages/agents/AgentDashboard"));
 const AgentsLandingPage     = lazy(() => import("@/pages/public/AgentsLandingPage"));
-const ImmersiveClassroom    = lazy(() => import("@/pages/agents/classroom/ImmersiveClassroom"));
 const CustomerManager       = lazy(() => import("@/pages/biz-dashboard/CustomerManager"));
 const TwilioAccountManager  = lazy(() => import("@/pages/developer/TwilioAccountManager"));
 const MvpLanding            = lazy(() => import("@/pages/showcase/MvpLanding"));
@@ -59,7 +58,6 @@ const PhonePage             = lazy(() => import("@/pages/public/PhonePage"));
 const ClearVoiceLogoCenteredPage = lazy(() => import("@/pages/public/ClearVoiceLogoCenteredPage"));
 const PlatformBuyPage       = lazy(() => import("@/pages/public/PlatformBuyPage"));
 const PlatformInfoPage      = lazy(() => import("@/pages/public/PlatformInfoPage"));
-const VoiceLeadMachine      = lazy(() => import("@/pages/biz-dashboard/VoiceLeadMachine"));
 const SitesAndLeads         = lazy(() => import("@/pages/owner/SitesAndLeads"));
 const MixingBoard           = lazy(() => import("@/pages/reseller/MixingBoard"));
 const ResellerDashboard     = lazy(() => import("@/pages/reseller/ResellerDashboard"));
@@ -102,7 +100,7 @@ function ServerPanel() {
         </div>
       </div>
       
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+      <div className="bg-slate-800 rounded-sui border border-slate-700 p-6">
         <div className="text-center py-8">
           <Server className="w-16 h-16 mx-auto text-slate-600 mb-4" />
           <h3 className="text-lg font-semibold text-white mb-2">No Servers Connected</h3>
@@ -113,7 +111,7 @@ function ServerPanel() {
             Server integration requires API credentials from your hosting provider.
           </p>
           <div className="flex justify-center gap-3">
-            <div className="bg-slate-900 px-4 py-2 rounded-lg border border-slate-700">
+            <div className="bg-slate-900 px-4 py-2 rounded-sui border border-slate-700">
               <p className="text-xs text-slate-500 mb-1">Supported Providers</p>
               <p className="text-sm text-slate-300">Hostinger • DigitalOcean • AWS • VPS</p>
             </div>
@@ -121,7 +119,7 @@ function ServerPanel() {
         </div>
       </div>
       
-      <div className="mt-6 bg-slate-800/50 rounded-xl border border-slate-700 p-4">
+      <div className="mt-6 bg-slate-800/50 rounded-sui border border-slate-700 p-4">
         <h4 className="text-sm font-semibold text-white mb-2">Coming Soon</h4>
         <ul className="text-sm text-slate-400 space-y-1">
           <li>• One-click server provisioning</li>
@@ -144,7 +142,7 @@ function GlobalConfig() {
         </h2>
         <p className="text-slate-400">Manage environment variables and system settings.</p>
       </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 space-y-4">
+      <div className="bg-slate-800 rounded-sui border border-slate-700 p-6 space-y-4">
         <div className="border-b border-slate-700 pb-4">
           <h3 className="text-lg font-semibold text-white mb-2">Platform Settings</h3>
           <p className="text-sm text-slate-400 mb-4">
@@ -152,19 +150,19 @@ function GlobalConfig() {
           </p>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+          <div className="bg-slate-900/50 p-4 rounded-sui border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">AI Provider</p>
             <p className="text-white font-medium">Google Gemini</p>
           </div>
-          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+          <div className="bg-slate-900/50 p-4 rounded-sui border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Telephony Provider</p>
             <p className="text-white font-medium">Twilio</p>
           </div>
-          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+          <div className="bg-slate-900/50 p-4 rounded-sui border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Voice AI</p>
             <p className="text-white font-medium">Gemini Native Audio</p>
           </div>
-          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+          <div className="bg-slate-900/50 p-4 rounded-sui border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Task Scheduler</p>
             <p className="text-white font-medium">Active (5 min interval)</p>
           </div>
@@ -187,7 +185,7 @@ function TestOrchestrator() {
         </h2>
         <p className="text-slate-400">Run and manage test suites.</p>
       </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+      <div className="bg-slate-800 rounded-sui border border-slate-700 p-6">
         <p className="text-slate-400 text-center py-12">Test orchestrator coming soon...</p>
       </div>
     </div>
@@ -204,7 +202,7 @@ function ResultsAnalyzer() {
         </h2>
         <p className="text-slate-400">Analyze test results with AI assistance.</p>
       </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+      <div className="bg-slate-800 rounded-sui border border-slate-700 p-6">
         <p className="text-slate-400 text-center py-12">Results analyzer coming soon...</p>
       </div>
     </div>
@@ -221,7 +219,7 @@ function SecurityDashboard() {
         </h2>
         <p className="text-slate-400">Monitor security alerts and compliance.</p>
       </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+      <div className="bg-slate-800 rounded-sui border border-slate-700 p-6">
         <p className="text-slate-400 text-center py-12">Security dashboard coming soon...</p>
       </div>
     </div>
@@ -240,13 +238,13 @@ function TwilioHub() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
+        <div className="bg-slate-800 rounded-sui border border-slate-700 p-5">
             <h3 className="text-slate-300 font-semibold mb-4 flex items-center gap-2">
                 <Smartphone className="w-5 h-5" /> Recent SMS Logs
             </h3>
             <div className="space-y-3">
                 {[1, 2, 3].map(i => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-800">
+                    <div key={i} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-sui border border-slate-800">
                         <div className="flex flex-col">
                             <span className="text-sm text-white font-mono">+1 (555) 012-34{i}{i}</span>
                             <span className="text-xs text-slate-500">Alert: Server Down (SRV-0{i})</span>
@@ -259,12 +257,12 @@ function TwilioHub() {
             </div>
         </div>
 
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
+        <div className="bg-slate-800 rounded-sui border border-slate-700 p-5">
             <h3 className="text-slate-300 font-semibold mb-4 flex items-center gap-2">
                 <Phone className="w-5 h-5" /> Voice Call Gateway
             </h3>
             <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-800">
+                <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-sui border border-slate-800">
                     <div className="flex flex-col">
                         <span className="text-sm text-white font-mono">+1 (555) 987-6543</span>
                         <span className="text-xs text-slate-500">Duration: 45s • Critical Alert</span>
@@ -273,7 +271,7 @@ function TwilioHub() {
                         <Check className="w-3 h-3" /> Completed
                     </span>
                 </div>
-                 <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-800">
+                 <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-sui border border-slate-800">
                     <div className="flex flex-col">
                         <span className="text-sm text-white font-mono">+1 (555) 111-2222</span>
                         <span className="text-xs text-slate-500">Duration: 0s • Warn Alert</span>
@@ -296,7 +294,6 @@ function AppRouter() {
       <Route path="/onboard" component={OnboardingFlow} />
       <Route path="/agents" component={AgentsLandingPage} />
       <Route path="/dashboard" component={AgentDashboard} />
-      <Route path="/nexus-classroom" component={ImmersiveClassroom} />
       <Route path="/agent/:agentId/telephony" component={AgentTelephony} />
       <Route path="/brand-admin" component={BrandAdminPage} />
       <Route path="/agent-manager" component={AgentManager} />
@@ -337,7 +334,6 @@ function AppRouter() {
       <Route path="/chat/owner" component={OwnerChatInterface} />
       <Route path="/chat/developer" component={DeveloperChatInterface} />
       {/* BusinessPage moved to public routes */}
-      <Route path="/lead-machine" component={VoiceLeadMachine} />
       <Route path="/sites-leads" component={SitesAndLeads} />
       <Route path="/mixing-board" component={MixingBoard} />
       <Route path="/inquiries" component={InquiryManagement} />

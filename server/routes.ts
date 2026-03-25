@@ -2,7 +2,6 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import path from "path";
 import { storage } from "./storage";
-import { registerVlmRoutes } from "./vlm-routes";
 import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding";
 import knowledgeRoutes from "./routes/knowledge-routes";
 import businessRoutes from "./routes/businessRoutes";
@@ -2149,126 +2148,10 @@ ${businessContext}`;
     }
   });
 
-  // Classroom / Micro-Learning API Routes
-  const { getOrCreateLessonForTopic, generateSlideContent, recordLessonCompletion, improveLessonPlan, getPopularTopics, getLessonById } = await import("./classroom");
-
-  app.post("/api/classroom/lesson", async (req, res) => {
-    try {
-      const { topic } = req.body;
-      if (!topic || typeof topic !== 'string') {
-        return res.status(400).json({ error: "Topic is required" });
-      }
-      const result = await getOrCreateLessonForTopic(topic);
-      res.json(result);
-    } catch (error: any) {
-      console.error("[Classroom] Lesson generation error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/classroom/lesson/:id", async (req, res) => {
-    try {
-      const lesson = await getLessonById(req.params.id);
-      if (!lesson) {
-        return res.status(404).json({ error: "Lesson not found" });
-      }
-      res.json(lesson);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/classroom/slide-content", async (req, res) => {
-    try {
-      const { topic, slideTitle, slideDescription } = req.body;
-      if (!topic || !slideTitle || !slideDescription) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-      const content = await generateSlideContent(topic, slideTitle, slideDescription);
-      res.json(content);
-    } catch (error: any) {
-      console.error("[Classroom] Slide content error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/classroom/complete", async (req, res) => {
-    try {
-      const { lessonPlanId, quizScore, slidesViewed, totalSlides, feedback, rating, userPhone } = req.body;
-      if (!lessonPlanId) {
-        return res.status(400).json({ error: "Lesson plan ID required" });
-      }
-      const result = await recordLessonCompletion(lessonPlanId, quizScore, slidesViewed, totalSlides, feedback, rating, userPhone);
-      res.json({ success: true, ...result });
-    } catch (error: any) {
-      console.error("[Classroom] Completion recording error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.post("/api/classroom/improve/:topicId", async (req, res) => {
-    try {
-      const improved = await improveLessonPlan(req.params.topicId);
-      res.json(improved);
-    } catch (error: any) {
-      console.error("[Classroom] Lesson improvement error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/classroom/popular-topics", async (req, res) => {
-    try {
-      const limit = parseInt(req.query.limit as string) || 10;
-      const topics = await getPopularTopics(limit);
-      res.json(topics);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Classroom image generation not configured
-  app.post("/api/classroom/generate-image", async (req, res) => {
-    res.status(503).json({ error: "Image generation not configured" });
-  });
-
-  // Classroom TTS decommissioned — use /api/tts/synthesize for Gemini
-  // Classroom TTS decommissioned — use /api/tts/synthesize for Gemini
-  app.post("/api/classroom/tts", async (req, res) => {
-    try {
-      const { text } = req.body;
-      if (!text) {
-        return res.status(400).json({ error: "Text is required" });
-      }
-      
-      // Decommissioned — use Gemini TTS
-      res.status(410).json({ error: "Classroom TTS via legacy audio is decommissioned. Use /api/tts/synthesize for Gemini Native Audio." });
-      return;
-      const output: any = null;
-      // Parse former response
-      let audioUrl = "";
-      if (Array.isArray(output)) {
-        for (const item of output) {
-          if (typeof item === "string" && item.startsWith("http")) {
-            audioUrl = item;
-            break;
-          }
-        }
-      }
-      
-      res.json({ audioUrl });
-    } catch (error: any) {
-      console.error("[Classroom] TTS error:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
   // ← extracted to server/routes/billingRoutes.ts or a2pRoutes.ts
 
   // ← extracted to server/routes/telephonyRoutes.ts
 
-
-  // VoiceLead Machine routes
-  registerVlmRoutes(app);
 
   // Register Workspace Onboarding routes
   registerWorkspaceOnboardingRoutes(app);
