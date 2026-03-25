@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-03-25T07:22:24.526Z",
-  "baseline_commit": "b33d1d0",
+  "generated_at": "2026-03-25T07:35:13.677Z",
+  "baseline_commit": "fcfaf95",
   "scan_dirs": [
     "client/src",
     "server",
@@ -8,12 +8,12 @@
     "os-core"
   ],
   "summary": {
-    "total": 1037,
+    "total": 1014,
     "by_type": {
-      "UI_DESIGN_VIOLATION": 996,
-      "HARDCODED_MODEL_ID": 41
+      "UI_DESIGN_VIOLATION": 974,
+      "HARDCODED_MODEL_ID": 40
     },
-    "by_file_count": 144
+    "by_file_count": 133
   },
   "violations": {
     "client/src/components/A2PComplianceWizard.tsx": {
@@ -100,18 +100,6 @@
         }
       ]
     },
-    "client/src/components/BusinessOnboardingWizard.tsx": {
-      "UI_DESIGN_VIOLATION": [
-        {
-          "line": 297,
-          "match": "rounded-lg"
-        },
-        {
-          "line": 454,
-          "match": "rounded-lg"
-        }
-      ]
-    },
     "client/src/components/DemoLaunchCard.tsx": {
       "UI_DESIGN_VIOLATION": [
         {
@@ -141,18 +129,6 @@
         {
           "line": 177,
           "match": "rounded-lg"
-        }
-      ]
-    },
-    "client/src/components/HeroSection.tsx": {
-      "UI_DESIGN_VIOLATION": [
-        {
-          "line": 64,
-          "match": "bg-white"
-        },
-        {
-          "line": 110,
-          "match": "bg-white"
         }
       ]
     },
@@ -290,14 +266,6 @@
         }
       ]
     },
-    "client/src/components/PushToTalkInterface.tsx": {
-      "UI_DESIGN_VIOLATION": [
-        {
-          "line": 239,
-          "match": "rounded-lg"
-        }
-      ]
-    },
     "client/src/components/ShareButton.tsx": {
       "UI_DESIGN_VIOLATION": [
         {
@@ -334,14 +302,6 @@
         },
         {
           "line": 311,
-          "match": "rounded-lg"
-        }
-      ]
-    },
-    "client/src/components/Sidebar.tsx": {
-      "UI_DESIGN_VIOLATION": [
-        {
-          "line": 33,
           "match": "rounded-lg"
         }
       ]
@@ -1240,22 +1200,6 @@
         }
       ]
     },
-    "client/src/components/showcase/B2bItinerarySidebar.tsx": {
-      "UI_DESIGN_VIOLATION": [
-        {
-          "line": 35,
-          "match": "bg-white"
-        },
-        {
-          "line": 64,
-          "match": "rounded-lg"
-        },
-        {
-          "line": 90,
-          "match": "rounded-lg"
-        }
-      ]
-    },
     "client/src/components/showcase/EventSearchPanel.tsx": {
       "UI_DESIGN_VIOLATION": [
         {
@@ -1881,22 +1825,6 @@
       ]
     },
     "client/src/pages/ResellerApplyPage.tsx": {
-      "UI_DESIGN_VIOLATION": [
-        {
-          "line": 6,
-          "match": "bg-white"
-        }
-      ]
-    },
-    "client/src/pages/TestB2BPortal.tsx": {
-      "UI_DESIGN_VIOLATION": [
-        {
-          "line": 52,
-          "match": "rounded-lg"
-        }
-      ]
-    },
-    "client/src/pages/WaitlistPage.tsx": {
       "UI_DESIGN_VIOLATION": [
         {
           "line": 6,
@@ -3128,14 +3056,6 @@
         }
       ]
     },
-    "client/src/pages/public/ClearVoiceLogoPage.tsx": {
-      "UI_DESIGN_VIOLATION": [
-        {
-          "line": 8,
-          "match": "bg-white"
-        }
-      ]
-    },
     "client/src/pages/public/PlatformBuyPage.tsx": {
       "UI_DESIGN_VIOLATION": [
         {
@@ -3153,22 +3073,6 @@
         {
           "line": 73,
           "match": "rounded-xl"
-        }
-      ]
-    },
-    "client/src/pages/public/PlatformEntryPage.tsx": {
-      "UI_DESIGN_VIOLATION": [
-        {
-          "line": 112,
-          "match": "bg-white"
-        },
-        {
-          "line": 121,
-          "match": "bg-white"
-        },
-        {
-          "line": 130,
-          "match": "bg-white"
         }
       ]
     },
@@ -4240,38 +4144,6 @@
         }
       ]
     },
-    "client/src/pages/showcase/ResellerRecruitment.tsx": {
-      "UI_DESIGN_VIOLATION": [
-        {
-          "line": 74,
-          "match": "rounded-xl"
-        },
-        {
-          "line": 89,
-          "match": "rounded-xl"
-        },
-        {
-          "line": 102,
-          "match": "rounded-xl"
-        },
-        {
-          "line": 113,
-          "match": "rounded-xl"
-        },
-        {
-          "line": 134,
-          "match": "rounded-xl"
-        },
-        {
-          "line": 199,
-          "match": "rounded-xl"
-        },
-        {
-          "line": 231,
-          "match": "rounded-xl"
-        }
-      ]
-    },
     "client/src/pages/showcase/SdkShowcase.tsx": {
       "UI_DESIGN_VIOLATION": [
         {
@@ -4636,14 +4508,6 @@
       "HARDCODED_MODEL_ID": [
         {
           "line": 48,
-          "match": "'gemini-2.0-flash'"
-        }
-      ]
-    },
-    "server/tools/pitchGeneration.ts": {
-      "HARDCODED_MODEL_ID": [
-        {
-          "line": 155,
           "match": "'gemini-2.0-flash'"
         }
       ]
