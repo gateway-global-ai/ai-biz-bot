@@ -171,9 +171,80 @@ function checkFile(filePath: string): Violation[] {
   return violations;
 }
 
+// ─── Baseline Comparison ──────────────────────────────────────────────────────
+
+interface BaselineData {
+  violations: Record<string, Record<string, Array<{ line: number; match: string }>>>;
+}
+
+function loadBaseline(): BaselineData | null {
+  const baselinePath = path.resolve(process.cwd(), 'governance/violation-baseline.json');
+  if (!fs.existsSync(baselinePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(baselinePath, 'utf8')) as BaselineData;
+  } catch {
+    return null;
+  }
+}
+
+function isBaselineViolation(baseline: BaselineData, v: Violation): boolean {
+  const fileEntry = baseline.violations[v.file];
+  if (!fileEntry) return false;
+  const ruleHits = fileEntry[v.rule];
+  if (!ruleHits) return false;
+  return ruleHits.some(b => b.match === v.match);
+}
+
+// ─── Archive Leakage Detection ───────────────────────────────────────────────
+
+function checkArchiveLeakage(filePath: string): Violation[] {
+  const violations: Violation[] = [];
+  if (!/\.(mdc|md)$/.test(filePath)) return violations;
+  if (filePath.startsWith('docs-governance/archive/')) return violations;
+
+  const fullPath = path.resolve(process.cwd(), filePath);
+  if (!fs.existsSync(fullPath)) return violations;
+
+  const content = fs.readFileSync(fullPath, 'utf8');
+  const lines = content.split('\n');
+  const archiveRef = /docs-governance\/archive\/[A-Z][A-Z_]+\.md/g;
+
+  for (let i = 0; i < lines.length; i++) {
+    archiveRef.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = archiveRef.exec(lines[i])) !== null) {
+      if (lines[i].includes('(archived') || lines[i].includes('reference only')) continue;
+      violations.push({
+        file: filePath,
+        line: i + 1,
+        rule: 'ARCHIVE_LEAKAGE',
+        match: match[0],
+        remedy: 'Archived docs must not be cited as authority. Promote to canonical/ or mark as "(archived — reference only)".',
+      });
+    }
+  }
+  return violations;
+}
+
+// ─── Governance Creation Gate ────────────────────────────────────────────────
+
+function checkGovernanceCreation(filePath: string, baseline: BaselineData | null): Violation[] {
+  if (!filePath.startsWith('docs-governance/') || !filePath.endsWith('.md')) return [];
+  if (filePath.startsWith('docs-governance/canonical/') || filePath.startsWith('docs-governance/archive/')) return [];
+
+  return [{
+    file: filePath,
+    line: 0,
+    rule: 'GOVERNANCE_CREATION_BLOCKED',
+    match: filePath,
+    remedy: 'New governance docs must go in canonical/ (with frontmatter) or archive/. Root-level docs-governance/ is frozen.',
+  }];
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 function main() {
+  const strict = process.argv.includes('--strict');
   console.log(`\n${BOLD}Sovereign Guard — Rule Enforcement${RESET}`);
   console.log('─'.repeat(50));
 
@@ -183,21 +254,48 @@ function main() {
     process.exit(0);
   }
 
+  const baseline = loadBaseline();
+  const newViolations: Violation[] = [];
+  const knownDebt: Violation[] = [];
   const allViolations: Violation[] = [];
 
   for (const file of staged) {
     const violations = checkFile(file);
-    allViolations.push(...violations);
+    const archiveLeaks = checkArchiveLeakage(file);
+    const govCreation = checkGovernanceCreation(file, baseline);
+    allViolations.push(...violations, ...archiveLeaks, ...govCreation);
   }
 
-  if (allViolations.length === 0) {
+  if (baseline && !strict) {
+    for (const v of allViolations) {
+      if (isBaselineViolation(baseline, v)) {
+        knownDebt.push(v);
+      } else {
+        newViolations.push(v);
+      }
+    }
+  } else {
+    newViolations.push(...allViolations);
+  }
+
+  if (newViolations.length === 0 && knownDebt.length === 0) {
     console.log(`${GREEN}All ${staged.length} staged files passed Sovereign Guard.${RESET}\n`);
     process.exit(0);
   }
 
-  console.log(`\n${RED}${BOLD}COMMIT BLOCKED — ${allViolations.length} violation(s) found${RESET}\n`);
+  if (newViolations.length === 0 && knownDebt.length > 0) {
+    console.log(`${GREEN}All ${staged.length} staged files passed Sovereign Guard.${RESET}`);
+    console.log(`${YELLOW}  Known baseline debt: ${knownDebt.length} pre-existing violation(s) (not blocking)${RESET}\n`);
+    process.exit(0);
+  }
 
-  for (const v of allViolations) {
+  console.log(`\n${RED}${BOLD}COMMIT BLOCKED — ${newViolations.length} new violation(s) found${RESET}`);
+  if (knownDebt.length > 0) {
+    console.log(`${YELLOW}  (plus ${knownDebt.length} known baseline violations — not blocking)${RESET}`);
+  }
+  console.log('');
+
+  for (const v of newViolations) {
     const location = v.line > 0 ? `:${v.line}` : '';
     console.log(`${RED}✗ [${v.rule}]${RESET}`);
     console.log(`  File   : ${YELLOW}${v.file}${location}${RESET}`);

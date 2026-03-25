@@ -1,0 +1,4748 @@
+{
+  "generated_at": "2026-03-25T07:22:24.526Z",
+  "baseline_commit": "b33d1d0",
+  "scan_dirs": [
+    "client/src",
+    "server",
+    "shared",
+    "os-core"
+  ],
+  "summary": {
+    "total": 1037,
+    "by_type": {
+      "UI_DESIGN_VIOLATION": 996,
+      "HARDCODED_MODEL_ID": 41
+    },
+    "by_file_count": 144
+  },
+  "violations": {
+    "client/src/components/A2PComplianceWizard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 340,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 560,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 798,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/AgentOrchestration.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 90,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 119,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 134,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 161,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 183,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 187,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 191,
+          "match": "text-gray-3"
+        },
+        {
+          "line": 195,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 211,
+          "match": "text-gray-4"
+        }
+      ]
+    },
+    "client/src/components/AgentQRCard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 55,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 55,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/components/B2bMap.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 60,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 69,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 129,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/BusinessOnboardingWizard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 297,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 454,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/DemoLaunchCard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 74,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 74,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/components/FloatingChatWidget.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 133,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 143,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 157,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 177,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/HeroSection.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 64,
+          "match": "bg-white"
+        },
+        {
+          "line": 110,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/components/ItinerarySidebar.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 46,
+          "match": "bg-white"
+        },
+        {
+          "line": 59,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 69,
+          "match": "bg-white"
+        },
+        {
+          "line": 69,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 80,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/LiveEmotionControl.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 40,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/MapDisplay.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 112,
+          "match": "bg-white"
+        },
+        {
+          "line": 114,
+          "match": "bg-white"
+        },
+        {
+          "line": 149,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 172,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 177,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 187,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 198,
+          "match": "bg-white"
+        },
+        {
+          "line": 198,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 201,
+          "match": "bg-white"
+        },
+        {
+          "line": 201,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 218,
+          "match": "bg-white"
+        },
+        {
+          "line": 236,
+          "match": "bg-white"
+        },
+        {
+          "line": 236,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 265,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 826,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 826,
+          "match": "bg-white"
+        },
+        {
+          "line": 837,
+          "match": "bg-white"
+        },
+        {
+          "line": 837,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 848,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 867,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/components/ModelCostComparison.tsx": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 218,
+          "match": "'gemini-2.5-flash-native-audio-preview'"
+        },
+        {
+          "line": 222,
+          "match": "'gemini-2.0-flash-native-audio'"
+        }
+      ],
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 167,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/PushToTalkInterface.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 239,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/ShareButton.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 178,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 179,
+          "match": "bg-white"
+        },
+        {
+          "line": 179,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 181,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 182,
+          "match": "bg-white"
+        },
+        {
+          "line": 182,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 258,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 268,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 311,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/Sidebar.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 33,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/StandardizedChatInterface.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 133,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 639,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 652,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 662,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 701,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 722,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/VoiceAdminPanel.tsx": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 79,
+          "match": "'gemini-2.5-flash-native-audio-preview'"
+        }
+      ],
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 205,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 386,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 427,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/WebhookSettings.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 234,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 255,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 296,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 324,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 359,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 405,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/WebsitePreview.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 876,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 907,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 927,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 937,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 950,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1036,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1213,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/account/CashBoardPanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 89,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/account/ProfileContent.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 251,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 794,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 797,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 800,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/account/QRRoutesManager.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 241,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 245,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 249,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 254,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/admin/AgentCreatorPanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 83,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 94,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 120,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 130,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 150,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 156,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 173,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 289,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/admin/GatewayRouterPanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 85,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 95,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 114,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 128,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 145,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 155,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 246,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/admin/KnowledgeProficiencyCard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 171,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/admin/ProductsServicePanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 373,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/admin/WebsitePlanUploader.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 108,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 117,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 175,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 186,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 226,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 283,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/biz/BusinessHeroIdle.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 107,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 117,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 152,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 152,
+          "match": "bg-white"
+        },
+        {
+          "line": 154,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 166,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 166,
+          "match": "bg-white"
+        },
+        {
+          "line": 168,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 267,
+          "match": "bg-white"
+        },
+        {
+          "line": 323,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 337,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 337,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/components/chat/ConciergePanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 246,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 358,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 379,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 460,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 492,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 515,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 587,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 593,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 602,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 604,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1455,
+          "match": "bg-white"
+        },
+        {
+          "line": 1510,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1510,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1528,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1528,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1576,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1592,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1592,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1601,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1601,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1681,
+          "match": "bg-white"
+        },
+        {
+          "line": 1702,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1702,
+          "match": "bg-white"
+        },
+        {
+          "line": 1721,
+          "match": "bg-white"
+        },
+        {
+          "line": 1754,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1777,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1801,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1819,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1835,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1887,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1941,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1970,
+          "match": "bg-white"
+        },
+        {
+          "line": 2017,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2023,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2029,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2048,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2092,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2110,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2144,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2161,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2162,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2166,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2179,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2182,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2210,
+          "match": "bg-white"
+        },
+        {
+          "line": 2225,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2245,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2260,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2323,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2330,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2345,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2406,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2433,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2457,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2466,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2507,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2737,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2765,
+          "match": "bg-white"
+        },
+        {
+          "line": 2793,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 2827,
+          "match": "text-gray-7"
+        },
+        {
+          "line": 2834,
+          "match": "bg-white"
+        },
+        {
+          "line": 2834,
+          "match": "bg-white"
+        },
+        {
+          "line": 2912,
+          "match": "bg-white"
+        },
+        {
+          "line": 2947,
+          "match": "bg-white"
+        },
+        {
+          "line": 2947,
+          "match": "bg-white"
+        },
+        {
+          "line": 3030,
+          "match": "bg-white"
+        },
+        {
+          "line": 3033,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 3033,
+          "match": "bg-white"
+        },
+        {
+          "line": 3057,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 3092,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 3107,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 3148,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/compliance/PhonePreview.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 47,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 47,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/components/nova/NovaGate.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 258,
+          "match": "bg-white"
+        },
+        {
+          "line": 261,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 261,
+          "match": "bg-white"
+        },
+        {
+          "line": 262,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 277,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 283,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 292,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 313,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 320,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/onboarding/GovernanceWizard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 81,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 96,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 122,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 137,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 152,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 202,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 254,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 294,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/os/BrandGovernancePanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 95,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 95,
+          "match": "bg-white"
+        },
+        {
+          "line": 104,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 104,
+          "match": "bg-white"
+        },
+        {
+          "line": 134,
+          "match": "bg-white"
+        },
+        {
+          "line": 139,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 139,
+          "match": "bg-white"
+        },
+        {
+          "line": 177,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 177,
+          "match": "bg-white"
+        },
+        {
+          "line": 183,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 188,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 289,
+          "match": "bg-white"
+        },
+        {
+          "line": 304,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 339,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 346,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 436,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 469,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 475,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 483,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 496,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/os/OSMenuList.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 53,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 53,
+          "match": "bg-white"
+        },
+        {
+          "line": 57,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/os/SalesFunnelsEditor.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 128,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 134,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 143,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 168,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 177,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 187,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/public/PlatformSiteFrame.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 75,
+          "match": "bg-white"
+        },
+        {
+          "line": 86,
+          "match": "bg-white"
+        },
+        {
+          "line": 97,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/components/reseller/CommissionReport.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 57,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 69,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 76,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 83,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/reseller/GrowthCalculator.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 43,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 47,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 52,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/reseller/PayoutDashboard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 83,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 127,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/showcase/B2bItinerarySidebar.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 35,
+          "match": "bg-white"
+        },
+        {
+          "line": 64,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 90,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/showcase/EventSearchPanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 98,
+          "match": "bg-white"
+        },
+        {
+          "line": 98,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/showcase/FlightSearchModalB2b.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 71,
+          "match": "bg-white"
+        },
+        {
+          "line": 71,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 90,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 100,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 110,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 121,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 128,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/showcase/HotelSearchModalB2b.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 122,
+          "match": "bg-white"
+        },
+        {
+          "line": 122,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 139,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 145,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 164,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 184,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/showcase/ItinerarySidebarOlympic.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 113,
+          "match": "bg-white"
+        },
+        {
+          "line": 132,
+          "match": "bg-white"
+        },
+        {
+          "line": 148,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 210,
+          "match": "bg-white"
+        },
+        {
+          "line": 240,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 252,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 267,
+          "match": "bg-white"
+        },
+        {
+          "line": 349,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/storefront/StorefrontQRGenerator.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 101,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/ui/alert-dialog.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 37,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/ui/alert.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 7,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/ui/card.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 12,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/ui/chart.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 182,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/ui/dialog.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 41,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/ui/sidebar.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 247,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 314,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/voice/AgentDirectoryMenu.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 72,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/voice/VoiceSelector.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 53,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 66,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/voice/VoiceSettings.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 244,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 262,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 311,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 358,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 399,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 442,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 506,
+          "match": "bg-white"
+        },
+        {
+          "line": 546,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/voice/animations/MapSkeleton.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 7,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/voice/animations/SuccessAnimation.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 38,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/voice/maps/MapTool.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 31,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/voice/maps/PlaceChangeListener.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 54,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/voice/tools/BailRescuePanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 159,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 170,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 187,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/voice/tools/KioskOnboarding.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 108,
+          "match": "bg-white"
+        },
+        {
+          "line": 108,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 111,
+          "match": "bg-white"
+        },
+        {
+          "line": 111,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 114,
+          "match": "bg-white"
+        },
+        {
+          "line": 114,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 122,
+          "match": "bg-white"
+        },
+        {
+          "line": 122,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 133,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 141,
+          "match": "bg-white"
+        },
+        {
+          "line": 141,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 154,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 162,
+          "match": "bg-white"
+        },
+        {
+          "line": 162,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 164,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 171,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 178,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 185,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 193,
+          "match": "bg-white"
+        },
+        {
+          "line": 193,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 200,
+          "match": "bg-white"
+        },
+        {
+          "line": 200,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 207,
+          "match": "bg-white"
+        },
+        {
+          "line": 207,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 211,
+          "match": "bg-white"
+        },
+        {
+          "line": 211,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 215,
+          "match": "bg-white"
+        },
+        {
+          "line": 215,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/voice/tools/KnowledgeManager.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 104,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 167,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 174,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 181,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 194,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 202,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 251,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/voice/tools/ManualCorrectionBox.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 36,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 53,
+          "match": "bg-white"
+        },
+        {
+          "line": 53,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 59,
+          "match": "text-gray-4"
+        }
+      ]
+    },
+    "client/src/components/voice/tools/ManualDataInput.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 74,
+          "match": "bg-white"
+        },
+        {
+          "line": 74,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 85,
+          "match": "text-gray-8"
+        },
+        {
+          "line": 99,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 111,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 114,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 114,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 114,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/voice/tools/PlanManager.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 121,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 122,
+          "match": "bg-white"
+        },
+        {
+          "line": 138,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 150,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 153,
+          "match": "bg-white"
+        },
+        {
+          "line": 164,
+          "match": "bg-white"
+        },
+        {
+          "line": 164,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 198,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 204,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 245,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 255,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 263,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 268,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 274,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/voice/tools/SharedCanvasPanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 47,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 55,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 78,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 122,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 130,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 189,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/voice/tools/TaskOrderEditor.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 106,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/components/voice/tools/WarrantResultsPanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 109,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 113,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 117,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 171,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/components/workspace/GoogleWorkspacePanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 107,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 138,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 158,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 165,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 180,
+          "match": "bg-white"
+        },
+        {
+          "line": 197,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 211,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/ResellerApplyPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 6,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/TestB2BPortal.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 52,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/WaitlistPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 6,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/account/BillingPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 86,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 143,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 212,
+          "match": "bg-white"
+        },
+        {
+          "line": 295,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 330,
+          "match": "bg-white"
+        },
+        {
+          "line": 331,
+          "match": "bg-white"
+        },
+        {
+          "line": 353,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/account/NovaVerifyPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 76,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 148,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/pages/admin/GatewayAdmin.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 171,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 185,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 198,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 211,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 224,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 394,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 398,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 573,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 577,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 644,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 703,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 707,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/admin/PlatformBusinesses.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 151,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 162,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 247,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 380,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/admin/PlatformKnowledgeLanding.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 103,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 115,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 134,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 231,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 242,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 249,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 273,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 281,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/admin/PlatformOverview.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 91,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 325,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/admin/PlatformQRCodeManager.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 146,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/admin/PlatformSettingsPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 142,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 197,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 482,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 495,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 508,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 523,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 576,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 633,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 663,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 724,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/admin/PlatformTenants.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 70,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 147,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 161,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 171,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 177,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/admin/not-found.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 11,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 14,
+          "match": "text-gray-6"
+        }
+      ]
+    },
+    "client/src/pages/agents/AgentDashboard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 192,
+          "match": "bg-white"
+        },
+        {
+          "line": 198,
+          "match": "bg-white"
+        },
+        {
+          "line": 251,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 258,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 372,
+          "match": "bg-white"
+        },
+        {
+          "line": 389,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 463,
+          "match": "bg-white"
+        },
+        {
+          "line": 486,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/agents/AgentManagementPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 209,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/agents/AgentPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 200,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/agents/AgentTestingDashboard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 121,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 134,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 178,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 190,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 202,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 214,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 226,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 282,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 305,
+          "match": "text-gray-3"
+        },
+        {
+          "line": 324,
+          "match": "text-gray-3"
+        },
+        {
+          "line": 343,
+          "match": "text-gray-3"
+        }
+      ]
+    },
+    "client/src/pages/agents/CommandChat.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 104,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 174,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/agents/OnboardingFlow.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 141,
+          "match": "bg-white"
+        },
+        {
+          "line": 540,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 547,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 626,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 633,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 715,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 722,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 770,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 786,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 794,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 815,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 832,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 840,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 872,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 888,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 904,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 920,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 931,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 938,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 985,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 994,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1007,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1034,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1081,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1086,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/pages/biz-dashboard/TransparencyDashboard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 87,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 174,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/customer/BailRescue.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 115,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/pages/customer/BusinessPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 1038,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1207,
+          "match": "bg-white"
+        },
+        {
+          "line": 1538,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1543,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1636,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/customer/ChatWithAgentPreview.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 89,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 144,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 169,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 190,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 194,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 198,
+          "match": "text-gray-3"
+        },
+        {
+          "line": 227,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 231,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 235,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 239,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 243,
+          "match": "text-gray-4"
+        }
+      ]
+    },
+    "client/src/pages/developer/AgentTelephony.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 144,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 166,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 168,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 217,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 246,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 254,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 326,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 368,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 369,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 417,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 421,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 425,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 431,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/developer/DeveloperChatInterface.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 56,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 63,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 85,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 92,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 114,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 118,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/developer/DeveloperPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 83,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 300,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/pages/developer/SystemHealthCheck.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 108,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/developer/TelephonyManager.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 189,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 213,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 241,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 255,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 259,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 263,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 271,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 292,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 378,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 403,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 477,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 512,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 540,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 619,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 673,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 723,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/developer/TelephonyPanel.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 646,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 748,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 815,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 860,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1060,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1513,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1748,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/developer/TwilioAccountManager.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 154,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 200,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 231,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 273,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 316,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 355,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 390,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 435,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 440,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 474,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 522,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 539,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 541,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 549,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 551,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 559,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 561,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 572,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 586,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/pages/developer/ui-kit/CodeBlock.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 25,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/developer/ui-kit/PlatformSdkSections.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 36,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 173,
+          "match": "bg-white"
+        },
+        {
+          "line": 183,
+          "match": "bg-white"
+        },
+        {
+          "line": 193,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/developer/ui-kit/index.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 185,
+          "match": "bg-white"
+        },
+        {
+          "line": 203,
+          "match": "bg-white"
+        },
+        {
+          "line": 221,
+          "match": "bg-white"
+        },
+        {
+          "line": 317,
+          "match": "bg-white"
+        },
+        {
+          "line": 398,
+          "match": "bg-white"
+        },
+        {
+          "line": 509,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/integrations/GoogleApiAnalyst.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 196,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 210,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/integrations/GooglePlacesSdk.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 24,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 39,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 56,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 89,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 127,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 128,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 152,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 211,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 271,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 272,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 300,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 350,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 404,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 406,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 444,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 466,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/pages/owner/AiBizBotAdmin.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 353,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 355,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 355,
+          "match": "bg-white"
+        },
+        {
+          "line": 370,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 370,
+          "match": "bg-white"
+        },
+        {
+          "line": 389,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 389,
+          "match": "bg-white"
+        },
+        {
+          "line": 413,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 413,
+          "match": "bg-white"
+        },
+        {
+          "line": 435,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 435,
+          "match": "bg-white"
+        },
+        {
+          "line": 471,
+          "match": "bg-white"
+        },
+        {
+          "line": 577,
+          "match": "bg-white"
+        },
+        {
+          "line": 1060,
+          "match": "bg-white"
+        },
+        {
+          "line": 1166,
+          "match": "bg-white"
+        },
+        {
+          "line": 1176,
+          "match": "bg-white"
+        },
+        {
+          "line": 1186,
+          "match": "bg-white"
+        },
+        {
+          "line": 1215,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1226,
+          "match": "bg-white"
+        },
+        {
+          "line": 1245,
+          "match": "bg-white"
+        },
+        {
+          "line": 1266,
+          "match": "bg-white"
+        },
+        {
+          "line": 1372,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1666,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1677,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1721,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1746,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1766,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1791,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1804,
+          "match": "bg-white"
+        },
+        {
+          "line": 1804,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1815,
+          "match": "bg-white"
+        },
+        {
+          "line": 1815,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1831,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1884,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 2007,
+          "match": "bg-white"
+        },
+        {
+          "line": 2040,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/owner/AiBizBotDashboard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 119,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 160,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 236,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 277,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/owner/OwnerChatInterface.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 64,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 75,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 79,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 83,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 103,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 107,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 111,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/owner/SitesAndLeads.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 170,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 280,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 397,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/public/AgentsLandingPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 92,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 139,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 146,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 236,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/pages/public/ClearVoiceLogoCenteredPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 5,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/public/ClearVoiceLogoPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 8,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/public/PlatformBuyPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 51,
+          "match": "bg-white"
+        },
+        {
+          "line": 56,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 71,
+          "match": "bg-white"
+        },
+        {
+          "line": 73,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/pages/public/PlatformEntryPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 112,
+          "match": "bg-white"
+        },
+        {
+          "line": 121,
+          "match": "bg-white"
+        },
+        {
+          "line": 130,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/public/PlatformHomePage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 203,
+          "match": "bg-white"
+        },
+        {
+          "line": 206,
+          "match": "bg-white"
+        },
+        {
+          "line": 222,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 226,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 236,
+          "match": "bg-white"
+        },
+        {
+          "line": 249,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 298,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 298,
+          "match": "bg-white"
+        },
+        {
+          "line": 367,
+          "match": "bg-white"
+        },
+        {
+          "line": 375,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 411,
+          "match": "bg-white"
+        },
+        {
+          "line": 458,
+          "match": "bg-white"
+        },
+        {
+          "line": 522,
+          "match": "bg-white"
+        },
+        {
+          "line": 535,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 554,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 691,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/public/PlatformInfoPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 70,
+          "match": "bg-white"
+        },
+        {
+          "line": 73,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/pages/reseller/MixingBoard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 132,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 136,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 137,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 158,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 160,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 163,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 216,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 223,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 227,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 234,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 240,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 247,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 250,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 254,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 262,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 270,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 332,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 337,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 340,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 344,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 355,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 360,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 363,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 380,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 382,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 383,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 450,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 455,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 469,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 475,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 482,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 485,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 496,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 504,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 507,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 517,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 520,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 568,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 569,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 579,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 581,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 582,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 590,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 591,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 591,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 594,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 594,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 597,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 597,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 600,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 600,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 628,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 640,
+          "match": "text-gray-1"
+        }
+      ]
+    },
+    "client/src/pages/reseller/ResellerAnalytics.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 166,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 181,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 188,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 215,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 216,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 220,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 221,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 243,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 288,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 294,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 298,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 303,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 304,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 310,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 321,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 327,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 338,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 339,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 344,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 356,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 361,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 371,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 373,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 374,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 376,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 380,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 396,
+          "match": "text-gray-2"
+        },
+        {
+          "line": 405,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 406,
+          "match": "text-gray-1"
+        },
+        {
+          "line": 407,
+          "match": "text-gray-5"
+        }
+      ]
+    },
+    "client/src/pages/reseller/ResellerDashboard.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 127,
+          "match": "bg-white"
+        },
+        {
+          "line": 144,
+          "match": "bg-white"
+        },
+        {
+          "line": 162,
+          "match": "bg-white"
+        },
+        {
+          "line": 183,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 245,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 249,
+          "match": "bg-white"
+        },
+        {
+          "line": 267,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 288,
+          "match": "bg-white"
+        },
+        {
+          "line": 337,
+          "match": "bg-white"
+        },
+        {
+          "line": 366,
+          "match": "bg-white"
+        },
+        {
+          "line": 409,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/showcase/AgentPortal.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 218,
+          "match": "bg-white"
+        },
+        {
+          "line": 228,
+          "match": "bg-white"
+        },
+        {
+          "line": 233,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 242,
+          "match": "bg-white"
+        },
+        {
+          "line": 266,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/showcase/ChatEmbedShowcase.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 110,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 132,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 163,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 165,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 188,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 210,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 231,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 297,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/showcase/DiscAssessment.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 219,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 244,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 309,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 313,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 320,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 324,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 337,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 341,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 367,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 409,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 430,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 451,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 453,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 459,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 471,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 502,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 544,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 565,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 569,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 582,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 591,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/pages/showcase/DiscVisualizer.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 176,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 179,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 194,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 201,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 226,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 237,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 312,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 320,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 408,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 800,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 827,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 847,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 886,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 895,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 915,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 918,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 936,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 961,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 981,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1016,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1074,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1094,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1121,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1165,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1167,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1193,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1202,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1204,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1235,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1247,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1255,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1280,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1283,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1296,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1304,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1313,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1327,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1336,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1349,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1356,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1370,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1377,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1386,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1393,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1402,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1409,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1422,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1429,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1438,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1445,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 1454,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 1461,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/showcase/LandingV2.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 47,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 50,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 50,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 56,
+          "match": "text-gray-7"
+        },
+        {
+          "line": 66,
+          "match": "bg-white"
+        },
+        {
+          "line": 74,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 75,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 82,
+          "match": "text-gray-7"
+        },
+        {
+          "line": 90,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 90,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 90,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 96,
+          "match": "text-gray-7"
+        },
+        {
+          "line": 104,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 104,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 104,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 110,
+          "match": "text-gray-7"
+        },
+        {
+          "line": 118,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 118,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 118,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 121,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 128,
+          "match": "text-gray-7"
+        },
+        {
+          "line": 137,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 144,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 145,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 154,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 167,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 168,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 174,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 175,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 181,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 182,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 186,
+          "match": "text-gray-5"
+        },
+        {
+          "line": 187,
+          "match": "text-gray-4"
+        },
+        {
+          "line": 197,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 198,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 207,
+          "match": "text-gray-9"
+        },
+        {
+          "line": 208,
+          "match": "text-gray-6"
+        },
+        {
+          "line": 210,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 236,
+          "match": "text-gray-5"
+        }
+      ]
+    },
+    "client/src/pages/showcase/MockConversation.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 160,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 460,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 494,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 794,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 801,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 844,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 872,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/showcase/OlympicB2b.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 289,
+          "match": "bg-white"
+        },
+        {
+          "line": 297,
+          "match": "bg-white"
+        },
+        {
+          "line": 304,
+          "match": "bg-white"
+        },
+        {
+          "line": 311,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 311,
+          "match": "bg-white"
+        },
+        {
+          "line": 318,
+          "match": "bg-white"
+        },
+        {
+          "line": 318,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 328,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 335,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 346,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 375,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/pages/showcase/ResellerRecruitment.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 74,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 89,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 102,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 113,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 134,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 199,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 231,
+          "match": "rounded-xl"
+        }
+      ]
+    },
+    "client/src/pages/showcase/SdkShowcase.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 37,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 70,
+          "match": "bg-white"
+        },
+        {
+          "line": 93,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 93,
+          "match": "bg-white"
+        },
+        {
+          "line": 96,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 100,
+          "match": "bg-white"
+        },
+        {
+          "line": 113,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 162,
+          "match": "bg-white"
+        },
+        {
+          "line": 172,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 220,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 236,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 259,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 269,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 274,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 282,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 286,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 290,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 419,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 466,
+          "match": "bg-white"
+        },
+        {
+          "line": 478,
+          "match": "bg-white"
+        },
+        {
+          "line": 484,
+          "match": "bg-white"
+        },
+        {
+          "line": 518,
+          "match": "bg-white"
+        },
+        {
+          "line": 528,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 528,
+          "match": "bg-white"
+        },
+        {
+          "line": 531,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 541,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 572,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 582,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 592,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 602,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 619,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 706,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 778,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 840,
+          "match": "bg-white"
+        },
+        {
+          "line": 840,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 843,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 846,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/showcase/TestB2b.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 285,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 294,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 300,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 309,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 317,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 348,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 356,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 373,
+          "match": "rounded-xl"
+        },
+        {
+          "line": 405,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 419,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/showcase/WidgetShowcasePage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 116,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 127,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 174,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 228,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 240,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 269,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/pages/storefronts/StorefrontCategoryPage.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 333,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 445,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 454,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 494,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 507,
+          "match": "rounded-lg"
+        },
+        {
+          "line": 527,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "client/src/types/voice.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 38,
+          "match": "'gemini-2.5-flash-native-audio-preview-12-2025'"
+        }
+      ]
+    },
+    "client/src/widgets/VoiceIndicatorWidget.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 49,
+          "match": "bg-white"
+        }
+      ]
+    },
+    "client/src/widgets/VoiceVisualizerWidget.tsx": {
+      "UI_DESIGN_VIOLATION": [
+        {
+          "line": 77,
+          "match": "rounded-lg"
+        }
+      ]
+    },
+    "server/ai-gateway.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 32,
+          "match": "'gemini-2.0-flash'"
+        },
+        {
+          "line": 33,
+          "match": "'gemini-2.0-flash'"
+        },
+        {
+          "line": 34,
+          "match": "'gemini-2.0-flash'"
+        },
+        {
+          "line": 51,
+          "match": "'gemini-2.0-flash'"
+        }
+      ]
+    },
+    "server/routes/agentResearch.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 77,
+          "match": "\"gemini-2.0-flash\""
+        }
+      ]
+    },
+    "server/routes/voiceTranscribe.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 92,
+          "match": "'gemini-2.0-flash'"
+        },
+        {
+          "line": 176,
+          "match": "'gemini-2.0-flash'"
+        }
+      ]
+    },
+    "server/services/audioAnalysis.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 74,
+          "match": "'gemini-2.0-flash'"
+        }
+      ]
+    },
+    "server/services/demo-enrichment.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 185,
+          "match": "'gemini-2.0-flash'"
+        }
+      ]
+    },
+    "server/services/discAnalysis.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 106,
+          "match": "'gemini-2.0-flash'"
+        }
+      ]
+    },
+    "server/services/geminiService.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 14,
+          "match": "'gemini-2.0-flash'"
+        },
+        {
+          "line": 41,
+          "match": "'gemini-2.0-flash'"
+        }
+      ]
+    },
+    "server/services/parsePlanService.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 48,
+          "match": "\"gemini-2.0-flash\""
+        }
+      ]
+    },
+    "server/services/sageIngestService.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 48,
+          "match": "'gemini-2.0-flash'"
+        }
+      ]
+    },
+    "server/tools/pitchGeneration.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 155,
+          "match": "'gemini-2.0-flash'"
+        }
+      ]
+    },
+    "server/voiceGemini.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 214,
+          "match": "'gemini-2.5-flash-preview-tts'"
+        }
+      ]
+    },
+    "shared/geminiVoiceModels.ts": {
+      "HARDCODED_MODEL_ID": [
+        {
+          "line": 96,
+          "match": "'gemini-3.0-flash'"
+        },
+        {
+          "line": 97,
+          "match": "'gemini-3.0-flash'"
+        },
+        {
+          "line": 98,
+          "match": "'gemini-3-flash-preview'"
+        },
+        {
+          "line": 144,
+          "match": "'gemini-3-flash-live-api'"
+        },
+        {
+          "line": 147,
+          "match": "'gemini-3.0-flash'"
+        },
+        {
+          "line": 155,
+          "match": "'gemini-2.5-flash-native-audio-preview-12-2025'"
+        },
+        {
+          "line": 156,
+          "match": "'gemini-2.5-flash-native-audio-preview-12-2025'"
+        },
+        {
+          "line": 157,
+          "match": "'gemini-2.5-flash-native-audio-preview-12-2025'"
+        },
+        {
+          "line": 252,
+          "match": "'gemini-2.5-flash-native-audio-preview-12-2025'"
+        },
+        {
+          "line": 306,
+          "match": "'gemini-2.5-flash-native-audio-preview'"
+        },
+        {
+          "line": 307,
+          "match": "'gemini-2.5-flash-native-audio-preview'"
+        },
+        {
+          "line": 308,
+          "match": "'gemini-2.5-flash-native-audio-preview'"
+        },
+        {
+          "line": 393,
+          "match": "'gemini-2.5-flash-native-audio-preview'"
+        },
+        {
+          "line": 423,
+          "match": "'gemini-2.5-flash-latest'"
+        },
+        {
+          "line": 424,
+          "match": "'gemini-2.5-flash-latest'"
+        },
+        {
+          "line": 425,
+          "match": "'gemini-2.5-flash-latest'"
+        },
+        {
+          "line": 507,
+          "match": "'gemini-2.5-flash-latest'"
+        },
+        {
+          "line": 532,
+          "match": "'gemini-2.0-flash-native-audio'"
+        },
+        {
+          "line": 533,
+          "match": "'gemini-2.0-flash-native-audio'"
+        },
+        {
+          "line": 534,
+          "match": "'gemini-2.0-flash-native-audio'"
+        },
+        {
+          "line": 615,
+          "match": "'gemini-2.0-flash-native-audio'"
+        }
+      ]
+    }
+  }
+}
