@@ -1,0 +1,87 @@
+# SURVIVOR_SET — Production Simulation Week 0
+#
+# This artifact tracks which features survive real usage under pressure.
+# It is the primary input for the v1 feature boundary.
+#
+# RULE: No feature may be promoted out of "unverified" until it has been
+#       exercised during Production Simulation Week 0.
+#
+# RULE: Entries are added ONLY after a feature is actually tested under
+#       real conditions. Do not pre-populate from architecture, code
+#       inspection, or documentation. "Wired" is not "survived."
+#
+# RULE: A feature with status "stable_with_warnings" MUST reference
+#       the related failure IDs from FAILURE_LOG.yaml.
+#
+# RULE: A feature with status "excluded_from_v1" MUST have an
+#       exclusion_reason. No silent exclusions.
+
+version: "1.0"
+created: "2026-03-25"
+authority: governance/TRUTH_REGISTRY.yaml
+phase: "production_simulation_week_0"
+
+# ─── SCHEMA ─────────────────────────────────────────────────────────────────
+#
+# Each survivor entry MUST contain ALL of the following fields:
+#
+#   feature:          string   — human-readable feature name
+#   status:           enum     — unverified | stable | stable_with_warnings | excluded_from_v1
+#   exercised:        boolean  — true only after real production simulation testing
+#   revenue_critical: boolean  — true if this feature directly generates or protects revenue
+#   owner:            enum     — governance | runtime | ui | data | voice
+#   tested_at:        string   (optional) — date of last exercise
+#   related_failures: list     (optional) — failure IDs from FAILURE_LOG.yaml
+#   exclusion_reason: string   (required if status = excluded_from_v1)
+#   notes:            string   (optional) — observations from testing
+#
+# ─── STATUS DEFINITIONS ─────────────────────────────────────────────────────
+#
+#   unverified           — exists in code but has NOT been exercised under
+#                          production simulation. Default state for all entries.
+#                          No feature ships as v1 in this state.
+#
+#   stable               — exercised during Week 0, no failures observed,
+#                          behaves deterministically under load. Candidate for v1.
+#
+#   stable_with_warnings — exercised during Week 0, works but has known
+#                          issues (referenced in FAILURE_LOG.yaml). May ship
+#                          in v1 if warnings are non-critical.
+#
+#   excluded_from_v1     — explicitly removed from v1 scope. Must have
+#                          exclusion_reason. May be reconsidered for v2+.
+#
+# ─── OWNER DOMAINS ──────────────────────────────────────────────────────────
+#
+#   governance — authority hierarchy, enforcement gates, policy rules
+#   runtime    — server execution, routing, state machines, provisioning
+#   ui         — client rendering, navigation, layout, interaction
+#   data       — schema, storage, migrations, data integrity
+#   voice      — Gemini Live pipeline, audio codec, WebSocket sessions
+#
+# ─── HOW ENTRIES ARE ADDED ──────────────────────────────────────────────────
+#
+# During Production Simulation Week 0:
+#
+#   1. Exercise a feature under real conditions
+#   2. Add an entry with status: unverified, exercised: false
+#   3. After testing, set exercised: true and update status based on results
+#   4. If failures occurred, log them in FAILURE_LOG.yaml first,
+#      then reference the failure IDs here
+#   5. After Week 0 concludes, any feature still "unverified" is
+#      automatically excluded_from_v1
+#
+# Post-Week 0 promotion rule:
+#
+#   unverified → excluded_from_v1   (automatic if not exercised)
+#   unverified → stable             (requires: exercised = true, zero related failures)
+#   unverified → stable_with_warnings (requires: exercised = true, non-critical failures only)
+
+survivors: []
+  # Example (remove when first real entry is added):
+  #
+  # - feature: voice_concierge_core
+  #   status: unverified
+  #   exercised: false
+  #   revenue_critical: true
+  #   owner: voice

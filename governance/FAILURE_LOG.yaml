@@ -1,0 +1,82 @@
+# FAILURE_LOG — Production Simulation Week 0
+#
+# This artifact captures failures observed during controlled production
+# simulation. It is the primary input for the v1 boundary decision.
+#
+# RULE: Entries are added ONLY during or after Production Simulation Week 0.
+#       Do not pre-populate from architecture assumptions or code inspection.
+#       Every entry must come from observed runtime behavior.
+#
+# RULE: No failure may be dismissed without a severity classification
+#       and an explicit fix_required decision.
+
+version: "1.0"
+created: "2026-03-25"
+authority: governance/TRUTH_REGISTRY.yaml
+phase: "production_simulation_week_0"
+
+# ─── SCHEMA ─────────────────────────────────────────────────────────────────
+#
+# Each failure entry MUST contain ALL of the following fields:
+#
+#   id:              string   — unique identifier (F001, F002, ...)
+#   type:            string   — failure category:
+#                                 governance_conflict
+#                                 silent_failure
+#                                 state_corruption
+#                                 enforcement_bypass
+#                                 agent_drift
+#                                 data_leak
+#                                 provisioning_failure
+#                                 recovery_failure
+#                                 rule_collision
+#                                 unknown
+#   description:     string   — what happened, not what you expected
+#   location:        string   — file path, route, or subsystem where it occurred
+#   severity:        enum     — critical | high | medium | low
+#   owner:           enum     — governance | runtime | ui | data | voice
+#   observed_under:  enum     — simulation | staging | live
+#   reproducible:    boolean  — true | false
+#   fix_required:    boolean  — true | false
+#   steps_to_reproduce: string (optional) — how to trigger the failure
+#   related_failures:  list   (optional) — ids of related failures
+#   resolution:        string (optional) — what was done to fix it
+#   resolved_at:       string (optional) — date of resolution
+#
+# ─── SEVERITY DEFINITIONS ───────────────────────────────────────────────────
+#
+#   critical  — system cannot function; data loss; security breach;
+#               enforcement bypass that allows ungoverned execution
+#   high      — feature broken; user-visible failure; state corruption
+#               that requires manual intervention
+#   medium    — degraded behavior; workaround exists; non-blocking
+#               but reduces confidence in the system
+#   low       — cosmetic; edge case; does not affect core flows
+#               or governance integrity
+#
+# ─── OWNER DOMAINS ──────────────────────────────────────────────────────────
+#
+#   governance — authority hierarchy, enforcement gates, policy rules
+#   runtime    — server execution, routing, state machines, provisioning
+#   ui         — client rendering, navigation, layout, interaction
+#   data       — schema, storage, migrations, data integrity
+#   voice      — Gemini Live pipeline, audio codec, WebSocket sessions
+#
+# ─── OBSERVED_UNDER VALUES ──────────────────────────────────────────────────
+#
+#   simulation — Production Simulation Week 0 (controlled chaos)
+#   staging    — staging environment under test load
+#   live       — production traffic (post-v1 launch)
+
+failures: []
+  # Example (remove when first real entry is added):
+  #
+  # - id: F001
+  #   type: governance_conflict
+  #   description: "Two policies triggered conflicting actions on agent creation"
+  #   location: server/services/agentProvisioning.ts
+  #   severity: high
+  #   owner: governance
+  #   observed_under: simulation
+  #   reproducible: true
+  #   fix_required: true
