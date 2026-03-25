@@ -1,0 +1,228 @@
+# TRUTH REGISTRY — Gateway Global AI OS
+# This file is the single authority declaration for the entire system.
+# Generated from: docs/architecture/GOVERNANCE_DOCS_AUDIT_REPORT.md (2026-03-25)
+#
+# Three authority layers:
+#   .cursor/rules/*.mdc      = LAW       (enforced every agent interaction)
+#   governance/TRUTH_REGISTRY = AUTHORITY (declares what exists)
+#   docs-governance/canonical = REFERENCE (explains the law)
+#
+# Everything else is archived or deleted.
+
+version: "1.0"
+authority_date: "2026-03-25"
+audit_source: "docs/architecture/GOVERNANCE_DOCS_AUDIT_REPORT.md"
+
+# ─── PRODUCTION ARCHITECTURE ───────────────────────────────────────────────
+# These paths contain the REAL, running system. All truth derives from here.
+
+production:
+  schema: shared/schema.ts
+  storage: server/storage.ts
+  routes: server/routes/
+  services: server/services/
+  enforcement: .cursor/rules/
+  client_app: client/src/
+  entry_point: server/index.ts
+
+# ─── EXPERIMENTAL ARCHITECTURE ─────────────────────────────────────────────
+# os-core/ is a prototype. It is NOT the production runtime.
+# Agents must NEVER merge os-core patterns into production without explicit governance task.
+
+experimental:
+  path: os-core/
+  status: NOT_ACTIVE
+  rule: >
+    os-core/ contains an 83-file prototype of a future control-plane/execution-plane
+    architecture. It is not loaded by server/index.ts. It is not served to users.
+    Do not import from os-core/ in server/ or client/src/.
+    Do not treat os-core/ views, contracts, or registries as production truth.
+
+# ─── VOICE LOCKDOWN ────────────────────────────────────────────────────────
+# These files are frozen infrastructure. Modifications require explicit CTO approval.
+
+voice_lockdown:
+  - server/geminiVoice.ts
+  - server/voiceStream.ts
+  - server/voiceGemini.ts
+  - server/voiceSession.ts
+  - server/audioCodec.ts
+  - server/config/geminiLiveProtocol.ts
+  - server/config/geminiSystemInstructions.ts
+  - server/config/geminiToolDeclarations.ts
+  - client/src/services/voice/**
+  - client/public/clear-voice-processor.js
+
+# ─── CANONICAL GOVERNANCE DOCS ─────────────────────────────────────────────
+# Exactly 28 documents. Each is backed by schema, service, or enforcement.
+# Located in: docs-governance/canonical/
+# All other docs are in docs-governance/archive/ and are NOT authoritative.
+
+canonical_docs:
+  count: 28
+  path: docs-governance/canonical/
+  documents:
+    - file: SYSTEM_MANIFEST.md
+      truth_domain: governance
+      enforced_by: ai-os-control-plane.mdc
+      backed_by: { schema: false, service: false, route: false }
+
+    - file: SCHEMA_ANCHOR_REGISTRY.md
+      truth_domain: schema
+      enforced_by: schema-anchor-registry.mdc
+      backed_by: { schema: true, service: false, route: false }
+
+    - file: CONTEXT_KEYS.md
+      truth_domain: schema
+      enforced_by: schema-anchor-registry.mdc
+      backed_by: { schema: true, service: false, route: false }
+
+    - file: SAFE_MODE_CONTRACT.md
+      truth_domain: runtime
+      enforced_by: agent-policy-registry.mdc
+      backed_by: { schema: false, service: true, route: false }
+
+    - file: AGENT_POLICY_REGISTRY.md
+      truth_domain: governance
+      enforced_by: agent-policy-registry.mdc
+      backed_by: { schema: false, service: true, route: false }
+
+    - file: VIEW_REGISTRY.md
+      truth_domain: ui
+      enforced_by: view-and-action-registry.mdc
+      backed_by: { schema: false, service: false, route: false }
+
+    - file: ACTION_REGISTRY.md
+      truth_domain: runtime
+      enforced_by: view-and-action-registry.mdc
+      backed_by: { schema: false, service: false, route: false }
+
+    - file: APP_SHELL_CONTRACT.md
+      truth_domain: ui
+      enforced_by: brand-tokens.mdc
+      backed_by: { schema: false, service: false, route: false }
+
+    - file: EXECUTION_PLANE_BOUNDARY_SPEC.md
+      truth_domain: runtime
+      enforced_by: execution-plane-boundary.mdc
+      backed_by: { schema: false, service: true, route: false }
+
+    - file: PROMPT_RUNTIME_GOVERNANCE.md
+      truth_domain: runtime
+      enforced_by: prompt-runtime-governance.mdc
+      backed_by: { schema: false, service: true, route: false }
+
+    - file: KNOWLEDGE_PLAN_ORCHESTRATOR.md
+      truth_domain: runtime
+      enforced_by: none
+      backed_by: { schema: false, service: true, route: false }
+
+    - file: SALES_FUNNEL_SPEC.md
+      truth_domain: schema
+      enforced_by: none
+      backed_by: { schema: true, service: false, route: false }
+
+    - file: PHASED_INDUSTRY_FUNNEL_SPEC.md
+      truth_domain: runtime
+      enforced_by: none
+      backed_by: { schema: false, service: true, route: false }
+
+    - file: SKILL_REGISTRY.md
+      truth_domain: schema
+      enforced_by: none
+      backed_by: { schema: true, service: false, route: false }
+
+    - file: COMMUNICATION_PLANE_CONTRACT.md
+      truth_domain: runtime
+      enforced_by: none
+      backed_by: { schema: false, service: true, route: false }
+
+    - file: BRAND_IDENTITY_SPEC.md
+      truth_domain: ui
+      enforced_by: brand-tokens.mdc
+      backed_by: { schema: true, service: false, route: false }
+
+    - file: BRAND_AGENT_POLICY.md
+      truth_domain: governance
+      enforced_by: brand-tokens.mdc
+      backed_by: { schema: false, service: false, route: false }
+
+    - file: HOSPITALITY_SWARM_RUNBOOK.md
+      truth_domain: runtime
+      enforced_by: none
+      backed_by: { schema: false, service: true, route: false }
+
+    - file: AGENT_SWARM_DEPLOYMENT_RUNBOOK.md
+      truth_domain: runtime
+      enforced_by: teams-agents-provisioning-matrix.mdc
+      backed_by: { schema: true, service: true, route: true }
+
+    - file: PLATFORM_LICENSE_ENTITLEMENT_MAP.md
+      truth_domain: schema
+      enforced_by: none
+      backed_by: { schema: true, service: true, route: true }
+
+    - file: VERIFICATION_GATE_TRANSPARENCY.md
+      truth_domain: runtime
+      enforced_by: none
+      backed_by: { schema: false, service: true, route: false }
+
+    - file: VOICE_SESSION_TRANSPARENCY.md
+      truth_domain: runtime
+      enforced_by: none
+      backed_by: { schema: false, service: true, route: false }
+
+    - file: VOICE_PHASE_5D_BRIDGE.md
+      truth_domain: runtime
+      enforced_by: none
+      backed_by: { schema: false, service: true, route: false }
+
+    - file: NOVA_VERIFICATION_GOVERNANCE.md
+      truth_domain: runtime
+      enforced_by: none
+      backed_by: { schema: true, service: true, route: true }
+
+    - file: CLIENT_SPEC_TREE_REGISTRY.md
+      truth_domain: ui
+      enforced_by: none
+      backed_by: { schema: false, service: false, route: false }
+
+    - file: CURSOR_RULES_INDEX.md
+      truth_domain: governance
+      enforced_by: none
+      backed_by: { schema: false, service: false, route: false }
+
+    - file: GPT_ACTIONS_BUSINESS_RESONANCE.md
+      truth_domain: runtime
+      enforced_by: none
+      backed_by: { schema: false, service: true, route: true }
+
+    - file: LICENSING_AND_ACTIVATION_FLOW.md
+      truth_domain: runtime
+      enforced_by: none
+      backed_by: { schema: true, service: true, route: true }
+
+# ─── ARCHIVED DOCS ─────────────────────────────────────────────────────────
+# 57 documents. NOT authoritative. NOT retrievable by agents as system truth.
+# Located in: docs-governance/archive/
+
+archived_docs:
+  count: 57
+  path: docs-governance/archive/
+  status: NOT_AUTHORITATIVE
+  rule: >
+    Archive docs are reference-only. They must not be cited as system authority.
+    They must not be referenced by cursor rules or runtime code.
+    If an archived doc becomes relevant, it must be promoted to canonical/
+    with proper frontmatter and truth_domain assignment.
+
+# ─── GOVERNANCE RULES ──────────────────────────────────────────────────────
+
+rules:
+  - docs_are_reference
+  - cursor_rules_are_law
+  - runtime_is_enforcement
+  - schema_is_truth
+  - no_new_governance_docs_without_backing
+  - archive_is_not_retrievable_as_authority
+  - os_core_is_not_production
