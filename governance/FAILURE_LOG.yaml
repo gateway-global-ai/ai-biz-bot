@@ -20,17 +20,8 @@ phase: "production_simulation_week_0"
 # Each failure entry MUST contain ALL of the following fields:
 #
 #   id:              string   — unique identifier (F001, F002, ...)
-#   type:            string   — failure category:
-#                                 governance_conflict
-#                                 silent_failure
-#                                 state_corruption
-#                                 enforcement_bypass
-#                                 agent_drift
-#                                 data_leak
-#                                 provisioning_failure
-#                                 recovery_failure
-#                                 rule_collision
-#                                 unknown
+#   session_id:      string   — Week 0 session identifier (W0-S001, W0-S002, ...)
+#   type:            string   — failure category (see FOCUS CLASSES below)
 #   description:     string   — what happened, not what you expected
 #   location:        string   — file path, route, or subsystem where it occurred
 #   severity:        enum     — critical | high | medium | low
@@ -42,6 +33,35 @@ phase: "production_simulation_week_0"
 #   related_failures:  list   (optional) — ids of related failures
 #   resolution:        string (optional) — what was done to fix it
 #   resolved_at:       string (optional) — date of resolution
+#
+# ─── FOCUS FAILURE CLASSES (Week 0 scope) ───────────────────────────────────
+#
+#   governance_conflict  — two or more rules/policies triggered conflicting actions
+#   policy_bypass        — anything slipped around the enforcement gate
+#   state_inconsistency  — wrong or stuck state transitions
+#   silent_failure       — no output, no error, no visible state change
+#   non_determinism      — same input produced different outputs
+#   recovery_failure     — could not retry or resume after error
+#
+#   Ignore all other failure types during Week 0.
+#
+# ─── GUARDRAILS ─────────────────────────────────────────────────────────────
+#
+#   1. NO SILENT SUCCESS: If a step completes without an event, a log,
+#      or a visible state change, treat it as a silent_failure and log it.
+#
+#   2. ONE FAILURE = ONE ENTRY: Do not bundle issues. Each failure gets
+#      its own id, its own location, its own severity.
+#
+# ─── WHAT TO LOG ────────────────────────────────────────────────────────────
+#
+#   Log ONLY if it:
+#     - broke
+#     - behaved inconsistently
+#     - violated governance
+#     - failed silently
+#
+#   Do NOT log ideas, improvements, or wish-list items.
 #
 # ─── SEVERITY DEFINITIONS ───────────────────────────────────────────────────
 #
@@ -72,11 +92,12 @@ failures: []
   # Example (remove when first real entry is added):
   #
   # - id: F001
-  #   type: governance_conflict
-  #   description: "Two policies triggered conflicting actions on agent creation"
+  #   session_id: W0-S001
+  #   type: silent_failure
+  #   description: "Provisioning returned 200 but no agents were created in DB"
   #   location: server/services/agentProvisioning.ts
-  #   severity: high
-  #   owner: governance
+  #   severity: critical
+  #   owner: runtime
   #   observed_under: simulation
   #   reproducible: true
   #   fix_required: true

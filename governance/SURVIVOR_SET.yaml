@@ -30,6 +30,7 @@ phase: "production_simulation_week_0"
 #   exercised:        boolean  — true only after real production simulation testing
 #   revenue_critical: boolean  — true if this feature directly generates or protects revenue
 #   owner:            enum     — governance | runtime | ui | data | voice
+#   session_ids:      list     — Week 0 session IDs where this feature was exercised (>=2 required for promotion)
 #   tested_at:        string   (optional) — date of last exercise
 #   related_failures: list     (optional) — failure IDs from FAILURE_LOG.yaml
 #   exclusion_reason: string   (required if status = excluded_from_v1)
@@ -63,19 +64,40 @@ phase: "production_simulation_week_0"
 #
 # During Production Simulation Week 0:
 #
-#   1. Exercise a feature under real conditions
+#   1. Exercise a feature under real conditions in a named session (W0-S001, etc.)
 #   2. Add an entry with status: unverified, exercised: false
-#   3. After testing, set exercised: true and update status based on results
+#   3. After testing, set exercised: true and record session_ids
 #   4. If failures occurred, log them in FAILURE_LOG.yaml first,
 #      then reference the failure IDs here
 #   5. After Week 0 concludes, any feature still "unverified" is
 #      automatically excluded_from_v1
 #
-# Post-Week 0 promotion rule:
+# ─── PROMOTION RULES (binding) ─────────────────────────────────────────────
 #
-#   unverified → excluded_from_v1   (automatic if not exercised)
-#   unverified → stable             (requires: exercised = true, zero related failures)
-#   unverified → stable_with_warnings (requires: exercised = true, non-critical failures only)
+#   unverified → excluded_from_v1     (automatic if not exercised)
+#   unverified → stable               (requires: exercised in >=2 sessions,
+#                                       zero critical/high failures,
+#                                       behavior is repeatable)
+#   unverified → stable_with_warnings (requires: exercised in >=2 sessions,
+#                                       non-critical failures only,
+#                                       all failures referenced by id)
+#
+# ─── GUARDRAILS ─────────────────────────────────────────────────────────────
+#
+#   1. NO SILENT SUCCESS: If a step completes without an event, a log,
+#      or a visible state change, treat it as a silent_failure in
+#      FAILURE_LOG.yaml. Do not mark the feature as stable.
+#
+#   2. PROMOTION REQUIRES EVIDENCE: A feature needs >=2 session_ids
+#      to leave "unverified." Single-session success is not sufficient.
+#
+# ─── WEEK 0 TEST SESSIONS ──────────────────────────────────────────────────
+#
+#   W0-S001: Provisioning flow (create -> activate -> retry on failure)
+#   W0-S002: Voice concierge core (inbound -> route -> handoff -> follow-up)
+#   W0-S003: Communication routing (phone -> SMS -> canvas escalation)
+#   W0-S004: State machine (lead create -> qualify -> convert -> follow-up)
+#   W0-S005: Policy enforcement (attempt disallowed actions: PII, direct DB, prompt injection)
 
 survivors: []
   # Example (remove when first real entry is added):
@@ -85,3 +107,4 @@ survivors: []
   #   exercised: false
   #   revenue_critical: true
   #   owner: voice
+  #   session_ids: []
