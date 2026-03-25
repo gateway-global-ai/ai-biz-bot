@@ -3,7 +3,6 @@ import { createServer, type Server } from "http";
 import path from "path";
 import { storage } from "./storage";
 import { registerVlmRoutes } from "./vlm-routes";
-import { registerAgentRoutes } from "./agents/agent-routes";
 import { registerWorkspaceOnboardingRoutes } from "./routes/workspace-onboarding";
 import knowledgeRoutes from "./routes/knowledge-routes";
 import businessRoutes from "./routes/businessRoutes";
@@ -2270,9 +2269,6 @@ ${businessContext}`;
 
   // VoiceLead Machine routes
   registerVlmRoutes(app);
-
-  // Register Agent System routes
-  registerAgentRoutes(app);
 
   // Register Workspace Onboarding routes
   registerWorkspaceOnboardingRoutes(app);

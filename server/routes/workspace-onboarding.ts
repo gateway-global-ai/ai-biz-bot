@@ -6,7 +6,6 @@
 
 import type { Express, Request, Response } from "express";
 import { workspaceOrchestrator } from "../services/workspace-orchestrator";
-import { aiBizBotConsultant } from "../agents/ai-bizbot-consultant";
 import { z } from "zod";
 
 export function registerWorkspaceOnboardingRoutes(app: Express) {
@@ -287,133 +286,14 @@ export function registerWorkspaceOnboardingRoutes(app: Express) {
     }
   });
 
-  /**
-   * Start AI Biz Bot consultation
-   * Returns initial consultation prompt and context
-   */
-  app.post("/api/workspace/consultation/start", async (req: Request, res: Response) => {
-    try {
-      const schema = z.object({
-        siteConfigId: z.string(),
-        businessName: z.string(),
-        swotAnalysisId: z.string(),
-        workspaceConfigId: z.string(),
-      });
-
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-
-      const consultationPrompt = await aiBizBotConsultant.getConsultationPrompt({
-        businessId: parsed.data.siteConfigId,
-        businessName: parsed.data.businessName,
-        swotAnalysis: parsed.data.swotAnalysisId,
-        workspaceConfigId: parsed.data.workspaceConfigId,
-      });
-
-      res.json({
-        success: true,
-        greeting: `Hi! I'm AI Biz Bot, and I've completed a comprehensive analysis of ${parsed.data.businessName}. I'd love to learn more about your specific needs so I can create a personalized workspace setup just for you. This won't be a generic template - it'll be customized based on how YOUR business actually operates. Ready to get started?`,
-        consultationPrompt,
-      });
-    } catch (error: any) {
-      console.error('Consultation start error:', error);
-      res.status(500).json({ error: error.message });
-    }
+  // Legacy consultation endpoints — deprecated (AI Biz Bot Consultant removed in AI OS extraction)
+  app.post("/api/workspace/consultation/start", (_req: Request, res: Response) => {
+    res.status(410).json({ error: "Consultation API deprecated — use AI OS agent system" });
   });
-
-  /**
-   * Process consultation message
-   * Handle conversation with business owner
-   */
-  app.post("/api/workspace/consultation/message", async (req: Request, res: Response) => {
-    try {
-      const schema = z.object({
-        siteConfigId: z.string(),
-        businessName: z.string(),
-        swotAnalysisId: z.string(),
-        workspaceConfigId: z.string(),
-        userMessage: z.string(),
-        conversationHistory: z.array(z.object({
-          role: z.string(),
-          content: z.string(),
-        })),
-      });
-
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-
-      const result = await aiBizBotConsultant.processConsultationMessage(
-        {
-          businessId: parsed.data.siteConfigId,
-          businessName: parsed.data.businessName,
-          swotAnalysis: parsed.data.swotAnalysisId,
-          workspaceConfigId: parsed.data.workspaceConfigId,
-        },
-        parsed.data.userMessage,
-        parsed.data.conversationHistory
-      );
-
-      res.json({
-        success: true,
-        response: result.response,
-        shouldFinalize: result.shouldFinalize,
-      });
-    } catch (error: any) {
-      console.error('Consultation message error:', error);
-      res.status(500).json({ error: error.message });
-    }
+  app.post("/api/workspace/consultation/message", (_req: Request, res: Response) => {
+    res.status(410).json({ error: "Consultation API deprecated — use AI OS agent system" });
   });
-
-  /**
-   * Analyze consultation and generate customization
-   * Called when consultation is complete
-   */
-  app.post("/api/workspace/consultation/analyze", async (req: Request, res: Response) => {
-    try {
-      const schema = z.object({
-        siteConfigId: z.string(),
-        businessName: z.string(),
-        swotAnalysisId: z.string(),
-        workspaceConfigId: z.string(),
-        conversationHistory: z.array(z.object({
-          role: z.string(),
-          content: z.string(),
-        })),
-      });
-
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-
-      const customization = await aiBizBotConsultant.analyzeConsultation(
-        {
-          businessId: parsed.data.siteConfigId,
-          businessName: parsed.data.businessName,
-          swotAnalysis: parsed.data.swotAnalysisId,
-          workspaceConfigId: parsed.data.workspaceConfigId,
-        },
-        parsed.data.conversationHistory
-      );
-
-      // Automatically finalize customization
-      const finalizeResult = await workspaceOrchestrator.finalizeCustomization(
-        parsed.data.workspaceConfigId,
-        customization
-      );
-
-      res.json({
-        success: true,
-        customization,
-        finalizeResult,
-      });
-    } catch (error: any) {
-      console.error('Consultation analysis error:', error);
-      res.status(500).json({ error: error.message });
-    }
+  app.post("/api/workspace/consultation/analyze", (_req: Request, res: Response) => {
+    res.status(410).json({ error: "Consultation API deprecated — use AI OS agent system" });
   });
 }
