@@ -1345,6 +1345,11 @@ export const siteConfigs = pgTable("site_configs", {
   logoUrl: text("logo_url"),
   /** Primary website URL for custom businesses. */
   website: text("website"),
+  /** Communication Plane: disclosure, stability dials, principal-of-record — see shared/conversationGrounding.ts */
+  communicationGovernance: jsonb("communication_governance").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  /** SKU from last successful platform software license redemption (informational). */
+  platformLicenseSku: text("platform_license_sku"),
+  platformLicenseActivatedAt: timestamp("platform_license_activated_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1364,6 +1369,40 @@ export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
 
 export type InsertSiteConfig = z.infer<typeof insertSiteConfigSchema>;
 export type SiteConfig = typeof siteConfigs.$inferSelect;
+
+/** Admin-issued software license keys; full key shown once; DB stores prefix + SHA-256 hash only. */
+export const platformLicenseKeys = pgTable("platform_license_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  keyPrefix: varchar("key_prefix", { length: 24 }).notNull(),
+  secretHash: text("secret_hash").notNull(),
+  sku: text("sku").notNull(),
+  label: text("label"),
+  maxActivations: integer("max_activations"),
+  activationCount: integer("activation_count").notNull().default(0),
+  expiresAt: timestamp("expires_at"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  revokedAt: timestamp("revoked_at"),
+  createdByAdminId: varchar("created_by_admin_id").references(() => adminUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const platformLicenseActivations = pgTable("platform_license_activations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  licenseKeyId: uuid("license_key_id")
+    .references(() => platformLicenseKeys.id, { onDelete: "cascade" })
+    .notNull(),
+  siteConfigId: varchar("site_config_id")
+    .references(() => siteConfigs.id, { onDelete: "cascade" })
+    .notNull(),
+  customerAccountId: varchar("customer_account_id").references(() => customerAccounts.id, {
+    onDelete: "set null",
+  }),
+  activatedAt: timestamp("activated_at").notNull().defaultNow(),
+});
+
+export type PlatformLicenseKey = typeof platformLicenseKeys.$inferSelect;
+export type PlatformLicenseActivation = typeof platformLicenseActivations.$inferSelect;
 
 // ── Knowledge Artifacts — first-class KB docs with scope, visibility, agent_access_key ─
 export const knowledgeArtifacts = pgTable(
@@ -1961,19 +2000,6 @@ export const businessIntelligenceCache = pgTable("business_intelligence_cache", 
 
 export type BusinessIntelligenceCacheRow = typeof businessIntelligenceCache.$inferSelect;
 
-/** Tour specifications (YAML-derived or manual) for featured partners. */
-export const tourSpecifications = pgTable("tour_specifications", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  placeId: text("place_id"),
-  partnerId: text("partner_id"),
-  tourId: text("tour_id").notNull().unique(),
-  spec: jsonb("spec").notNull(), // { segments: TourSegment[] }
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type TourSpecificationRow = typeof tourSpecifications.$inferSelect;
-
 /** Featured Partners - Preferential placement for Clear Voice partners (e.g. Boardwalk Suites). */
 export const featuredPartners = pgTable("featured_partners", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2184,71 +2210,6 @@ export const insertOgSettingsSchema = createInsertSchema(ogSettings).omit({
 
 export type InsertOgSettings = z.infer<typeof insertOgSettingsSchema>;
 export type OgSettings = typeof ogSettings.$inferSelect;
-
-// SWOT Analysis Results (legacy; workspace config is defined above with siteConfigId)
-export const swotAnalyses = pgTable("swot_analyses", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
-  
-  // Analysis Data (stored as JSON)
-  strengths: jsonb("strengths").notNull(),
-  weaknesses: jsonb("weaknesses").notNull(),
-  opportunities: jsonb("opportunities").notNull(),
-  threats: jsonb("threats").notNull(),
-  
-  // Recommendations
-  recommendations: jsonb("recommendations"),
-  agentTrainingData: jsonb("agent_training_data"),
-  
-  // Metadata
-  analysisSource: text("analysis_source"), // 'google_places' | 'manual' | 'ai_generated'
-  confidence: integer("confidence"), // 0-100
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertSwotAnalysisSchema = createInsertSchema(swotAnalyses).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertSwotAnalysis = z.infer<typeof insertSwotAnalysisSchema>;
-export type SwotAnalysis = typeof swotAnalyses.$inferSelect;
-
-// AI Biz Bot Consultations
-export const consultations = pgTable("consultations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
-  workspaceConfigId: varchar("workspace_config_id").references(() => workspaceConfigurations.id),
-  swotAnalysisId: varchar("swot_analysis_id").references(() => swotAnalyses.id),
-  
-  // Consultation Data
-  conversationHistory: jsonb("conversation_history").notNull(), // Array of messages
-  consultationSummary: text("consultation_summary"),
-  insights: jsonb("insights"), // Extracted insights from conversation
-  
-  // Customization Results
-  customTools: jsonb("custom_tools"),
-  customizationApplied: boolean("customization_applied").default(false),
-  
-  // Status
-  status: text("status").default("in_progress"), // 'in_progress' | 'completed' | 'abandoned'
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-  completedAt: timestamp("completed_at"),
-});
-
-export const insertConsultationSchema = createInsertSchema(consultations).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertConsultation = z.infer<typeof insertConsultationSchema>;
-export type Consultation = typeof consultations.$inferSelect;
 
 // Agent Knowledge Base - Research and Documentation Storage
 export const agentKnowledgeBase = pgTable("agent_knowledge_base", {
