@@ -88,16 +88,43 @@ phase: "production_simulation_week_0"
 #   staging    — staging environment under test load
 #   live       — production traffic (post-v1 launch)
 
-failures: []
-  # Example (remove when first real entry is added):
-  #
-  # - id: F001
-  #   session_id: W0-S001
-  #   type: silent_failure
-  #   description: "Provisioning returned 200 but no agents were created in DB"
-  #   location: server/services/agentProvisioning.ts
-  #   severity: critical
-  #   owner: runtime
-  #   observed_under: simulation
-  #   reproducible: true
-  #   fix_required: true
+failures:
+  - id: F001
+    session_id: W0-S001
+    type: state_inconsistency
+    description: "PM2 process inherited Cursor IDE sandbox proxy env vars (HTTP_PROXY=127.0.0.1:34389). All outbound API calls (Gemini, SerpApi, Hostinger) failed with ECONNREFUSED. Health check returned 503. Server appeared online but could not reach any external service."
+    location: PM2 process environment / server startup
+    severity: critical
+    owner: runtime
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+    steps_to_reproduce: "Start PM2 from a Cursor terminal. The proxy env vars leak into the PM2 process. Restart without those vars fixes it."
+    resolution: "Deleted PM2 process, unset all proxy vars, restarted with doppler run -- pm2 start. Health now returns 200 with all services ok."
+    resolved_at: "2026-03-25"
+
+  - id: F002
+    session_id: W0-S001
+    type: state_inconsistency
+    description: "PM2 process was running stale code referencing server/taskScheduler.ts which queries the dropped 'tasks' table. Error: relation 'tasks' does not exist. This caused repeated error logging (2791 restarts over 2 days) but did not crash the process."
+    location: server/taskScheduler.ts (deleted) / server/index.ts (import removed)
+    severity: high
+    owner: runtime
+    observed_under: simulation
+    reproducible: true
+    fix_required: false
+    steps_to_reproduce: "Run old code after Schema Guillotine migration 0064 drops the tasks table. Task scheduler tries to query tasks table on a timer."
+    resolution: "PM2 restart picks up current code where taskScheduler.ts is deleted and its import removed from index.ts."
+    resolved_at: "2026-03-25"
+
+  - id: F003
+    session_id: W0-S001
+    type: silent_failure
+    description: "No valid auth sessions exist in auth_sessions table. All tokens expired. Cannot exercise any requireAuth endpoint (provisioning, agent CRUD, knowledge routes) without logging in through the UI first. No CLI-based test path exists for authenticated flows."
+    location: server/auth.ts / auth_sessions table
+    severity: medium
+    owner: runtime
+    observed_under: simulation
+    reproducible: true
+    fix_required: false
+    notes: "This is expected behavior (sessions expire), but it means Week 0 authenticated flow testing requires a human operator to log in through the browser first, then extract the token. No programmatic test harness exists for API-level integration testing."
