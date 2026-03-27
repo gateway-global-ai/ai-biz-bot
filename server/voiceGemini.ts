@@ -8,7 +8,7 @@
  *    Google Cloud Speech-to-Text v1 (sub-300ms) instead of a generative LLM round-trip.
  */
 
-import { GoogleGenerativeAI, type Content } from "@google/generative-ai";
+import { GoogleGenerativeAI, type Content, type Tool } from "@google/generative-ai";
 import { SpeechClient } from "@google-cloud/speech";
 import { HOTEL_MCP_TOOLS } from "./mcp-hotels.js";
 import { executeHotelTool } from "./mcp-hotels-executor.js";
@@ -85,14 +85,21 @@ export async function generateVoiceResponseGemini(
 
   const genAI = new GoogleGenerativeAI(apiKey);
 
-  // Build function declarations from HOTEL_MCP_TOOLS for tool-calling support
-  const tools = HOTEL_MCP_TOOLS.length > 0
-    ? [{ functionDeclarations: HOTEL_MCP_TOOLS.map((t) => ({
-        name: t.name,
-        description: t.description,
-        parameters: t.parameters,
-      })) }]
-    : undefined;
+  // Build function declarations from HOTEL_MCP_TOOLS for tool-calling support.
+  // HOTEL_MCP_TOOLS uses JSON-schema-shaped literals; SDK expects FunctionDeclarationSchema (narrow SchemaType).
+  // Cast at the boundary only — runtime payload is unchanged (voice-governed typing pass).
+  const tools: Tool[] | undefined =
+    HOTEL_MCP_TOOLS.length > 0
+      ? ([
+          {
+            functionDeclarations: HOTEL_MCP_TOOLS.map((t) => ({
+              name: t.name,
+              description: t.description,
+              parameters: t.parameters,
+            })),
+          },
+        ] as unknown as Tool[])
+      : undefined;
 
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL_ID,
@@ -124,7 +131,9 @@ export async function generateVoiceResponseGemini(
     if (functionCalls && functionCalls.length > 0) {
       const call = functionCalls[0];
       console.log(`[VoiceGemini] Tool call: ${call.name}`);
-      const resultJson = await executeHotelTool(call.name, call.args ?? {});
+      const toolArgs: Record<string, unknown> =
+        call.args && typeof call.args === "object" ? { ...call.args } : {};
+      const resultJson = await executeHotelTool(call.name, toolArgs);
       let resultObj: unknown;
       try {
         resultObj = JSON.parse(resultJson);
