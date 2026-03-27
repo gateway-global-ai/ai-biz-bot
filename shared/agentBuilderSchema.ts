@@ -13,7 +13,12 @@
  * DISC/ARCH overrides are applied post-provision to the primary Concierge agent.
  */
 import { z } from "zod";
-import { AGENT_ARCHETYPES } from "./schema";
+import { PLACES_TYPE_TO_INDUSTRY } from "./schema";
+import {
+  HOSPITALITY_PHASE1_CONTRACT_ID,
+  EXPECTED_HOSPITALITY_PHASE1_CONTRACT_HASH,
+  ONBOARDING_PHASE1_SCHEMA_VERSION,
+} from "./onboardingPhase1ContractDefinition";
 
 // ── Industry Vertical Registry ────────────────────────────────────────────────
 // Maps a human-readable vertical to the representative Google Places type
@@ -101,12 +106,31 @@ export type AgentBuilderPayload = z.infer<typeof agentBuilderSchema>;
 
 // ── Provision API payload extractor ──────────────────────────────────────────
 
+function detectIndustryGroupFromPlaceTypes(placeTypes: string[]): string {
+  for (const type of placeTypes) {
+    const g = PLACES_TYPE_TO_INDUSTRY[type];
+    if (g) return g;
+  }
+  return "professional_services";
+}
+
+/** Builds POST /api/intelligence/provision body; adds admission contract for hospitality_travel. */
 export function toProvisionPayload(data: AgentBuilderPayload) {
-  return {
+  const placeTypes = [data.placeType];
+  const base = {
     siteConfigId: data.siteConfigId,
-    placeTypes: [data.placeType],
+    placeTypes,
     businessName: data.businessName,
   };
+  if (detectIndustryGroupFromPlaceTypes(placeTypes) === "hospitality_travel") {
+    return {
+      ...base,
+      admissionContractId: HOSPITALITY_PHASE1_CONTRACT_ID,
+      admissionContractHash: EXPECTED_HOSPITALITY_PHASE1_CONTRACT_HASH,
+      admissionContractVersion: ONBOARDING_PHASE1_SCHEMA_VERSION,
+    };
+  }
+  return base;
 }
 
 // ── Default values (Gateway Founder Voice calibration) ───────────────────────

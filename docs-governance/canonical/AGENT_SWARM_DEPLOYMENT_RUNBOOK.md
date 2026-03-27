@@ -38,6 +38,9 @@ Deliver a **repeatable path** from an empty or single-agent site to a **full ind
 | `siteConfigId` | string | Required. Target site. |
 | `placeTypes` | string[] | Optional; default `["establishment"]`. Drives `IndustryGroup`. |
 | `businessName` | string | Required. Used for display names and voice company name on agents. |
+| `admissionContractId` | string | **Required when** `placeTypes` resolve to `hospitality_travel` (unless `HOSPITALITY_PROVISION_CONTRACT_ENFORCE=0`). Value: `onboarding.hospitality.phase1.v1`. |
+| `admissionContractHash` | string | **Required** with id above. SHA-256 hex from [`shared/onboardingPhase1ContractDefinition.ts`](../../shared/onboardingPhase1ContractDefinition.ts) `EXPECTED_HOSPITALITY_PHASE1_CONTRACT_HASH`. |
+| `admissionContractVersion` | string | Optional. Schema version string (e.g. `1`); forwarded for audit. |
 
 ### Example
 
@@ -48,7 +51,10 @@ curl -X POST "$BASE/api/intelligence/provision" \
   -d '{
     "siteConfigId": "<uuid>",
     "placeTypes": ["lodging", "establishment"],
-    "businessName": "Example Hotel"
+    "businessName": "Example Hotel",
+    "admissionContractId": "onboarding.hospitality.phase1.v1",
+    "admissionContractHash": "<run: npm run validate:onboarding-contract-hash>",
+    "admissionContractVersion": "1"
   }'
 ```
 

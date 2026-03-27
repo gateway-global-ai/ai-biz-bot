@@ -21,6 +21,12 @@
     "check:storefront-health": "doppler run -- npx tsx scripts/check-storefront-health.ts",
     "test:bi": "doppler run -- tsx tests/test-bi-pipeline.ts",
     "test:guardrails": "doppler run -- tsx tests/test-guardrails.ts",
+    "test:onboarding-e2e-hospitality": "doppler run -- npx tsx tests/onboarding-e2e-new-business-hospitality.ts",
+    "test:onboarding-e2e-hospitality-negative": "doppler run -- npx tsx tests/onboarding-e2e-hospitality-negative.ts",
+    "validate:onboarding-contract-hash": "npx tsx scripts/validate-onboarding-contract-hash.ts",
+    "test:admission-contract-gate": "npx tsx tests/test-admission-contract-gate.ts",
+    "test:execution-contract-registry": "npx tsx tests/test-execution-contract-registry.ts",
+    "test:intelligence-provision-contract-http": "npx tsx tests/test-intelligence-provision-contract-http.ts",
     "test:guest-tool-phone-binding": "tsx tests/test-guest-tool-phone-binding.ts",
     "test:twilio-debugger-normalize": "tsx tests/test-twilio-debugger-normalize.ts",
     "test:twilio-debugger-hints-integrity": "tsx tests/test-twilio-debugger-hints-integrity.ts",
@@ -59,7 +65,9 @@
     "validate:agent-capabilities": "npx tsx scripts/validate-agent-capability-registry.ts",
     "validate:integration-registry": "npx tsx scripts/validate-integration-registry.ts",
     "stripe:bootstrap-prices": "npx tsx scripts/bootstrap-stripe-plan-prices.ts",
-    "validate:swarm-schematic": "npx tsx scripts/validate-swarm-schematic.ts"
+    "validate:swarm-schematic": "npx tsx scripts/validate-swarm-schematic.ts",
+    "validate:agent-classification": "npx tsx scripts/validate-agent-classification.ts",
+    "verify:hospitality-projection": "npx tsx scripts/verify-hospitality-projection.ts"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

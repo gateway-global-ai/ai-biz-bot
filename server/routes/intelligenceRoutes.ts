@@ -5,6 +5,7 @@
  * POST /resolve  — resolve data_id or placeTypes (accepts query or placeId)
  * POST /ingest   — full autonomous pipeline: resolve → harvest → analyze → store
  * POST /provision — provision 6 agents for a site from industry templates
+ *   (hospitality_travel: requires admissionContractId + admissionContractHash unless HOSPITALITY_PROVISION_CONTRACT_ENFORCE=0)
  * POST /orchestration-runs — start run for manual single-agent create (POST /api/agents)
  * POST /ppp-snapshot — bounded PPP profile from Places/Serp (inferred; optional persist to knowledge library)
  * GET /status/:siteConfigId — intelligence brief status
@@ -14,6 +15,7 @@ import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { storage } from '../storage.js';
+import { placeTypesFromSiteConfig } from '../config/sitePlaceTypesForContract.js';
 import { requireAuth } from '../auth.js';
 import {
   resolve_data_id,
@@ -27,6 +29,11 @@ import {
   persistOrchestrationViolation,
 } from '../services/agentOrchestration.js';
 import { assertSiteAccessForSession } from '../utils/siteScopedAccess';
+import {
+  validateExecutionContract,
+  recordContractViolation,
+} from '../services/executionContractEngine.js';
+import { HOSPITALITY_PHASE1_CONTRACT_ID } from '../../shared/onboardingPhase1ContractDefinition.js';
 
 const router = Router();
 
@@ -101,6 +108,9 @@ router.post('/provision', requireAuth, async (req, res) => {
     siteConfigId: z.string().min(1),
     placeTypes: z.array(z.string()).default(['establishment']),
     businessName: z.string().min(1),
+    admissionContractId: z.string().min(1).optional(),
+    admissionContractHash: z.string().min(1).optional(),
+    admissionContractVersion: z.string().min(1).max(32).optional(),
   });
 
   const parsed = schema.safeParse(req.body);
@@ -129,6 +139,39 @@ router.post('/provision', requireAuth, async (req, res) => {
     });
   }
 
+  const admission = validateExecutionContract({
+    executionKind: 'post_intelligence_provision',
+    placeTypes: parsed.data.placeTypes,
+    admissionContractId: parsed.data.admissionContractId,
+    admissionContractHash: parsed.data.admissionContractHash,
+    admissionContractVersion: parsed.data.admissionContractVersion,
+  });
+  if (!admission.ok) {
+    const session = (req as { session?: { adminUserId?: string } }).session;
+    await recordContractViolation({
+      siteConfigId: parsed.data.siteConfigId,
+      routeOrSource: 'POST /api/intelligence/provision',
+      actorHint: session?.adminUserId ?? undefined,
+      validation: admission,
+      extraDetail: {
+        admissionContractVersion: parsed.data.admissionContractVersion ?? null,
+      },
+    });
+    console.warn(
+      '[executionContract] provision refused',
+      JSON.stringify({
+        siteConfigId: parsed.data.siteConfigId,
+        code: admission.code,
+        reason: admission.reason,
+      }),
+    );
+    return res.status(422).json({
+      error: admission.reason,
+      code: admission.code,
+      contractId: HOSPITALITY_PHASE1_CONTRACT_ID,
+    });
+  }
+
   try {
     const { provisionResult: result, runId, finalStatus } = await runAgentSwarmProvisionOrchestrated({
       siteConfigId: parsed.data.siteConfigId,
@@ -142,6 +185,7 @@ router.post('/provision', requireAuth, async (req, res) => {
       orchestrationRunId: runId,
       orchestrationFinalStatus: finalStatus,
       agentsCreated: result.agentsCreated,
+      agentsSkipped: result.agentsSkipped,
       agentIds: result.agentIds,
       industryGroup: result.industryGroup,
       archetypesProvisioned: result.archetypesProvisioned,
@@ -157,6 +201,9 @@ router.post('/provision', requireAuth, async (req, res) => {
 router.post('/orchestration-runs', requireAuth, async (req, res) => {
   const schema = z.object({
     siteConfigId: z.string().min(1),
+    admissionContractId: z.string().min(1).optional(),
+    admissionContractHash: z.string().min(1).optional(),
+    admissionContractVersion: z.string().min(1).max(32).optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
@@ -182,6 +229,45 @@ router.post('/orchestration-runs', requireAuth, async (req, res) => {
       code: 'SITE_ACCESS_DENIED',
     });
   }
+
+  const siteRow = await storage.getSiteConfigById(parsed.data.siteConfigId);
+  if (!siteRow) {
+    return res.status(404).json({ error: 'Site not found', code: 'SITE_NOT_FOUND' });
+  }
+  const placeTypes = placeTypesFromSiteConfig(siteRow);
+  const admission = validateExecutionContract({
+    executionKind: 'post_intelligence_orchestration_runs',
+    placeTypes,
+    admissionContractId: parsed.data.admissionContractId,
+    admissionContractHash: parsed.data.admissionContractHash,
+    admissionContractVersion: parsed.data.admissionContractVersion,
+  });
+  if (!admission.ok) {
+    const session = (req as { session?: { adminUserId?: string } }).session;
+    await recordContractViolation({
+      siteConfigId: parsed.data.siteConfigId,
+      routeOrSource: 'POST /api/intelligence/orchestration-runs',
+      actorHint: session?.adminUserId ?? undefined,
+      validation: admission,
+      extraDetail: {
+        admissionContractVersion: parsed.data.admissionContractVersion ?? null,
+      },
+    });
+    console.warn(
+      '[executionContract] orchestration-runs refused',
+      JSON.stringify({
+        siteConfigId: parsed.data.siteConfigId,
+        code: admission.code,
+        reason: admission.reason,
+      }),
+    );
+    return res.status(422).json({
+      error: admission.reason,
+      code: admission.code,
+      contractId: HOSPITALITY_PHASE1_CONTRACT_ID,
+    });
+  }
+
   try {
     const { runId } = await createSingleAgentOrchestrationRun({
       siteConfigId: parsed.data.siteConfigId,
