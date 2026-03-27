@@ -400,7 +400,12 @@ router.post("/task", requireAuth, async (req: Request, res: Response) => {
 // ── GET /api/local-agent/status/:runId ───────────────────────────────────────
 
 router.get("/status/:runId", requireAuth, async (req: Request, res: Response) => {
-  const { runId } = req.params;
+  const runIdRaw = req.params.runId;
+  const runId = typeof runIdRaw === "string" ? runIdRaw : runIdRaw?.[0];
+  if (!runId) {
+    res.status(400).json({ error: "run_id_required" });
+    return;
+  }
 
   const [run] = await db
     .select()

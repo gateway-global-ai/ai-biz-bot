@@ -468,14 +468,24 @@ ${goalContext}`;
     ? "deferred"
     : "completed";
 
+  const [existingRunRow] = await db
+    .select({ metadata: agentOrchestrationRuns.metadata })
+    .from(agentOrchestrationRuns)
+    .where(eq(agentOrchestrationRuns.id, runId))
+    .limit(1);
+  const priorMeta = (existingRunRow?.metadata ?? {}) as Record<string, unknown>;
+
   await db
     .update(agentOrchestrationRuns)
     .set({
       status: finalStatus,
       currentState: finalStatus,
       rawModelOutput: rawOutput.slice(0, 8000),
-      filesTouched: structured.files_touched,
-      assumptions: structured.assumptions,
+      filesTouchedJson: structured.files_touched,
+      metadata: {
+        ...priorMeta,
+        workspaceAgentAssumptions: structured.assumptions,
+      },
       blockers: violations.length > 0
         ? violations.map((v) => ({ code: "action_blocked", message: `${v.tool}: ${v.reason}` }))
         : [],
@@ -499,7 +509,11 @@ ${goalContext}`;
 // ── GET /api/workspace-agent/status/:runId ────────────────────────────────────
 
 router.get("/status/:runId", requireAuth, async (req: Request, res: Response) => {
-  const { runId } = req.params;
+  const runIdRaw = req.params.runId;
+  const runId = typeof runIdRaw === "string" ? runIdRaw : runIdRaw?.[0];
+  if (!runId) {
+    return res.status(400).json({ error: "run_id_required" });
+  }
 
   const [run] = await db
     .select()
@@ -511,6 +525,9 @@ router.get("/status/:runId", requireAuth, async (req: Request, res: Response) =>
     return res.status(404).json({ error: "run_not_found" });
   }
 
+  const meta = (run.metadata ?? {}) as Record<string, unknown>;
+  const assumptions = meta.workspaceAgentAssumptions;
+
   return res.json({
     runId: run.id,
     status: run.status,
@@ -518,8 +535,8 @@ router.get("/status/:runId", requireAuth, async (req: Request, res: Response) =>
     siteConfigId: run.siteConfigId,
     reviewRequired: run.reviewRequired,
     blockers: run.blockers,
-    assumptions: run.assumptions,
-    filesTouched: run.filesTouched,
+    assumptions: Array.isArray(assumptions) ? assumptions : [],
+    filesTouched: run.filesTouchedJson,
     metadata: run.metadata,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,

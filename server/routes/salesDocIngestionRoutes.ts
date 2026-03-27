@@ -216,7 +216,8 @@ router.post("/ingest-sales-doc", requireAuth, async (req, res) => {
 
 // ── POST /api/knowledge/approve-artifact ─────────────────────────────────────
 router.post("/approve-artifact/:id", requireAuth, async (req, res) => {
-  const { id } = req.params;
+  const idRaw = req.params.id;
+  const id = typeof idRaw === "string" ? idRaw : idRaw?.[0];
   if (!id) return res.status(400).json({ error: 'id required' });
 
   try {

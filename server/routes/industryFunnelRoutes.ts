@@ -101,11 +101,13 @@ router.post("/seed", async (_req, res) => {
           agentAccessKey: artifactKey,
           scope: "platform",
           visibility: "private",
-          status: "draft",
-          classification: "sales_process",
           trustWeight: 8,
           groupLevel: "operator",
-          tags: ["funnel", "industry", payload.industryVertical, `v${payload.version}`],
+          artifactMetadata: {
+            status: "draft",
+            classification: "sales_process",
+            tags: ["funnel", "industry", payload.industryVertical, `v${payload.version}`],
+          },
         });
         results.push({ slug: payload.slug, action: "created", artifactKey });
       }

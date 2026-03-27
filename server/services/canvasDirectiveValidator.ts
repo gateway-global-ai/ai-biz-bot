@@ -60,7 +60,7 @@ async function resolveVisitorSecurity(
     const rows = await db
       .select({
         securityLevel: visitorSessions.securityLevel,
-        authState: visitorSessions.authState,
+        verifiedPhone: visitorSessions.verifiedPhone,
       })
       .from(visitorSessions)
       .where(eq(visitorSessions.id, visitorId))
@@ -70,9 +70,22 @@ async function resolveVisitorSecurity(
       return { securityLevel: 'public', authState: 'anonymous' };
     }
 
+    const raw = rows[0].securityLevel ?? 'anonymous';
+    const securityLevel: ResolvedVisitorSecurity['securityLevel'] =
+      raw === 'phone_verified'
+        ? 'verified'
+        : raw === 'admin'
+          ? 'admin'
+          : 'public';
+    const verified = Boolean(rows[0].verifiedPhone);
+    const authState: ResolvedVisitorSecurity['authState'] =
+      securityLevel === 'admin' || securityLevel === 'verified' || verified
+        ? 'authenticated'
+        : 'anonymous';
+
     return {
-      securityLevel: (rows[0].securityLevel ?? 'public') as ResolvedVisitorSecurity['securityLevel'],
-      authState: (rows[0].authState ?? 'anonymous') as ResolvedVisitorSecurity['authState'],
+      securityLevel,
+      authState,
     };
   } catch {
     // Fail safe — downgrade to public, never trust client hint on DB error

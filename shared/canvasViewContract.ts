@@ -429,6 +429,10 @@ export type CanvasViewPayload =
   | (CanvasViewBase & { viewId: 'dynamic'; componentType: string; props: Record<string, unknown>; actions?: Array<{ actionId: string; label: string; style?: 'primary' | 'secondary' | 'danger' }> })
   | (CanvasViewBase & { viewId: 'service_menu' | 'schedule' | 'pricing_table' | 'faq_list' | 'intake_checklist' | 'business_summary' | 'custom_card'; canvas_type: string; items: Array<{ label: string; value?: string; description?: string; price?: string; duration?: string }>; cta_label?: string; cta_action?: 'book' | 'call' | 'form' | 'link'; accent_color?: 'indigo' | 'emerald' | 'amber' | 'rose' });
 
+/** Skill-dispatch + SharedCanvasPanel entry shapes (full view rows, not inner view models). */
+export type PhoneProvisioningPayload = Extract<CanvasViewPayload, { viewId: 'phone_provisioning_form' }>;
+export type AccountOverviewPayload = Extract<CanvasViewPayload, { viewId: 'account_overview' }>;
+
 export function isSkillCanvasView(payload: unknown): payload is CanvasViewPayload {
   return typeof payload === 'object' && payload !== null && 'viewId' in payload;
 }
