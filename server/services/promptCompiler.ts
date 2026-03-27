@@ -491,9 +491,10 @@ export function buildBehavioralPrompt(
   // ── Gateway Founder Voice Doctrine (Anti-Platform Canon) ──────────────────
   // Injected for sales, concierge, and brand-facing roles only.
   // Gives the agent the brand conviction it needs before DISC shapes HOW it expresses that conviction.
+  const founderModeUpper = String(modeId ?? "").toUpperCase();
   const founderVoiceFrag = buildFounderVoiceFragment(modeId, (agent as { roleType?: string | null }).roleType, {
-    includeProductFacts: mode?.toUpperCase() === 'SALES' || mode?.toUpperCase() === 'ADVISOR',
-    includeObjectionHandling: mode?.toUpperCase() === 'SALES',
+    includeProductFacts: founderModeUpper === "SALES" || founderModeUpper === "ADVISOR",
+    includeObjectionHandling: founderModeUpper === "SALES",
   });
   if (founderVoiceFrag) {
     sections.push(founderVoiceFrag);
