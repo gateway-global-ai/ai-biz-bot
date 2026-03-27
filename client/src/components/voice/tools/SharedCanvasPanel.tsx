@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, ChevronDown, ChevronUp, Clock, DollarSign, Phone, Calendar, FileText, List, Building2, Wifi, WifiOff, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
 import type {
+  CanvasViewId,
   CanvasViewPayload,
   PhoneProvisioningPayload,
   AccountOverviewPayload,
-  AgentBuilderPayload,
 } from '@shared/canvasViewContract';
 
 // ── Skill-driven view renderers ───────────────────────────────────────────────
@@ -69,7 +69,7 @@ function PhoneProvisioningView({
         </div>
         {payload.availableNumbers && payload.availableNumbers.length > 0 && (
           <div className="space-y-1.5 max-h-48 overflow-y-auto">
-            {payload.availableNumbers.map(n => (
+            {payload.availableNumbers.map((n: NonNullable<PhoneProvisioningPayload['availableNumbers']>[number]) => (
               <button
                 key={n.phoneNumber}
                 type="button"
@@ -115,7 +115,7 @@ function AccountOverviewView({
         {payload.businesses.length === 0 && (
           <p className="text-slate-400 text-sm text-center py-4">No businesses linked yet.</p>
         )}
-        {payload.businesses.map(biz => (
+        {payload.businesses.map((biz: AccountOverviewPayload['businesses'][number]) => (
           <div key={biz.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
             <Building2 size={14} className="text-indigo-400 shrink-0" />
             <div className="min-w-0">
@@ -167,14 +167,16 @@ interface CanvasItem {
 }
 
 interface SharedCanvasPanelProps {
+  /** Legacy panels use a narrow set; canvas_control may pass any registered CanvasViewId. */
   metadata: {
-    canvas_type: 'service_menu' | 'schedule' | 'pricing_table' | 'faq_list' | 'intake_checklist' | 'business_summary' | 'custom_card';
+    canvas_type: CanvasViewId;
     title: string;
     subtitle?: string;
-    items: CanvasItem[];
+    items?: CanvasItem[];
     cta_label?: string;
     cta_action?: 'book' | 'call' | 'form' | 'link';
     accent_color?: 'indigo' | 'emerald' | 'amber' | 'rose';
+    [key: string]: unknown;
   };
   onTriggerSpeech?: (text: string) => void;
   onContextUpdate?: (context: string) => void;
@@ -297,7 +299,8 @@ export const SharedCanvasPanel: React.FC<SharedCanvasPanelProps> = ({
   onContextUpdate,
   onCancel,
 }) => {
-  const { canvas_type, title, subtitle, items = [], cta_label, cta_action, accent_color = 'indigo' } = metadata;
+  const { canvas_type, title, subtitle, items: itemsRaw, cta_label, cta_action, accent_color = 'indigo' } = metadata;
+  const items = itemsRaw ?? [];
   const accent = ACCENT_CLASSES[accent_color] || ACCENT_CLASSES.indigo;
   const CtaIcon = cta_action ? CTA_ICON[cta_action] : null;
 

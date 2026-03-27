@@ -29,17 +29,12 @@ const router = Router();
 async function resolveVisitorSecurityLevel(
   req: any
 ): Promise<{ level: "anonymous" | "phone_verified" | "admin"; customerId?: string; adminId?: string }> {
-  // Check customer session token
   const bearer = (req.headers.authorization as string | undefined)?.replace("Bearer ", "");
   if (bearer) {
-    const session = await storage.getValidCustomerSession(bearer).catch(() => null);
-    if (session) {
-      const adminSession = await storage.getValidSession(bearer).catch(() => null);
-      if (adminSession) return { level: "admin", adminId: adminSession.userId };
-      return { level: "phone_verified", customerId: session.customerAccountId };
-    }
-    const adminSession = await storage.getValidSession(bearer).catch(() => null);
-    if (adminSession) return { level: "admin", adminId: adminSession.userId };
+    const adminSession = await storage.getValidAuthSession(bearer).catch(() => null);
+    if (adminSession) return { level: "admin", adminId: adminSession.adminUserId };
+    const customerSession = await storage.getValidCustomerSession(bearer).catch(() => null);
+    if (customerSession) return { level: "phone_verified", customerId: customerSession.customerAccountId };
   }
   // Check visitor security level from visitor session
   const visitorSecurityLevel = (req.headers["x-visitor-security-level"] as string) ?? "anonymous";
@@ -111,9 +106,9 @@ router.post("/dispatch", async (req, res) => {
 
       try {
         const { getTwilioClient } = await import("../twilio");
-        const twilio = getTwilioClient();
+        const twilio = await getTwilioClient();
         const numbers = await twilio.availablePhoneNumbers("US")
-          .local.list({ areaCode: parseInt(areaCode), limit: 8 });
+          .local.list({ areaCode: parseInt(areaCode, 10), limit: 8 });
 
         const available = numbers.map((n: any) => ({
           phoneNumber: n.phoneNumber,

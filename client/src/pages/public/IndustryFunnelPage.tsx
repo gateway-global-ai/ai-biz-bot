@@ -40,9 +40,18 @@ function DynIcon({ name, className }: { name?: string; className?: string }) {
 }
 
 // ── Section fade-in wrapper ───────────────────────────────────────────────────
-function Section({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function Section({
+  children,
+  className = "",
+  id,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  id?: string;
+}) {
   return (
     <motion.section
+      id={id}
       initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
@@ -125,7 +134,7 @@ export default function IndustryFunnelPage() {
           </button>
           <div className="flex items-center gap-3">
             <span className="text-xs text-emerald-400 font-medium px-2 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10">
-              {funnel.eyebrow ?? funnel.hero.eyebrow}
+              {funnel.hero.eyebrow ?? funnel.vertical}
             </span>
             <button
               onClick={() => navigate("/login")}
