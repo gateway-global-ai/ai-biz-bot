@@ -1,5 +1,7 @@
 # TypeScript rebaseline — post promptCompiler (#83)
 
+**Location:** Durable checkpoint under `docs/architecture/` (Sovereign Guard blocks *new* files under `docs-governance/worklogs/` with `GOVERNANCE_CREATION_BLOCKED`; use this path for the same content.)
+
 **Commit (main when captured):** `e357d8b1960f9243d58c1ba2540484bc8ce51a85`  
 **Command:** `npm run check`  
 **Result:** failed (~27 `error TS*` lines before Bucket B cleanup).
@@ -12,17 +14,14 @@
 
 ## Bucket B — non-voice implementation drift
 
-Grouped for review (optional split: B1 = canvas + uuid; B2 = routes + validator + funnel):
+**Update:** Mechanical alignment on branch `fix/ts-implementation-drift-bucket-b`. After those changes, `npm run check` reports **only** `server/voiceGemini.ts` (Bucket A).
 
-- **Canvas contract / UI:** `shared/canvasViewContract` payload aliases; `SharedCanvasPanel` / `ToolRouter` prop widening and explicit `any` cleanup.
-- **uuid typings:** `client/.../voiceTurnOrchestrator.ts`, `server/routes/canvasControlRoutes.ts`.
-- **Routes / storage:** `skillDispatchRoutes`, `localAgentRoutes`, `salesDocIngestionRoutes`, `workspaceAgentRoutes`, `industryFunnelRoutes`, `IndustryFunnelPage`.
-- **Validator vs schema:** `canvasDirectiveValidator` vs `visitor_sessions` (no `authState` column — derive from `security_level` / `verified_phone`).
+Optional review split: **B1** — canvas contract, SharedCanvasPanel, ToolRouter, uuid typings; **B2** — skill dispatch, Drizzle param normalization, workspace agent routes, canvasDirectiveValidator, industry funnel.
 
 ## Revised sequence
 
 1. ~~#83 promptCompiler~~ merged.
-2. **Bucket B** — drive `npm run check` clean except `server/voiceGemini.ts`.
+2. **Bucket B** — merge alignment branch; `npm run check` clean except `server/voiceGemini.ts`.
 3. **Bucket A** — minimal `voiceGemini.ts` typing PR under voice governance.
 
 ## Hygiene
