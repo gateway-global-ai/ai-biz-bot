@@ -196,7 +196,7 @@ Both the SDK and StandardizedChatInterface support the three modes described in 
 
 ### ⚠️ Specialized (Justified - Not for General Use)
 - `/chat/:agentId` - AgentChat (agent-specific features: avatars, voice, sharing)
-- `/command-chat` - CommandChat (admin tool: agent selection, DISC metrics, quick commands)
+- `/command-chat` - CommandChat (admin tool: agent selection, DISC metrics, quick commands). **API:** `POST /api/admin/command-chat` — live context is sites / visitors / messages / customers only; **VLM prospect/campaign context was removed for v1** (2026-03-25). **`GET /api/admin/sites/leads` returns 410** (VLM lead merge retired).
 
 ## Future Considerations
 

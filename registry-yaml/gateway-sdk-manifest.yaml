@@ -1,0 +1,78 @@
+# Gateway SDK manifest — governed components for Design Studio + product surfaces
+# Authority: docs-governance/canonical/AI_DESIGN_STUDIO_GOVERNED_SPEC_V1.md
+version: 1
+spec_ref: docs-governance/canonical/AI_DESIGN_STUDIO_GOVERNED_SPEC_V1.md
+
+themes_allowed:
+  - light-apple
+  - dark-apple
+  - crystal-glass
+
+global_prohibited:
+  - inline_style
+  - raw_color
+  - unregistered_import
+
+entries:
+  - id: sovereign-button
+    type: primitive
+    source: internal
+    import: "@/ui-core"
+    export_name: SovereignButton
+    themes_supported: [light-apple, dark-apple, crystal-glass]
+    allowed_props:
+      sovereignVariant: [primary, secondary, outlined, text]
+      children: string
+    prohibited: [inline_style, raw_color]
+
+  - id: sovereign-card
+    type: primitive
+    source: internal
+    import: "@/ui-core"
+    export_name: SovereignCard
+    themes_supported: [light-apple, dark-apple, crystal-glass]
+    allowed_props:
+      children: any
+    prohibited: [inline_style, raw_color]
+
+  - id: sovereign-form-field
+    type: primitive
+    source: internal
+    import: "@/ui-core"
+    export_name: SovereignFormField
+    themes_supported: [light-apple, dark-apple, crystal-glass]
+    allowed_props:
+      label: string
+      value: string
+    prohibited: [inline_style, raw_color]
+
+  - id: sovereign-section-header
+    type: widget
+    source: internal
+    import: "@/ui-core"
+    export_name: SovereignSectionHeader
+    themes_supported: [light-apple, dark-apple, crystal-glass]
+    allowed_props:
+      title: string
+      subtitle: string
+    prohibited: [inline_style, raw_color]
+
+  - id: sovereign-page-shell
+    type: screen
+    source: internal
+    import: "@/ui-core"
+    export_name: SovereignPageShell
+    themes_supported: [light-apple, dark-apple, crystal-glass]
+    allowed_props:
+      children: any
+    prohibited: [inline_style, raw_color]
+
+  - id: shadcn-placeholder-promotion
+    type: primitive
+    source: shadcn
+    import: null
+    export_name: null
+    promotion_status: discovery_only
+    themes_supported: []
+    allowed_props: {}
+    prohibited: [inline_style, raw_color, direct_product_import]

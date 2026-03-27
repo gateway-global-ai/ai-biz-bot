@@ -6,6 +6,7 @@ interface SliderProps {
   onChange: (value: number) => void;
   color: string;
   description?: string;
+  disabled?: boolean;
 }
 
 export function Slider({
@@ -14,6 +15,7 @@ export function Slider({
   onChange,
   color,
   description,
+  disabled = false,
 }: SliderProps) {
   return (
     <div className="space-y-1 group">
@@ -30,8 +32,9 @@ export function Slider({
         min="0"
         max="100"
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(parseInt(e.target.value, 10))}
-        className="w-full cursor-pointer appearance-none rounded-lg bg-slate-800 accent-current h-1"
+        className="w-full cursor-pointer appearance-none rounded-lg bg-slate-800 accent-current h-1 disabled:cursor-not-allowed disabled:opacity-40"
         style={{ color }}
       />
       {description ? (

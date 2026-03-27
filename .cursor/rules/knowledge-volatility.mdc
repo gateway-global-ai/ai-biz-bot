@@ -1,0 +1,40 @@
+# Knowledge Volatility Enforcement
+
+Read `docs-governance/canonical/KNOWLEDGE_VOLATILITY_GOVERNANCE.md` before citing external documentation or vendor SDK references.
+
+## Absolute Rules
+
+- NEVER cite vendored SDK samples, notebooks, or copied documentation from local folders (e.g. `generative-ai/`, `_legacy_archive/`, any REFERENCE_ONLY directory) when official live docs exist.
+- NEVER treat a static markdown copy of vendor documentation as equal to the live official source.
+- NEVER use deprecated model names, old API paths, or expired integration patterns without explicitly flagging them as potentially stale.
+- NEVER generate code based on SDK examples that lack a `last_verified_at` date within the past 30 days.
+
+## Authority Hierarchy (binding)
+
+1. Live official source (SDK URLs, versioned API docs, live schemas)
+2. Current internal canonical docs (governance specs in `docs-governance/`, architecture docs)
+3. Pinned reference snapshots (explicitly frozen with documented reason + expiry)
+4. Archive only (invisible to default retrieval)
+5. Dead / purge candidate (must not be cited)
+
+Agents must prefer tier 1-2 sources. Tier 3 requires explicit justification. Tiers 4-5 are retrieval-blocked.
+
+## Retrieval-Blocked Paths
+
+These directories and patterns are excluded from default retrieval:
+
+- `generative-ai/` — deleted; if restored, treat as REFERENCE_ONLY
+- `_legacy_archive/` — historical reference only
+- Any folder containing `.reference-only` marker file
+- Any knowledge artifact with `retrieval_status: archive_only` or `purge_candidate`
+- Any document where `expires_at` has passed without re-verification
+
+## When Citing Vendor Documentation
+
+- Prefer `@url` references to official documentation sites
+- If citing a local copy, verify it has been updated within its volatility window (30 days for SDK docs, 90 days for architecture docs)
+- Flag any reference older than its verification window with an explicit staleness warning
+
+## Violation
+
+Citing expired, deprecated, or archived sources in agent output is a governance violation with consequence: `block_response` + `require_recertification`.

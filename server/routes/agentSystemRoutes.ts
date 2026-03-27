@@ -1,22 +1,33 @@
 import { Router } from "express";
 import { storage } from "../storage";
-import { db } from "../db";
-import { eq, desc, and } from "drizzle-orm";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { gatewayChat, chat, parseTask, generateNavigatorIntroduction } from "../ai-gateway";
+import { gatewayChat, chat } from "../ai-gateway";
 import { requireAuth } from "../auth";
 import {
-  DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS, PLAN_LIMITS,
-  insertAgentSchema, botTemplates, agents, organizations,
-  projects, projectTasks, analyticsLogs,
-  type DiscRanking, type DiscAssessmentResult,
+  DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS,
+  insertAgentSchema,
+  type DiscAssessmentResult,
+  type InsertAgent,
 } from "@shared/schema";
 import { handleAdminToolCall, ADMIN_TOOL_DEFINITIONS } from "../tools/adminToolHandlers";
+import {
+  assertRunAllowsSingleAgentCreate,
+  completeSingleAgentCreateRun,
+  envAgentCreateBypass,
+  persistOrchestrationViolation,
+} from "../services/agentOrchestration";
+import { assertSiteAccessForSession } from "../utils/siteScopedAccess";
 
 const router = Router();
 
-// ── DISC + Conversation + Agents + Orgs + Projects + BotTemplates ──────────────────────────────────────────────────────
+/** Express `req.params` values are `string | string[]`; storage/Drizzle expect a single string. */
+function paramString(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
+
+// ── DISC + Conversation + Agents ──────────────────────────────────────────────────────
 
   router.get("/api/disc/questions", (req, res) => {
     res.json({
@@ -28,7 +39,8 @@ const router = Router();
 
   // Get a single question set
   router.get("/api/disc/questions/:setNumber", (req, res) => {
-    const setNumber = parseInt(req.params.setNumber);
+    const setRaw = paramString(req.params.setNumber);
+    const setNumber = setRaw !== undefined ? parseInt(setRaw, 10) : NaN;
     const wordSet = DISC_WORD_SETS.find(s => s.setNumber === setNumber);
     
     if (!wordSet) {
@@ -168,158 +180,6 @@ const router = Router();
         secondaryStyle: styleScores[1][0],
         styleDescriptions: DISC_STYLE_DESCRIPTIONS,
       });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // =====================================================
-  // MVP Task Submission API
-  // =====================================================
-  
-  // Zod schema for task submission validation
-  const taskSubmitSchema = z.object({
-    task: z.string().min(5, "Task must be at least 5 characters"),
-    phone: z.string().min(10, "Phone number must be at least 10 digits"),
-    name: z.string().min(1, "Name is required"),
-    agentName: z.string().min(1, "Agent name is required"),
-    personality: z.object({
-      id: z.enum(['achiever', 'collaborator', 'supporter', 'analyst']),
-      name: z.string(),
-      description: z.string(),
-      icon: z.string(),
-      disc: z.object({
-        dominance: z.number().min(0).max(100),
-        influence: z.number().min(0).max(100),
-        steadiness: z.number().min(0).max(100),
-        conscientiousness: z.number().min(0).max(100),
-      }),
-    }),
-  });
-
-  // Submit a new task (from MVP landing page)
-  router.post("/api/tasks/submit", async (req, res) => {
-    try {
-      // Validate request body with Zod
-      const validationResult = taskSubmitSchema.safeParse(req.body);
-      if (!validationResult.success) {
-        return res.status(400).json({ 
-          error: "Validation failed", 
-          details: validationResult.error.flatten().fieldErrors 
-        });
-      }
-      
-      const { task, phone, name, personality, agentName } = validationResult.data;
-      
-      // Normalize phone number (remove formatting)
-      const normalizedPhone = phone.replace(/\D/g, '');
-      if (normalizedPhone.length < 10) {
-        return res.status(400).json({ error: "Invalid phone number" });
-      }
-      
-      // Format to E.164 for Twilio
-      const e164Phone = normalizedPhone.startsWith('1') 
-        ? `+${normalizedPhone}` 
-        : `+1${normalizedPhone}`;
-      
-      // Parse task via AI gateway
-      let parsedTask = null;
-      try {
-        // 
-        parsedTask = await parseTask(task);
-        console.log('[Task Submit] Parsed task:', parsedTask);
-      } catch (parseError) {
-        console.error('[Task Submit] Task parsing error:', parseError);
-      }
-      
-      // Calculate next update time (1 hour from now)
-      const nextUpdateAt = new Date(Date.now() + 60 * 60 * 1000);
-      
-      // Create the task with validated DISC values
-      const newTask = await storage.createTask({
-        userName: name,
-        userPhone: e164Phone,
-        agentName,
-        personalityId: personality.id,
-        task,
-        parsedTask,
-        status: 'started',
-        estimatedHours: parsedTask?.estimatedHours || 24,
-        dominance: personality.disc.dominance,
-        influence: personality.disc.influence,
-        steadiness: personality.disc.steadiness,
-        conscientiousness: personality.disc.conscientiousness,
-        startedAt: new Date(),
-        nextUpdateAt,
-        updatesCount: 1,
-      });
-      
-      console.log('[Task Submit] Created task:', newTask.id);
-      
-      // Send Navigator first-login "Call Coordinates" SMS
-      let callCoordinates: string | null = null;
-      try {
-        // 
-        
-        // Fetch telephony config once; reuse the phone number as Call Coordinates
-        const config = await storage.getTelephonyConfig();
-        callCoordinates = config?.phoneNumber ?? null;
-
-        const smsMessage = await generateNavigatorIntroduction({
-          userName: name,
-          agentName,
-          taskDescription: task,
-          callCoordinates: callCoordinates ?? 'Gateway Global AI',
-        });
-        
-        // Send SMS via Twilio
-        if (callCoordinates && config?.accountSid && config?.authToken) {
-          const { sendSms } = await import("../twilio");
-          await sendSms(e164Phone, smsMessage, callCoordinates);
-          console.log(`[Task Submit] Sent Navigator intro SMS to ${e164Phone}`);
-        } else {
-          console.warn('[Task Submit] No Twilio config, skipping Navigator intro SMS');
-        }
-      } catch (smsError) {
-        console.error('[Task Submit] Navigator intro SMS error:', smsError);
-      }
-      
-      res.json({ 
-        success: true, 
-        taskId: newTask.id,
-        message: `Task created! ${agentName} will text you shortly.`,
-        callCoordinates,
-      });
-      
-    } catch (error: any) {
-      console.error('[Task Submit] Error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-  
-  // Get task status (for optional dashboard)
-  router.get("/api/tasks/:id", async (req, res) => {
-    try {
-      const task = await storage.getTask(req.params.id);
-      if (!task) {
-        return res.status(404).json({ error: "Task not found" });
-      }
-      res.json(task);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-  
-  // Get tasks by phone number
-  router.get("/api/tasks/phone/:phone", async (req, res) => {
-    try {
-      const normalizedPhone = req.params.phone.replace(/\D/g, '');
-      const e164Phone = normalizedPhone.startsWith('1') 
-        ? `+${normalizedPhone}` 
-        : `+1${normalizedPhone}`;
-      
-      const tasks = await storage.getTasksByPhone(e164Phone);
-      res.json(tasks);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -484,7 +344,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Get single agent
   router.get("/api/agents/:id", async (req, res) => {
     try {
-      const agent = await storage.getAgent(req.params.id);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      const agent = await storage.getAgent(id);
       if (!agent) {
         return res.status(404).json({ error: "Agent not found" });
       }
@@ -494,14 +358,103 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   });
 
-  // Create agent — requires auth; configuration changes require superadmin
+  const createAgentRequestSchema = insertAgentSchema.and(
+    z.object({ orchestrationRunId: z.string().uuid().optional() }),
+  );
+
+  // Create agent — requires auth + valid orchestration run (unless ORCHESTRATION_AGENT_CREATE_BYPASS=true)
   router.post("/api/agents", requireAuth, async (req, res) => {
     try {
-      const parsed = insertAgentSchema.safeParse(req.body);
+      const parsed = createAgentRequestSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.message });
       }
-      const agent = await storage.createAgent(parsed.data);
+      const { orchestrationRunId, ...agentFields } = parsed.data as InsertAgent & {
+        orchestrationRunId?: string;
+      };
+      const bypass = envAgentCreateBypass();
+      const siteConfigId = agentFields.siteConfigId ?? null;
+
+      if (!bypass && !siteConfigId) {
+        return res.status(400).json({
+          error: "siteConfigId is required for orchestrated agent creation",
+          code: "SITE_CONFIG_REQUIRED",
+        });
+      }
+
+      if (siteConfigId) {
+        const siteAccess = await assertSiteAccessForSession(req, siteConfigId);
+        if (!siteAccess.ok) {
+          const session = (req as { session?: { adminUserId?: string } }).session;
+          await persistOrchestrationViolation({
+            violationType: "governance_violation",
+            severity: "medium",
+            siteConfigId,
+            routeOrSource: "POST /api/agents",
+            actorHint: session?.adminUserId ?? undefined,
+            detail: {
+              reason: "site_access_denied",
+              httpStatus: siteAccess.status,
+              orchestrationRunId: orchestrationRunId ?? null,
+            },
+          });
+          return res.status(siteAccess.status).json({
+            error: siteAccess.error,
+            code: "SITE_ACCESS_DENIED",
+          });
+        }
+      }
+
+      if (!bypass) {
+        const sid = siteConfigId as string;
+        if (!orchestrationRunId) {
+          await persistOrchestrationViolation({
+            violationType: "orchestration_bypass_attempt",
+            severity: "high",
+            siteConfigId: sid,
+            routeOrSource: "POST /api/agents",
+            actorHint: (req as { session?: { adminUserId?: string } }).session?.adminUserId ?? undefined,
+            detail: { reason: "missing_orchestration_run_id" },
+          });
+          return res.status(403).json({
+            error:
+              "Orchestration run required: POST /api/intelligence/orchestration-runs then include orchestrationRunId in body",
+            code: "ORCHESTRATION_REQUIRED",
+          });
+        }
+        const gate = await assertRunAllowsSingleAgentCreate({
+          orchestrationRunId,
+          siteConfigId: sid,
+        });
+        if (!gate.ok) {
+          await persistOrchestrationViolation({
+            violationType: "governance_violation",
+            severity: "medium",
+            orchestrationRunId,
+            siteConfigId: sid,
+            routeOrSource: "POST /api/agents",
+            detail: { reason: gate.reason },
+          });
+          return res.status(400).json({ error: gate.reason, code: "ORCHESTRATION_RUN_INVALID" });
+        }
+      }
+
+      if (bypass && !orchestrationRunId) {
+        await persistOrchestrationViolation({
+          violationType: "orchestration_bypass_attempt",
+          severity: "medium",
+          siteConfigId: siteConfigId ?? undefined,
+          routeOrSource: "POST /api/agents",
+          detail: { reason: "env_ORCHESTRATION_AGENT_CREATE_BYPASS" },
+        });
+      }
+
+      const agent = await storage.createAgent(agentFields as InsertAgent);
+
+      if (!bypass && orchestrationRunId) {
+        await completeSingleAgentCreateRun({ runId: orchestrationRunId, agentId: agent.id });
+      }
+
       res.json(agent);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -511,6 +464,10 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Update agent — requires auth; core configuration fields restricted to superadmin
   router.patch("/api/agents/:id", requireAuth, async (req, res) => {
     try {
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
       const session = (req as any).session;
       const configOnlyFields = ['systemPrompt', 'safeMode', 'roleType', 'name', 'dominance', 'influence', 'steadiness', 'conscientiousness'];
       const requestedFields = Object.keys(req.body);
@@ -518,7 +475,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       if (touchesConfig && session?.role !== 'superadmin') {
         return res.status(403).json({ error: "Agent configuration changes require superadmin privileges" });
       }
-      const agent = await storage.updateAgent(req.params.id, req.body);
+      const agent = await storage.updateAgent(id, req.body);
       if (!agent) {
         return res.status(404).json({ error: "Agent not found" });
       }
@@ -531,7 +488,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Delete agent — requires auth
   router.delete("/api/agents/:id", requireAuth, async (req, res) => {
     try {
-      await storage.deleteAgent(req.params.id);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      await storage.deleteAgent(id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -610,7 +571,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       if (parsed.data.startupScript !== undefined) updates.startupScript = parsed.data.startupScript;
       if (parsed.data.startupBudgetUsd !== undefined) updates.startupBudgetUsd = parsed.data.startupBudgetUsd;
 
-      const agent = await storage.updateAgent(req.params.id, updates);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      const agent = await storage.updateAgent(id, updates);
       if (!agent) return res.status(404).json({ error: "Agent not found" });
       res.json(agent);
     } catch (error: any) {
@@ -621,7 +586,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Get agent budget summary
   router.get("/api/agents/:id/budget", async (req, res) => {
     try {
-      const agent = await storage.getAgent(req.params.id);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      const agent = await storage.getAgent(id);
       if (!agent) return res.status(404).json({ error: "Agent not found" });
 
       // Check if budget period has reset
@@ -661,7 +630,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Run agent startup script — requires auth
   router.post("/api/agents/:id/startup-run", requireAuth, async (req, res) => {
     try {
-      const agent = await storage.getAgent(req.params.id);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      const agent = await storage.getAgent(id);
       if (!agent) return res.status(404).json({ error: "Agent not found" });
 
       if (!agent.startupScript || agent.startupScript.trim().length === 0) {
@@ -746,7 +719,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Reset agent budget spending — requires auth
   router.post("/api/agents/:id/budget-reset", requireAuth, async (req, res) => {
     try {
-      const agent = await storage.getAgent(req.params.id);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      const agent = await storage.getAgent(id);
       if (!agent) return res.status(404).json({ error: "Agent not found" });
       
       await storage.updateAgent(agent.id, {
@@ -755,280 +732,6 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       });
       
       res.json({ success: true, message: 'Budget reset successfully' });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // ============================================
-  // ORGANIZATIONS, PROJECTS & TASKS API
-  // ============================================
-
-  // Organizations CRUD
-  router.get("/api/organizations", async (req, res) => {
-    try {
-      const orgs = await storage.getOrganizations();
-      res.json(orgs);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.get("/api/organizations/:id", async (req, res) => {
-    try {
-      const org = await storage.getOrganization(req.params.id);
-      if (!org) return res.status(404).json({ error: "Organization not found" });
-      res.json(org);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.post("/api/organizations", async (req, res) => {
-    try {
-      const schema = z.object({
-        name: z.string().min(1).max(100),
-        description: z.string().max(500).optional(),
-      });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const org = await storage.createOrganization(parsed.data);
-      res.status(201).json(org);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.patch("/api/organizations/:id", async (req, res) => {
-    try {
-      const schema = z.object({
-        name: z.string().min(1).max(100).optional(),
-        description: z.string().max(500).optional(),
-      });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const org = await storage.updateOrganization(req.params.id, parsed.data);
-      if (!org) return res.status(404).json({ error: "Organization not found" });
-      res.json(org);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.delete("/api/organizations/:id", async (req, res) => {
-    try {
-      await storage.deleteOrganization(req.params.id);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Projects CRUD
-  router.get("/api/projects", async (req, res) => {
-    try {
-      const orgId = req.query.orgId as string | undefined;
-      const projectsList = await storage.getProjects(orgId);
-      res.json(projectsList);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.get("/api/projects/:id", async (req, res) => {
-    try {
-      const project = await storage.getProject(req.params.id);
-      if (!project) return res.status(404).json({ error: "Project not found" });
-      res.json(project);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.post("/api/projects", async (req, res) => {
-    try {
-      const schema = z.object({
-        orgId: z.string().min(1),
-        name: z.string().min(1).max(200),
-        description: z.string().max(2000).optional(),
-        status: z.enum(["active", "completed", "archived"]).optional(),
-        leadAgentId: z.string().optional().nullable(),
-        agentIds: z.array(z.string()).optional(),
-      });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const project = await storage.createProject(parsed.data);
-      res.status(201).json(project);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.patch("/api/projects/:id", async (req, res) => {
-    try {
-      const schema = z.object({
-        name: z.string().min(1).max(200).optional(),
-        description: z.string().max(2000).optional(),
-        status: z.enum(["active", "completed", "archived"]).optional(),
-        leadAgentId: z.string().optional().nullable(),
-        agentIds: z.array(z.string()).optional(),
-      });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const project = await storage.updateProject(req.params.id, parsed.data);
-      if (!project) return res.status(404).json({ error: "Project not found" });
-      res.json(project);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.delete("/api/projects/:id", async (req, res) => {
-    try {
-      await storage.deleteProject(req.params.id);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Project Tasks CRUD
-  router.get("/api/projects/:projectId/tasks", async (req, res) => {
-    try {
-      const tasksList = await storage.getProjectTasks(req.params.projectId);
-      res.json(tasksList);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.post("/api/projects/:projectId/tasks", async (req, res) => {
-    try {
-      const schema = z.object({
-        title: z.string().min(1).max(500),
-        description: z.string().max(5000).optional(),
-        status: z.enum(["todo", "in_progress", "review", "done"]).optional(),
-        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
-        assignedAgentId: z.string().optional().nullable(),
-        dueDate: z.string().optional().nullable(),
-      });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const taskData = {
-        ...parsed.data,
-        projectId: req.params.projectId,
-        dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : undefined,
-      };
-      const task = await storage.createProjectTask(taskData);
-      res.status(201).json(task);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.patch("/api/project-tasks/:id", async (req, res) => {
-    try {
-      const schema = z.object({
-        title: z.string().min(1).max(500).optional(),
-        description: z.string().max(5000).optional(),
-        status: z.enum(["todo", "in_progress", "review", "done"]).optional(),
-        priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
-        assignedAgentId: z.string().optional().nullable(),
-        dueDate: z.string().optional().nullable(),
-      });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const updates: any = { ...parsed.data };
-      if (parsed.data.dueDate) updates.dueDate = new Date(parsed.data.dueDate);
-      if (parsed.data.status === 'done') updates.completedAt = new Date();
-      const task = await storage.updateProjectTask(req.params.id, updates);
-      if (!task) return res.status(404).json({ error: "Task not found" });
-      res.json(task);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.delete("/api/project-tasks/:id", async (req, res) => {
-    try {
-      await storage.deleteProjectTask(req.params.id);
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Project context endpoint - assembles full context for chat
-  router.get("/api/projects/:id/context", async (req, res) => {
-    try {
-      const project = await storage.getProject(req.params.id);
-      if (!project) return res.status(404).json({ error: "Project not found" });
-      const org = await storage.getOrganization(project.orgId);
-      const tasksList = await storage.getProjectTasks(project.id);
-      const allAgents = await storage.getAgents();
-      const assignedAgents = allAgents.filter(a => 
-        project.agentIds?.includes(a.id) || a.id === project.leadAgentId
-      );
-      res.json({
-        organization: org,
-        project,
-        tasks: tasksList,
-        agents: assignedAgents.map(a => ({ id: a.id, name: a.name })),
-      });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // ============================================
-  // BOT TEMPLATES API
-  // ============================================
-
-  router.get("/api/bot-templates", async (_req, res) => {
-    try {
-      const templates = await storage.getBotTemplates();
-      res.json(templates);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.get("/api/bot-templates/:id", async (req, res) => {
-    try {
-      const template = await storage.getBotTemplate(req.params.id);
-      if (!template) return res.status(404).json({ error: "Template not found" });
-      res.json(template);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.post("/api/bot-templates", async (req, res) => {
-    try {
-      const { insertBotTemplateSchema } = await import("@shared/schema");
-      const parsed = insertBotTemplateSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const template = await storage.createBotTemplate(parsed.data);
-      res.status(201).json(template);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.patch("/api/bot-templates/:id", async (req, res) => {
-    try {
-      const template = await storage.updateBotTemplate(req.params.id, req.body);
-      if (!template) return res.status(404).json({ error: "Template not found" });
-      res.json(template);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  router.delete("/api/bot-templates/:id", async (req, res) => {
-    try {
-      await storage.deleteBotTemplate(req.params.id);
-      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

@@ -1,0 +1,7 @@
+{
+  "id": "programmatic_sales_engine",
+  "version": "1.0.0",
+  "description": "Runtime manifest anchor for Cursor skill programmatic-sales-engine",
+  "cursor_skill_path": ".cursor/skills/programmatic-sales-engine",
+  "contract": { "inputs": [], "outputs": [], "enforcement": "required" }
+}

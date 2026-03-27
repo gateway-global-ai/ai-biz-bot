@@ -1,0 +1,246 @@
+# Skill Dispatch Registry — Gateway Global AI OS
+# Version: v1.0
+# Status: canonical
+# Governed by: docs-governance/canonical/SYSTEM_MANIFEST.md
+#
+# This registry defines the callable skills available to the AI OS.
+# The PTT runtime (ConciergePanel) passes visitor security_level to the
+# prompt compiler, which injects only the skills allowed for that level.
+#
+# Flow:
+#   PTT → Intent → Skill Dispatch → Canvas Render → User Confirms → Loop Closes
+#
+# Fields per skill:
+#   skillId            — unique stable identifier
+#   label              — human-readable name
+#   description        — what the skill does (injected into AI context)
+#   intentPatterns     — natural language trigger patterns the AI should recognize
+#   allowedSecurityLevels — minimum level required to dispatch this skill
+#   dispatchTarget     — where the skill resolves (internal_route | mcp_tool)
+#   internalRoute      — server route if dispatchTarget is internal_route
+#   mcpTool            — MCP tool identifier if dispatchTarget is mcp_tool
+#   canvasViewId       — view ID the canvas renderer should render after dispatch
+#   requiresConfirm    — whether human-in-the-loop confirmation is required
+#   reviewGated        — whether result goes to draft state before commit
+
+skills:
+
+  # ── Platform & Account Skills ────────────────────────────────────────────────
+
+  - skillId: show_account
+    label: My Account
+    description: >
+      Show the user their account information, linked businesses, billing
+      summary, and current plan.
+    intentPatterns:
+      - "my account"
+      - "show my business"
+      - "account details"
+      - "my businesses"
+      - "billing summary"
+      - "what plan am I on"
+    allowedSecurityLevels:
+      - phone_verified
+      - admin
+    dispatchTarget: internal_route
+    internalRoute: /api/customer/businesses
+    canvasViewId: account_overview
+    requiresConfirm: false
+    reviewGated: false
+
+  # ── Telephony Skills ─────────────────────────────────────────────────────────
+
+  - skillId: provision_phone_number
+    label: Set Up Phone Number
+    description: >
+      Search for and provision a Twilio phone number for a business.
+      The AI walks the user through area code selection, number search,
+      and confirmation. Requires voice plan activation.
+    intentPatterns:
+      - "set up a phone number"
+      - "get a phone number"
+      - "provision a number"
+      - "I need a phone number"
+      - "add a phone line"
+      - "set up voice AI"
+      - "connect a phone"
+    allowedSecurityLevels:
+      - phone_verified
+      - admin
+    dispatchTarget: internal_route
+    internalRoute: /api/telephony/business
+    canvasViewId: phone_provisioning_form
+    requiresConfirm: true
+    reviewGated: false
+
+  # ── Agent Builder Skills ─────────────────────────────────────────────────────
+
+  - skillId: build_agent
+    label: Build AI Agent
+    description: >
+      Launch the governed async Agent Builder pipeline. Creates an orchestration
+      run, runs aptitude test (threshold 80/100) with up to 3 Gemini remediation
+      attempts, provisions the swarm via agentProvisioning, and creates a QR route
+      for each agent. Returns jobId for polling.
+      Triggers POST /api/skills/dispatch (skillId: build_agent, siteConfigId, data.placeTypes).
+    intentPatterns:
+      - "build an agent"
+      - "create an AI agent"
+      - "set up an AI"
+      - "add an agent to my business"
+      - "I want to create a new agent"
+      - "configure my AI assistant"
+      - "deploy agents"
+      - "provision my team"
+    allowedSecurityLevels:
+      - admin
+    dispatchTarget: skill_dispatch
+    internalRoute: /api/skills/dispatch
+    canvasViewId: agent_build_status
+    implemented: true
+    requiresConfirm: true
+    reviewGated: false
+
+  # ── Google Workspace Skills ──────────────────────────────────────────────────
+
+  - skillId: configure_workspace
+    label: Connect Google Workspace
+    description: >
+      Trigger the Google Workspace provisioning workflow for a business.
+      Sets up Gmail OAuth, Calendar sync, and Drive folder structure
+      via the internal workspace_agent on the execution plane.
+      This is an internal operator workflow, not a conversational task.
+    intentPatterns:
+      - "connect Google Workspace"
+      - "set up Gmail"
+      - "sync my calendar"
+      - "connect my Google account"
+      - "link Google Workspace"
+      - "set up workspace integration"
+    allowedSecurityLevels:
+      - admin
+    dispatchTarget: internal_route
+    internalRoute: /api/workspace/provision
+    canvasViewId: workspace_provisioning_form
+    requiresConfirm: true
+    reviewGated: true
+
+  # ── UI Rendering Skills ──────────────────────────────────────────────────────
+
+  - skillId: render_component
+    label: Render UI Component
+    description: >
+      Instruct the shared canvas to render a specific ShadCN UI component
+      by viewId. Used by the AI to surface forms, dashboards, confirmations,
+      or data views in the canvas without a page navigation.
+    intentPatterns:
+      - "show me"
+      - "display"
+      - "open the"
+      - "I want to see"
+    allowedSecurityLevels:
+      - anonymous
+      - phone_verified
+      - admin
+    dispatchTarget: mcp_tool
+    mcpTool: shadcn_render_component
+    canvasViewId: dynamic
+    requiresConfirm: false
+    reviewGated: false
+
+  # ── Canvas Control OS Skills (Syscall Layer v1.0) ─────────────────────────────
+
+  - skillId: manage_agents
+    label: Manage Agents
+    description: >
+      List the agent roster with status, aptitude score, and QR route info.
+      Triggers POST /api/skills/dispatch (skillId: manage_agents). Returns
+      agent_roster canvas view. Requires admin access.
+    intentPatterns:
+      - "my agents"
+      - "agent roster"
+      - "manage agents"
+      - "view agents"
+      - "configure agent"
+    allowedSecurityLevels:
+      - admin
+    dispatchTarget: skill_dispatch
+    internalRoute: /api/skills/dispatch
+    canvasViewId: agent_roster
+    implemented: true
+    requiresConfirm: false
+    reviewGated: false
+
+  - skillId: build_knowledge_library
+    label: Build Knowledge Library
+    description: >
+      Open the knowledge library builder to upload training documents,
+      FAQs, and reference artifacts for a specific agent.
+      Requires admin access.
+    intentPatterns:
+      - "add knowledge"
+      - "upload document"
+      - "train agent"
+      - "knowledge library"
+      - "build knowledge"
+      - "teach the agent"
+    allowedSecurityLevels:
+      - admin
+    dispatchTarget: internal_route
+    internalRoute: /api/canvas-control
+    canvasViewId: knowledge_library_builder
+    requiresConfirm: false
+    reviewGated: false
+
+  - skillId: run_aptitude_test
+    label: Run Aptitude Test
+    description: >
+      Execute a 3-check aptitude pipeline (config completeness, prompt quality,
+      ARCH alignment) against a specific agent. Score threshold: 80/100.
+      If score < 80, up to 3 Gemini-powered remediation attempts are run.
+      Triggers POST /api/skills/dispatch (skillId: run_aptitude_test, data.agentId).
+      Returns aptitude_test_runner canvas view with full report.
+      Requires admin access.
+    intentPatterns:
+      - "test agent"
+      - "aptitude test"
+      - "run test"
+      - "evaluate agent"
+      - "check proficiency"
+      - "benchmark agent"
+      - "test proficiency"
+    allowedSecurityLevels:
+      - admin
+    dispatchTarget: skill_dispatch
+    internalRoute: /api/skills/dispatch
+    canvasViewId: aptitude_test_runner
+    implemented: true
+    requiresConfirm: false
+    reviewGated: false
+
+# ── Security Level Definitions ────────────────────────────────────────────────
+# Used by the prompt compiler to filter available skills before injection.
+securityLevels:
+  anonymous:
+    label: Anonymous Visitor
+    description: No identity verification performed. PTT session started.
+    allowedSkills:
+      - render_component
+  phone_verified:
+    label: Phone Verified
+    description: OTP confirmed via Twilio Verify. Identity established.
+    allowedSkills:
+      - render_component
+      - show_account
+      - provision_phone_number
+  admin:
+    label: Platform Admin
+    description: Admin user authenticated with auth_sessions token.
+    allowedSkills:
+      - render_component
+      - show_account
+      - provision_phone_number
+      - build_agent
+      - configure_workspace
+      - manage_agents
+      - run_aptitude_test

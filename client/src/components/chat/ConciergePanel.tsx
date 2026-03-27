@@ -19,7 +19,7 @@
  * - Auto-restart on settings change
  */
 
-import React, { useState, useEffect, useRef, startTransition } from 'react';
+import React, { useState, useEffect, useRef, useCallback, startTransition } from 'react';
 import { motion } from 'framer-motion';
 import { useOSMenu } from '@/hooks/useOSMenu';
 import AgentManager from '@/pages/agents/AgentManager';
@@ -34,8 +34,14 @@ import {
 import { VoiceClientFactory } from '../../services/voice/VoiceClientFactory';
 import { IVoiceClient } from '../../services/voice/IVoiceClient';
 import { VoiceConfig, BusinessContext, AgentConfig } from '../../types/voice';
+import { voiceTurnOrchestrator } from '../../services/voiceTurnOrchestrator';
+import type { GeminiSpeechInterface, CanvasController } from '../../services/voiceTurnOrchestrator';
+import type { PttSessionContext, SiteRuntimeContext } from '../../../../shared/siteRuntimeContext';
+import type { CanvasRenderPayload } from '../../../../shared/canvasViewContract';
 import { VoiceSettings } from '../voice/VoiceSettings';
 import { ToolRouter } from '../voice/tools/ToolRouter';
+import { SharedCanvasPanel } from '../voice/tools/SharedCanvasPanel';
+import { TypedCanvasView } from '../voice/tools/SharedCanvasPanel';
 import { SuccessAnimation } from '../voice/animations/SuccessAnimation';
 import { useVoiceAnimations } from '../voice/animations/useVoiceAnimations';
 import QRCode from 'qrcode';
@@ -47,8 +53,58 @@ import { MixingBoardContent } from '@/pages/reseller/MixingBoard';
 import ShareButton from '@/components/ShareButton';
 import AIOSMark from '@/components/public/AIOSMark';
 import { OSMenuList } from '@/components/os/OSMenuList';
+import { fetchOrchestrationRunForAgentCreate } from '@/lib/agentOrchestrationClient';
+import { IntentFirstIdleChrome, isPlatformMarketingLanding } from '@/components/os/IntentFirstIdleChrome';
 import type { OSMenuItem } from '@/hooks/useOSMenu';
 import { BRAND } from '@/config/brand';
+
+// ── Governed helper: build SiteRuntimeContext from BusinessContext ─────────────
+// Used by VoiceTurnOrchestrator.init() to populate session context at connect time.
+// The server-side resolver is the authoritative source; this is the client-side
+// bootstrap built from what ConciergePanel already holds in BusinessContext props.
+// Security/entitlement fields are conservative defaults — the server validator
+// always performs authoritative checks from the visitor session record.
+function buildSiteRuntimeFromBusiness(
+  business: BusinessContext,
+  siteConfigId: string,
+): SiteRuntimeContext {
+  const plan = (business.plan ?? 'free') as 'free' | 'pro' | 'voice' | 'enterprise';
+  const workspaceState = (business.workspaceState ?? 'demo') as SiteRuntimeContext['identity']['workspaceState'];
+  const claimStatus = (business.claimStatus ?? 'unclaimed') as SiteRuntimeContext['identity']['claimStatus'];
+  return {
+    identity: {
+      siteConfigId,
+      ownerId: business.ownerId ?? null,
+      slug: null,
+      workspaceState,
+      claimStatus,
+    },
+    business: {
+      name: business.name,
+      placeId: business.placeId ?? null,
+      businessType: (business.types?.[0] ?? 'business'),
+      businessDescription: null,
+      serviceMenu: (business.services ?? []).map((s, i) => ({ name: s, id: String(i) })) as import('../../../../shared/siteRuntimeContext').ServiceMenuItem[],
+      faqs: [] as import('../../../../shared/siteRuntimeContext').FAQItem[],
+      taskOrder: [] as import('../../../../shared/siteRuntimeContext').TaskOrderItem[],
+      staticRoutes: {},
+    },
+    ai: {
+      assignedAgentId: null,
+      systemPromptOverride: business.systemPromptOverride ?? null,
+      modelProvider: 'gemini',
+      knowledgeLibrary: [],
+    },
+    entitlements: {
+      plan,
+      voicePlanActive: plan === 'voice' || plan === 'enterprise',
+      enabledSkills: ['canvas_control'],
+      allowedCanvasViews: ['welcome', 'service_menu', 'faq_list', 'support_home', 'disambiguation_menu'],
+      allowedCanvasActions: ['open_support', 'open_service_menu', 'open_faq'],
+      allowedRuntimeActions: [],
+    },
+  };
+}
 
 // Thin wrapper: renders OSMenuList inside the idle canvas without triggering hook violations
 function OSMenuListIdle({ role, isAuthenticated, capabilities, onSelect }: { role: any; isAuthenticated: boolean; capabilities?: import('@/hooks/useOSMenu').OSCapabilities; onSelect: (item: OSMenuItem) => void }) {
@@ -62,6 +118,10 @@ import TelephonyPanelFull from '../../pages/developer/TelephonyPanel';
 import { DiscRadar, ArchBreakdown } from '@/ui/charts';
 import VoiceSelector from '../voice/VoiceSelector';
 import { NovaGate } from '../nova/NovaGate';
+import { SalesFunnelsEditor } from '@/components/os/SalesFunnelsEditor';
+import { loadFunnelContextKeys, mergeFunnelContextFromBusiness, saveFunnelContextKeys, getOrCreateVisitorId, loadBuyerJourneyFromServer, persistBuyerJourneySignal } from '@/lib/funnelContext';
+import { postDesignStudioHandoff } from '@/lib/designStudioHandoff';
+import { DesignStudioPlaceholder } from '@/components/os/DesignStudioPlaceholder';
 
 interface ConciergePanelProps {
   business: BusinessContext;
@@ -608,6 +668,17 @@ function TelephonyInlinePanel({ siteConfigId }: { siteConfigId?: string | null }
   );
 }
 
+/** Prevents voice reconnect when parent passes a new `agent` object reference with unchanged fields (e.g. inline literals). */
+function agentConfigStableKey(a: AgentConfig): string {
+  return JSON.stringify({
+    name: a.name ?? null,
+    role: a.role,
+    personality: a.personality,
+    objectives: a.objectives,
+    constraints: a.constraints,
+  });
+}
+
 export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   business,
   agent,
@@ -661,6 +732,13 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     ? `/qr/img/${encodeURIComponent(publicSlug)}`
     : transferQrDataUrl;
   const canShowTransferQr = Boolean(qrTargetUrl && qrImageSrc);
+  const isPlatformMarketingDemo = business.platformMarketingDemo === true;
+  /** Customer-entry intent framing above OSMenuList — not used on platform marketing or custom idleContent. */
+  const showIntentFirstIdleChrome =
+    !idleContent &&
+    Boolean(business?.id?.trim()) &&
+    !isPlatformMarketingLanding(business.id) &&
+    !isPlatformMarketingDemo;
 
   // --- State ---
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -673,6 +751,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [aiOutputVolume, setAiOutputVolume] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  /** Bumps voice reconnect when funnel context keys change (SalesFunnelsEditor). */
+  const [funnelContextRevision, setFunnelContextRevision] = useState(0);
+  /** Voice proxy: DB agent id for design_studio after handoff (sessionContext.agentId). */
+  const [sessionEntryPointAgentId, setSessionEntryPointAgentId] = useState<string | null>(null);
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [currentVoiceConfig, setCurrentVoiceConfig] = useState(voiceConfig);
@@ -718,20 +800,11 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [localAdminMode, setLocalAdminMode] = useState(false);
   /** First-level drill: null = home (Admin | User | Public Agents); then 'admin' | 'user' | 'public'. */
   /** Flattened menu: no drill-down; single list with section headers. */
-  type EmbeddedViewId = 'profile' | 'billing' | 'my-businesses' | 'reseller' | 'operations' | 'agent-manager' | 'financials' | 'team' | 'front-desk' | 'internal-agents' | 'public-agents' | 'booking-view' | 'reschedule-view' | 'profile-view' | 'insurance-view' | 'concierge-view' | 'employee-dashboard-view' | 'live-queue-view' | 'session-monitor-view' | 'calendar-view' | 'customer-list-view' | 'verification-view' | 'intake-view' | 'communications-view' | 'manager-dashboard-view' | 'operations-view' | 'customer-db-view' | 'schedule-rules-view' | 'staff-view' | 'comms-config-view' | 'reports-view' | 'system-health-view' | 'locations-view' | 'billing-view' | 'identity-view' | 'behavior-view' | 'guardrails-view' | 'audit-view' | 'welcome-view' | 'login-view' | 'getting-started-view' | 'brand-profile-view' | 'offer-stack-view' | 'market-strategy-view' | 'sales-funnels-view' | 'preflight-view';
+  type EmbeddedViewId = 'profile' | 'billing' | 'my-businesses' | 'reseller' | 'operations' | 'agent-manager' | 'financials' | 'team' | 'front-desk' | 'internal-agents' | 'public-agents' | 'booking-view' | 'reschedule-view' | 'profile-view' | 'insurance-view' | 'concierge-view' | 'employee-dashboard-view' | 'live-queue-view' | 'session-monitor-view' | 'calendar-view' | 'customer-list-view' | 'verification-view' | 'intake-view' | 'communications-view' | 'manager-dashboard-view' | 'operations-view' | 'customer-db-view' | 'schedule-rules-view' | 'staff-view' | 'comms-config-view' | 'reports-view' | 'system-health-view' | 'locations-view' | 'billing-view' | 'identity-view' | 'behavior-view' | 'guardrails-view' | 'audit-view' | 'welcome-view' | 'login-view' | 'getting-started-view' | 'brand-profile-view' | 'offer-stack-view' | 'market-strategy-view' | 'sales-funnels-view' | 'preflight-view' | 'design_studio_landing' | 'design_studio_learn' | 'design_studio_path' | 'design_studio_step';
   const [embeddedView, setEmbeddedView] = useState<EmbeddedViewId | null>(null);
 
-  const handleMenuAction = (viewId: string) => {
-     if (['profile', 'billing', 'my-businesses', 'reseller', 'operations', 'agent-manager', 'financials', 'team', 'front-desk', 'internal-agents', 'public-agents', 'booking-view', 'reschedule-view', 'profile-view', 'insurance-view', 'concierge-view', 'employee-dashboard-view', 'live-queue-view', 'session-monitor-view', 'calendar-view', 'customer-list-view', 'verification-view', 'intake-view', 'communications-view', 'manager-dashboard-view', 'operations-view', 'customer-db-view', 'schedule-rules-view', 'staff-view', 'comms-config-view', 'reports-view', 'system-health-view', 'locations-view', 'billing-view', 'identity-view', 'behavior-view', 'guardrails-view', 'audit-view', 'welcome-view', 'login-view', 'getting-started-view', 'brand-profile-view', 'offer-stack-view', 'market-strategy-view', 'sales-funnels-view', 'preflight-view'].includes(viewId)) {
-         setEmbeddedView(viewId as EmbeddedViewId);
-     } else {
-         onNavigate?.(viewId);
-     }
-     setShowMenuOverlay(false);
-  };
-
-  // Expose handleMenuAction externally via ref so idleContent (e.g. BusinessHeroIdle) can open views
-  if (onMenuActionRef) onMenuActionRef.current = handleMenuAction;
+  /** Agent-controlled canvas: set when voice agent calls show_canvas; renders pinned above message scroll. */
+  const [pinnedCanvas, setPinnedCanvas] = useState<Record<string, unknown> | null>(null);
 
   const osMenuItems = useOSMenu((showOwnerControls || localAdminMode || ownerMode) ? 'manager' : isAuthenticated ? 'employee' : 'customer', isAuthenticated, siteCapabilities);
 
@@ -760,6 +833,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   type ShellMode = 'owner' | 'customer' | 'demo_claimable' | 'locked';
   const shellMode: ShellMode = (() => {
     if (showOwnerControls || localAdminMode) return 'owner';
+    // Platform marketing demos (e.g. ai-biz-bots) are never SMB "claim this site" surfaces
+    if (isPlatformMarketingDemo) return 'customer';
     const ws = business.workspaceState;
     if (ws === 'demo' || ws === 'provisioned') return 'demo_claimable';
     if (ws === 'claimed' || ws === 'active') return 'locked';
@@ -768,6 +843,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
   // Effective owner controls flag — true when parent forces it OR local admin mode is active
   const effectiveOwnerControls = showOwnerControls || localAdminMode;
+
 
   // Nova Gate: shown inline when a non-owner taps to claim or sign in
   const [showNovaGate, setShowNovaGate] = useState(false);
@@ -849,12 +925,14 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           // Auto-provision a default agent if none exist for this site
           if (!agent && siteConfigId) {
             try {
+              const orchestrationRunId = await fetchOrchestrationRunForAgentCreate(siteConfigId);
               const createRes = await fetch('/api/agents', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
                 credentials: 'include',
                 body: JSON.stringify({
                   siteConfigId,
+                  orchestrationRunId,
                   name: business?.name ? `${business.name} Concierge` : 'AI Concierge',
                   roleType: 'CONCIERGE',
                   voiceId: 'Kore',
@@ -915,14 +993,16 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [currentAgent, setCurrentAgent] = useState<AgentConfig>(agent);
   const [availableAgents, setAvailableAgents] = useState<AgentConfig[]>([]);
 
-  // Update currentAgent when agent prop changes (unless user manually switched)
+  // Update currentAgent when agent *content* changes — not reference identity (stable key).
   useEffect(() => {
-    setCurrentAgent(agent);
+    setCurrentAgent((prev) =>
+      agentConfigStableKey(prev) === agentConfigStableKey(agent) ? prev : agent,
+    );
   }, [agent]);
 
-  // Fetch available agents when owner mode is active
+  // Fetch available agents when owner mode or owner controls are active
   useEffect(() => {
-    if (!ownerMode || !siteConfigId) return;
+    if ((!ownerMode && !showOwnerControls) || !siteConfigId) return;
     
     // Always include AI Biz Bot as the first option
     const aiBizBot: AgentConfig = {
@@ -950,7 +1030,166 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         }
       })
       .catch(() => setAvailableAgents([aiBizBot, agent]));
-  }, [ownerMode, siteConfigId, agent]);
+  }, [ownerMode, showOwnerControls, siteConfigId, agent]);
+
+  const beginDesignStudioSessionRef = useRef<() => Promise<void>>(async () => {});
+  const voiceDesignStudioCooldownRef = useRef(0);
+
+  const appendSystemMessage = (text: string) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `msg-${Date.now()}-${Math.random()}`,
+        role: 'system' as const,
+        text,
+        timestamp: Date.now(),
+      },
+    ]);
+  };
+
+  const beginDesignStudioSession = useCallback(async () => {
+    if (!siteConfigId) return;
+    const sid = siteConfigId.trim();
+    if (!sid || ['platform-landing', 'platform_landing', 'platform', 'undefined', ''].includes(sid)) return;
+    try {
+      const res = await fetch(`/api/site-configs/${encodeURIComponent(sid)}/agents`, {
+        credentials: 'include',
+        headers: authHeaders(),
+      });
+      const data = res.ok ? await res.json() : null;
+      const agents = Array.isArray(data?.agents) ? data.agents : [];
+      const ds = agents.find(
+        (a: { roleType?: string }) => String(a?.roleType || '').toLowerCase() === 'design_studio',
+      );
+      if (!ds?.id) {
+        appendSystemMessage('Design Studio agent is not provisioned for this site yet.');
+        return;
+      }
+      const refAgent =
+        agents.find(
+          (a: { roleType?: string }) => String(a?.roleType || '').toLowerCase() === 'concierge',
+        ) || agents[0];
+      const refId = refAgent?.id != null ? String(refAgent.id) : String(ds.id);
+      await postDesignStudioHandoff(sid, {
+        handoffReason: 'user_requested_design',
+        intentSummary: {
+          raw: 'Owner opened Design Studio from the Gateway shell',
+          classified_intent: 'open_design_studio_shell',
+          project_type: 'view',
+          confidence: 0.92,
+        },
+        referringAgentId: refId,
+        siteConfigId: sid,
+        entrySurface: 'voice',
+      });
+      setSessionEntryPointAgentId(String(ds.id));
+      setCurrentAgent({
+        name: ds.name || 'Design Studio',
+        role: String(ds.roleType || 'design_studio'),
+        personality:
+          typeof ds.basePrompt === 'string' && ds.basePrompt.trim()
+            ? ds.basePrompt
+            : 'Design Studio specialist under Gateway governance.',
+        objectives: [],
+        constraints: [],
+      });
+      if (clientRef.current) {
+        clientRef.current.disconnect();
+        setConnectionStatus('disconnected');
+      }
+      setFunnelContextRevision((n) => n + 1);
+    } catch (e) {
+      appendSystemMessage(e instanceof Error ? e.message : 'Design Studio handoff failed.');
+    }
+  }, [siteConfigId]);
+
+  useEffect(() => {
+    beginDesignStudioSessionRef.current = beginDesignStudioSession;
+  }, [beginDesignStudioSession]);
+
+  const openDesignStudioFromShell = useCallback(
+    async (viewId: EmbeddedViewId) => {
+      await beginDesignStudioSession();
+      if (ownerMode || embedViewsInPanel) {
+        setEmbeddedView(viewId);
+      }
+      setShowMenuOverlay(false);
+    },
+    [beginDesignStudioSession, ownerMode, embedViewsInPanel],
+  );
+
+  const handleMenuAction = (viewId: string) => {
+    if (
+      viewId === 'design_studio_landing' ||
+      viewId === 'design_studio_learn' ||
+      viewId === 'design_studio_path' ||
+      viewId === 'design_studio_step'
+    ) {
+      void openDesignStudioFromShell(viewId as EmbeddedViewId);
+      return;
+    }
+    if (
+      [
+        'profile',
+        'billing',
+        'my-businesses',
+        'reseller',
+        'operations',
+        'agent-manager',
+        'financials',
+        'team',
+        'front-desk',
+        'internal-agents',
+        'public-agents',
+        'booking-view',
+        'reschedule-view',
+        'profile-view',
+        'insurance-view',
+        'concierge-view',
+        'employee-dashboard-view',
+        'live-queue-view',
+        'session-monitor-view',
+        'calendar-view',
+        'customer-list-view',
+        'verification-view',
+        'intake-view',
+        'communications-view',
+        'manager-dashboard-view',
+        'operations-view',
+        'customer-db-view',
+        'schedule-rules-view',
+        'staff-view',
+        'comms-config-view',
+        'reports-view',
+        'system-health-view',
+        'locations-view',
+        'billing-view',
+        'identity-view',
+        'behavior-view',
+        'guardrails-view',
+        'audit-view',
+        'welcome-view',
+        'login-view',
+        'getting-started-view',
+        'brand-profile-view',
+        'offer-stack-view',
+        'market-strategy-view',
+        'sales-funnels-view',
+        'preflight-view',
+        'design_studio_landing',
+        'design_studio_learn',
+        'design_studio_path',
+        'design_studio_step',
+      ].includes(viewId)
+    ) {
+      setEmbeddedView(viewId as EmbeddedViewId);
+    } else {
+      onNavigate?.(viewId);
+    }
+    setShowMenuOverlay(false);
+  };
+
+  if (onMenuActionRef) onMenuActionRef.current = handleMenuAction;
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { triggerSuccess } = useVoiceAnimations();
@@ -1172,15 +1411,23 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           basePrompt?: string;
         } | null | undefined;
 
-        // Use currentAgent state which might have been switched by user
-        const activeAgent = currentAgent.name === 'AI Biz Bot' ? currentAgent : (dbAgentConfig ? {
-          ...currentAgent,
-          role: [dbAgentConfig.name, dbAgentConfig.role].filter(Boolean).join(', ') || currentAgent.role,
-          personality: [
-            dbAgentConfig.basePrompt,
-            dbAgentConfig.discProfile ? `DISC Profile: ${dbAgentConfig.discProfile}` : undefined
-          ].filter(Boolean).join('. ') || currentAgent.personality,
-        } : currentAgent);
+        // Use currentAgent when user switched agents (incl. Design Studio handoff) or AI Biz Bot; else enrich from site primary agent config.
+        const activeAgent = sessionEntryPointAgentId
+          ? currentAgent
+          : currentAgent.name === 'AI Biz Bot'
+            ? currentAgent
+            : (dbAgentConfig
+                ? {
+                    ...currentAgent,
+                    role: [dbAgentConfig.name, dbAgentConfig.role].filter(Boolean).join(', ') || currentAgent.role,
+                    personality: [
+                      dbAgentConfig.basePrompt,
+                      dbAgentConfig.discProfile ? `DISC Profile: ${dbAgentConfig.discProfile}` : undefined,
+                    ]
+                      .filter(Boolean)
+                      .join('. ') || currentAgent.personality,
+                  }
+                : currentAgent);
 
         console.log('[ConciergePanel] Initializing with model:', validatedVoiceConfig.model, '| Persona:', activeAgent.role, hasValidId ? '(Handover Service)' : '(props — preview mode)');
 
@@ -1220,14 +1467,45 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             } else if (msg.isFinal && currentVoiceConfig.mode === 'clear_voice') {
               setProcessingOff();
             }
-          } else if (msg.type === 'response') {
+
+            // GOVERNED TURN ORCHESTRATION — canvas_control.md §12
+            // VoiceTurnOrchestrator intercepts transcript.final, resolves canvas intent,
+            // renders canvas view, builds SpeechGroundingContext for Gemini narration.
+            // This is the architectural separation between canvas truth and speech generation.
+            if (msg.isFinal && msg.text) {
+              void voiceTurnOrchestrator.handleFinalTranscript(msg.text);
+            }
+
+            if (
+              msg.isFinal &&
+              effectiveOwnerControls &&
+              typeof msg.text === 'string' &&
+              /open\s+design\s+studio/i.test(msg.text.trim())
+            ) {
+              const now = Date.now();
+              if (now - voiceDesignStudioCooldownRef.current > 10000) {
+                voiceDesignStudioCooldownRef.current = now;
+                void beginDesignStudioSessionRef.current();
+              }
+            }
+            } else if (msg.type === 'response') {
             setProcessingOff();
             setIsAISpeaking(false);
             if (msg.text) {
               addMessage('assistant', msg.text, msg.metadata);
             } else if (msg.metadata?.tool_type) {
-              // Tool result without text (e.g. map, business intelligence)
-              addMessage('assistant', undefined, msg.metadata);
+              if (msg.metadata.tool_type === 'shared_canvas' || msg.metadata.tool_type === 'show_canvas') {
+                // GOVERNANCE: Do not pin canvas from raw Gemini tool metadata (bypasses /api/canvas-control).
+                // Governed path: transcript.final → VoiceTurnOrchestrator → canvas.resolve → canvas.render.
+                // Legacy tools still render inline via ToolRouter in the chat log (see message list branch).
+                console.warn(
+                  '[ConciergePanel] Legacy shared_canvas/show_canvas — inline ToolRouter only; not pinned (GOVERNANCE_EXECUTION_PLAN_V1 Phase 3)',
+                );
+                addMessage('assistant', msg.text ?? undefined, msg.metadata);
+              } else {
+                // Tool result without text (e.g. map, business intelligence)
+                addMessage('assistant', undefined, msg.metadata);
+              }
             }
           } else if (msg.type === 'error') {
             setProcessingOff();
@@ -1256,6 +1534,11 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           onConnectionStatusChange?.(status);
           if (!connected) {
             setIsAISpeaking(false);
+            // Persist session-end signal to buyer journey payload node
+            const vid = siteConfigId ? getOrCreateVisitorId(siteConfigId) : null;
+            if (vid && siteConfigId) {
+              persistBuyerJourneySignal(vid, siteConfigId, { type: 'phaseTransition', agentId: undefined });
+            }
           }
         });
 
@@ -1263,13 +1546,82 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         //    Handover Service ran; in preview mode use business as-is.
         //    CRITICAL: Always pass the resolved siteConfigId (UUID) into sessionContext so
         //    the voice proxy and MCP tools receive the Business UUID, not place_id or empty string.
+        const storedFunnel = loadFunnelContextKeys(siteConfigId);
+        const mergedFunnel = mergeFunnelContextFromBusiness(business, storedFunnel);
+        if (JSON.stringify(mergedFunnel) !== JSON.stringify(storedFunnel)) {
+          saveFunnelContextKeys(siteConfigId, mergedFunnel);
+        }
+
+        // Load persistent buyer journey from server (non-blocking — warms up context silently)
+        const visitorId = siteConfigId ? getOrCreateVisitorId(siteConfigId) : null;
+        if (visitorId && siteConfigId) {
+          loadBuyerJourneyFromServer(visitorId, siteConfigId).catch(() => {/* fire-and-forget */});
+        }
         const handoverBusinessContext = dbSiteConfig
-          ? { ...business, id: siteConfigId, systemPromptOverride: dbSiteConfig.systemPromptOverride, ownerAgentRole: effectiveOwnerControls ? ownerAgentRole : undefined }
-          : { ...business, ownerAgentRole: effectiveOwnerControls ? ownerAgentRole : undefined };
+          ? {
+              ...business,
+              id: siteConfigId,
+              systemPromptOverride: dbSiteConfig.systemPromptOverride,
+              ownerAgentRole: effectiveOwnerControls ? ownerAgentRole : undefined,
+              funnelContextKeys: mergedFunnel,
+              ...(sessionEntryPointAgentId ? { entryPointAgentId: sessionEntryPointAgentId } : {}),
+            }
+          : {
+              ...business,
+              ownerAgentRole: effectiveOwnerControls ? ownerAgentRole : undefined,
+              funnelContextKeys: mergedFunnel,
+              ...(sessionEntryPointAgentId ? { entryPointAgentId: sessionEntryPointAgentId } : {}),
+            };
 
         await newClient.connect(handoverBusinessContext, activeAgent, validatedVoiceConfig);
         clientRef.current = newClient;
-        
+
+        // ── GOVERNED ORCHESTRATOR INIT (canvas_control.md §12) ─────────────────
+        // Wire VoiceTurnOrchestrator ONCE per connection.
+        // This is the bridge that activates the governed chain:
+        //   transcript.final → canvas.resolve → canvas.render → grounded speech
+        // Without this call the orchestrator is instantiated but silent (a no-op).
+        const visitorIdForInit = siteConfigId ? getOrCreateVisitorId(siteConfigId) : undefined;
+        const sessionContextForInit: PttSessionContext = {
+          sessionId: `session-${Date.now()}`,
+          siteRuntime: buildSiteRuntimeFromBusiness(business, siteConfigId ?? business.id),
+          visitor: {
+            visitorId: visitorIdForInit ?? undefined,
+            securityLevel: 'public',
+            authState: 'anonymous',
+          },
+          currentCanvas: {
+            currentViewId: pinnedCanvas
+              ? ((pinnedCanvas as Record<string, unknown>).viewId as string | undefined)
+              : undefined,
+          },
+          activeAgent: {
+            agentId: (activeAgent as unknown as Record<string, unknown>)?.id as string | undefined,
+          },
+        };
+        const runtimeStateForInit = {
+          currentCanvasView: pinnedCanvas
+            ? ((pinnedCanvas as Record<string, unknown>).viewId as string | null) ?? null
+            : null,
+          currentCanvasSummary: '',
+          lastTurnId: null,
+        };
+        // Adapter: GeminiStreamingClient exposes interruptSpeech + sendGroundedSpeechContext
+        // but IVoiceClient doesn't — safe cast because factory returns GeminiStreamingClient
+        // for all live voice modes.
+        const geminiAdapter: GeminiSpeechInterface = newClient as unknown as GeminiSpeechInterface;
+        // Adapter: canvasController.apply() → setPinnedCanvas (single governed mutation path)
+        const canvasAdapter: CanvasController = {
+          apply: (payload: CanvasRenderPayload) => {
+            setPinnedCanvas(payload as unknown as Record<string, unknown>);
+          },
+          clear: (_reason: string) => {
+            setPinnedCanvas(null);
+          },
+        };
+        voiceTurnOrchestrator.init(sessionContextForInit, runtimeStateForInit, geminiAdapter, canvasAdapter);
+        console.log('[ConciergePanel] VoiceTurnOrchestrator initialized — governed canvas chain active');
+
         console.log('[ConciergePanel] Voice engine connected successfully');
 
       } catch (err) {
@@ -1297,9 +1649,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   // Deps: `siteConfigId` (primitive) replaces the full `business` object reference
   // so that inline object literals in calling components (e.g. WebsitePreview) do
   // not create new references on every render and trigger an infinite re-connect.
+  // `currentAgent` is only updated when `agentConfigStableKey` changes (see sync effect above).
   // `currentVoiceConfig` is React state so its identity is already stable.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, siteConfigId, currentVoiceConfig, currentAgent]);
+  }, [isOpen, siteConfigId, currentVoiceConfig, currentAgent, funnelContextRevision, sessionEntryPointAgentId, effectiveOwnerControls]);
 
   // Auto-scroll
   useEffect(() => {
@@ -1456,11 +1809,11 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       }
     : {};
 
-  // In fullscreen, header/footer must never collapse — use flex basis
+  // Footer is always 110px — governance spec (brand-tokens.mdc)
   const isFullscreen = layoutMode === 'fullscreen';
   const headerStyle = isFullscreen ? { flex: '0 0 56px', minHeight: 56, maxHeight: 56 } : undefined;
   const visualizerStyle = isFullscreen ? { flex: '0 0 64px', minHeight: 64, maxHeight: 64 } : undefined;
-  const footerStyle = isFullscreen ? { flex: '0 0 110px', minHeight: 110, maxHeight: 110 } : undefined;
+  const footerStyle = { flex: '0 0 110px', minHeight: 110, maxHeight: 110 };
 
   return (
     <PanelWrapper
@@ -1493,9 +1846,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               type="button"
               onClick={() => {
                 if (shellMode === 'locked') {
-                  // Not authenticated on a claimed site — show Nova sign-in gate
-                  setNovaGateMode('signin');
-                  setShowNovaGate(true);
+                  // Not authenticated — redirect to unified OTP login
+                  window.location.href = '/login';
                 } else {
                   setShowMenuOverlay((v) => !v);
                 }
@@ -1539,10 +1891,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   setLocalAdminMode(false);
                   setShowMenuOverlay(false);
                 } else if (shellMode === 'locked' || isSovereign) {
-                  // Claimed/active site OR sovereign panel — must authenticate first
-                  novaGateReasonRef.current = 'admin_toggle';
-                  setNovaGateMode('signin');
-                  setShowNovaGate(true);
+                  // Claimed/active site OR sovereign panel — redirect to unified OTP login
+                  window.location.href = '/login';
                 } else {
                   // Demo/unclaimed customer site — enter admin preview directly
                   setLocalAdminMode(true);
@@ -1683,10 +2033,87 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           </div>
         )}
 
+        {/* PINNED CANVAS — agent-controlled visual zone; renders above message scroll while voice continues */}
+        {pinnedCanvas && (
+          <div className="flex-shrink-0 px-4 pt-3 pb-2 border-b border-slate-200 bg-white">
+            {'viewId' in (pinnedCanvas as Record<string, unknown>) ? (
+              <TypedCanvasView
+                payload={pinnedCanvas as any}
+                onTriggerSpeech={(text) => {
+                  if (clientRef.current && clientRef.current.isConnected()) {
+                    clientRef.current.sendText(text);
+                  }
+                }}
+                onContextUpdate={(context) => {
+                  if (clientRef.current && clientRef.current.isConnected()) {
+                    clientRef.current.sendText(context);
+                  }
+                }}
+                onAction={async (action, data) => {
+                  try {
+                    const res = await fetch('/api/skills/dispatch', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        skillId: (pinnedCanvas as any)?.sourceSkillId ?? 'render_component',
+                        action,
+                        siteConfigId: (pinnedCanvas as any)?.siteConfigId,
+                        data,
+                      }),
+                    });
+                    const result = await res.json();
+                    if (result.canvasPayload) {
+                      // Route through orchestrator — single governed mutation path.
+                      // Server-originated payload from /api/skills/dispatch.
+                      voiceTurnOrchestrator.applyCanvasPayload(result.canvasPayload as CanvasRenderPayload);
+                    }
+                    if (clientRef.current && clientRef.current.isConnected()) {
+                      clientRef.current.sendText(`[SKILL_ACTION] ${action} completed. Result: ${JSON.stringify(result.canvasPayload ?? {})}`);
+                    }
+                  } catch (e: any) {
+                    if (clientRef.current && clientRef.current.isConnected()) {
+                      clientRef.current.sendText(`[SKILL_ACTION] ${action} failed: ${e.message}`);
+                    }
+                  }
+                }}
+                onCancel={() => voiceTurnOrchestrator.clearCanvas('dismiss')}
+              />
+            ) : (
+              <SharedCanvasPanel
+                metadata={pinnedCanvas as any}
+                onTriggerSpeech={(text) => {
+                  if (clientRef.current && clientRef.current.isConnected()) {
+                    clientRef.current.sendText(text);
+                  }
+                }}
+                onContextUpdate={(context) => {
+                  if (clientRef.current && clientRef.current.isConnected()) {
+                    clientRef.current.sendText(context);
+                  }
+                }}
+                onCancel={() => voiceTurnOrchestrator.clearCanvas('dismiss')}
+              />
+            )}
+          </div>
+        )}
+
         <div
           className={`flex-1 min-h-0 overflow-x-hidden concierge-content-scroll relative${idleContent && messages.length === 0 ? ' overflow-hidden' : ' overflow-y-auto'}`}
           style={{ WebkitOverflowScrolling: 'touch', minHeight: 0 }}
         >
+        {(connectionStatus === 'connecting' || (connectionStatus === 'connected' && isProcessing)) && (
+          <div
+            className="shrink-0 z-10 px-3 py-2 text-center text-xs sm:text-sm border-b border-indigo-200 bg-indigo-50/95 text-indigo-900"
+            role="status"
+            aria-live="polite"
+          >
+            {connectionStatus === 'connecting'
+              ? 'Connecting…'
+              : isPlatformMarketingDemo
+                ? 'AI Biz Bot is responding…'
+                : 'Responding…'}
+          </div>
+        )}
         {/* Nova Gate overlay: claim or sign-in IDV flow */}
         {showNovaGate && (
           <motion.div
@@ -2813,8 +3240,14 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                 {embeddedView === 'my-businesses' && <ProfileContent section="my-businesses" />}
                 {embeddedView === 'reseller' && <MixingBoardContent />}
                 {embeddedView === 'agent-manager' && <AgentManager params={{}} siteConfigId={siteConfigId} />}
+                {embeddedView === 'sales-funnels-view' && siteConfigId && (
+                  <SalesFunnelsEditor
+                    siteConfigId={siteConfigId}
+                    onFunnelContextChanged={() => setFunnelContextRevision((n) => n + 1)}
+                  />
+                )}
                 {/* New OS menu views — placeholder until full views are built */}
-                {embeddedView && ['getting-started-view', 'brand-profile-view', 'offer-stack-view', 'market-strategy-view', 'sales-funnels-view', 'preflight-view', 'manager-dashboard-view', 'operations-view', 'customer-db-view', 'schedule-rules-view', 'staff-view', 'comms-config-view', 'reports-view', 'system-health-view', 'locations-view', 'identity-view', 'behavior-view', 'guardrails-view', 'audit-view', 'welcome-view', 'login-view', 'booking-view', 'reschedule-view', 'profile-view', 'insurance-view', 'concierge-view', 'employee-dashboard-view', 'live-queue-view', 'session-monitor-view', 'calendar-view', 'customer-list-view', 'verification-view', 'intake-view', 'communications-view'].includes(embeddedView) && (
+                {embeddedView && embeddedView !== 'sales-funnels-view' && ['getting-started-view', 'brand-profile-view', 'offer-stack-view', 'market-strategy-view', 'preflight-view', 'manager-dashboard-view', 'operations-view', 'customer-db-view', 'schedule-rules-view', 'staff-view', 'comms-config-view', 'reports-view', 'system-health-view', 'locations-view', 'identity-view', 'behavior-view', 'guardrails-view', 'audit-view', 'welcome-view', 'login-view', 'booking-view', 'reschedule-view', 'profile-view', 'insurance-view', 'concierge-view', 'employee-dashboard-view', 'live-queue-view', 'session-monitor-view', 'calendar-view', 'customer-list-view', 'verification-view', 'intake-view', 'communications-view'].includes(embeddedView) && (
                   <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-4">
                     <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
                       <span className="text-2xl">🔧</span>
@@ -2894,11 +3327,15 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   {transferDescription}
                 </p>
                 <div className="w-full mt-4">
+                  {showIntentFirstIdleChrome && <IntentFirstIdleChrome businessName={business.name} />}
                   <OSMenuListIdle role={effectiveOwnerControls ? 'manager' : 'customer'} isAuthenticated={isAuthenticated} capabilities={siteCapabilities} onSelect={(item) => item.viewId && handleMenuAction(item.viewId)} />
                 </div>
               </>
             ) : (
-              <OSMenuListIdle role={effectiveOwnerControls ? 'manager' : 'customer'} isAuthenticated={isAuthenticated} capabilities={siteCapabilities} onSelect={(item) => item.viewId && handleMenuAction(item.viewId)} />
+              <>
+                {showIntentFirstIdleChrome && <IntentFirstIdleChrome businessName={business.name} />}
+                <OSMenuListIdle role={effectiveOwnerControls ? 'manager' : 'customer'} isAuthenticated={isAuthenticated} capabilities={siteCapabilities} onSelect={(item) => item.viewId && handleMenuAction(item.viewId)} />
+              </>
             )}
           </div>
         ) : (
@@ -2909,7 +3346,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                 ? 'bg-indigo-500 text-white shadow-sm'
                 : 'bg-blue-600 text-white shadow-sm';
               const assistantBubble = isSovereign
-                ? (hasTool ? 'bg-slate-50 text-slate-900 border border-slate-200' : 'bg-slate-100 text-slate-900 border border-slate-200 shadow-sm')
+                ? (hasTool ? 'bg-white text-slate-900 border border-slate-200' : 'bg-white text-slate-900 border border-slate-200 shadow-sm')
                 : (hasTool ? 'bg-gray-50 text-slate-800 border border-gray-200' : 'bg-gray-100 text-slate-800 shadow-sm');
               const systemBubble = isSovereign ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-yellow-50 text-yellow-800 border border-yellow-200';
               return (
@@ -2930,11 +3367,23 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                       <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                     )}
                     
-                    {/* MULTIMODAL TOOL RENDERING */}
+                    {/* MULTIMODAL TOOL RENDERING — shared_canvas/show_canvas render inline only (no metadata→pinned bypass; GOVERNANCE_EXECUTION_PLAN_V1 Phase 3) */}
                     {hasTool && !msg.metadata.completed && (
                       <div className="mt-3 relative">
+                        {(() => {
+                          const rawType = msg.metadata.tool_type || 'loading';
+                          const demoSafe = new Set(['shared_canvas', 'request_manual_input', 'manual_input', 'loading']);
+                          const blocked = isPlatformMarketingDemo && rawType !== 'loading' && !demoSafe.has(rawType);
+                          if (blocked) {
+                            return (
+                              <p className="text-xs text-slate-500 italic">
+                                This panel is simplified for the demo — continue in voice for this step.
+                              </p>
+                            );
+                          }
+                          return (
                         <ToolRouter
-                          toolType={msg.metadata.tool_type || 'loading'}
+                          toolType={rawType}
                           metadata={{ ...msg.metadata, siteConfigId }}
                           onSubmit={(value) => handleToolSubmit(msg.id, value)}
                           onCancel={() => handleToolCancel(msg.id)}
@@ -2951,6 +3400,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                             }
                           }}
                         />
+                          );
+                        })()}
                         {showSuccessAnimation && successMessageId === msg.id && (
                           <SuccessAnimation
                             isVisible={showSuccessAnimation}
@@ -2969,8 +3420,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                       </div>
                     )}
                     
-                    {/* Metadata Footer (DISC, Emotion, Sentiment) */}
-                    {msg.metadata && !hasTool && (
+                    {/* Metadata Footer (DISC, Emotion, Sentiment) — hidden on platform marketing demo */}
+                    {msg.metadata && !hasTool && !isPlatformMarketingDemo && (
                       <div className={`mt-2 text-xs border-t pt-2 space-x-3 ${isSovereign ? 'border-slate-200 text-slate-500' : 'border-white/20 opacity-70'}`}>
                         {msg.metadata.emotion && <span>😊 {msg.metadata.emotion}</span>}
                         {msg.metadata.sentiment && <span>💭 {msg.metadata.sentiment}</span>}
@@ -3041,7 +3492,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         }}
-        className="flex flex-col items-center justify-center gap-3 px-4 py-3 flex-shrink-0 min-h-[120px] border-t border-slate-700/50"
+        className="flex flex-col items-center justify-center gap-3 px-4 py-3 flex-shrink-0 border-t border-slate-700/50"
       >
         <div className="flex items-center justify-center gap-3 w-full">
           {/* LEFT SLOT (20%): Mute + Share — both permanent footer residents */}
@@ -3122,8 +3573,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         <div className="flex items-center justify-between w-full text-[10px] font-medium uppercase tracking-wider text-slate-400">
           <span>
             {currentAgent.name
-              ? (currentVoiceConfig.mode === 'clear_voice' ? `⚡ ${currentAgent.name}` : `💬 ${currentAgent.name}`)
-              : (currentVoiceConfig.mode === 'clear_voice' ? '⚡ Clear Voice' : '💬 Standard PTT')}
+              ? (currentVoiceConfig.mode === 'clear_voice' ? `CV · ${currentAgent.name}` : `PTT · ${currentAgent.name}`)
+              : (currentVoiceConfig.mode === 'clear_voice' ? 'CLEAR VOICE' : 'STANDARD PTT')}
           </span>
           <span className={connectionStatus === 'connected' ? 'text-emerald-400' : connectionStatus === 'connecting' ? 'text-yellow-400' : 'text-red-400'}>
             {connectionStatus === 'connected' ? '● CONNECTED' : connectionStatus === 'connecting' ? '◐ CONNECTING' : '○ DISCONNECTED'}

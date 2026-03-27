@@ -191,7 +191,7 @@ export const TOOL_DECLARATIONS = {
   guest_phone_verification: {
     name: "guest_phone_verification",
     description:
-      "Sends or verifies a one-time code (SMS) for the guest's phone number before discussing account-specific or folio details. Use send_otp first, then verify_otp with the code the guest enters. Requires Twilio Verify on the server.",
+      "Sends or verifies a one-time code (SMS) for the guest's phone number before discussing account-specific or folio details. Use send_otp first, then verify_otp with the code the guest enters. Requires Twilio Verify on the server. On inbound PSTN calls, the server binds to Twilio caller ID — do not rely on a verbally supplied number for identity.",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -202,30 +202,32 @@ export const TOOL_DECLARATIONS = {
         },
         phone: {
           type: "STRING",
-          description: "Guest phone number (any common format; normalized server-side).",
+          description:
+            "Guest phone for browser/web sessions. On inbound phone calls with verified caller ID in session, omit this — the server uses signaling-derived ANI.",
         },
         otp_code: {
           type: "STRING",
           description: "Required when action is verify_otp — the code the guest entered.",
         },
       },
-      required: ["action", "phone"],
+      required: ["action"],
     },
   },
 
   pms_lookup_guest_journey: {
     name: "pms_lookup_guest_journey",
     description:
-      "Looks up the guest in Cloudbeds by phone across recent/future reservations and classifies journey: in_house, upcoming_stay, recent_checkout, past_guest, or no_pms_match. Use after the guest agrees to share their phone or after OTP verification. Does not replace folio or payment advice—follow property policy.",
+      "Looks up the guest in Cloudbeds by phone across recent/future reservations and classifies journey: in_house, upcoming_stay, recent_checkout, past_guest, or no_pms_match. Use after OTP verification when required. On inbound PSTN, the server uses Twilio caller ID for the lookup phone. Does not replace folio or payment advice—follow property policy.",
     parameters: {
       type: "OBJECT",
       properties: {
         phone: {
           type: "STRING",
-          description: "Guest phone number to match against PMS guest records.",
+          description:
+            "Guest phone for browser sessions. Omit on inbound phone calls when session carries verified caller ID — server binds to Twilio From.",
         },
       },
-      required: ["phone"],
+      required: [],
     },
   },
 
@@ -668,6 +670,11 @@ export const TOOL_DECLARATIONS = {
 
   show_canvas: {
     name: "show_canvas",
+    // LEGACY ADAPTER (p5-adapter) — This tool is preserved for backward compat during the
+    // transition to the Canvas Control Syscall Layer. All invocations are routed through
+    // canvasControlRoutes.ts with source:'legacy_adapter'. A WARN is logged on every call.
+    // DO NOT add new canvas features via this tool. This will be removed after p5-deprecate confirms zero usage.
+    // New canvas surfaces: use CanvasSyscallEnvelope with syscall:'canvas.resolve' via /api/canvas-control.
     description: "Display rich structured content in the shared canvas window so the user can read it while you speak. Use proactively whenever presenting multi-item information: service menus, appointment schedules, pricing tables, FAQ lists, intake checklists, or business summaries. The canvas stays visible until the user dismisses it.",
     parameters: {
       type: "OBJECT",

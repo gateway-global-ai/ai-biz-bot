@@ -33,12 +33,12 @@ import { PlatformBilling } from "./PlatformBilling";
 import { PlatformAffiliate } from "./PlatformAffiliate";
 import { MeProfile } from "./MeProfile";
 import CallTracking from "@/pages/biz-dashboard/CallTracking";
-import VoiceLeadMachine from "@/pages/biz-dashboard/VoiceLeadMachine";
 import SitesAndLeads from "@/pages/owner/SitesAndLeads";
 import TransparencyDashboard from "@/pages/biz-dashboard/TransparencyDashboard";
 import CustomerManager from "@/pages/biz-dashboard/CustomerManager";
 import TwilioHealthCheck from "@/pages/developer/TwilioHealthCheck";
 import DiscAssessment from "@/pages/showcase/DiscAssessment";
+import { ReadinessGateMetricsPage } from "./ReadinessGateMetricsPage";
 import { PlatformAgentsLanding } from "./PlatformAgentsLanding";
 import { PlatformKnowledgeLanding } from "./PlatformKnowledgeLanding";
 /** Same Clear Voice AI logo as main app sidebar (POWERED BY CLEAR VOICE AI). */
@@ -140,11 +140,11 @@ function AdminContent() {
   if (location === "/platform/settings/affiliate-program") return <PlatformAffiliate />;
   // Platform tools (specific routes)
   if (location === "/platform/tools/call-tracking") return <CallTracking />;
-  if (location === "/platform/tools/lead-machine") return <VoiceLeadMachine />;
   if (location === "/platform/tools/sites-leads") return <SitesAndLeads />;
   if (location === "/platform/tools/campaigns") return <TransparencyDashboard />;
   if (location === "/platform/tools/customers") return <CustomerManager />;
   if (location === "/platform/tools/sms-health") return <TwilioHealthCheck />;
+  if (location === "/platform/tools/readiness-gate") return <ReadinessGateMetricsPage />;
   if (location === "/platform/tools/disc") return <DiscAssessment />;
   // Tools: QR Code Manager (default for /platform/tools and /platform/tools/qr-codes)
   if (location === "/platform/tools" || location === "/platform/tools/qr-codes") return <PlatformQRCodeManager />;

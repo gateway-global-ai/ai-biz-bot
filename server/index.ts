@@ -6,7 +6,6 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes";
 import { createServer } from "http";
-import { startTaskScheduler } from "./taskScheduler";
 import { setupVoiceStreamWebSocket, setupAudioTempRoute } from "./voiceStream";
 import { setupBrowserAudioTempRoute } from "./browserVoice";
 import { setupGeminiLiveWebSocket } from "./geminiVoice";
@@ -236,6 +235,15 @@ async function seedDemoAgentKnowledge() {
   }
 }
 
+/** Appended only to ai-biz-bots (platform marketing voice demo). Transcript is verbatim — forbid chain-of-thought leakage. */
+const PLATFORM_MARKETING_DEMO_OUTPUT_RULES = `
+
+### PLATFORM MARKETING DEMO — OUTPUT SHAPE (MANDATORY)
+- Your spoken and written output is shown to the visitor verbatim. Never output chain-of-thought, planning steps, "confidence scores," or section headings like "**Initiating**", "**Confirming**", "**Defining**", or similar meta-commentary about your process.
+- Do not narrate compliance, protocols, or how you will answer. Speak in plain, conversational sentences only.
+- When the visitor asks about AI OS, Gateway Global AI, the platform, Clear Voice, or related topics: answer that question first with a concise, helpful explanation (what it is, who it helps, one concrete benefit). Only after answering may you ask one short follow-up. Do not deflect to "what are your needs" before you have addressed their question.
+- Use the knowledge base for accuracy; translate into customer-facing benefit. Avoid dumping every architecture layer unless they ask for technical depth.`;
+
 // Introduction directive appended to every demo agent's systemPromptOverride so they introduce themselves by name and company.
 const INTRODUCTION_PROTOCOL = `
 
@@ -414,7 +422,10 @@ async function seedDemoAgents() {
       }
 
       const compiledPrompt = buildBehavioralPrompt(agent);
-      const systemPromptOverride = compiledPrompt + INTRODUCTION_PROTOCOL;
+      const systemPromptOverride =
+        compiledPrompt +
+        INTRODUCTION_PROTOCOL +
+        (slug === "ai-biz-bots" ? PLATFORM_MARKETING_DEMO_OUTPUT_RULES : "");
       const discProfileStr = `D:${profile.dominance} I:${profile.influence} S:${profile.steadiness} C:${profile.conscientiousness}`;
       const agentConfig = {
         name: profile.name,
@@ -423,12 +434,30 @@ async function seedDemoAgents() {
         basePrompt: profile.longTermMemory.primaryIntent,
       };
 
+      const voiceConciergeGovernance =
+        slug === "ai-biz-bots"
+          ? {
+              disclosurePolicyId: "contextual",
+              principalOfRecord: "customer",
+              pppEngagement: { enabled: true, mode: "sales_emphasis" as const },
+            }
+          : undefined;
+      const prevMeta =
+        site && typeof (site as { metadata?: Record<string, unknown> }).metadata === "object"
+          ? ((site as { metadata?: Record<string, unknown> }).metadata ?? {})
+          : {};
       await storage.updateSiteConfig(siteId, {
         systemPromptOverride,
         agentConfig: agentConfig as unknown as Record<string, unknown>,
         assignedAgentId: agent.id,
+        ...(voiceConciergeGovernance
+          ? {
+              communicationGovernance: voiceConciergeGovernance as unknown as Record<string, unknown>,
+              metadata: { ...prevMeta, platformMarketingDemo: true },
+            }
+          : {}),
       });
-      console.log(`[Seed] Demo site config updated: ${slug} (systemPromptOverride + agentConfig + assignedAgentId)`);
+      console.log(`[Seed] Demo site config updated: ${slug} (systemPromptOverride + agentConfig + assignedAgentId${voiceConciergeGovernance ? " + communicationGovernance + metadata.platformMarketingDemo" : ""})`);
       if (slug === "voice-ai-assistant") {
         console.log("[Seed] Voice AI Assistant (Target) demo agent seeded — Aria / Voice Concierge ready for customers.");
       }
@@ -921,6 +950,12 @@ app.use((req, res, next) => {
   // WebSocket: Sovereign OS local chained pipeline (/ws/local-voice) — operator-only sandbox
   setupLocalVoiceProxy(httpServer);
 
+  // WebSocket: Sovereign Twilio stream (/ws/twilio-sovereign) — local STT/LLM/TTS for PSTN calls
+  if (process.env.LOCAL_VOICE_TWILIO_STREAM === "true") {
+    const { setupTwilioSovereignStream } = await import("./twilioSovereignStream");
+    setupTwilioSovereignStream(httpServer);
+  }
+
   // Initialize the WebSocket router (must be AFTER all routes are registered)
   const { setupWebSocketRouter } = await import("./websocketRouter");
   setupWebSocketRouter(httpServer);
@@ -1049,8 +1084,6 @@ app.use((req, res, next) => {
     .listen(port, "0.0.0.0", () => {
       const addr = server.address();
       log(`serving on port ${port} at ${JSON.stringify(addr)}`);
-      // Start the task scheduler for 24-hour SMS automation
-      startTaskScheduler(5);
     })
     .on("error", (err: NodeJS.ErrnoException) => {
       if (err.code === "EADDRINUSE") {

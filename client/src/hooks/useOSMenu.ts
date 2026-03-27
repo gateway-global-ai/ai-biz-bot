@@ -227,6 +227,14 @@ export function useOSMenu(role: OSRole = 'customer', isAuthenticated: boolean = 
         viewId: 'agent-manager'
       },
       {
+        id: 'design_studio',
+        label: 'Design Studio',
+        icon: Wand2,
+        description: 'AI-guided views and apps (Chad)',
+        action: 'switch_view',
+        viewId: 'design_studio_landing'
+      },
+      {
         id: 'reports',
         label: 'Reports',
         icon: BarChart3,

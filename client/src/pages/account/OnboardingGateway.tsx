@@ -11,7 +11,8 @@
  *                             Status set to PENDING until carrier approves — not APPROVED on submit.
  * Step 3 — Grace Countdown:  30-day progress bar sourced from pricing_v1.yaml → grace_period_days.
  *
- * Source of truth: /.system_design/rules.md, contracts/MSA_v1.1.0_RESELLER.md
+ * Legal source of truth: .system_design/rules.md, .system_design/contracts/MSA_v1.0.0.md, .system_design/contracts/MSA_v1.1.0_RESELLER.md
+ * (MSA strings below are embedded for scroll-gate UX — must stay in sync with those contract files; see docs-governance/CLIENT_SPEC_TREE_REGISTRY.md)
  */
 
 import { useRef, useState, useCallback } from "react";

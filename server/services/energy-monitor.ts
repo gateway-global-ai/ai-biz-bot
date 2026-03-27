@@ -11,7 +11,7 @@
  * This service is the single source of truth for:
  *   1. Computing billed minutes from raw seconds.
  *   2. Persisting a voice_usage_log row for every completed call.
- *   3. Decrementing the site's prepaid minute_balance.
+ *   3. Decrementing voice_phone_ai_minutes / voice_web_ai_minutes (granular ledger).
  *   4. Providing a balance-check guard used by voice webhooks.
  */
 
@@ -82,19 +82,28 @@ export async function logVoiceUsage(
     .values(insertPayload)
     .returning();
 
-  // Decrement minute_balance if it is set (not null).
+  // Decrement granular voice pools (minute_balance column was removed in migration 0009).
   let newBalance: number | null = null;
   if (billedMinutes > 0) {
     const [site] = await db
-      .select({ minuteBalance: siteConfigs.minuteBalance })
+      .select({
+        voicePhoneAiMinutes: siteConfigs.voicePhoneAiMinutes,
+        voiceWebAiMinutes: siteConfigs.voiceWebAiMinutes,
+      })
       .from(siteConfigs)
       .where(eq(siteConfigs.id, siteConfigId));
 
-    if (site && site.minuteBalance !== null) {
-      newBalance = Math.max(0, site.minuteBalance - billedMinutes);
+    if (site) {
+      const pool = callType === "web" ? site.voiceWebAiMinutes : site.voicePhoneAiMinutes;
+      const next = Math.max(0, pool - billedMinutes);
+      newBalance = next;
       await db
         .update(siteConfigs)
-        .set({ minuteBalance: newBalance })
+        .set(
+          callType === "web"
+            ? { voiceWebAiMinutes: next }
+            : { voicePhoneAiMinutes: next },
+        )
         .where(eq(siteConfigs.id, siteConfigId));
       // Non-blocking: nudge owner if balance is low (once per site until refill).
       import("./energyAlerts").then((m) => m.checkEnergyAndNudge(siteConfigId)).catch(() => {});
@@ -105,18 +114,17 @@ export async function logVoiceUsage(
 }
 
 /**
- * Returns true if the site has prepaid minutes available (or no balance cap).
- * Returns false only when minute_balance is explicitly set AND equals 0.
+ * Returns true if the site has prepaid PSTN (phone) AI minutes available.
+ * WebRTC balance is tracked separately in voice_web_ai_minutes.
  */
 export async function hasEnergyBalance(siteConfigId: string): Promise<boolean> {
   const [site] = await db
-    .select({ minuteBalance: siteConfigs.minuteBalance })
+    .select({ voicePhoneAiMinutes: siteConfigs.voicePhoneAiMinutes })
     .from(siteConfigs)
     .where(eq(siteConfigs.id, siteConfigId));
 
   if (!site) return false;
-  if (site.minuteBalance === null) return true; // unrestricted
-  return site.minuteBalance > 0;
+  return site.voicePhoneAiMinutes > 0;
 }
 
 /**
@@ -128,7 +136,10 @@ export async function getEnergyBalance(siteConfigId: string): Promise<{
   totalBilledAmountCents: number;
 }> {
   const [site] = await db
-    .select({ minuteBalance: siteConfigs.minuteBalance })
+    .select({
+      voicePhoneAiMinutes: siteConfigs.voicePhoneAiMinutes,
+      voiceWebAiMinutes: siteConfigs.voiceWebAiMinutes,
+    })
     .from(siteConfigs)
     .where(eq(siteConfigs.id, siteConfigId));
 
@@ -140,8 +151,10 @@ export async function getEnergyBalance(siteConfigId: string): Promise<{
     .from(voiceUsageLogs)
     .where(eq(voiceUsageLogs.siteConfigId, siteConfigId));
 
+  const phone = site?.voicePhoneAiMinutes ?? 0;
+  const web = site?.voiceWebAiMinutes ?? 0;
   return {
-    minuteBalance: site?.minuteBalance ?? null,
+    minuteBalance: phone + web,
     totalBilledMinutes: Number(totals?.totalMinutes ?? 0),
     totalBilledAmountCents: Number(totals?.totalCents ?? 0),
   };

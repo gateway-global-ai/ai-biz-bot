@@ -1,3 +1,5 @@
+<!-- Not a production prompt source. SSoT: docs-governance/CLIENT_SPEC_TREE_REGISTRY.md, VIEW_REGISTRY, intake/tool contracts. -->
+
 To implement a **Manual Correction Box** that fits your **40% Content Window** and adheres to your design hierarchy, we will create a specialized React component that handles real-time input and submits the "Correction" back to the AI as a tool response.
 
 This component is designed to be **auto-focused** the moment it appears, ensuring the user can immediately type without clicking, which is critical for maintaining conversational flow.

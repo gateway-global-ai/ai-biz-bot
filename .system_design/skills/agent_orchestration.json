@@ -1,0 +1,17 @@
+{
+  "id": "agent_orchestration",
+  "version": "1.0.0",
+  "description": "Control-plane orchestration for agent swarm provisioning",
+  "governance_ref": [
+    "docs-governance/canonical/SOVEREIGN_OS_V1_SPEC.md",
+    "registry-yaml/orchestrator_contract.yaml"
+  ],
+  "required_for": [
+    "create_agent",
+    "update_agent",
+    "deploy_agent",
+    "assign_skills",
+    "generate_funnel"
+  ],
+  "runtime_table": "agent_orchestration_runs"
+}

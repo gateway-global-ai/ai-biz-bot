@@ -1,0 +1,81 @@
+# Named capability bundles for agent / mode assignment
+# Validated by: scripts/validate-integration-registry.ts
+#
+# Binding (see INTEGRATION_GRAPH_DISCIPLINE.md D3):
+# - requires_modes_superset: enforced only for model-facing sets (non-empty resolved_tool_names).
+#   Each listed mode's allowedToolNames MUST contain every resolved tool. Validator uses tools only,
+#   not prose in description.
+# - exposure_type: model_facing | non_model_facing — empty resolved_tool_names MUST use
+#   non_model_facing (or requires_tool_resolution: false) or validation fails (masks broken wiring).
+# - Per-capability operational_mode_allowlist is still checked separately.
+# - Swarm binding: agents.structuredControls.swarm_role_contract (see HOSPITALITY_SWARM_SCHEMATIC_V1.md).
+
+spec: integration_capability_sets_v1
+version: "1.1.0"
+
+authority:
+  source_of_truth: registry-yaml/integration-capability-sets.yaml
+
+sets:
+  - set_id: cloudbeds_hospitality_front_desk
+    exposure_type: model_facing
+    description: >
+      Read inventory + guest journey. Narrative: CUSTOMER_SUPPORT has pms_lookup only (no inventory tool);
+      requires_modes_superset lists only modes that actually include every resolved tool.
+    vendor_id: cloudbeds
+    member_capabilities:
+      - cb_inventory_quote
+      - cb_guest_journey_lookup
+    resolved_tool_names:
+      - get_hotel_inventory
+      - pms_lookup_guest_journey
+    requires_modes_superset:
+      - RECEPTIONIST
+      - SALES
+      - MANAGER
+      - CASHIER
+
+  - set_id: cloudbeds_hospitality_guest_lookup_only
+    exposure_type: model_facing
+    description: >
+      PMS guest journey lookup only (no inventory). For support-style modes without inventory tool.
+    vendor_id: cloudbeds
+    member_capabilities:
+      - cb_guest_journey_lookup
+    resolved_tool_names:
+      - pms_lookup_guest_journey
+    requires_modes_superset:
+      - RECEPTIONIST
+      - SALES
+      - CASHIER
+      - CUSTOMER_SUPPORT
+      - MANAGER
+      - CUSTOMER_SERVICE
+
+  - set_id: cloudbeds_hospitality_manager_ops
+    exposure_type: model_facing
+    description: Housekeeping and dashboard reads for manager oversight.
+    vendor_id: cloudbeds
+    member_capabilities:
+      - cb_housekeeping_status
+      - cb_hotel_dashboard
+      - cb_inventory_quote
+      - cb_guest_journey_lookup
+    resolved_tool_names:
+      - pms_get_housekeeping_status
+      - pms_get_hotel_dashboard
+      - get_hotel_inventory
+      - pms_lookup_guest_journey
+    requires_modes_superset:
+      - MANAGER
+
+  - set_id: cloudbeds_hospitality_booking_write
+    exposure_type: non_model_facing
+    description: >
+      Declarative / business-scope bundle: post_reservation capability exists; no Gemini tools yet.
+      When tool_name is wired, set exposure_type to model_facing and populate resolved_tool_names +
+      requires_modes_superset.
+    vendor_id: cloudbeds
+    member_capabilities:
+      - cb_post_reservation
+    resolved_tool_names: []

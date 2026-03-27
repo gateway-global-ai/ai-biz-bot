@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Prompt Runtime Governance
 
-- Read `docs-governance/PROMPT_RUNTIME_GOVERNANCE.md` before changing prompts or prompt assembly.
+- Read `docs-governance/canonical/PROMPT_RUNTIME_GOVERNANCE.md` before changing prompts or prompt assembly.
 - Do not place raw system prompt strings in UI components, route files, or domain handlers.
 - User-facing behavior controls must remain structured inputs, not direct compiled prompt editing.
 - Prompt changes should flow through templates/fragments/compiler and be reviewable like code.

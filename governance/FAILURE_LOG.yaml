@@ -1,0 +1,266 @@
+# FAILURE_LOG — Production Simulation Week 0
+#
+# This artifact captures failures observed during controlled production
+# simulation. It is the primary input for the v1 boundary decision.
+#
+# RULE: Entries are added ONLY during or after Production Simulation Week 0.
+#       Do not pre-populate from architecture assumptions or code inspection.
+#       Every entry must come from observed runtime behavior.
+#
+# RULE: No failure may be dismissed without a severity classification
+#       and an explicit fix_required decision.
+
+version: "1.0"
+created: "2026-03-25"
+authority: governance/TRUTH_REGISTRY.yaml
+phase: "production_simulation_week_0"
+
+# ─── SCHEMA ─────────────────────────────────────────────────────────────────
+#
+# Each failure entry MUST contain ALL of the following fields:
+#
+#   id:              string   — unique identifier (F001, F002, ...)
+#   session_id:      string   — Week 0 session identifier (W0-S001, W0-S002, ...)
+#   type:            string   — failure category (see FOCUS CLASSES below)
+#   description:     string   — what happened, not what you expected
+#   location:        string   — file path, route, or subsystem where it occurred
+#   severity:        enum     — critical | high | medium | low
+#   owner:           enum     — governance | runtime | ui | data | voice
+#   observed_under:  enum     — simulation | staging | live
+#   reproducible:    boolean  — true | false
+#   fix_required:    boolean  — true | false
+#   steps_to_reproduce: string (optional) — how to trigger the failure
+#   related_failures:  list   (optional) — ids of related failures
+#   resolution:        string (optional) — what was done to fix it
+#   resolved_at:       string (optional) — date of resolution
+#
+# ─── FOCUS FAILURE CLASSES (Week 0 scope) ───────────────────────────────────
+#
+#   governance_conflict  — two or more rules/policies triggered conflicting actions
+#   policy_bypass        — anything slipped around the enforcement gate
+#   state_inconsistency  — wrong or stuck state transitions
+#   silent_failure       — no output, no error, no visible state change
+#   non_determinism      — same input produced different outputs
+#   recovery_failure     — could not retry or resume after error
+#
+#   Ignore all other failure types during Week 0.
+#
+# ─── GUARDRAILS ─────────────────────────────────────────────────────────────
+#
+#   1. NO SILENT SUCCESS: If a step completes without an event, a log,
+#      or a visible state change, treat it as a silent_failure and log it.
+#
+#   2. ONE FAILURE = ONE ENTRY: Do not bundle issues. Each failure gets
+#      its own id, its own location, its own severity.
+#
+# ─── WHAT TO LOG ────────────────────────────────────────────────────────────
+#
+#   Log ONLY if it:
+#     - broke
+#     - behaved inconsistently
+#     - violated governance
+#     - failed silently
+#
+#   Do NOT log ideas, improvements, or wish-list items.
+#
+# ─── SEVERITY DEFINITIONS ───────────────────────────────────────────────────
+#
+#   critical  — system cannot function; data loss; security breach;
+#               enforcement bypass that allows ungoverned execution
+#   high      — feature broken; user-visible failure; state corruption
+#               that requires manual intervention
+#   medium    — degraded behavior; workaround exists; non-blocking
+#               but reduces confidence in the system
+#   low       — cosmetic; edge case; does not affect core flows
+#               or governance integrity
+#
+# ─── OWNER DOMAINS ──────────────────────────────────────────────────────────
+#
+#   governance — authority hierarchy, enforcement gates, policy rules
+#   runtime    — server execution, routing, state machines, provisioning
+#   ui         — client rendering, navigation, layout, interaction
+#   data       — schema, storage, migrations, data integrity
+#   voice      — Gemini Live pipeline, audio codec, WebSocket sessions
+#
+# ─── OBSERVED_UNDER VALUES ──────────────────────────────────────────────────
+#
+#   simulation — Production Simulation Week 0 (controlled chaos)
+#   staging    — staging environment under test load
+#   live       — production traffic (post-v1 launch)
+
+failures:
+  - id: F001
+    session_id: W0-S001
+    type: state_inconsistency
+    description: "PM2 process inherited Cursor IDE sandbox proxy env vars (HTTP_PROXY=127.0.0.1:34389). All outbound API calls (Gemini, SerpApi, Hostinger) failed with ECONNREFUSED. Health check returned 503. Server appeared online but could not reach any external service."
+    location: PM2 process environment / server startup
+    severity: critical
+    owner: runtime
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+    steps_to_reproduce: "Start PM2 from a Cursor terminal. The proxy env vars leak into the PM2 process. Restart without those vars fixes it."
+    resolution: "Deleted PM2 process, unset all proxy vars, restarted with doppler run -- pm2 start. Health now returns 200 with all services ok."
+    resolved_at: "2026-03-25"
+
+  - id: F002
+    session_id: W0-S001
+    type: state_inconsistency
+    description: "PM2 process was running stale code referencing server/taskScheduler.ts which queries the dropped 'tasks' table. Error: relation 'tasks' does not exist. This caused repeated error logging (2791 restarts over 2 days) but did not crash the process."
+    location: server/taskScheduler.ts (deleted) / server/index.ts (import removed)
+    severity: high
+    owner: runtime
+    observed_under: simulation
+    reproducible: true
+    fix_required: false
+    steps_to_reproduce: "Run old code after Schema Guillotine migration 0064 drops the tasks table. Task scheduler tries to query tasks table on a timer."
+    resolution: "PM2 restart picks up current code where taskScheduler.ts is deleted and its import removed from index.ts."
+    resolved_at: "2026-03-25"
+
+  - id: F003
+    session_id: W0-S001
+    type: silent_failure
+    description: "No valid auth sessions exist in auth_sessions table. All tokens expired. Cannot exercise any requireAuth endpoint (provisioning, agent CRUD, knowledge routes) without logging in through the UI first. No CLI-based test path exists for authenticated flows."
+    location: server/auth.ts / auth_sessions table
+    severity: medium
+    owner: runtime
+    observed_under: simulation
+    reproducible: true
+    fix_required: false
+    notes: "This is expected behavior (sessions expire), but it means Week 0 authenticated flow testing requires a human operator to log in through the browser first, then extract the token. No programmatic test harness exists for API-level integration testing."
+
+  # ─── W0-S001 LIVE USER TESTING (operator-observed) ─────────────────────────
+
+  - id: F004
+    session_id: W0-S001
+    type: silent_failure
+    description: "Login action on PlatformHomePage does nothing visible. The NovaGate overlay is triggered (showLoginOverlay=true) but either fails to render or renders behind the ConciergePanel z-index. User clicks 'Log In' and nothing happens."
+    location: client/src/pages/public/PlatformHomePage.tsx (line 676, 682-704)
+    severity: high
+    owner: ui
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+
+  - id: F005
+    session_id: W0-S001
+    type: state_inconsistency
+    description: "'Try Demo' sends user to /agent/ai-biz-bots — a raw OS screen with no context. No explanation of what they're looking at, no voice prompting, no intent tracking, no customer capture. IntentFirstIdleChrome is explicitly excluded for platform marketing demos. Prospect clicks 'demo' and lands in a blank agent interface."
+    location: client/src/pages/public/PlatformHomePage.tsx (line 22) / client/src/components/chat/ConciergePanel.tsx (line 667-673)
+    severity: critical
+    owner: ui
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+
+  - id: F006
+    session_id: W0-S001
+    type: silent_failure
+    description: "Support menu item is dead. viewId 'concierge-view' is registered in useOSMenu.ts and allowed in handleMenuAction, but has NO component renderer in ConciergePanel. Clicking it shows a blank white screen with only a Back button."
+    location: client/src/hooks/useOSMenu.ts (line 69-75) / ConciergePanel.tsx (line 733-741, no render case)
+    severity: high
+    owner: ui
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+
+  - id: F007
+    session_id: W0-S001
+    type: silent_failure
+    description: "My Account menu item does nothing visible. viewId 'profile-view' and 'insurance-view' are registered and allowed but have no component renderer. Same blank screen as F006."
+    location: client/src/hooks/useOSMenu.ts (line 58-66) / ConciergePanel.tsx (no render case for profile-view, insurance-view)
+    severity: high
+    owner: ui
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+    related_failures: [F006]
+
+  - id: F008
+    session_id: W0-S001
+    type: state_inconsistency
+    description: "Visualizer bar shows 'Ready' text when connected and idle. This was never approved, takes up space in the 64px visualizer band, and is redundant with 'Connected' shown elsewhere."
+    location: client/src/components/chat/ConciergePanel.tsx (line 1647)
+    severity: medium
+    owner: ui
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+
+  - id: F009
+    session_id: W0-S001
+    type: policy_bypass
+    description: "Share button in footer shows a user menu to unauthenticated visitors. This is a gate failure — showing account-level actions to someone with no account. Wrong icon (share icon) for the destination (user menu)."
+    location: client/src/components/chat/ConciergePanel.tsx (footer share/QR section)
+    severity: high
+    owner: ui
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+
+  - id: F010
+    session_id: W0-S001
+    type: silent_failure
+    description: "Refresh/reconnect button in footer wastes key space. No user need for a manual reconnect button in the primary interface chrome. Takes space from PTT button on mobile."
+    location: client/src/components/chat/ConciergePanel.tsx (footer right slot)
+    severity: medium
+    owner: ui
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+
+  - id: F011
+    session_id: W0-S001
+    type: state_inconsistency
+    description: "Settings cog in header triggers sign-in flow, then corrupts shell state. After NovaGate dismissal, the Lock icon switches to a non-functional hamburger menu. The cog should not exist — settings are what the Lock icon protects."
+    location: client/src/components/chat/ConciergePanel.tsx (header settings button / shellMode transition)
+    severity: high
+    owner: ui
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+    related_failures: [F004]
+
+  - id: F012
+    session_id: W0-S001
+    type: state_inconsistency
+    description: "ConciergePanel chrome bloat: 8 interactive elements (logo, name, minimize/maximize/fullscreen, cog, lock/menu in header; mute, share, PTT, refresh in footer) shown before user establishes intent. Violates 1-to-many menu principle. Target: 1 system menu, 1 PTT, 1 minimize. Everything else gated behind menu."
+    location: client/src/components/chat/ConciergePanel.tsx (header + footer layout)
+    severity: critical
+    owner: ui
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+
+  - id: F013
+    session_id: W0-S001
+    type: recovery_failure
+    description: "Login flow completely broken. NovaGate returns error: 'Missing X-Nova-Timestamp, X-Nova-Business-ID, or X-Nova-Protocol-Level'. Cannot authenticate at all. All authenticated flows are inaccessible."
+    location: client/src/components/nova/NovaGate.tsx / server verification endpoint
+    severity: critical
+    owner: runtime
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+
+  - id: F014
+    session_id: W0-S001
+    type: state_inconsistency
+    description: "On /biz/harry-reid-international-airport-cpn0 (closest to a branded entry), the canvas displays AI reasoning text instead of useful intent-driven UI. The branded experience is undermined by exposing internal processing. Menu overlay has no opacity — completely blocks the hero image instead of being translucent."
+    location: client/src/components/chat/ConciergePanel.tsx (canvas rendering + menu overlay styling)
+    severity: high
+    owner: ui
+    observed_under: simulation
+    reproducible: true
+    fix_required: true
+
+  - id: F015
+    session_id: W0-S001
+    type: silent_failure
+    description: "Initial greeting from the AI concierge lacks appropriate sales messaging. First response has noticeable delay. For a product selling voice-first AI, the first interaction fails to demonstrate the core value proposition."
+    location: server/services/promptCompiler.ts / site_configs system prompt
+    severity: high
+    owner: runtime
+    observed_under: simulation
+    reproducible: true
+    fix_required: true

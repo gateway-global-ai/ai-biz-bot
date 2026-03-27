@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Send, Bot, User, Loader2, Volume2, MessageCircle,
   Coffee, Briefcase, FlaskConical, GraduationCap, Phone,
-  Globe, Users, Zap, BarChart3, Sparkles, ChevronDown, ChevronUp,
+  Globe, Users, BarChart3, Sparkles, ChevronDown, ChevronUp,
   CheckCircle2, XCircle, Database,
 } from 'lucide-react';
 import type { Agent } from '@shared/schema';
@@ -35,7 +35,6 @@ const QUICK_COMMANDS = [
   { label: 'Site Stats', prompt: 'Give me a summary of all generated websites - how many sites, total visitors, total messages, and which sites have the most activity.', icon: Globe },
   { label: 'Lead Report', prompt: 'Show me a lead conversion report. How many total leads do we have, how many have been contacted, how many converted, and what is our conversion rate?', icon: BarChart3 },
   { label: 'Customer Overview', prompt: 'Give me an overview of our customer base. How many customers do we have, what statuses are they in, and who are the most recent ones?', icon: Users },
-  { label: 'Pipeline Status', prompt: 'What is the current status of our VoiceLeadMachine pipeline? How many campaigns have been run, how many calls made, and what are the results?', icon: Zap },
 ];
 
 interface EnrichResult {

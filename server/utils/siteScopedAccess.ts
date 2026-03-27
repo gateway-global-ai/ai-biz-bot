@@ -17,7 +17,13 @@ export type SitePolicyKey =
   | "telephony.paid_activation.write"
   | "qr.routes.read"
   | "qr.routes.write"
-  | "qr.firewall.write";
+  | "qr.firewall.write"
+  /** Zero-LLM vault ingestion — opaque refs only; no support_agent bypass. */
+  | "secure.vault.write"
+  /** AI Design Studio — read/update studio state on site metadata (stub). */
+  | "design_studio.access"
+  /** AI Design Studio — publish / promote artifacts (tighter gate; use when wiring publish). */
+  | "design_studio.publish";
 
 export type AccessClass =
   | "global_admin"
@@ -230,6 +236,40 @@ const POLICY_ROLE_ALLOWLIST: Record<SitePolicyKey, string[]> = {
     "regional_admin",
     "location_admin",
   ],
+  "secure.vault.write": [
+    "superadmin",
+    "platform_admin",
+    "admin",
+    "owner",
+    "organization_admin",
+    "franchise_admin",
+    "regional_admin",
+    "location_admin",
+    "manager",
+  ],
+  "design_studio.access": [
+    "superadmin",
+    "platform_admin",
+    "admin",
+    "support_agent",
+    "owner",
+    "organization_admin",
+    "franchise_admin",
+    "regional_admin",
+    "location_admin",
+    "manager",
+  ],
+  "design_studio.publish": [
+    "superadmin",
+    "platform_admin",
+    "admin",
+    "owner",
+    "organization_admin",
+    "franchise_admin",
+    "regional_admin",
+    "location_admin",
+    "manager",
+  ],
 };
 
 function normalizeRole(value: unknown): string {
@@ -238,6 +278,10 @@ function normalizeRole(value: unknown): string {
 }
 
 function canRoleSatisfyPolicy(role: string, policy: SitePolicyKey): boolean {
+  // Vault writes: no blanket support_agent grant (global/support short-circuit below).
+  if (policy === "secure.vault.write" && SUPPORT_ROLES.has(role)) {
+    return false;
+  }
   if (GLOBAL_ROLES.has(role) || SUPPORT_ROLES.has(role)) return true;
   return POLICY_ROLE_ALLOWLIST[policy].includes(role);
 }
@@ -283,6 +327,18 @@ export async function assertAdminSessionActor(req: any): Promise<
       accessClass,
     },
   };
+}
+
+/**
+ * Binds the authenticated admin session to a site for orchestration and agent mutations.
+ * Same tenancy rules as other site-scoped routes (global/support roles, or reseller match).
+ * Call after `requireAuth` on routes that accept a `siteConfigId` body/param.
+ */
+export async function assertSiteAccessForSession(
+  req: any,
+  siteConfigId: string,
+): Promise<SiteScopedAccessResult> {
+  return assertSiteScopedAccess({ req, siteConfigId });
 }
 
 export async function assertSiteScopedAccess({

@@ -18,6 +18,7 @@ import {
   agentPhoneAssignments,
   platformNumberPool,
 } from "@shared/schema";
+import { invalidateSiteRuntimeCache } from "../services/siteRuntimeResolver";
 import { eq, and, isNull, count } from "drizzle-orm";
 import { getTwilioClient } from "../twilio";
 
@@ -116,6 +117,7 @@ router.post("/activate-plan/:siteConfigId", async (req, res) => {
       .update(siteConfigs)
       .set({ voicePlanActive: true, voicePlanActivatedAt: new Date() })
       .where(eq(siteConfigs.id, site.id));
+    invalidateSiteRuntimeCache(site.id);
 
     res.json({ success: true, message: "Voice AI Package activated" });
   } catch (err: any) {
@@ -146,7 +148,7 @@ router.post("/create-sub-account/:siteConfigId", async (req, res) => {
       });
     }
 
-    const client = getTwilioClient();
+    const client = await getTwilioClient();
     const businessName =
       (site as any).name ||
       (site as any).voiceCompanyName ||
@@ -166,6 +168,7 @@ router.post("/create-sub-account/:siteConfigId", async (req, res) => {
         voiceSubAccountFriendlyName: subAccount.friendlyName,
       })
       .where(eq(siteConfigs.id, site.id));
+    invalidateSiteRuntimeCache(site.id);
 
     res.json({
       success: true,
@@ -199,7 +202,7 @@ router.get("/search-numbers/:siteConfigId", async (req, res) => {
     }
 
     // Use sub-account client if available, otherwise master
-    let client = getTwilioClient();
+    let client = await getTwilioClient();
     if (site.voiceSubAccountSid && site.voiceSubAccountAuthToken) {
       const twilio = await import("twilio");
       client = twilio.default(
@@ -293,7 +296,7 @@ router.post("/assign-number/:siteConfigId", async (req, res) => {
     const smsUrl = buildWebhookUrl("/webhook/sms");
 
     // Purchase number using sub-account client (or master)
-    let client = getTwilioClient();
+    let client = await getTwilioClient();
     if (site.voiceSubAccountSid && site.voiceSubAccountAuthToken) {
       const twilio = await import("twilio");
       client = twilio.default(
@@ -341,6 +344,7 @@ router.post("/assign-number/:siteConfigId", async (req, res) => {
           provisionedPhoneSid: purchased.sid,
         })
         .where(eq(siteConfigs.id, site.id));
+      invalidateSiteRuntimeCache(site.id);
     }
 
     res.json({
@@ -379,7 +383,7 @@ router.post("/release-number/:assignmentId", async (req, res) => {
 
     // Release in Twilio
     try {
-      let client = getTwilioClient();
+      let client = await getTwilioClient();
       if (site?.voiceSubAccountSid && site?.voiceSubAccountAuthToken) {
         const twilio = await import("twilio");
         client = twilio.default(
@@ -489,7 +493,7 @@ router.post("/admin/number-pool/add", async (req, res) => {
       country?: string;
     };
 
-    const client = getTwilioClient();
+    const client = await getTwilioClient();
     let purchased: any;
 
     if (phoneNumber) {
@@ -596,7 +600,7 @@ router.post("/admin/number-pool/assign", async (req, res) => {
     const isPrimary = activeAssignments.length === 0;
 
     // Update Twilio webhooks to point to this business
-    const client = getTwilioClient();
+    const client = await getTwilioClient();
     await (client as any).incomingPhoneNumbers(poolNumber.phoneSid).update({
       voiceUrl: buildWebhookUrl("/webhook/voice"),
       smsUrl: buildWebhookUrl("/webhook/sms"),
@@ -637,6 +641,7 @@ router.post("/admin/number-pool/assign", async (req, res) => {
           provisionedPhoneSid: poolNumber.phoneSid,
         })
         .where(eq(siteConfigs.id, siteConfigId));
+      invalidateSiteRuntimeCache(siteConfigId);
     }
 
     res.json({ success: true, assignment });

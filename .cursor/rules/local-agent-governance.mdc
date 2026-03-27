@@ -1,0 +1,120 @@
+---
+description: Governed Local Agent Plane — rules for local/internal LLM agents (Ollama-backed). Always-on when touching localAgentRoutes, localAgentKnowledgeContext, or any agent with aiModelProvider='local'.
+globs: server/routes/localAgentRoutes.ts, server/services/localAgentKnowledgeContext.ts, scripts/seed-local-coding-agent.ts
+alwaysApply: true
+---
+
+# Governed Local Agent Plane
+
+The `local_agent_plane` is a governed internal execution tier. It runs alongside the Gemini customer-facing runtime but is completely isolated from it.
+
+## Two-Plane Model
+
+| Plane | Model | Scope |
+|---|---|---|
+| `customer_facing_runtime` | Gemini only | Voice concierge, ConciergePanel, siteConfig-assigned agents, any user-visible response |
+| `internal_worker_runtime` | Local (Ollama) permitted | Coding, analysis, governance linting, schema/UI generation, enforcement |
+
+## Interaction Model (Node Awareness)
+
+Every local agent task flows through:
+
+```
+Node (payload + allowed_actions) → Route → Orchestrator → Knowledge Context → Local LLM
+```
+
+The **Node** is the spatial interaction container. It:
+- Holds the inbound payload
+- Defines allowed actions per agent jurisdiction
+- Stabilizes context before the LLM call
+
+Do NOT skip steps. Do NOT call Ollama directly from a route without an orchestration run.
+
+## Domain Jurisdiction
+
+Jurisdiction is stored in `agents.structuredControls` JSONB and enforced at the route level before dispatch.
+
+### `coding_agent`
+```yaml
+allowed_domains:
+  - server/routes/**
+  - server/services/**
+  - shared/**
+  - migrations/**
+  - scripts/**
+  - client/src/**
+forbidden_domains:
+  - server/geminiVoice.ts
+  - server/voiceStream.ts
+  - server/voiceGemini.ts
+  - server/voiceSession.ts
+  - server/audioCodec.ts
+  - server/config/geminiLiveProtocol.ts
+  - client/src/services/voice/**
+  - client/public/clear-voice-processor.js
+```
+
+### `ui_agent`
+```yaml
+allowed_domains:
+  - client/src/ui-core/**
+  - client/src/pages/**
+  - client/src/components/**
+forbidden_domains:
+  - server/**
+  - migrations/**
+  - shared/schema.ts
+```
+
+## Hard Constraints (Absolute)
+
+- NEVER allow a local model agent to interact directly with a user (no WebSocket, no SSE to client)
+- NEVER allow a local model agent to touch the Gemini Live voice runtime (any file in sovereign-voice-lockdown.mdc)
+- NEVER allow a local model agent to autonomously publish, merge, or deploy to production
+- NEVER assign a `local` aiModelProvider agent as `siteConfig.assignedAgentId` without an explicit `governanceOverride: true` flag in `structuredControls`
+- NEVER call Ollama `/api/generate` without first creating an `agent_orchestration_runs` row
+
+## Orchestration Enforcement
+
+Every local agent task MUST:
+1. Create an `agent_orchestration_runs` row (violation: `missing_orchestration_run` if skipped)
+2. Pass a jurisdiction check against `agents.structuredControls` (violation: `unauthorized_domain_access` if forbidden domain)
+3. Produce a structured output (see contract below)
+
+## Structured Output Contract
+
+Every Ollama response MUST parse as:
+
+```typescript
+interface LocalAgentOutput {
+  files_touched: string[];   // relative paths only, within jurisdiction
+  assumptions: string[];     // what was assumed about missing context
+  blockers: string[];        // what prevents full completion
+  result: string;            // the actual output (code, analysis, etc.)
+}
+```
+
+Responses that fail to parse as this schema → orchestration run is set to `blocked`, NOT `completed`.
+
+## Violation Types (Local Agent Plane)
+
+| Type | Trigger |
+|---|---|
+| `local_model_voice_path_attempt` | Any attempt to route a local model into the Gemini Live path or any voice-lockdown file |
+| `unauthorized_domain_access` | Task targets a forbidden domain for the agent's jurisdiction class |
+| `missing_orchestration_run` | Ollama called without a prior `agent_orchestration_runs` insert |
+
+## Model Reference
+
+- Default: `LOCAL_LLM_MODEL=qwen2.5-coder:7b` (~4.5GB RAM, ~8-10 tok/sec on CPU)
+- Large: `LOCAL_LLM_MODEL_LARGE=qwen2.5-coder:14b` (~9GB RAM, ~3-5 tok/sec on CPU)
+- Base URL: `LOCAL_LLM_BASE_URL=http://127.0.0.1:11434`
+- Never hardcode model strings — always read from `process.env.LOCAL_LLM_MODEL`
+
+## RAG Knowledge Context
+
+Knowledge injection uses a 4-step compression pipeline:
+1. Select relevant docs by `taskType`
+2. Extract only rule/constraint lines (MUST, NEVER, FORBIDDEN, REQUIRED)
+3. Concatenate with doc headers
+4. Hard-cap at 3000 tokens — priority: policy rules > registry anchors > reference docs

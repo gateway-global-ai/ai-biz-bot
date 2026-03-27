@@ -21,6 +21,11 @@ import * as path from "path";
 
 const router = Router();
 
+function paramString(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
+
 // Multer: memory storage, 10MB limit, images only
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -185,7 +190,8 @@ router.post("/", requireAuth, async (req, res) => {
 // ── PATCH /api/platform-products/:id ─────────────────────────────────────
 router.patch("/:id", requireAuth, async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = paramString(req.params.id);
+    if (!id) return res.status(400).json({ error: "id required" });
     const {
       name,
       description,
@@ -292,7 +298,8 @@ router.patch("/:id", requireAuth, async (req, res) => {
 // Soft-delete (isActive=false) + archive in Stripe
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = paramString(req.params.id);
+    if (!id) return res.status(400).json({ error: "id required" });
     const [existing] = await db
       .select()
       .from(platformProducts)
@@ -328,7 +335,8 @@ router.delete("/:id", requireAuth, async (req, res) => {
 // ── POST /api/platform-products/:id/image — upload product image ──────────
 router.post("/:id/image", requireAuth, upload.single("image"), async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = paramString(req.params.id);
+    if (!id) return res.status(400).json({ error: "id required" });
     if (!req.file) return res.status(400).json({ error: "No image file provided" });
 
     const [existing] = await db
@@ -382,7 +390,8 @@ router.post("/:id/image", requireAuth, upload.single("image"), async (req: Reque
 // ── POST /api/platform-products/:id/generate-image — AI-generate image ────
 router.post("/:id/generate-image", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = paramString(req.params.id);
+    if (!id) return res.status(400).json({ error: "id required" });
     const { prompt: customPrompt } = req.body as { prompt?: string };
 
     const [existing] = await db

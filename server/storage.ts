@@ -7,14 +7,13 @@ import {
   type InsertCallLog,
   type Agent,
   type InsertAgent,
+  type StructuredControls,
   type Customer,
   type InsertCustomer,
   type SmsConversation,
   type InsertSmsConversation,
   type SmsMessage,
   type InsertSmsMessage,
-  type Task,
-  type InsertTask,
   type AdminUser,
   type InsertAdminUser,
   type OtpCode,
@@ -29,24 +28,10 @@ import {
   type InsertA2pBrand,
   type A2pCampaign,
   type InsertA2pCampaign,
-  type KnowledgeTopic,
-  type InsertKnowledgeTopic,
-  type LessonPlan,
-  type InsertLessonPlan,
-  type LessonSession,
-  type InsertLessonSession,
-  type Organization,
-  type InsertOrganization,
-  type Project,
-  type InsertProject,
-  type ProjectTask,
-  type InsertProjectTask,
   type DemoLead,
   type InsertDemoLead,
   type AffiliateSignup,
   type InsertAffiliateSignup,
-  type BotTemplate,
-  type InsertBotTemplate,
   type SiteConfig,
   type InsertSiteConfig,
   type ChatLog,
@@ -55,19 +40,12 @@ import {
   type InsertCustomerAccount,
   type CustomerSession,
   type InsertCustomerSession,
-  type VlmProspect,
-  type InsertVlmProspect,
-  type VlmCampaign,
-  type InsertVlmCampaign,
-  type VlmCallAttempt,
-  type InsertVlmCallAttempt,
   type Inquiry,
   type InsertInquiry,
   type PlatformBusinessMap,
   type VoiceUsageLog,
   type InsertVoiceUsageLog,
   voiceUsageLogs,
-  botTemplates,
   telephonyConfigs,
   callLogs,
   users,
@@ -75,7 +53,6 @@ import {
   customers,
   smsConversations,
   smsMessages,
-  tasks,
   adminUsers,
   otpCodes,
   authSessions,
@@ -83,21 +60,12 @@ import {
   smsDeliveryStatus,
   a2pBrands,
   a2pCampaigns,
-  knowledgeTopics,
-  lessonPlans,
-  lessonSessions,
-  organizations,
-  projects,
-  projectTasks,
   demoLeads,
   affiliateSignups,
   siteConfigs,
   chatLogs,
   customerAccounts,
   customerSessions,
-  vlmProspects,
-  vlmCampaigns,
-  vlmCallAttempts,
   ogSettings,
   inquiries,
   platformBusinessMap,
@@ -122,8 +90,11 @@ import {
   smsLogs,
   smsOptOuts,
   knowledgeArtifacts,
+  knowledgeCertificationOverrides,
+  secureVaultRefs,
   artifactSessionActivations,
   type KnowledgeArtifact,
+  type KnowledgeCertificationOverride,
   type ArtifactSessionActivation,
   type InsertKnowledgeArtifact,
   qrRoutes,
@@ -142,7 +113,8 @@ import {
 } from "@shared/schema";
 import type { Reseller } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, asc, ilike, or, lte, isNull, isNotNull, and, gt, inArray, sql } from "drizzle-orm";
+import { eq, desc, asc, ilike, or, isNull, isNotNull, and, gt, inArray, sql, type InferInsertModel } from "drizzle-orm";
+import { invalidateSiteRuntimeCache } from "./services/siteRuntimeResolver";
 import {
   redactSensitiveMetadata,
   redactSensitiveText,
@@ -195,6 +167,13 @@ const siteConfigsColumns = {
   qrCodeUrl: siteConfigs.qrCodeUrl,
   shareCount: siteConfigs.shareCount,
   socialSharing: siteConfigs.socialSharing,
+  /** Required for public /agent/:slug — drives claim banner + platform marketing flags in ConciergePanel */
+  workspaceState: siteConfigs.workspaceState,
+  claimStatus: siteConfigs.claimStatus,
+  metadata: siteConfigs.metadata,
+  communicationGovernance: siteConfigs.communicationGovernance,
+  platformLicenseSku: siteConfigs.platformLicenseSku,
+  platformLicenseActivatedAt: siteConfigs.platformLicenseActivatedAt,
   createdAt: siteConfigs.createdAt,
   updatedAt: siteConfigs.updatedAt,
 };
@@ -237,13 +216,6 @@ export interface IStorage {
   getMessagesByConversation(conversationId: string, limit?: number): Promise<SmsMessage[]>;
   createMessage(message: InsertSmsMessage): Promise<SmsMessage>;
   
-  // Task operations (MVP)
-  getTask(id: string): Promise<Task | undefined>;
-  getTasksByPhone(phone: string): Promise<Task[]>;
-  getTasksPendingUpdate(): Promise<Task[]>;
-  createTask(task: InsertTask): Promise<Task>;
-  updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined>;
-  
   // Twilio Sub-Accounts operations
   getTwilioSubAccounts(): Promise<TwilioSubAccount[]>;
   getTwilioSubAccount(id: string): Promise<TwilioSubAccount | undefined>;
@@ -270,40 +242,12 @@ export interface IStorage {
   createA2pCampaign(campaign: InsertA2pCampaign): Promise<A2pCampaign>;
   updateA2pCampaign(id: string, updates: Partial<InsertA2pCampaign>): Promise<A2pCampaign | undefined>;
   
-  // Organization operations
-  getOrganizations(): Promise<Organization[]>;
-  getOrganization(id: string): Promise<Organization | undefined>;
-  createOrganization(org: InsertOrganization): Promise<Organization>;
-  updateOrganization(id: string, updates: Partial<InsertOrganization>): Promise<Organization | undefined>;
-  deleteOrganization(id: string): Promise<boolean>;
-  
-  // Project operations
-  getProjects(orgId?: string): Promise<Project[]>;
-  getProject(id: string): Promise<Project | undefined>;
-  createProject(project: InsertProject): Promise<Project>;
-  updateProject(id: string, updates: Partial<InsertProject>): Promise<Project | undefined>;
-  deleteProject(id: string): Promise<boolean>;
-  
-  // Project Task operations
-  getProjectTasks(projectId: string): Promise<ProjectTask[]>;
-  getProjectTask(id: string): Promise<ProjectTask | undefined>;
-  createProjectTask(task: InsertProjectTask): Promise<ProjectTask>;
-  updateProjectTask(id: string, updates: Partial<InsertProjectTask>): Promise<ProjectTask | undefined>;
-  deleteProjectTask(id: string): Promise<boolean>;
-  
   createDemoLead(lead: InsertDemoLead): Promise<DemoLead>;
   getDemoLead(id: string): Promise<DemoLead | undefined>;
   getDemoLeadByToken(token: string): Promise<DemoLead | undefined>;
   getDemoLeadByPhone(phone: string): Promise<DemoLead | undefined>;
   getAllDemoLeads(): Promise<DemoLead[]>;
   updateDemoLead(id: string, updates: Partial<InsertDemoLead>): Promise<DemoLead | undefined>;
-  
-  // Bot Template operations
-  getBotTemplates(): Promise<BotTemplate[]>;
-  getBotTemplate(id: string): Promise<BotTemplate | undefined>;
-  createBotTemplate(template: InsertBotTemplate): Promise<BotTemplate>;
-  updateBotTemplate(id: string, updates: Partial<InsertBotTemplate>): Promise<BotTemplate | undefined>;
-  deleteBotTemplate(id: string): Promise<boolean>;
   
   // Site Config operations
   getSiteConfigs(): Promise<SiteConfig[]>;
@@ -329,6 +273,29 @@ export interface IStorage {
   getKnowledgeArtifactById(id: string): Promise<KnowledgeArtifact | undefined>;
   createKnowledgeArtifact(data: InsertKnowledgeArtifact): Promise<KnowledgeArtifact>;
   deleteKnowledgeArtifact(id: string): Promise<void>;
+  /** Non-expired overrides for gap analysis and tool gates (Phase 5E). */
+  listActiveKnowledgeCertificationOverrides(siteConfigId: string): Promise<KnowledgeCertificationOverride[]>;
+  upsertKnowledgeCertificationOverride(row: {
+    siteConfigId: string;
+    dimensionId: string;
+    overrideScore: number;
+    reasonText: string;
+    createdByAdminUserId: string;
+    expiresAt: Date;
+    reviewRequired?: boolean;
+    auditDetail?: Record<string, unknown>;
+  }): Promise<KnowledgeCertificationOverride>;
+  /** All overrides for a site (admin / Sentinel), newest expiry first. */
+  listKnowledgeCertificationOverridesForSite(siteConfigId: string): Promise<KnowledgeCertificationOverride[]>;
+  /** Zero-LLM vault: idempotent on idempotency_key; same key must target same site. */
+  upsertSecureVaultRef(input: {
+    siteConfigId: string;
+    category: string;
+    opaqueReference: string;
+    idempotencyKey: string;
+    attestedAt: Date;
+    createdByAdminUserId: string;
+  }): Promise<{ id: string; category: string }>;
   activateArtifactForSession(sessionId: string, agentAccessKey: string, siteConfigId?: string): Promise<void>;
   deactivateArtifactForSession(sessionId: string, agentAccessKey: string): Promise<void>;
   getActiveArtifactKeysForSession(sessionId: string): Promise<string[]>;
@@ -356,28 +323,6 @@ export interface IStorage {
   getSiteConfigBySlug(slug: string): Promise<SiteConfig | undefined>;
   searchSiteConfigsWithSlug(query: string, limit?: number): Promise<SiteConfig[]>;
   claimUnlinkedSitesByPhone(phone: string, customerAccountId: string): Promise<number>;
-
-  // VLM Prospect operations
-  getVlmProspects(options?: { industry?: string; city?: string; status?: string; limit?: number }): Promise<VlmProspect[]>;
-  getVlmProspect(id: string): Promise<VlmProspect | undefined>;
-  getVlmProspectByPlaceId(placeId: string): Promise<VlmProspect | undefined>;
-  createVlmProspect(prospect: InsertVlmProspect): Promise<VlmProspect>;
-  createVlmProspects(prospects: InsertVlmProspect[]): Promise<VlmProspect[]>;
-  updateVlmProspect(id: string, updates: Partial<InsertVlmProspect>): Promise<VlmProspect | undefined>;
-  deleteVlmProspect(id: string): Promise<boolean>;
-
-  // VLM Campaign operations
-  getVlmCampaigns(): Promise<VlmCampaign[]>;
-  getVlmCampaign(id: string): Promise<VlmCampaign | undefined>;
-  createVlmCampaign(campaign: InsertVlmCampaign): Promise<VlmCampaign>;
-  updateVlmCampaign(id: string, updates: Partial<InsertVlmCampaign>): Promise<VlmCampaign | undefined>;
-  deleteVlmCampaign(id: string): Promise<boolean>;
-
-  // VLM Call Attempt operations
-  getVlmCallAttempts(options?: { campaignId?: string; prospectId?: string; limit?: number }): Promise<VlmCallAttempt[]>;
-  getVlmCallAttemptByCallSid(callSid: string): Promise<VlmCallAttempt | undefined>;
-  createVlmCallAttempt(attempt: InsertVlmCallAttempt): Promise<VlmCallAttempt>;
-  updateVlmCallAttempt(id: string, updates: Partial<InsertVlmCallAttempt>): Promise<VlmCallAttempt | undefined>;
 
   getOgSettingsByPath(pagePath: string): Promise<any | undefined>;
   getAllOgSettings(): Promise<any[]>;
@@ -550,14 +495,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAgent(agent: InsertAgent): Promise<Agent> {
-    const [created] = await db.insert(agents).values(agent).returning();
+    const structuredControls =
+      agent.structuredControls === undefined || agent.structuredControls === null
+        ? agent.structuredControls
+        : (agent.structuredControls as StructuredControls);
+    const [created] = await db
+      .insert(agents)
+      .values({ ...agent, structuredControls })
+      .returning();
     return created;
   }
 
   async updateAgent(id: string, updates: Partial<InsertAgent>): Promise<Agent | undefined> {
+    const { structuredControls: sc, ...rest } = updates;
+    const patch: Partial<InsertAgent> & { updatedAt: Date } = {
+      ...rest,
+      updatedAt: new Date(),
+    };
+    if (sc !== undefined) {
+      patch.structuredControls =
+        sc === null ? null : (sc as StructuredControls);
+    }
     const [updated] = await db
       .update(agents)
-      .set({ ...updates, updatedAt: new Date() })
+      .set(patch as Partial<InferInsertModel<typeof agents>>)
       .where(eq(agents.id, id))
       .returning();
     return updated;
@@ -655,46 +616,6 @@ export class DatabaseStorage implements IStorage {
   async createMessage(message: InsertSmsMessage): Promise<SmsMessage> {
     const [created] = await db.insert(smsMessages).values(message).returning();
     return created;
-  }
-
-  // Task operations (MVP)
-  async getTask(id: string): Promise<Task | undefined> {
-    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
-    return task;
-  }
-
-  async getTasksByPhone(phone: string): Promise<Task[]> {
-    return db.select().from(tasks)
-      .where(eq(tasks.userPhone, phone))
-      .orderBy(desc(tasks.createdAt));
-  }
-
-  async getTasksPendingUpdate(): Promise<Task[]> {
-    const now = new Date();
-    return db.select().from(tasks)
-      .where(
-        and(
-          lte(tasks.nextUpdateAt, now),
-          or(
-            eq(tasks.status, 'started'),
-            eq(tasks.status, 'in_progress')
-          )
-        )
-      );
-  }
-
-  async createTask(task: InsertTask): Promise<Task> {
-    const [created] = await db.insert(tasks).values(task).returning();
-    return created;
-  }
-
-  async updateTask(id: string, updates: Partial<InsertTask>): Promise<Task | undefined> {
-    const [updated] = await db
-      .update(tasks)
-      .set(updates)
-      .where(eq(tasks.id, id))
-      .returning();
-    return updated;
   }
 
   // Admin User operations
@@ -956,189 +877,6 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
-  // Knowledge Topics methods
-  async getKnowledgeTopicByNormalized(normalizedTopic: string): Promise<KnowledgeTopic | undefined> {
-    const [topic] = await db.select().from(knowledgeTopics)
-      .where(eq(knowledgeTopics.normalizedTopic, normalizedTopic));
-    return topic;
-  }
-
-  async getKnowledgeTopicById(id: string): Promise<KnowledgeTopic | undefined> {
-    const [topic] = await db.select().from(knowledgeTopics)
-      .where(eq(knowledgeTopics.id, id));
-    return topic;
-  }
-
-  async createKnowledgeTopic(topic: InsertKnowledgeTopic): Promise<KnowledgeTopic> {
-    const [created] = await db.insert(knowledgeTopics).values(topic).returning();
-    return created;
-  }
-
-  async incrementTopicRequestCount(id: string): Promise<void> {
-    const topic = await this.getKnowledgeTopicById(id);
-    if (topic) {
-      await db.update(knowledgeTopics)
-        .set({ requestCount: (topic.requestCount || 0) + 1, updatedAt: new Date() })
-        .where(eq(knowledgeTopics.id, id));
-    }
-  }
-
-  async updateTopicBestLesson(id: string, lessonId: string): Promise<void> {
-    await db.update(knowledgeTopics)
-      .set({ bestLessonId: lessonId, updatedAt: new Date() })
-      .where(eq(knowledgeTopics.id, id));
-  }
-
-  async updateTopicVersion(id: string, version: number, lessonId: string): Promise<void> {
-    await db.update(knowledgeTopics)
-      .set({ currentVersion: version, bestLessonId: lessonId, updatedAt: new Date() })
-      .where(eq(knowledgeTopics.id, id));
-  }
-
-  async getPopularKnowledgeTopics(limit: number = 10): Promise<KnowledgeTopic[]> {
-    return await db.select().from(knowledgeTopics)
-      .orderBy(desc(knowledgeTopics.requestCount))
-      .limit(limit);
-  }
-
-  // Lesson Plans methods
-  async getLessonPlanById(id: string): Promise<LessonPlan | undefined> {
-    const [lesson] = await db.select().from(lessonPlans)
-      .where(eq(lessonPlans.id, id));
-    return lesson;
-  }
-
-  async createLessonPlan(lesson: InsertLessonPlan): Promise<LessonPlan> {
-    const [created] = await db.insert(lessonPlans).values(lesson).returning();
-    return created;
-  }
-
-  async incrementLessonCompletionCount(id: string): Promise<void> {
-    const lesson = await this.getLessonPlanById(id);
-    if (lesson) {
-      await db.update(lessonPlans)
-        .set({ completionCount: (lesson.completionCount || 0) + 1, updatedAt: new Date() })
-        .where(eq(lessonPlans.id, id));
-    }
-  }
-
-  async updateLessonQuizStats(id: string, newScore: number): Promise<void> {
-    const lesson = await this.getLessonPlanById(id);
-    if (lesson) {
-      const totalAttempts = (lesson.totalQuizAttempts || 0) + 1;
-      const currentAvg = lesson.avgQuizScore || 0;
-      const newAvg = Math.round(((currentAvg * (totalAttempts - 1)) + newScore) / totalAttempts);
-      
-      await db.update(lessonPlans)
-        .set({ avgQuizScore: newAvg, totalQuizAttempts: totalAttempts, updatedAt: new Date() })
-        .where(eq(lessonPlans.id, id));
-    }
-  }
-
-  // Lesson Sessions methods
-  async createLessonSession(session: InsertLessonSession): Promise<LessonSession> {
-    const [created] = await db.insert(lessonSessions).values(session).returning();
-    return created;
-  }
-
-  async getLessonSessionsByLessonId(lessonId: string): Promise<LessonSession[]> {
-    return await db.select().from(lessonSessions)
-      .where(eq(lessonSessions.lessonPlanId, lessonId))
-      .orderBy(desc(lessonSessions.startedAt));
-  }
-
-  // Organization operations
-  async getOrganizations(): Promise<Organization[]> {
-    return db.select().from(organizations).orderBy(desc(organizations.createdAt));
-  }
-
-  async getOrganization(id: string): Promise<Organization | undefined> {
-    const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
-    return org;
-  }
-
-  async createOrganization(org: InsertOrganization): Promise<Organization> {
-    const [created] = await db.insert(organizations).values(org).returning();
-    return created;
-  }
-
-  async updateOrganization(id: string, updates: Partial<InsertOrganization>): Promise<Organization | undefined> {
-    const [updated] = await db.update(organizations)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(organizations.id, id))
-      .returning();
-    return updated;
-  }
-
-  async deleteOrganization(id: string): Promise<boolean> {
-    await db.delete(organizations).where(eq(organizations.id, id));
-    return true;
-  }
-
-  // Project operations
-  async getProjects(orgId?: string): Promise<Project[]> {
-    if (orgId) {
-      return db.select().from(projects)
-        .where(eq(projects.orgId, orgId))
-        .orderBy(desc(projects.createdAt));
-    }
-    return db.select().from(projects).orderBy(desc(projects.createdAt));
-  }
-
-  async getProject(id: string): Promise<Project | undefined> {
-    const [project] = await db.select().from(projects).where(eq(projects.id, id));
-    return project;
-  }
-
-  async createProject(project: InsertProject): Promise<Project> {
-    const [created] = await db.insert(projects).values(project).returning();
-    return created;
-  }
-
-  async updateProject(id: string, updates: Partial<InsertProject>): Promise<Project | undefined> {
-    const [updated] = await db.update(projects)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(projects.id, id))
-      .returning();
-    return updated;
-  }
-
-  async deleteProject(id: string): Promise<boolean> {
-    await db.delete(projectTasks).where(eq(projectTasks.projectId, id));
-    await db.delete(projects).where(eq(projects.id, id));
-    return true;
-  }
-
-  // Project Task operations
-  async getProjectTasks(projectId: string): Promise<ProjectTask[]> {
-    return db.select().from(projectTasks)
-      .where(eq(projectTasks.projectId, projectId))
-      .orderBy(desc(projectTasks.createdAt));
-  }
-
-  async getProjectTask(id: string): Promise<ProjectTask | undefined> {
-    const [task] = await db.select().from(projectTasks).where(eq(projectTasks.id, id));
-    return task;
-  }
-
-  async createProjectTask(task: InsertProjectTask): Promise<ProjectTask> {
-    const [created] = await db.insert(projectTasks).values(task).returning();
-    return created;
-  }
-
-  async updateProjectTask(id: string, updates: Partial<InsertProjectTask>): Promise<ProjectTask | undefined> {
-    const [updated] = await db.update(projectTasks)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(projectTasks.id, id))
-      .returning();
-    return updated;
-  }
-
-  async deleteProjectTask(id: string): Promise<boolean> {
-    await db.delete(projectTasks).where(eq(projectTasks.id, id));
-    return true;
-  }
-
   async createDemoLead(lead: InsertDemoLead): Promise<DemoLead> {
     const [created] = await db.insert(demoLeads).values(lead).returning();
     return created;
@@ -1174,33 +912,6 @@ export class DatabaseStorage implements IStorage {
   async createAffiliateSignup(signup: InsertAffiliateSignup): Promise<AffiliateSignup> {
     const [created] = await db.insert(affiliateSignups).values(signup).returning();
     return created;
-  }
-
-  async getBotTemplates(): Promise<BotTemplate[]> {
-    return db.select().from(botTemplates).orderBy(desc(botTemplates.createdAt));
-  }
-
-  async getBotTemplate(id: string): Promise<BotTemplate | undefined> {
-    const [template] = await db.select().from(botTemplates).where(eq(botTemplates.id, id));
-    return template;
-  }
-
-  async createBotTemplate(template: InsertBotTemplate): Promise<BotTemplate> {
-    const [created] = await db.insert(botTemplates).values(template).returning();
-    return created;
-  }
-
-  async updateBotTemplate(id: string, updates: Partial<InsertBotTemplate>): Promise<BotTemplate | undefined> {
-    const [updated] = await db.update(botTemplates)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(botTemplates.id, id))
-      .returning();
-    return updated;
-  }
-
-  async deleteBotTemplate(id: string): Promise<boolean> {
-    await db.delete(botTemplates).where(eq(botTemplates.id, id));
-    return true;
   }
 
   async getSiteConfigs(): Promise<SiteConfig[]> {
@@ -1253,15 +964,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSiteConfig(config: InsertSiteConfig): Promise<SiteConfig> {
-    const [created] = await db.insert(siteConfigs).values(config).returning();
+    const [created] = await db
+      .insert(siteConfigs)
+      .values(config as InferInsertModel<typeof siteConfigs>)
+      .returning();
     return created;
   }
 
   async updateSiteConfig(id: string, updates: Partial<InsertSiteConfig>): Promise<SiteConfig | undefined> {
     const [updated] = await db.update(siteConfigs)
-      .set({ ...updates, updatedAt: new Date() })
+      .set({ ...updates, updatedAt: new Date() } as Partial<InferInsertModel<typeof siteConfigs>>)
       .where(eq(siteConfigs.id, id))
       .returning();
+    // Invalidate the in-memory SiteRuntimeContext cache so the next request
+    // reads the authoritative updated values, not stale entitlements.
+    invalidateSiteRuntimeCache(id);
     return updated;
   }
 
@@ -1441,6 +1158,102 @@ export class DatabaseStorage implements IStorage {
     await db.delete(knowledgeArtifacts).where(eq(knowledgeArtifacts.id, id));
   }
 
+  async listActiveKnowledgeCertificationOverrides(siteConfigId: string): Promise<KnowledgeCertificationOverride[]> {
+    return db
+      .select()
+      .from(knowledgeCertificationOverrides)
+      .where(
+        and(
+          eq(knowledgeCertificationOverrides.siteConfigId, siteConfigId),
+          gt(knowledgeCertificationOverrides.expiresAt, new Date()),
+        ),
+      );
+  }
+
+  async upsertKnowledgeCertificationOverride(row: {
+    siteConfigId: string;
+    dimensionId: string;
+    overrideScore: number;
+    reasonText: string;
+    createdByAdminUserId: string;
+    expiresAt: Date;
+    reviewRequired?: boolean;
+    auditDetail?: Record<string, unknown>;
+  }): Promise<KnowledgeCertificationOverride> {
+    const reviewRequired = row.reviewRequired ?? false;
+    const auditDetail = row.auditDetail ?? {};
+    const [out] = await db
+      .insert(knowledgeCertificationOverrides)
+      .values({
+        siteConfigId: row.siteConfigId,
+        dimensionId: row.dimensionId,
+        overrideScore: row.overrideScore,
+        reasonText: row.reasonText,
+        createdByAdminUserId: row.createdByAdminUserId,
+        expiresAt: row.expiresAt,
+        reviewRequired,
+        auditDetail,
+      })
+      .onConflictDoUpdate({
+        target: [knowledgeCertificationOverrides.siteConfigId, knowledgeCertificationOverrides.dimensionId],
+        set: {
+          overrideScore: row.overrideScore,
+          reasonText: row.reasonText,
+          createdByAdminUserId: row.createdByAdminUserId,
+          expiresAt: row.expiresAt,
+          reviewRequired,
+          auditDetail,
+          createdAt: new Date(),
+        },
+      })
+      .returning();
+    return out;
+  }
+
+  async listKnowledgeCertificationOverridesForSite(siteConfigId: string): Promise<KnowledgeCertificationOverride[]> {
+    return db
+      .select()
+      .from(knowledgeCertificationOverrides)
+      .where(eq(knowledgeCertificationOverrides.siteConfigId, siteConfigId))
+      .orderBy(desc(knowledgeCertificationOverrides.expiresAt));
+  }
+
+  async upsertSecureVaultRef(input: {
+    siteConfigId: string;
+    category: string;
+    opaqueReference: string;
+    idempotencyKey: string;
+    attestedAt: Date;
+    createdByAdminUserId: string;
+  }): Promise<{ id: string; category: string }> {
+    const [existing] = await db
+      .select()
+      .from(secureVaultRefs)
+      .where(eq(secureVaultRefs.idempotencyKey, input.idempotencyKey))
+      .limit(1);
+    if (existing) {
+      if (existing.siteConfigId !== input.siteConfigId) {
+        throw new Error("IDEMPOTENCY_KEY_CONFLICT");
+      }
+      return { id: existing.id, category: existing.category };
+    }
+    const [row] = await db
+      .insert(secureVaultRefs)
+      .values({
+        siteConfigId: input.siteConfigId,
+        category: input.category,
+        opaqueReference: input.opaqueReference,
+        idempotencyKey: input.idempotencyKey,
+        attestedAt: input.attestedAt,
+        createdByAdminUserId: input.createdByAdminUserId,
+      })
+      .returning({ id: secureVaultRefs.id, category: secureVaultRefs.category });
+    if (!row) {
+      throw new Error("SECURE_VAULT_INSERT_FAILED");
+    }
+    return row;
+  }
+
   async activateArtifactForSession(sessionId: string, agentAccessKey: string, siteConfigId?: string): Promise<void> {
     await db.insert(artifactSessionActivations).values({
       sessionId,
@@ -1564,99 +1377,6 @@ export class DatabaseStorage implements IStorage {
       }
     }
     return claimed;
-  }
-
-  async getVlmProspects(options?: { industry?: string; city?: string; status?: string; limit?: number }): Promise<VlmProspect[]> {
-    const conditions = [];
-    if (options?.industry) conditions.push(eq(vlmProspects.industry, options.industry));
-    if (options?.city) conditions.push(ilike(vlmProspects.city, `%${options.city}%`));
-    if (options?.status) conditions.push(eq(vlmProspects.status, options.status));
-    const query = db.select().from(vlmProspects);
-    if (conditions.length > 0) {
-      return (query as any).where(and(...conditions)).orderBy(desc(vlmProspects.qualityScore)).limit(options?.limit || 500);
-    }
-    return query.orderBy(desc(vlmProspects.qualityScore)).limit(options?.limit || 500);
-  }
-
-  async getVlmProspect(id: string): Promise<VlmProspect | undefined> {
-    const [prospect] = await db.select().from(vlmProspects).where(eq(vlmProspects.id, id));
-    return prospect;
-  }
-
-  async getVlmProspectByPlaceId(placeId: string): Promise<VlmProspect | undefined> {
-    const [prospect] = await db.select().from(vlmProspects).where(eq(vlmProspects.googlePlaceId, placeId));
-    return prospect;
-  }
-
-  async createVlmProspect(prospect: InsertVlmProspect): Promise<VlmProspect> {
-    const [created] = await db.insert(vlmProspects).values(prospect).returning();
-    return created;
-  }
-
-  async createVlmProspects(prospects: InsertVlmProspect[]): Promise<VlmProspect[]> {
-    if (prospects.length === 0) return [];
-    const created = await db.insert(vlmProspects).values(prospects).onConflictDoNothing({ target: vlmProspects.googlePlaceId }).returning();
-    return created;
-  }
-
-  async updateVlmProspect(id: string, updates: Partial<InsertVlmProspect>): Promise<VlmProspect | undefined> {
-    const [updated] = await db.update(vlmProspects).set(updates).where(eq(vlmProspects.id, id)).returning();
-    return updated;
-  }
-
-  async deleteVlmProspect(id: string): Promise<boolean> {
-    await db.delete(vlmProspects).where(eq(vlmProspects.id, id));
-    return true;
-  }
-
-  async getVlmCampaigns(): Promise<VlmCampaign[]> {
-    return db.select().from(vlmCampaigns).orderBy(desc(vlmCampaigns.createdAt));
-  }
-
-  async getVlmCampaign(id: string): Promise<VlmCampaign | undefined> {
-    const [campaign] = await db.select().from(vlmCampaigns).where(eq(vlmCampaigns.id, id));
-    return campaign;
-  }
-
-  async createVlmCampaign(campaign: InsertVlmCampaign): Promise<VlmCampaign> {
-    const [created] = await db.insert(vlmCampaigns).values(campaign).returning();
-    return created;
-  }
-
-  async updateVlmCampaign(id: string, updates: Partial<InsertVlmCampaign>): Promise<VlmCampaign | undefined> {
-    const [updated] = await db.update(vlmCampaigns).set(updates).where(eq(vlmCampaigns.id, id)).returning();
-    return updated;
-  }
-
-  async deleteVlmCampaign(id: string): Promise<boolean> {
-    await db.delete(vlmCampaigns).where(eq(vlmCampaigns.id, id));
-    return true;
-  }
-
-  async getVlmCallAttempts(options?: { campaignId?: string; prospectId?: string; limit?: number }): Promise<VlmCallAttempt[]> {
-    const conditions = [];
-    if (options?.campaignId) conditions.push(eq(vlmCallAttempts.campaignId, options.campaignId));
-    if (options?.prospectId) conditions.push(eq(vlmCallAttempts.prospectId, options.prospectId));
-    const query = db.select().from(vlmCallAttempts);
-    if (conditions.length > 0) {
-      return (query as any).where(and(...conditions)).orderBy(desc(vlmCallAttempts.createdAt)).limit(options?.limit || 200);
-    }
-    return query.orderBy(desc(vlmCallAttempts.createdAt)).limit(options?.limit || 200);
-  }
-
-  async getVlmCallAttemptByCallSid(callSid: string): Promise<VlmCallAttempt | undefined> {
-    const [attempt] = await db.select().from(vlmCallAttempts).where(eq(vlmCallAttempts.callSid, callSid));
-    return attempt;
-  }
-
-  async createVlmCallAttempt(attempt: InsertVlmCallAttempt): Promise<VlmCallAttempt> {
-    const [created] = await db.insert(vlmCallAttempts).values(attempt).returning();
-    return created;
-  }
-
-  async updateVlmCallAttempt(id: string, updates: Partial<InsertVlmCallAttempt>): Promise<VlmCallAttempt | undefined> {
-    const [updated] = await db.update(vlmCallAttempts).set(updates).where(eq(vlmCallAttempts.id, id)).returning();
-    return updated;
   }
 
   async getOgSettingsByPath(pagePath: string): Promise<any | undefined> {
@@ -1842,13 +1562,14 @@ export class DatabaseStorage implements IStorage {
   // QR Routes (shadow telecom); optional search filters by label, destination, variable (URL/id); siteConfigId filters to that site
   async getQrRoutes(page = 1, limit = 50, search?: string, siteConfigId?: string | null): Promise<{ routes: QrRoute[]; total: number }> {
     const offset = (page - 1) * limit;
-    const pattern = search?.trim() ? `%${search.trim().replace(/%/g, "\\%")}%` : null;
-    const searchCond = pattern
+    const trimmedSearch = search?.trim();
+    const pattern = trimmedSearch ? `%${trimmedSearch.replace(/%/g, "\\%")}%` : null;
+    const searchCond = pattern && trimmedSearch
       ? or(
           ilike(qrRoutes.label, pattern),
           ilike(qrRoutes.destination, pattern),
           ilike(sql`${qrRoutes.variable}::text`, pattern),
-          sql`${qrRoutes.id}::text = ${search.trim()}`
+          sql`${qrRoutes.id}::text = ${trimmedSearch}`
         )
       : undefined;
     const siteCond = siteConfigId ? eq(qrRoutes.siteConfigId, siteConfigId) : undefined;

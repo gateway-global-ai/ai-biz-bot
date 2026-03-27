@@ -1,6 +1,162 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, ChevronDown, ChevronUp, Clock, DollarSign, Phone, Calendar, FileText, List } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Clock, DollarSign, Phone, Calendar, FileText, List, Building2, Wifi, WifiOff, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
+import type {
+  CanvasViewPayload,
+  PhoneProvisioningPayload,
+  AccountOverviewPayload,
+  AgentBuilderPayload,
+} from '@shared/canvasViewContract';
+
+// ── Skill-driven view renderers ───────────────────────────────────────────────
+
+function PhoneProvisioningView({
+  payload,
+  onAction,
+  onCancel,
+}: {
+  payload: PhoneProvisioningPayload;
+  onAction?: (action: string, data?: Record<string, unknown>) => void;
+  onCancel?: () => void;
+}) {
+  const [areaCode, setAreaCode] = useState(payload.suggestedAreaCode ?? '');
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-sui bg-slate-900/40 border border-indigo-500/20 backdrop-blur-xl shadow-2xl overflow-hidden"
+    >
+      <div className="px-4 pt-4 pb-3 border-b border-slate-700/50 flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-white font-semibold text-sm">Set Up Your Phone Number</h3>
+          <p className="text-slate-400 text-xs mt-0.5">Search available numbers for your area</p>
+        </div>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/10">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      <div className="p-4 space-y-3">
+        {!payload.voicePlanActive && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+            <AlertCircle size={14} className="text-amber-400 shrink-0" />
+            <p className="text-amber-300 text-xs">Voice plan required ($50/mo). Activate to provision a number.</p>
+          </div>
+        )}
+        {payload.currentNumber && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+            <CheckCircle size={14} className="text-emerald-400 shrink-0" />
+            <p className="text-emerald-300 text-xs font-mono">{payload.currentNumber} — active</p>
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={areaCode}
+            onChange={e => setAreaCode(e.target.value.replace(/\D/g, '').slice(0, 3))}
+            placeholder="Area code (e.g. 702)"
+            className="flex-1 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm placeholder-slate-500 focus:border-indigo-500/60 focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => onAction?.('search_numbers', { areaCode, siteConfigId: payload.siteConfigId })}
+            disabled={areaCode.length !== 3 || !payload.voicePlanActive}
+            className="px-4 py-2 rounded-xl bg-indigo-500 text-white text-sm font-medium hover:bg-indigo-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Search
+          </button>
+        </div>
+        {payload.availableNumbers && payload.availableNumbers.length > 0 && (
+          <div className="space-y-1.5 max-h-48 overflow-y-auto">
+            {payload.availableNumbers.map(n => (
+              <button
+                key={n.phoneNumber}
+                type="button"
+                onClick={() => onAction?.('provision_number', { phoneNumber: n.phoneNumber, siteConfigId: payload.siteConfigId })}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60 hover:border-indigo-500/40 text-left transition-colors"
+              >
+                <span className="text-white font-mono text-sm">{n.friendlyName}</span>
+                <span className="text-slate-400 text-xs">{n.locality}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function AccountOverviewView({
+  payload,
+  onCancel,
+}: {
+  payload: AccountOverviewPayload;
+  onCancel?: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-sui bg-slate-900/40 border border-indigo-500/20 backdrop-blur-xl shadow-2xl overflow-hidden"
+    >
+      <div className="px-4 pt-4 pb-3 border-b border-slate-700/50 flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-white font-semibold text-sm">Your Account</h3>
+          <p className="text-slate-400 text-xs mt-0.5">Plan: <span className="text-indigo-300 font-medium">{payload.plan}</span></p>
+        </div>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/10">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      <div className="p-4 space-y-2">
+        {payload.businesses.length === 0 && (
+          <p className="text-slate-400 text-sm text-center py-4">No businesses linked yet.</p>
+        )}
+        {payload.businesses.map(biz => (
+          <div key={biz.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60">
+            <Building2 size={14} className="text-indigo-400 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-white text-sm font-medium truncate">{biz.name}</p>
+              {biz.businessAddress && <p className="text-slate-400 text-xs truncate">{biz.businessAddress}</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+// ── Typed canvas dispatcher ───────────────────────────────────────────────────
+// Renders the correct view based on viewId, falls through to legacy renderer.
+
+interface TypedCanvasProps {
+  payload: CanvasViewPayload;
+  onTriggerSpeech?: (text: string) => void;
+  onContextUpdate?: (context: string) => void;
+  onAction?: (action: string, data?: Record<string, unknown>) => void;
+  onCancel?: () => void;
+}
+
+export const TypedCanvasView: React.FC<TypedCanvasProps> = ({ payload, onTriggerSpeech, onContextUpdate, onAction, onCancel }) => {
+  if (payload.viewId === 'phone_provisioning_form') {
+    return <PhoneProvisioningView payload={payload as PhoneProvisioningPayload} onAction={onAction} onCancel={onCancel} />;
+  }
+  if (payload.viewId === 'account_overview') {
+    return <AccountOverviewView payload={payload as AccountOverviewPayload} onCancel={onCancel} />;
+  }
+  // Fall through to legacy SharedCanvasPanel for service_menu, schedule, etc.
+  return (
+    <SharedCanvasPanel
+      metadata={payload as any}
+      onTriggerSpeech={onTriggerSpeech}
+      onContextUpdate={onContextUpdate}
+      onCancel={onCancel}
+    />
+  );
+};
 
 interface CanvasItem {
   label: string;

@@ -1,37 +1,78 @@
 /**
- * Me Profile — sovereign-styled placeholder.
- * Matches chat: bg-slate-950, glass cards, indigo accents, rounded-sui.
+ * Me Profile — admin/control-plane account surface (MUI via @/ui-core).
+ * Clear Voice AI branding remains on AdminShell sidebar; this page uses sovereign admin theme only.
  */
-import { motion } from "framer-motion";
+import { useState } from "react";
 import { User } from "lucide-react";
+import { BRAND } from "@/config/brand";
+import {
+  SovereignThemeProvider,
+  SovereignPageShell,
+  SovereignSectionHeader,
+  SovereignCard,
+  SovereignAlert,
+  SovereignButton,
+  SovereignModal,
+  SovereignFormField,
+  SovereignStack,
+  SovereignTypography,
+} from "@/ui-core";
 
 export function MeProfile() {
-  return (
-    <div className="p-6 space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-        className="flex items-center gap-3"
-      >
-        <div className="p-2 rounded-sui bg-slate-900/40 border border-indigo-500/20">
-          <User className="w-6 h-6 text-indigo-400" />
-        </div>
-        <div>
-          <h1 className="text-xl font-bold text-white">Profile</h1>
-          <p className="text-slate-400 text-sm">Your account and preferences.</p>
-        </div>
-      </motion.div>
+  const [infoOpen, setInfoOpen] = useState(false);
 
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: "easeOut", delay: 0.05 }}
-        whileHover={{ scale: 1.02, y: -2 }}
-        className="p-6 rounded-sui bg-slate-900/40 border border-indigo-500/20 backdrop-blur-xl shadow-2xl"
-      >
-        <p className="text-slate-400">Profile and security settings will be wired here. Same sovereign styling as chat.</p>
-      </motion.div>
-    </div>
+  return (
+    <SovereignThemeProvider>
+      <SovereignPageShell>
+        <SovereignSectionHeader
+          title="Profile"
+          subtitle="Your account and preferences."
+          icon={<User size={24} color={BRAND.blueLight} aria-hidden />}
+          action={
+            <SovereignButton sovereignVariant="outlined" onClick={() => setInfoOpen(true)}>
+              About this screen
+            </SovereignButton>
+          }
+        />
+
+        <SovereignStack spacing={3}>
+          <SovereignAlert severity="info">
+            Operational profile controls will connect to session and security APIs in a later slice.
+            This route validates the ui-core pattern only.
+          </SovereignAlert>
+
+          <SovereignCard title="Account">
+            <SovereignFormField
+              label="Display name"
+              placeholder="Connected when profile API is wired"
+              disabled
+              helperText="Read-only placeholder — no PII stored client-side."
+            />
+            <SovereignFormField
+              label="Email"
+              type="email"
+              placeholder="you@company.com"
+              disabled
+              sx={{ mt: 2 }}
+            />
+          </SovereignCard>
+        </SovereignStack>
+
+        <SovereignModal
+          open={infoOpen}
+          onClose={() => setInfoOpen(false)}
+          title="Profile (control plane)"
+          primaryAction={{ label: "Close", onClick: () => setInfoOpen(false) }}
+        >
+          <SovereignTypography variant="body2" color="text.secondary">
+            Built with the Sovereign UI layer: MUI runs only inside{" "}
+            <SovereignTypography component="span" variant="body2" fontFamily="monospace" fontSize="0.85em">
+              client/src/ui-core
+            </SovereignTypography>
+            . Sidebar logo and admin chrome are unchanged.
+          </SovereignTypography>
+        </SovereignModal>
+      </SovereignPageShell>
+    </SovereignThemeProvider>
   );
 }

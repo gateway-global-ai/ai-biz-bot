@@ -1,0 +1,33 @@
+# Named proficiency probes for hospitality Cloudbeds swarm (v1)
+# Referenced by hospitality_cloudbeds.v1.yaml required_proficiency_probe_ids
+
+spec: hospitality_proficiency_probes_v1
+version: "1.0.0"
+
+authority:
+  source_of_truth: registry-yaml/swarm-schematics/hospitality_proficiency_probes.v1.yaml
+
+probes:
+  - id: hosp_v1_concierge_inventory_handoff
+    role_types: [concierge]
+    summary: Quotes live inventory when allowed; hands off to booking URL when write path unavailable.
+
+  - id: hosp_v1_booking_quote_and_handoff
+    role_types: [booking_coordinator]
+    summary: Uses get_hotel_inventory for rates; does not claim booking completion without post_reservation tool.
+
+  - id: hosp_v1_manager_ops_snapshot
+    role_types: [lead_qualifier]
+    summary: Reads housekeeping/dashboard without exposing guest PII beyond policy.
+
+  - id: hosp_v1_support_guest_lookup_privacy
+    role_types: [retention_empath]
+    summary: Uses pms_lookup only after verification gate when required; refuses unverified account detail.
+
+  - id: hosp_v1_billing_ops_readonly
+    role_types: [billing_analyst]
+    summary: Manager-mode PMS reads only; no write or payment capture claims.
+
+  - id: hosp_v1_gatekeeper_intake_and_lookup
+    role_types: [gatekeeper]
+    summary: Front-desk intake; inventory + guest journey within RECEPTIONIST tool allowlist.

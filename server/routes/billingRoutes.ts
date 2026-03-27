@@ -13,6 +13,7 @@ import {
 } from "@shared/schema";
 import { db } from "../db";
 import { getPricingConfig, getEffectiveRate } from "../utils/pricing";
+import { handleClaimCheckoutCompleted } from "./claimRoutes";
 // All Stripe calls use dynamic imports: await import('../stripeClient')
 
 const router = Router();
@@ -144,7 +145,7 @@ const router = Router();
   // Create a Stripe Checkout Session for a plan upgrade (per-business)
   router.post("/api/subscriptions/create-checkout-session", async (req, res) => {
     try {
-      const { getStripeClient, getStripePublishableKey, STRIPE_PRICE_IDS } = await import('./stripeClient');
+      const { getStripeClient, getStripePublishableKey, STRIPE_PRICE_IDS } = await import("../stripeClient");
       const stripe = getStripeClient();
 
       // Support Bearer token auth (primary) or legacy session (fallback)
@@ -196,7 +197,7 @@ const router = Router();
   // Stripe webhook — subscription plan upgrades
   router.post("/api/stripe/webhook/subscriptions", async (req, res) => {
     try {
-      const { getStripeClient, getStripeWebhookSecret } = await import('./stripeClient');
+      const { getStripeClient, getStripeWebhookSecret } = await import("../stripeClient");
       const stripe = getStripeClient();
       const sig = req.headers['stripe-signature'] as string;
       const webhookSecret = getStripeWebhookSecret();
@@ -230,16 +231,16 @@ const router = Router();
           const site = await storage.getSiteConfigById(siteId);
           if (site) {
             const minutes = meta.packageType === 'pro' ? 1200 : 500;
-            const current = site.minuteBalance ?? 0;
-            await storage.updateSiteConfig(siteId, { minuteBalance: current + minutes, lastNudgeSentAt: null } as any);
+            const current = site.voicePhoneAiMinutes ?? 0;
+            await storage.updateSiteConfig(siteId, { voicePhoneAiMinutes: current + minutes, lastNudgeSentAt: null });
             try {
-              const { processCommission } = await import('./services/commission');
+              const { processCommission } = await import("../services/commission");
               await processCommission(session, siteId);
             } catch (e: any) {
               console.error('[Stripe] ENERGY_REFILL processCommission failed (non-fatal):', e?.message);
             }
             try {
-              const { broadcastLiveEvent } = await import('./services/eventBridge');
+              const { broadcastLiveEvent } = await import("../services/eventBridge");
               broadcastLiveEvent(siteId, { type: 'ENERGY_REFILL_SUCCESS', data: { minutes } });
             } catch (e: any) {
               console.error('[Stripe] ENERGY_REFILL broadcast failed (non-fatal):', e?.message);
@@ -252,7 +253,7 @@ const router = Router();
 
           // Post-payment onboarding email (non-fatal — never blocks the webhook response)
           try {
-            const { sendPlatformEmail } = await import('./services/emailService');
+            const { sendPlatformEmail } = await import("../services/emailService");
             const siteConfig = await storage.getSiteConfig(siteConfigId);
             const platformId = await storage.getOrCreatePlatformId(siteConfigId);
 
@@ -310,7 +311,7 @@ const router = Router();
 
   router.get("/api/billing/publishable-key", async (_req, res) => {
     try {
-      const { getStripePublishableKey } = await import('./stripeClient');
+      const { getStripePublishableKey } = await import("../stripeClient");
       const key = getStripePublishableKey() ?? '';
       res.json({ publishableKey: key });
     } catch (error: any) {
@@ -494,7 +495,7 @@ const router = Router();
       const customer = await storage.getCustomer(customerId);
       if (!customer) return res.status(404).json({ error: "Customer not found" });
 
-      const { getUncachableStripeClient } = await import('./stripeClient');
+      const { getUncachableStripeClient } = await import("../stripeClient");
       const stripe = await getUncachableStripeClient();
 
       let stripeCustomerId = customer.stripeCustomerId;
@@ -527,7 +528,7 @@ const router = Router();
       if (!customer) return res.status(404).json({ error: "Customer not found" });
       if (!customer.stripeCustomerId) return res.json({ paymentMethods: [], defaultPaymentMethodId: null });
 
-      const { getUncachableStripeClient } = await import('./stripeClient');
+      const { getUncachableStripeClient } = await import("../stripeClient");
       const stripe = await getUncachableStripeClient();
 
       const methods = await stripe.paymentMethods.list({
@@ -563,7 +564,7 @@ const router = Router();
       const customer = await storage.getCustomer(req.params.customerId);
       if (!customer?.stripeCustomerId) return res.status(404).json({ error: "Customer or Stripe customer not found" });
 
-      const { getUncachableStripeClient } = await import('./stripeClient');
+      const { getUncachableStripeClient } = await import("../stripeClient");
       const stripe = await getUncachableStripeClient();
 
       await stripe.customers.update(customer.stripeCustomerId, {
@@ -582,7 +583,7 @@ const router = Router();
       const customer = await storage.getCustomer(req.params.customerId);
       if (!customer?.stripeCustomerId) return res.status(404).json({ error: "Customer or Stripe customer not found" });
 
-      const { getUncachableStripeClient } = await import('./stripeClient');
+      const { getUncachableStripeClient } = await import("../stripeClient");
       const stripe = await getUncachableStripeClient();
 
       await stripe.paymentMethods.detach(req.params.paymentMethodId);

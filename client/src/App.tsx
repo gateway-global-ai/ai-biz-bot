@@ -13,6 +13,7 @@ import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Cl
 
 // ── Eager: first-paint critical paths only ────────────────────────────────────
 import PlatformHomePage from "@/pages/public/PlatformHomePage";
+import DemoPublicRedirect from "@/pages/public/DemoPublicRedirect";
 import NotFound from "@/pages/admin/not-found";
 
 // ── Lazy: everything else — loaded only when the route is visited ─────────────
@@ -29,9 +30,9 @@ const OnboardingFlow        = lazy(() => import("@/pages/agents/OnboardingFlow")
 const DiscAssessment        = lazy(() => import("@/pages/showcase/DiscAssessment"));
 const MockConversation      = lazy(() => import("@/pages/showcase/MockConversation"));
 const AgentManager          = lazy(() => import("@/pages/agents/AgentManager"));
+const AgentBuilderPage      = lazy(() => import("@/pages/agents/AgentBuilderPage"));
 const AgentDashboard        = lazy(() => import("@/pages/agents/AgentDashboard"));
 const AgentsLandingPage     = lazy(() => import("@/pages/public/AgentsLandingPage"));
-const ImmersiveClassroom    = lazy(() => import("@/pages/agents/classroom/ImmersiveClassroom"));
 const CustomerManager       = lazy(() => import("@/pages/biz-dashboard/CustomerManager"));
 const TwilioAccountManager  = lazy(() => import("@/pages/developer/TwilioAccountManager"));
 const MvpLanding            = lazy(() => import("@/pages/showcase/MvpLanding"));
@@ -48,6 +49,7 @@ const GoogleTasksPage       = lazy(() => import("@/pages/biz-dashboard/GoogleTas
 const AiBizBotAdmin         = lazy(() => import("@/pages/owner/AiBizBotAdmin"));
 const Login                 = lazy(() => import("@/pages/account/Login"));
 const SdkShowcase           = lazy(() => import("@/pages/showcase/SdkShowcase"));
+const UiPrimitivesComparisonPage = lazy(() => import("@/pages/showcase/UiPrimitivesComparisonPage"));
 const GooglePlacesSdk       = lazy(() => import("@/pages/integrations/GooglePlacesSdk"));
 const MyAccount             = lazy(() => import("@/pages/account/MyAccount"));
 const CustomerSiteManager   = lazy(() => import("@/pages/owner/CustomerSiteManager"));
@@ -59,7 +61,7 @@ const PhonePage             = lazy(() => import("@/pages/public/PhonePage"));
 const ClearVoiceLogoCenteredPage = lazy(() => import("@/pages/public/ClearVoiceLogoCenteredPage"));
 const PlatformBuyPage       = lazy(() => import("@/pages/public/PlatformBuyPage"));
 const PlatformInfoPage      = lazy(() => import("@/pages/public/PlatformInfoPage"));
-const VoiceLeadMachine      = lazy(() => import("@/pages/biz-dashboard/VoiceLeadMachine"));
+const IndustryFunnelPage    = lazy(() => import("@/pages/public/IndustryFunnelPage"));
 const SitesAndLeads         = lazy(() => import("@/pages/owner/SitesAndLeads"));
 const MixingBoard           = lazy(() => import("@/pages/reseller/MixingBoard"));
 const ResellerDashboard     = lazy(() => import("@/pages/reseller/ResellerDashboard"));
@@ -87,7 +89,7 @@ const StorefrontsIndex      = lazy(() => import("@/pages/storefronts/Storefronts
 const StorefrontCategoryPage = lazy(() => import("@/pages/storefronts/StorefrontCategoryPage"));
 const BrandAdminPage        = lazy(() => import("@/pages/brand-admin"));
 const AdminShell            = lazy(() => import("@/pages/admin/AdminShell").then(m => ({ default: m.AdminShell })));
-const MissionControlRuntime = lazy(() => import("../../os-core/src/app/MissionControlRuntime"));
+const MissionControlApp = lazy(() => import("./mission-control/MissionControlApp"));
 
 function ServerPanel() {
   return (
@@ -102,7 +104,7 @@ function ServerPanel() {
         </div>
       </div>
       
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+      <div className="bg-slate-800 rounded-sui border border-slate-700 p-6">
         <div className="text-center py-8">
           <Server className="w-16 h-16 mx-auto text-slate-600 mb-4" />
           <h3 className="text-lg font-semibold text-white mb-2">No Servers Connected</h3>
@@ -113,7 +115,7 @@ function ServerPanel() {
             Server integration requires API credentials from your hosting provider.
           </p>
           <div className="flex justify-center gap-3">
-            <div className="bg-slate-900 px-4 py-2 rounded-lg border border-slate-700">
+            <div className="bg-slate-900 px-4 py-2 rounded-sui border border-slate-700">
               <p className="text-xs text-slate-500 mb-1">Supported Providers</p>
               <p className="text-sm text-slate-300">Hostinger • DigitalOcean • AWS • VPS</p>
             </div>
@@ -121,7 +123,7 @@ function ServerPanel() {
         </div>
       </div>
       
-      <div className="mt-6 bg-slate-800/50 rounded-xl border border-slate-700 p-4">
+      <div className="mt-6 bg-slate-800/50 rounded-sui border border-slate-700 p-4">
         <h4 className="text-sm font-semibold text-white mb-2">Coming Soon</h4>
         <ul className="text-sm text-slate-400 space-y-1">
           <li>• One-click server provisioning</li>
@@ -144,7 +146,7 @@ function GlobalConfig() {
         </h2>
         <p className="text-slate-400">Manage environment variables and system settings.</p>
       </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 space-y-4">
+      <div className="bg-slate-800 rounded-sui border border-slate-700 p-6 space-y-4">
         <div className="border-b border-slate-700 pb-4">
           <h3 className="text-lg font-semibold text-white mb-2">Platform Settings</h3>
           <p className="text-sm text-slate-400 mb-4">
@@ -152,19 +154,19 @@ function GlobalConfig() {
           </p>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+          <div className="bg-slate-900/50 p-4 rounded-sui border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">AI Provider</p>
             <p className="text-white font-medium">Google Gemini</p>
           </div>
-          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+          <div className="bg-slate-900/50 p-4 rounded-sui border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Telephony Provider</p>
             <p className="text-white font-medium">Twilio</p>
           </div>
-          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+          <div className="bg-slate-900/50 p-4 rounded-sui border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Voice AI</p>
             <p className="text-white font-medium">Gemini Native Audio</p>
           </div>
-          <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+          <div className="bg-slate-900/50 p-4 rounded-sui border border-slate-700">
             <p className="text-xs text-slate-500 uppercase mb-1">Task Scheduler</p>
             <p className="text-white font-medium">Active (5 min interval)</p>
           </div>
@@ -187,7 +189,7 @@ function TestOrchestrator() {
         </h2>
         <p className="text-slate-400">Run and manage test suites.</p>
       </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+      <div className="bg-slate-800 rounded-sui border border-slate-700 p-6">
         <p className="text-slate-400 text-center py-12">Test orchestrator coming soon...</p>
       </div>
     </div>
@@ -204,7 +206,7 @@ function ResultsAnalyzer() {
         </h2>
         <p className="text-slate-400">Analyze test results with AI assistance.</p>
       </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+      <div className="bg-slate-800 rounded-sui border border-slate-700 p-6">
         <p className="text-slate-400 text-center py-12">Results analyzer coming soon...</p>
       </div>
     </div>
@@ -221,7 +223,7 @@ function SecurityDashboard() {
         </h2>
         <p className="text-slate-400">Monitor security alerts and compliance.</p>
       </div>
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6">
+      <div className="bg-slate-800 rounded-sui border border-slate-700 p-6">
         <p className="text-slate-400 text-center py-12">Security dashboard coming soon...</p>
       </div>
     </div>
@@ -240,13 +242,13 @@ function TwilioHub() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
+        <div className="bg-slate-800 rounded-sui border border-slate-700 p-5">
             <h3 className="text-slate-300 font-semibold mb-4 flex items-center gap-2">
                 <Smartphone className="w-5 h-5" /> Recent SMS Logs
             </h3>
             <div className="space-y-3">
                 {[1, 2, 3].map(i => (
-                    <div key={i} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-800">
+                    <div key={i} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-sui border border-slate-800">
                         <div className="flex flex-col">
                             <span className="text-sm text-white font-mono">+1 (555) 012-34{i}{i}</span>
                             <span className="text-xs text-slate-500">Alert: Server Down (SRV-0{i})</span>
@@ -259,12 +261,12 @@ function TwilioHub() {
             </div>
         </div>
 
-        <div className="bg-slate-800 rounded-xl border border-slate-700 p-5">
+        <div className="bg-slate-800 rounded-sui border border-slate-700 p-5">
             <h3 className="text-slate-300 font-semibold mb-4 flex items-center gap-2">
                 <Phone className="w-5 h-5" /> Voice Call Gateway
             </h3>
             <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-800">
+                <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-sui border border-slate-800">
                     <div className="flex flex-col">
                         <span className="text-sm text-white font-mono">+1 (555) 987-6543</span>
                         <span className="text-xs text-slate-500">Duration: 45s • Critical Alert</span>
@@ -273,7 +275,7 @@ function TwilioHub() {
                         <Check className="w-3 h-3" /> Completed
                     </span>
                 </div>
-                 <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border border-slate-800">
+                 <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-sui border border-slate-800">
                     <div className="flex flex-col">
                         <span className="text-sm text-white font-mono">+1 (555) 111-2222</span>
                         <span className="text-xs text-slate-500">Duration: 0s • Warn Alert</span>
@@ -294,12 +296,13 @@ function AppRouter() {
     <Switch>
       <Route path="/">{() => <Redirect to="/dashboard" />}</Route>
       <Route path="/onboard" component={OnboardingFlow} />
-      <Route path="/agents" component={AgentsLandingPage} />
+      {/* /agents legacy marketing page — redirected to platform home */}
+      <Route path="/agents">{() => <Redirect to="/" />}</Route>
       <Route path="/dashboard" component={AgentDashboard} />
-      <Route path="/nexus-classroom" component={ImmersiveClassroom} />
       <Route path="/agent/:agentId/telephony" component={AgentTelephony} />
       <Route path="/brand-admin" component={BrandAdminPage} />
       <Route path="/agent-manager" component={AgentManager} />
+      <Route path="/admin/agents/build" component={AgentBuilderPage} />
       <Route path="/customers" component={CustomerManager} />
       <Route path="/gateway-admin" component={GatewayAdmin} />
       <Route path="/telephony" component={TelephonyManager} />
@@ -337,7 +340,6 @@ function AppRouter() {
       <Route path="/chat/owner" component={OwnerChatInterface} />
       <Route path="/chat/developer" component={DeveloperChatInterface} />
       {/* BusinessPage moved to public routes */}
-      <Route path="/lead-machine" component={VoiceLeadMachine} />
       <Route path="/sites-leads" component={SitesAndLeads} />
       <Route path="/mixing-board" component={MixingBoard} />
       <Route path="/inquiries" component={InquiryManagement} />
@@ -423,9 +425,10 @@ function App() {
               {/* Public routes */}
               <Route path="/" component={PlatformHomePage} />
               <Route path="/business" component={BusinessPage} />
-              <Route path="/demo" component={AgentsLandingPage} />
+              <Route path="/demo" component={DemoPublicRedirect} />
               <Route path="/buy" component={PlatformBuyPage} />
               <Route path="/more-info" component={PlatformInfoPage} />
+              <Route path="/industry/:slug" component={IndustryFunnelPage} />
               <Route path="/login" component={Login} />
               <Route path="/contact" component={ContactForm} />
               <Route path="/sms-consent" component={SmsConsent} />
@@ -437,6 +440,7 @@ function App() {
               <Route path="/storefronts/:categorySlug" component={StorefrontCategoryPage} />
               {/* voice-demo route — handled by Gemini Live on homepage */}
               <Route path="/sdk" component={SdkShowcase} />
+              <Route path="/sdk/ui-primitives" component={UiPrimitivesComparisonPage} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
               {/* ClearVoice Developer UI Kit — public URL; content gated inside page (dev or VITE_UI_KIT). Not LiveKit. */}
               <Route path="/dev/ui-kit" component={UiKitPage} />
@@ -459,15 +463,16 @@ function App() {
               <Route path="/test-b2b-olympic" component={OlympicB2b} />
               <Route path="/test-b2b-wireframe" component={TestB2b} />
               {/* Public business pages — shareable, no auth required */}
-              <Route path="/agents" component={AgentsLandingPage} />
+              {/* /agents legacy marketing page — redirected to platform home */}
+              <Route path="/agents">{() => <Redirect to="/" />}</Route>
               <Route path="/biz/:slug" component={PublicBusinessPage} />
               <Route path="/agent/:slug" component={AgentPage} />
               <Route path="/kiosk/:slug" component={KioskPage} />
               {/* Standalone Clear Voice phone UI — QR-codeable, no app shell. Params: ?siteConfigId=uuid | ?slug=url-slug */}
               <Route path="/phone" component={PhonePage} />
               <Route path="/clearvoice-logo" component={ClearVoiceLogoCenteredPage} />
-              <Route path="/mission-control" component={MissionControlRuntime} />
-              <Route path="/mission-control/*" component={MissionControlRuntime} />
+              <Route path="/mission-control" component={MissionControlApp} />
+              <Route path="/mission-control/*" component={MissionControlApp} />
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
               <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />

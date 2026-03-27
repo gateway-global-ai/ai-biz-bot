@@ -10,4 +10,4 @@ alwaysApply: false
 - Keep `App.tsx` limited to providers, router mount, and shell mount.
 - Do not place business logic, prompt logic, or giant route trees in `App.tsx`.
 - The shell must preserve a persistent `ContextBar`, breadcrumbs, conversational navigation surface, and primary chat/PTT container.
-- Respect shell modes from `docs-governance/APP_SHELL_CONTRACT.md`: `menu`, `view`, `confirmation`, `refusal`, `ptt_first`.
+- Respect shell modes from `docs-governance/canonical/APP_SHELL_CONTRACT.md`: `menu`, `view`, `confirmation`, `refusal`, `ptt_first`.

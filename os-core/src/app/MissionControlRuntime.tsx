@@ -2,7 +2,9 @@ import React, { useEffect } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Router } from "wouter";
 
+import type { MissionControlConciergePanelComponent } from "../contracts/missionControlConcierge";
 import { AppProviders, queryClient } from "./AppProviders";
+import { MissionControlHostProvider } from "./MissionControlHostContext";
 import { configureBridgeSettings } from "../os-core/execution-plane/gemini-live-engine/bridgeRuntime";
 import { EventLogProvider } from "../os-core/observability/EventLogProvider";
 import { ContextBar } from "../shell/ContextBar";
@@ -51,37 +53,49 @@ function MissionControlBootstrap() {
   return null;
 }
 
-function MissionControlShell() {
+function MissionControlShell({
+  conciergePanel,
+}: {
+  conciergePanel?: MissionControlConciergePanelComponent;
+}) {
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
 
   return (
-    <EventLogProvider>
-      <SharedCanvasProvider>
-        <MissionControlBootstrap />
-        <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-50">
-          <ContextBar onToggleInspector={() => setInspectorOpen((open) => !open)} />
-          <main className="relative flex flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto">
-              <BrowserRouteAdapter />
-            </div>
-            <ConversationalNavController />
-            <InspectorPanel
-              open={inspectorOpen}
-              onClose={() => setInspectorOpen(false)}
-            />
-          </main>
-        </div>
-      </SharedCanvasProvider>
-    </EventLogProvider>
+    <MissionControlHostProvider conciergePanel={conciergePanel}>
+      <EventLogProvider>
+        <SharedCanvasProvider>
+          <MissionControlBootstrap />
+          <div className="flex h-screen w-screen flex-col overflow-hidden bg-slate-950 text-slate-50">
+            <ContextBar onToggleInspector={() => setInspectorOpen((open) => !open)} />
+            <main className="relative flex flex-1 overflow-hidden">
+              <div className="flex-1 overflow-y-auto">
+                <BrowserRouteAdapter />
+              </div>
+              <ConversationalNavController />
+              <InspectorPanel
+                open={inspectorOpen}
+                onClose={() => setInspectorOpen(false)}
+              />
+            </main>
+          </div>
+        </SharedCanvasProvider>
+      </EventLogProvider>
+    </MissionControlHostProvider>
   );
 }
 
-export default function MissionControlRuntime() {
+export interface MissionControlRuntimeProps {
+  conciergePanel?: MissionControlConciergePanelComponent;
+}
+
+export default function MissionControlRuntime({
+  conciergePanel,
+}: MissionControlRuntimeProps = {}) {
   return (
     <QueryClientProvider client={queryClient}>
       <AppProviders>
         <Router base="/mission-control">
-          <MissionControlShell />
+          <MissionControlShell conciergePanel={conciergePanel} />
         </Router>
       </AppProviders>
     </QueryClientProvider>

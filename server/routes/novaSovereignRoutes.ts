@@ -8,10 +8,11 @@ import { Router, type Request, type Response } from "express";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as yaml from "js-yaml";
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import { db } from "../db";
-import { novaIdvSessions } from "@shared/schema";
+import { novaIdvSessions, siteConfigs } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { invalidateSiteRuntimeCache } from "../services/siteRuntimeResolver";
 import {
   buildCanonical,
   verifyReplayTimestamp,
@@ -20,12 +21,24 @@ import {
 } from "../utils/novaSignature";
 import { generateInvoice } from "../services/novaInvoiceService";
 import { requireAuth } from "../auth";
+import { sendVerification, checkVerification, isVerifyConfigured } from "../twilio";
+import { getStripeClient, STRIPE_PRICE_IDS } from "../stripeClient";
+import { resolveDocumentProfile } from "../services/novaDocumentService";
+import { storage } from "../storage";
+
+/** Express `req.params` values are `string | string[]`; Drizzle `eq()` needs a single string. */
+function paramString(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
 
 const router = Router();
 
 // --- Gate 1: Security perimeter (skip for dashboard) ---
 router.use((req: Request, res: Response, next) => {
+  // /dashboard and /verify paths are browser-callable; skip HMAC gate
   if (req.path.startsWith("/dashboard")) return next();
+  if (req.path.startsWith("/verify")) return next();
 
   const signature = req.headers["x-nova-signature"] as string | undefined;
   const timestamp = req.headers["x-nova-timestamp"] as string | undefined;
@@ -126,7 +139,7 @@ function getProtocolSteps(protocolLevel: number): string[] {
 }
 
 router.get("/dashboard/session/:sessionId", requireAuth, async (req: any, res: Response) => {
-  const sessionId = req.params.sessionId;
+  const sessionId = paramString(req.params.sessionId);
   if (!sessionId) return res.status(400).json({ error: "sessionId required" });
   try {
     const rows = await db
@@ -175,13 +188,6 @@ router.get("/dashboard/session/:sessionId", requireAuth, async (req: any, res: R
 // initiated directly from the ConciergePanel in the browser, not server-to-server.
 // They wrap the existing Twilio Verify + claim flow from claimRoutes.ts.
 // ─────────────────────────────────────────────────────────────────────────────
-
-import { sendVerification, checkVerification, isVerifyConfigured } from "../twilio";
-import { siteConfigs, customerAccounts } from "@shared/schema";
-import { eq } from "drizzle-orm";
-import crypto from "crypto";
-import { getStripeClient, STRIPE_PRICE_IDS } from "../stripeClient";
-import { resolveDocumentProfile } from "../services/novaDocumentService";
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -249,15 +255,18 @@ router.post("/verify/complete", async (req: Request, res: Response) => {
 
   try {
     // Find or create admin user (owner account) by phone
-    let adminUser = await (storage as any).getAdminUserByPhone(normalized).catch(() => null);
+    let adminUser = await storage.getAdminUserByPhone(normalized);
     if (!adminUser) {
-      // Create new account if not exists
-      adminUser = await (storage as any).createAdminUser({
-        phone: normalized,
-        name: null,
-        role: "owner",
-        isActive: true,
-      }).catch(() => null);
+      try {
+        adminUser = await storage.createAdminUser({
+          phone: normalized,
+          name: null,
+          role: "owner",
+          isActive: true,
+        });
+      } catch {
+        adminUser = undefined;
+      }
     }
 
     if (!adminUser) {
@@ -266,9 +275,9 @@ router.post("/verify/complete", async (req: Request, res: Response) => {
 
     if (mode === "signin") {
       // Generate session token and return immediately
-      const token = crypto.randomBytes(32).toString("hex");
+      const token = randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      await (storage as any).createAuthSession({ adminUserId: adminUser.id, token, expiresAt });
+      await storage.createAuthSession({ adminUserId: adminUser.id, token, expiresAt });
       return res.json({ ok: true, token, userId: adminUser.id });
     }
 
@@ -297,6 +306,7 @@ router.post("/verify/activate", async (req: Request, res: Response) => {
         .update(siteConfigs)
         .set({ workspaceState: "claimed", claimedAt: new Date(), plan: "pro" } as any)
         .where(eq(siteConfigs.id, siteConfigId));
+      invalidateSiteRuntimeCache(siteConfigId);
       return res.json({ ok: true, activated: true });
     }
 
@@ -334,7 +344,7 @@ router.post("/verify/activate", async (req: Request, res: Response) => {
 // GET /api/nova/documents/:siteConfigId — return document profile for a site
 // Public (no Nova header required) — data is non-sensitive industry templates
 router.get("/documents/:siteConfigId", async (req: Request, res: Response) => {
-  const { siteConfigId } = req.params;
+  const siteConfigId = paramString(req.params.siteConfigId);
   if (!siteConfigId) return res.status(400).json({ error: "siteConfigId required" });
 
   try {

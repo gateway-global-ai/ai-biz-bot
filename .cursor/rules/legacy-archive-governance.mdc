@@ -6,9 +6,9 @@ alwaysApply: true
 # Legacy Archive Governance
 
 - `_legacy_archive/` is reference-only. Do not import from it, modify it, or treat it as runtime truth.
-- If a legacy artifact seems useful, record it in `docs-governance/SCHEMA_ARCHAEOLOGY.md` or another governed review doc outside the archive.
+- If a legacy artifact seems useful, record it in `docs-governance/archive/SCHEMA_ARCHAEOLOGY.md` (archived — reference only) or another governed review doc outside the archive.
 - Any valuable concept from legacy materials must be re-derived through current registries and contracts, not copied directly.
 - Compare historical concepts against:
-  - `docs-governance/SCHEMA_ANCHOR_REGISTRY.md`
-  - `docs-governance/DOMAIN_CONCEPT_REGISTRY.md`
+  - `docs-governance/canonical/SCHEMA_ANCHOR_REGISTRY.md`
+  - `docs-governance/archive/DOMAIN_CONCEPT_REGISTRY.md` (archived — reference only)
   - `registry-yaml/`

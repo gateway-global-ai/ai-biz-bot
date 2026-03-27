@@ -35,18 +35,18 @@ export async function processCommission(
   const meta = session.metadata ?? {};
   const isRefill = meta.type === "ENERGY_REFILL";
 
-  const commissionDollars = isRefill
-    ? Math.round(amountDollars * REFILL_COMMISSION_RATE * 100) / 100
-    : PLATFORM_COMMISSION_DEFAULT;
+  const commissionCents = isRefill
+    ? Math.round(amountCents * REFILL_COMMISSION_RATE)
+    : PLATFORM_COMMISSION_DEFAULT * 100;
 
-  if (commissionDollars <= 0) return;
+  if (commissionCents <= 0) return;
 
   await db.insert(commissions).values({
     resellerId: site.resellerId,
     siteConfigId,
-    amount: String(amountDollars.toFixed(2)),
-    commission: String(commissionDollars.toFixed(2)),
-    type: isRefill ? "REFILL" : "PLATFORM",
-    status: "PENDING_PAYOUT",
+    eventType: isRefill ? "top_up" : "subscription",
+    grossAmountCents: amountCents,
+    commissionCents,
+    status: "pending",
   });
 }

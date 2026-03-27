@@ -12,6 +12,11 @@ import { generateBusinessQR, getQRFilePath } from "../services/qrCodeService";
 
 const router = Router();
 
+function paramString(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function getBaseUrl(req: Request): string {
   return (
     process.env.APP_URL ||
@@ -43,7 +48,7 @@ router.get("/search", async (req: Request, res: Response) => {
 /** Serve QR code image for a business by slug. Redirects to public /qr/img/:slug so image is never behind API auth. */
 router.get("/image/:slug", async (req: Request, res: Response) => {
   try {
-    const { slug } = req.params;
+    const slug = paramString(req.params.slug);
     if (!slug) {
       res.status(400).json({ error: "Slug required" });
       return;
@@ -64,7 +69,11 @@ router.get("/image/:slug", async (req: Request, res: Response) => {
 /** Ensure QR is generated for a site (by ID). Idempotent. */
 router.post("/generate/:siteConfigId", async (req: Request, res: Response) => {
   try {
-    const { siteConfigId } = req.params;
+    const siteConfigId = paramString(req.params.siteConfigId);
+    if (!siteConfigId) {
+      res.status(400).json({ error: "siteConfigId required" });
+      return;
+    }
     const config = await storage.getSiteConfigById(siteConfigId);
     if (!config) {
       res.status(404).json({ error: "Site not found" });

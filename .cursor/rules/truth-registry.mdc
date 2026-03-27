@@ -1,0 +1,51 @@
+# Truth Registry Enforcement
+
+The system has three authority layers. You must respect this hierarchy:
+
+1. `.cursor/rules/*.mdc` = **LAW** (enforced every interaction)
+2. `governance/TRUTH_REGISTRY.yaml` = **AUTHORITY** (declares what exists)
+3. `docs-governance/canonical/` = **REFERENCE** (explains the law)
+
+Everything in `docs-governance/archive/` is NOT authoritative. Do not cite archived docs as system truth.
+
+## Before Creating Any System Artifact
+
+Check the Truth Registry (`governance/TRUTH_REGISTRY.yaml`). If the concept you are about to create does not have backing in:
+- `shared/schema.ts` (schema truth)
+- `server/services/` or `server/routes/` (runtime truth)
+- `.cursor/rules/` (enforcement truth)
+
+Then STOP. You may only extend existing canonical documents. You may not create new governance documents without implementation backing.
+
+## Production vs Experimental
+
+- **Production:** `server/`, `client/src/`, `shared/`, `server/routes/`, `server/services/`
+- **Experimental:** `os-core/` — this is a prototype, NOT the production runtime
+
+Do NOT merge os-core patterns into production without an explicit governance task. Do NOT treat os-core views, contracts, or registries as production truth. Do NOT import from os-core/ in server/ or client/src/.
+
+## Archive Leakage Prevention
+
+If you find yourself referencing a document from `docs-governance/archive/`:
+- STOP — archived docs are not system authority
+- If the concept is needed, it must be promoted to `docs-governance/canonical/` with proper frontmatter including `truth_domain` and implementation backing
+- Never cite an archived doc as justification for a system change
+
+## Governance Doc Frontmatter Requirement
+
+Every document in `docs-governance/canonical/` must have YAML frontmatter:
+
+```yaml
+---
+status: canonical
+truth_domain: schema | runtime | governance | ui | experimental
+enforced_by: <cursor-rule-name>.mdc | none
+backed_by:
+  schema: true | false
+  service: true | false
+  route: true | false
+last_verified: YYYY-MM-DD
+---
+```
+
+Documents without this frontmatter are not considered canonical.

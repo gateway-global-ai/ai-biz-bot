@@ -43,7 +43,7 @@ router.post("/api/bail-rescue/:token/checkout", async (req, res) => {
     return res.status(503).json({ error: "Payment system is not configured." });
   }
 
-  const stripe = new Stripe(stripeKey, { apiVersion: "2025-01-27.acacia" });
+  const stripe = new Stripe(stripeKey, { apiVersion: "2025-11-17.clover" });
 
   const origin = req.headers.origin || `https://${req.headers.host}`;
   const successUrl = `${origin}/rescue/${session.token}?payment=success`;

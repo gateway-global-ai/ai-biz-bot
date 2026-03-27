@@ -5,6 +5,8 @@ alwaysApply: true
 
 # Teams/Agents Provisioning Matrix
 
+**Operator runbook:** [docs-governance/canonical/AGENT_SWARM_DEPLOYMENT_RUNBOOK.md](../../docs-governance/canonical/AGENT_SWARM_DEPLOYMENT_RUNBOOK.md)
+
 ## Database Schema Relationships
 
 ### Agents Table

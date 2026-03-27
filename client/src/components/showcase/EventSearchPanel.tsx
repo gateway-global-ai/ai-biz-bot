@@ -53,8 +53,8 @@ export function EventSearchPanel({ onUseForHotelSearch }: EventSearchPanelProps)
       }
       if (!r.ok) {
         const errMsg = (data as { error?: string }).error || "Search failed";
-        const stepMsg = Array.isArray((data as { steps?: Array<{ message?: string }> }).steps)
-          ? (data as { steps?: Array<{ message?: string }> }).steps?.find((s) => s.status === "error")?.message
+        const stepMsg = Array.isArray((data as { steps?: Array<{ message?: string; status?: string }> }).steps)
+          ? (data as { steps?: Array<{ message?: string; status?: string }> }).steps?.find((s) => s.status === "error")?.message
           : undefined;
         setError(stepMsg ? `${errMsg}: ${stepMsg}` : errMsg);
         return;

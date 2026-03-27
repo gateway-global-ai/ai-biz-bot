@@ -8,6 +8,7 @@ import path from "path";
 import fs from "fs";
 import { storage } from "../storage";
 import { requireAuth } from "../auth";
+import { firstRouteParam } from "../utils/expressParams";
 import {
   assertAdminSessionActor,
   assertSiteScopedAccess,
@@ -194,7 +195,7 @@ qrAdminRouter.post("/firewall/rules", async (req: Request, res: Response) => {
 
 qrAdminRouter.delete("/firewall/rules/:id", async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(firstRouteParam(req.params.id) ?? '', 10);
     if (Number.isNaN(id)) {
       res.status(400).json({ error: "Invalid rule id" });
       return;
@@ -215,7 +216,7 @@ qrAdminRouter.delete("/firewall/rules/:id", async (req: Request, res: Response) 
 // ─── Admin: single route ───────────────────────────────────────────────────
 qrAdminRouter.get("/:id", async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(firstRouteParam(req.params.id) ?? '', 10);
     if (Number.isNaN(id)) {
       res.status(400).json({ error: "Invalid route id" });
       return;
@@ -253,7 +254,7 @@ qrAdminRouter.get("/:id", async (req: Request, res: Response) => {
 
 qrAdminRouter.patch("/:id", async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(firstRouteParam(req.params.id) ?? '', 10);
     if (Number.isNaN(id)) {
       res.status(400).json({ error: "Invalid route id" });
       return;
@@ -309,7 +310,7 @@ qrAdminRouter.patch("/:id", async (req: Request, res: Response) => {
 
 qrAdminRouter.delete("/:id", async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(firstRouteParam(req.params.id) ?? '', 10);
     if (Number.isNaN(id)) {
       res.status(400).json({ error: "Invalid route id" });
       return;
@@ -351,7 +352,7 @@ qrAdminRouter.delete("/:id", async (req: Request, res: Response) => {
 // ─── Admin: serve QR image ──────────────────────────────────────────────────
 qrAdminRouter.get("/:id/image", async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(firstRouteParam(req.params.id) ?? '', 10);
     if (Number.isNaN(id)) {
       res.status(400).json({ error: "Invalid route id" });
       return;
@@ -398,7 +399,7 @@ qrAdminRouter.get("/:id/image", async (req: Request, res: Response) => {
 // ─── Admin: regenerate QR (re-encode same route URL) ────────────────────────
 qrAdminRouter.post("/:id/regenerate", async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(firstRouteParam(req.params.id) ?? '', 10);
     if (Number.isNaN(id)) {
       res.status(400).json({ error: "Invalid route id" });
       return;
@@ -440,7 +441,7 @@ qrAdminRouter.post("/:id/regenerate", async (req: Request, res: Response) => {
 // ─── Admin: access log for route ───────────────────────────────────────────
 qrAdminRouter.get("/:id/access-log", async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(firstRouteParam(req.params.id) ?? '', 10);
     if (Number.isNaN(id)) {
       res.status(400).json({ error: "Invalid route id" });
       return;
@@ -477,7 +478,7 @@ qrAdminRouter.get("/:id/access-log", async (req: Request, res: Response) => {
 // ─── Public: GET /qr/img/:slug — serve business QR PNG (no auth; for embedding and printing)
 qrRedirectRouter.get("/img/:slug", async (req: Request, res: Response) => {
   try {
-    const { slug } = req.params;
+    const slug = firstRouteParam(req.params.slug);
     if (!slug) {
       res.status(400).send("Slug required");
       return;
@@ -513,7 +514,7 @@ qrRedirectRouter.get("/img/:slug", async (req: Request, res: Response) => {
 // ─── Redirect: GET /qr/:id → firewall, log, 302 ──────────────────────────
 qrRedirectRouter.get("/:id", async (req: Request, res: Response) => {
   const start = Date.now();
-  const id = parseInt(req.params.id, 10);
+  const id = parseInt(firstRouteParam(req.params.id) ?? '', 10);
   if (Number.isNaN(id)) {
     res.status(404).send("Not found");
     return;
@@ -562,7 +563,7 @@ qrRedirectRouter.get("/:id", async (req: Request, res: Response) => {
       ipAddress: ip,
       userAgent: ua,
       referrer: req.get("referrer") ?? undefined,
-      destination: null,
+      destination: undefined,
       wasBlocked: false,
       responseMs,
     });

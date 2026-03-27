@@ -1,0 +1,45 @@
+# Twilio / telephony platform failure classes (v0)
+# Peer-reviewed: analog to agent capability IDs — policy engine maps Twilio error_code → class_id.
+# See: docs-governance/canonical/TWILIO_ERROR_NORMALIZATION_SPEC.md
+
+schema_version: "0.1"
+registry_id: twilio_platform_failure_classes
+description: >
+  Stable platform semantics for Twilio-derived and voice-pipeline failures.
+  Debugger error_code hints live in twilio-debugger-error-code-hints.v0.yaml (expand alongside this file).
+
+failure_classes:
+  - id: transport_failure
+    summary: Network, DNS, TLS, or reachability between Twilio and platform endpoints.
+    typical_twilio_signals: ["HTTP timeout", "connection refused", "DNS failure"]
+    default_severity: high
+
+  - id: webhook_failure
+    summary: Twilio could not successfully complete webhook HTTP retrieval or callback.
+    typical_twilio_signals: ["11200", "HTTP non-2xx to status URL"]
+    default_severity: high
+
+  - id: auth_configuration_failure
+    summary: Signature, credential, or URL/configuration mismatch.
+    typical_twilio_signals: ["signature validation", "401", "403", "misconfigured voice URL"]
+    default_severity: critical
+
+  - id: carrier_delivery_issue
+    summary: SMS/MMS carrier filtering, geographic block, or delivery failure.
+    typical_twilio_signals: ["messaging status", "carrier errors"]
+    default_severity: medium
+
+  - id: voice_runtime_failure
+    summary: Media Stream, audio bridge, or AI voice runtime fault after connect.
+    typical_twilio_signals: ["stream errors", "internal voice path"]
+    default_severity: high
+
+  - id: customer_actionable_issue
+    summary: Tenant-owned misconfiguration or quota; safe summary may be shown to business user.
+    typical_twilio_signals: ["account limits", "registration"]
+    default_severity: low
+
+  - id: platform_actionable_issue
+    summary: Internal defect, deploy regression, or capacity; operator-only detail.
+    typical_twilio_signals: ["500 from app", "uncaught exception"]
+    default_severity: critical

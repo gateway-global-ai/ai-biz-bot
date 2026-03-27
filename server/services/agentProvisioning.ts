@@ -14,11 +14,19 @@ import { eq, and } from 'drizzle-orm';
 import {
   industryAgentTemplates,
   agents,
+  siteConfigs,
   PLACES_TYPE_TO_INDUSTRY,
   type IndustryGroup,
   type IndustryAgentTemplate,
 } from '@shared/schema';
+import { generateQrForRoute } from './qrRoutingService.js';
 import { buildBehavioralPrompt } from './promptCompiler.js';
+import type { StructuredControls } from '@shared/schema';
+import {
+  loadHospitalityCloudbedsSchematic,
+  getHospitalitySchematicMember,
+} from '../config/loadHospitalitySwarmSchematic.js';
+
 
 // ── Industry Detection ─────────────────────────────────────────────────────────
 
@@ -106,6 +114,11 @@ export async function provisionAgentsForBusiness(
 
   console.log(`[Provisioning] Detected industry: ${industryGroup} for "${businessName}"`);
 
+  // Resolve site slug for QR route destination
+  const appUrl = process.env.APP_URL ?? 'https://aibizbot-dev.gatewayglobal.ai';
+  const [siteRow] = await db.select({ slug: siteConfigs.slug }).from(siteConfigs).where(eq(siteConfigs.id, siteConfigId)).limit(1);
+  const siteSlug = siteRow?.slug ?? null;
+
   // Fetch all 6 templates for this industry group
   const templates = await db
     .select()
@@ -129,6 +142,34 @@ export async function provisionAgentsForBusiness(
   for (const template of templates) {
     try {
       const systemPrompt = buildSystemPromptFromTemplate(template);
+
+      let hospitalityOperationalMode: string | undefined;
+      let hospitalityStructuredControls: StructuredControls | undefined;
+      if (industryGroup === 'hospitality_travel') {
+        const schDoc = loadHospitalityCloudbedsSchematic();
+        if (!schDoc) {
+          throw new Error(
+            '[Provisioning] hospitality_travel requires registry-yaml/swarm-schematics/hospitality_cloudbeds.v1.yaml',
+          );
+        }
+        const sm = getHospitalitySchematicMember(schDoc, template.roleType);
+        if (!sm) {
+          throw new Error(
+            `[Provisioning] swarm schematic has no member for role_type=${template.roleType}`,
+          );
+        }
+        hospitalityOperationalMode = sm.default_operational_mode;
+        hospitalityStructuredControls = {
+          swarm_role_contract: {
+            schematic_id: schDoc.schematic_id,
+            bundle_version: schDoc.version,
+            role_type: template.roleType,
+            integration_capability_set_ids: sm.integration_capability_set_ids,
+            deploy_posture: sm.deploy_posture,
+            api_version_lane: sm.api_version_lane,
+          },
+        };
+      }
 
       const agent = await storage.createAgent({
         siteConfigId,
@@ -181,10 +222,32 @@ export async function provisionAgentsForBusiness(
         budgetPeriod: 'monthly',
         budgetSpentUsd: '0',
         startupStatus: 'pending',
+        ...(hospitalityOperationalMode ? { operationalMode: hospitalityOperationalMode } : {}),
+        ...(hospitalityStructuredControls ? { structuredControls: hospitalityStructuredControls } : {}),
       });
 
       agentIds.push(agent.id);
       archetypesProvisioned.push(template.roleType);
+
+      // ── Create QR route for this agent (destination: /agent/{site-slug}) ───
+      if (siteSlug) {
+        try {
+          const destination = `${appUrl}/agent/${siteSlug}`;
+          const route = await storage.createQrRoute({
+            destination,
+            siteConfigId,
+            label: `${template.defaultName} — ${template.roleType.replace(/_/g, ' ')}`,
+            isActive: true,
+          });
+          // Generate the QR code PNG for the route
+          await generateQrForRoute(route.id).catch((e: unknown) =>
+            console.warn(`[Provisioning] QR PNG generation failed for routeId=${route.id}:`, e)
+          );
+          console.log(`[Provisioning] QR route created: routeId=${route.id} → ${destination}`);
+        } catch (qrErr: unknown) {
+          console.warn(`[Provisioning] QR route creation failed for agent ${template.defaultName}:`, qrErr);
+        }
+      }
 
       console.log(`[Provisioning] Created agent: ${template.defaultName} (${template.roleType})`);
     } catch (err: any) {

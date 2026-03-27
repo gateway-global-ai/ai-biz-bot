@@ -15,8 +15,12 @@ import {
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useOSEventLog } from '../../os-core/observability/EventLogProvider';
-import { ConciergePanel } from '@/components/chat/ConciergePanel';
-import type { BusinessContext, AgentConfig, VoiceConfig } from '@/types/voice';
+import { useMissionControlHost } from '../../app/MissionControlHostContext';
+import type {
+  MissionControlAgentConfig,
+  MissionControlBusinessContext,
+  MissionControlVoiceConfig,
+} from '../../contracts/missionControlConcierge';
 import {
   configureBridgeSettings,
   connectActiveBridge,
@@ -407,6 +411,8 @@ const StatusBadge = ({ status }: { status: Client['status'] }) => {
 };
 
 export default function MissionControlView() {
+  const { ConciergePanel: ConciergePanelCmp } = useMissionControlHost();
+
   const [activeTab, setActiveTab] = useState('ACTIVITY VIEWER');
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
@@ -498,7 +504,7 @@ export default function MissionControlView() {
 
   const kioskUrl = `${window.location.origin}/kiosk/the-joint-chiropractic`;
 
-  const business: BusinessContext = {
+  const business: MissionControlBusinessContext = {
     id: '4e1f25ba-09f0-4a69-9914-ec29b073fb75',
     placeId: 'ChIJ_mock_place_id',
     name: 'The Joint Chiropractic',
@@ -508,7 +514,7 @@ export default function MissionControlView() {
     services: ['Chiropractic Care', 'Wellness Plans']
   };
 
-  const agent: AgentConfig = {
+  const agent: MissionControlAgentConfig = {
     name: 'Dr. Miller\'s Assistant',
     role: 'Front Desk Agent',
     personality: 'Professional, warm, and organized.',
@@ -516,7 +522,7 @@ export default function MissionControlView() {
     constraints: ['Verify insurance', 'Confirm appointments']
   };
 
-  const voiceConfig: VoiceConfig = {
+  const voiceConfig: MissionControlVoiceConfig = {
     latency: 'ultra-low',
     voiceName: 'Puck',
     model: typeof process !== 'undefined' && process.env.GEMINI_MODEL_ID
@@ -528,25 +534,27 @@ export default function MissionControlView() {
 
   return (
     <div className="flex h-screen w-full bg-[#f1f5f9] overflow-hidden font-sans">
-      <ConciergePanel
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        layoutMode={chatLayout}
-        onCycleLayout={() => setChatLayout(prev => {
-          if (prev === 'floating') return 'fixed';
-          if (prev === 'fixed') return 'fullscreen';
-          return 'floating';
-        })}
-        business={business}
-        agent={agent}
-        voiceConfig={voiceConfig}
-        agentName={agent.name}
-        variant="sovereign"
-        ownerMode={true}
-        showOwnerControls={true}
-        isAuthenticated={true}
-        className="z-[100]"
-      />
+      {ConciergePanelCmp ? (
+        <ConciergePanelCmp
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+          layoutMode={chatLayout}
+          onCycleLayout={() => setChatLayout(prev => {
+            if (prev === 'floating') return 'fixed';
+            if (prev === 'fixed') return 'fullscreen';
+            return 'floating';
+          })}
+          business={business}
+          agent={agent}
+          voiceConfig={voiceConfig}
+          agentName={agent.name}
+          variant="sovereign"
+          ownerMode={true}
+          showOwnerControls={true}
+          isAuthenticated={true}
+          className="z-[100]"
+        />
+      ) : null}
       <AnimatePresence>
         {showKioskModal && (
           <motion.div 

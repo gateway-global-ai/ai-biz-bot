@@ -1,0 +1,15 @@
+{
+  "id": "governance_linter",
+  "version": "1.0.0",
+  "description": "Runtime manifest anchor for GOVERNANCE_LINTER_AGENT — alignment drift detection; emits docs/governance alignment artifacts only",
+  "cursor_skill_path": ".cursor/skills/governance-linter",
+  "contract": {
+    "inputs": ["changed_files", "repo_scope"],
+    "outputs": [
+      "docs/governance/GOVERNANCE_ALIGNMENT_REPORT.md",
+      "docs/governance/artifacts/governance_alignment_report.yaml",
+      "docs/governance/GOVERNANCE_SYNC_ACTIONS.md"
+    ],
+    "enforcement": "required"
+  }
+}

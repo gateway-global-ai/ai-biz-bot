@@ -19,7 +19,7 @@ import {
   Bot, Plus, Globe, MessageSquare, Settings, Trash2,
   Send, Loader2, ExternalLink, Code, Copy, Check, Network, Users,
   Sparkles, Clock, Star, MapPin, Phone, Zap,
-  ShoppingCart, Headphones, Palette, BookOpen, Image as ImageIcon, Building2,
+  BookOpen, Image as ImageIcon, Building2,
   Activity, QrCode, Share2, ArrowLeft, BarChart3, Upload, FileText,
   Home
 } from 'lucide-react';
@@ -28,20 +28,12 @@ import StandardizedChatInterface from '@/components/StandardizedChatInterface';
 import { QRRoutesManager } from '@/components/account/QRRoutesManager';
 import { CashBoardPanel } from '@/components/account/CashBoardPanel';
 import { AiBizBotDashboard } from '@/pages/owner/AiBizBotDashboard';
-import type { Agent, SiteConfig, BotTemplate } from '@shared/schema';
+import type { Agent, SiteConfig } from '@shared/schema';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
 }
-
-const TEMPLATE_ICONS: Record<string, any> = {
-  ShoppingCart,
-  Headphones,
-  Sparkles,
-  Palette,
-  Bot,
-};
 
 interface KnowledgeDoc {
   id: string;
@@ -778,7 +770,6 @@ function SocialSharingCard({ site, onUpdate }: { site: SiteConfig; onUpdate: (u:
 function AdminPanel({
   site,
   agents,
-  templates,
   onUpdate,
   isUpdating,
   initialTab,
@@ -786,7 +777,6 @@ function AdminPanel({
 }: {
   site: SiteConfig;
   agents: Agent[];
-  templates: BotTemplate[];
   onUpdate: (updates: Partial<SiteConfig>) => void;
   isUpdating: boolean;
   initialTab?: 'home' | 'settings' | 'plan' | 'gateway' | 'agents' | 'agent' | 'workspace' | 'chat' | 'logs' | 'embed' | 'qr-network' | 'cash-board' | 'publishing';
@@ -961,22 +951,6 @@ function AdminPanel({
     navigator.clipboard.writeText(embedCode);
     setEmbedCopied(true);
     setTimeout(() => setEmbedCopied(false), 2000);
-  };
-
-  const applyTemplate = (template: BotTemplate) => {
-    const uiConfig = template.defaultUiConfig as any;
-    const knownProviders = ['gemini', 'openai', 'anthropic'];
-    const model = template.defaultModel || 'gemini';
-    const isProvider = knownProviders.includes(model);
-    onUpdate({
-      botTemplateId: template.id,
-      systemPromptOverride: template.defaultSystemPrompt,
-      modelProvider: isProvider ? model : 'gemini',
-      modelName: isProvider ? null : model,
-      widgetColor: uiConfig?.primaryColor || site.widgetColor,
-      greetingMessage: uiConfig?.greetingMessage || site.greetingMessage,
-      placeholderText: uiConfig?.placeholderText || site.placeholderText,
-    });
   };
 
   const sitePlan = (site as any).plan || 'free';
@@ -1431,40 +1405,6 @@ function AdminPanel({
                   })}
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1.5">Deploy a pre-built agent to activate it for this business. It will appear in the Assigned Agent list below.</p>
-              </div>
-            )}
-
-            {templates.length > 0 && (
-              <div>
-                <Label className="text-slate-300 text-xs mb-2 block">Bot Templates</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {templates.map((template) => {
-                    const IconComp = TEMPLATE_ICONS[template.icon || 'Bot'] || Bot;
-                    const isSelected = site.botTemplateId === template.id;
-                    return (
-                      <button
-                        key={template.id}
-                        onClick={() => applyTemplate(template)}
-                        className={`p-3 rounded-lg border text-left transition-colors ${
-                          isSelected
-                            ? 'bg-indigo-500/10 border-indigo-500/30'
-                            : 'bg-slate-800/50 border-slate-700 hover:bg-slate-800'
-                        }`}
-                        data-testid={`button-template-${template.id}`}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <IconComp className={`w-4 h-4 ${isSelected ? 'text-indigo-400' : 'text-slate-400'}`} />
-                          <span className={`text-xs font-medium ${isSelected ? 'text-indigo-300' : 'text-slate-300'}`}>{template.name}</span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 line-clamp-2">{template.description}</p>
-                        {isSelected && (
-                          <Badge variant="secondary" className="text-[10px] mt-1.5">Active</Badge>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="text-[10px] text-slate-500 mt-1.5">Click a template to apply its system prompt, model, and widget settings.</p>
               </div>
             )}
 
@@ -2012,10 +1952,6 @@ export default function AiBizBotAdmin() {
     queryKey: ['/api/agents'],
   });
 
-  const { data: templates = [] } = useQuery<BotTemplate[]>({
-    queryKey: ['/api/bot-templates'],
-  });
-
   const { data: demoLeads = [] } = useQuery<DemoLeadRow[]>({
     queryKey: ['/api/admin/demo-leads'],
     queryFn: () => fetch('/api/admin/demo-leads').then(r => r.json()),
@@ -2120,7 +2056,6 @@ export default function AiBizBotAdmin() {
             <AdminPanel
               site={sites.find(s => s.id === selectedSiteId)!}
               agents={agents}
-              templates={templates}
               onUpdate={handleUpdate}
               isUpdating={updateMutation.isPending}
               initialTab={(() => {
@@ -2182,7 +2117,7 @@ export default function AiBizBotAdmin() {
                 name: s.name,
                 domain: s.domain,
                 slug: s.slug,
-                chatbotEnabled: s.chatbotEnabled,
+                chatbotEnabled: s.chatbotEnabled ?? undefined,
                 placeData: s.placeData as { rating?: number } | null,
               }))}
               onSelectSite={(id) => { setSelectedSiteId(id); setMainView('config'); }}

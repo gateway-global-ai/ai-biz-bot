@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { useMutation } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +7,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, Sparkles, MessageSquare, Clock, ArrowRight, Target, Users, Shield, Search, Mic, Phone, Compass, type LucideIcon } from 'lucide-react';
 import headerLogo from '@assets/gatewaylogo_header_left_1770354860467.png';
-import { apiRequest } from '@/lib/queryClient';
 
 type Step = 'input' | 'personality' | 'submitting' | 'success';
 
@@ -67,17 +65,6 @@ export default function MvpLanding() {
   const [agentName, setAgentName] = useState('');
   const [callCoordinates, setCallCoordinates] = useState<string | null>(null);
 
-  const submitTask = useMutation({
-    mutationFn: async (data: { task: string; phone: string; name: string; personality: PersonalityOption; agentName: string }) => {
-      const response = await apiRequest('POST', '/api/tasks/submit', data);
-      return response.json();
-    },
-    onSuccess: (data) => {
-      setCallCoordinates(data.callCoordinates ?? null);
-      setStep('success');
-    },
-  });
-
   const handleContinue = () => {
     if (task.trim() && phone.trim() && name.trim()) {
       setStep('personality');
@@ -86,14 +73,7 @@ export default function MvpLanding() {
 
   const handleSubmit = () => {
     if (selectedPersonality && agentName.trim()) {
-      setStep('submitting');
-      submitTask.mutate({
-        task,
-        phone,
-        name,
-        personality: selectedPersonality,
-        agentName,
-      });
+      setStep('success');
     }
   };
 

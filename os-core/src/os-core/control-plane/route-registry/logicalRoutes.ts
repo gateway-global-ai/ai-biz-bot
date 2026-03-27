@@ -32,7 +32,7 @@ export const LOGICAL_ROUTES: Record<string, LogicalRouteDef> = {
     routeId: "workspace.detail",
     requiredContextKeys: ["siteConfigId"],
     renderMode: "view",
-    linkedViewId: "workspace-router-view",
+    linkedViewId: "mission-control-view",
     optionalBrowserPath: "/workspace/:siteId",
   },
   agent_config: {

@@ -12,6 +12,8 @@ import {
   analyzeKnowledgeGapForSite,
 } from "../services/knowledgeGapAnalysis";
 import { firstRouteParam } from "../utils/expressParams";
+import { classifyOverrideReasonText } from "../services/securitySentinel";
+import { z } from "zod";
 
 const router = Router();
 
@@ -68,6 +70,81 @@ router.get(
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Knowledge gap analysis failed";
+      res.status(500).json({ error: msg });
+    }
+  }
+);
+
+router.get(
+  "/api/v1/admin/knowledge-gap/:siteConfigId/overrides",
+  requireAuth,
+  requirePlatformAdmin,
+  async (req: Request, res: Response) => {
+    try {
+      const siteConfigId = firstRouteParam(req.params.siteConfigId);
+      if (!siteConfigId) {
+        res.status(400).json({ error: "Missing siteConfigId" });
+        return;
+      }
+      const overrides = await storage.listKnowledgeCertificationOverridesForSite(siteConfigId);
+      res.json({ ok: true, overrides });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to list overrides";
+      res.status(500).json({ error: msg });
+    }
+  }
+);
+
+const overridePostSchema = z.object({
+  dimensionId: z.string().min(1),
+  overrideScore: z.number().int().min(0).max(10),
+  reasonText: z.string().min(1).max(4000),
+  expiresAt: z.string().datetime(),
+});
+
+router.post(
+  "/api/v1/admin/knowledge-gap/:siteConfigId/overrides",
+  requireAuth,
+  requirePlatformAdmin,
+  async (req: Request, res: Response) => {
+    try {
+      const siteConfigId = firstRouteParam(req.params.siteConfigId);
+      if (!siteConfigId) {
+        res.status(400).json({ error: "Missing siteConfigId" });
+        return;
+      }
+      const parsed = overridePostSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.message });
+        return;
+      }
+      const session = (req as any).session as { adminUserId?: string } | undefined;
+      const adminUserId = session?.adminUserId;
+      if (!adminUserId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+      const sentinel = classifyOverrideReasonText(parsed.data.reasonText);
+      const row = await storage.upsertKnowledgeCertificationOverride({
+        siteConfigId,
+        dimensionId: parsed.data.dimensionId,
+        overrideScore: parsed.data.overrideScore,
+        reasonText: parsed.data.reasonText,
+        createdByAdminUserId: adminUserId,
+        expiresAt: new Date(parsed.data.expiresAt),
+        reviewRequired: sentinel.classification === "review_required",
+        auditDetail: { sentinel: sentinel.auditDetail, classification: sentinel.classification },
+      });
+      res.json({
+        ok: true,
+        override: row,
+        sentinel: {
+          classification: sentinel.classification,
+          auditDetail: sentinel.auditDetail,
+        },
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to save override";
       res.status(500).json({ error: msg });
     }
   }

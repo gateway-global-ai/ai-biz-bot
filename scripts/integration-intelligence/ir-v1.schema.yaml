@@ -1,0 +1,25 @@
+# Integration IR bundle v1 — minimum shape produced by openapi-to-ir / postman-to-ir
+# Normative field names align with INTEGRATION_CAPABILITY_GRAPH_SPEC_V1.md §4 (subset for ingest).
+
+spec: integration_ir_v1
+description: >
+  Offline ingest output. Human review required before promoting rows into
+  registry-yaml/integration-endpoints/*.yaml.
+
+required_top_level:
+  - spec
+  - ir_version
+  - vendor_id
+  - source_tier
+  - generated_at
+  - endpoints
+
+endpoint_minimum:
+  - endpoint_id
+  - vendor_id
+  - source_tier
+  - method
+  - path_template
+  - operation_name
+  - stability_score
+  - adapter_status

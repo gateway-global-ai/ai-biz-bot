@@ -22,6 +22,10 @@ export interface VoiceSession {
   actualSeconds: number | null;
   /** The site/business this call belongs to – used for billing attribution. */
   siteConfigId: string | null;
+  /** Twilio signaling `From` passed via Stream `<Parameter name="callerId">` — trust anchor for verify/lookup tools. */
+  trustedCallerId?: string | null;
+  /** Twilio signaling `To` (dialed number) from `<Parameter name="dialedNumber">`. */
+  dialedNumber?: string | null;
   /** Phase 5D: gap-analysis snapshot for observability / future PSTN Live setup parity. */
   knowledgeSnapshot?: VoiceKnowledgeSnapshot | null;
 }

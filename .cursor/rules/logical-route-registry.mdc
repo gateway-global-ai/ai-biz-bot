@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Logical Route Registry
 
-- Read `docs-governance/LOGICAL_ROUTE_REGISTRY.md` before adding routes.
+- Read `docs-governance/canonical/LOGICAL_ROUTE_REGISTRY.md` before adding routes.
 - No browser path is the source of truth; define logical route ids first.
 - Every route must declare required context keys and a render mode.
 - No route may bypass policy gates or reference undeclared views/actions.

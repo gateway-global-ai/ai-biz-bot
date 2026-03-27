@@ -1,4 +1,5 @@
-import React, { ReactNode, useState } from "react";
+import React, { ReactNode, useMemo, useState } from "react";
+import type { AgentConfig } from "@/types/voice";
 import { Link, useLocation } from "wouter";
 import {
   Bot,
@@ -19,6 +20,22 @@ const platformIdentity = {
   hours: "24/7 Support Available",
   services: ["AI Concierge", "Business Automation", "Voice Agents", "Website Generation"],
   primaryColor: "#6366f1",
+};
+
+/** Module-stable: inline `agent={{...}}` on every render was a new reference → ConciergePanel synced `currentAgent` → voice effect cleanup disconnected after first turn. */
+const PLATFORM_SITE_FRAME_SALES_AGENT: AgentConfig = {
+  role: "Platform Sales Agent",
+  personality: "Helpful, professional, confident, and educational",
+  objectives: [
+    "Help business owners understand the AI Biz Bot platform",
+    "Explain the value of AI OS, Clear Voice AI, and AI Router",
+    "Guide visitors into the correct path: demo, buy now, or more info",
+  ],
+  constraints: [
+    "Be concise and enterprise-friendly",
+    "Position AI Biz Bot as the public representative of the platform",
+    "Focus on business value and next steps",
+  ],
 };
 
 interface PlatformSiteFrameProps {
@@ -53,7 +70,7 @@ export default function PlatformSiteFrame({
   );
   const [initialView, setInitialView] = useState<"chat" | "voice">("chat");
 
-  const voiceConfig = VoiceClientFactory.getDefaultConfig("premium");
+  const voiceConfig = useMemo(() => VoiceClientFactory.getDefaultConfig("premium"), []);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
@@ -148,20 +165,7 @@ export default function PlatformSiteFrame({
 
       <ConciergePanel
         business={platformIdentity}
-        agent={{
-          role: "Platform Sales Agent",
-          personality: "Helpful, professional, confident, and educational",
-          objectives: [
-            "Help business owners understand the AI Biz Bot platform",
-            "Explain the value of AI OS, Clear Voice AI, and AI Router",
-            "Guide visitors into the correct path: demo, buy now, or more info",
-          ],
-          constraints: [
-            "Be concise and enterprise-friendly",
-            "Position AI Biz Bot as the public representative of the platform",
-            "Focus on business value and next steps",
-          ],
-        }}
+        agent={PLATFORM_SITE_FRAME_SALES_AGENT}
         voiceConfig={voiceConfig}
         agentName="Gateway AI Assistant"
         isOpen={isChatOpen}

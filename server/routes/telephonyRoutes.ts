@@ -41,6 +41,50 @@ import {
 } from "../services/energy-monitor";
 import { buildRichSystemInstruction } from "../services/systemInstructionBuilder";
 import { buildBehavioralPrompt } from "../services/promptCompiler";
+import { firstRouteParam } from "../utils/expressParams";
+import {
+  generateOwnerReport,
+  generateMarketingSearch,
+  formatOwnerReportForSms,
+  formatMarketingReportForSms,
+} from "../mcp/placesAggregate";
+
+/** Placeholder for future Google Workspace OAuth map (SMS calendar branch checks presence). */
+const googleWorkspaceCredentials = new Map<string, unknown>();
+
+/** SMS coding branch: legacy MCP removed — route through Gemini gateway. */
+async function runSmsCodingAssistant(
+  toolName: string,
+  args: Record<string, unknown>,
+  opts: { temperature?: number; maxTokens?: number }
+): Promise<string> {
+  const language = String(args.language ?? "typescript");
+  const code = String(args.code ?? "");
+  const errText = String((args as { error?: string }).error ?? "");
+  let userContent: string;
+  if (toolName === "diagnose_error") {
+    userContent = `Language: ${language}\nError or code:\n${errText || code}\n\nDiagnose briefly for SMS.`;
+  } else if (toolName === "fix_code") {
+    userContent = `Language: ${language}\nCode:\n${code}\n\nSuggest a minimal fix (keep SMS-short).`;
+  } else if (toolName === "explain_code") {
+    userContent = `Language: ${language}\nCode:\n${code}\n\nExplain briefly for a beginner.`;
+  } else {
+    userContent = `Language: ${language}\nCode:\n${code}\n\nAnalyze briefly.`;
+  }
+  const { response } = await gatewayChat({
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are a concise coding assistant. Reply in plain text suitable for SMS (under 1200 characters).",
+      },
+      { role: "user", content: userContent },
+    ],
+    temperature: (opts.temperature ?? 60) / 100,
+    max_tokens: Math.min(opts.maxTokens ?? 800, 1200),
+  });
+  return response;
+}
 
 const router = Router();
 
@@ -116,7 +160,8 @@ const webhooksUpdateSchema = z.object({
   // Update telephony config by ID
   router.patch("/api/telephony/config/:id", async (req, res) => {
     try {
-      const { id } = req.params;
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Config id required" });
       const parsed = updateConfigSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.message });
@@ -164,7 +209,7 @@ const webhooksUpdateSchema = z.object({
 
   async function requireActiveSubscription(): Promise<{ allowed: boolean; error?: string }> {
     try {
-      const { getUncachableStripeClient } = await import('./stripeClient');
+      const { getUncachableStripeClient } = await import("../stripeClient");
       const stripe = await getUncachableStripeClient();
 
       const subscriptions = await stripe.subscriptions.list({
@@ -290,7 +335,8 @@ const webhooksUpdateSchema = z.object({
       // If we have credentials and phoneSid, configure webhooks on Twilio
       if (twilioClient && phoneSid) {
         try {
-          await twilioClient.incomingPhoneNumbers(phoneSid).update({
+          // Twilio SDK param names vary by version; keep runtime payload, satisfy TS.
+          await twilioClient.incomingPhoneNumbers(String(phoneSid)).update({
             voiceUrl: voiceUrl,
             voiceMethod: 'POST',
             smsUrl: smsUrl,
@@ -302,7 +348,7 @@ const webhooksUpdateSchema = z.object({
             voiceFallbackMethod: 'POST',
             smsFallbackUrl: errorUrl,
             smsFallbackMethod: 'POST',
-          });
+          } as any);
           console.log(`Configured webhooks for ${phoneNumber} on Twilio`);
         } catch (webhookError: any) {
           console.error('Failed to configure webhooks:', webhookError);
@@ -731,7 +777,8 @@ const webhooksUpdateSchema = z.object({
   // Update webhooks for an owned number
   router.patch("/api/twilio/numbers/:phoneSid", async (req, res) => {
     try {
-      const { phoneSid } = req.params;
+      const phoneSid = firstRouteParam(req.params.phoneSid);
+      if (!phoneSid) return res.status(400).json({ error: "phoneSid required" });
       const {
         voiceUrl,
         voiceFallbackUrl,
@@ -788,7 +835,8 @@ const webhooksUpdateSchema = z.object({
   // Release (delete) an owned number
   router.delete("/api/twilio/numbers/:phoneSid", async (req, res) => {
     try {
-      const { phoneSid } = req.params;
+      const phoneSid = firstRouteParam(req.params.phoneSid);
+      if (!phoneSid) return res.status(400).json({ error: "phoneSid required" });
       await releasePhoneNumber(phoneSid);
       res.json({ ok: true });
     } catch (error: any) {
@@ -928,7 +976,8 @@ const webhooksUpdateSchema = z.object({
   // Update sub-account (suspend/close)
   router.patch("/api/twilio/subaccounts/:sid", async (req, res) => {
     try {
-      const { sid } = req.params;
+      const sid = firstRouteParam(req.params.sid);
+      if (!sid) return res.status(400).json({ error: "sid required" });
       const { status } = req.body;
       if (!status || !['active', 'suspended', 'closed'].includes(status)) {
         return res.status(400).json({ error: "Valid status required: active, suspended, or closed" });
@@ -1016,7 +1065,8 @@ const webhooksUpdateSchema = z.object({
   // TwiML Apps - Update webhook URLs
   router.patch("/api/twilio/twiml-apps/:sid", async (req, res) => {
     try {
-      const { sid } = req.params;
+      const sid = firstRouteParam(req.params.sid);
+      if (!sid) return res.status(400).json({ error: "sid required" });
       const { voiceUrl, smsUrl, voiceFallbackUrl, smsFallbackUrl, statusCallback } = req.body;
       const client = await getTwilioClient();
       
@@ -1196,7 +1246,8 @@ const webhooksUpdateSchema = z.object({
   // Update Messaging Service webhooks (auto-fix)
   router.patch("/api/twilio/messaging-services/:sid", async (req, res) => {
     try {
-      const { sid } = req.params;
+      const sid = firstRouteParam(req.params.sid);
+      if (!sid) return res.status(400).json({ error: "sid required" });
       const { inboundRequestUrl, inboundMethod, fallbackUrl, fallbackMethod, statusCallback, useInboundWebhookOnNumber } = req.body;
       
       const client = await getTwilioClient();
@@ -1359,7 +1410,7 @@ const webhooksUpdateSchema = z.object({
         webhookUrls: {
           sms: smsWebhookUrl,
           voice: voiceWebhookUrl,
-          voiceFallback: voiceFallbackUrl
+          voiceFallback: errorWebhookUrl,
         },
         details: results
       });
@@ -1774,6 +1825,8 @@ const webhooksUpdateSchema = z.object({
   // Update call log with notes and customer info
   router.patch("/api/telephony/calls/:id", async (req, res) => {
     try {
+      const callLogId = firstRouteParam(req.params.id);
+      if (!callLogId) return res.status(400).json({ error: "Call id required" });
       const updateSchema = z.object({
         notes: z.string().optional(),
         customerName: z.string().optional(),
@@ -1785,7 +1838,7 @@ const webhooksUpdateSchema = z.object({
         return res.status(400).json({ error: parsed.error.message });
       }
 
-      const updated = await storage.updateCallLog(req.params.id, parsed.data);
+      const updated = await storage.updateCallLog(callLogId, parsed.data);
       if (!updated) {
         return res.status(404).json({ error: "Call log not found" });
       }
@@ -1915,7 +1968,8 @@ const webhooksUpdateSchema = z.object({
 
   router.patch("/api/twilio/sub-accounts/:id", async (req, res) => {
     try {
-      const { id } = req.params;
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Sub-account id required" });
       const { friendlyName, ownerEmail, status } = req.body;
       
       // Only allow safe fields to be updated - never authToken/accountSid
@@ -1938,7 +1992,8 @@ const webhooksUpdateSchema = z.object({
 
   router.delete("/api/twilio/sub-accounts/:id", async (req, res) => {
     try {
-      const { id } = req.params;
+      const id = firstRouteParam(req.params.id);
+      if (!id) return res.status(400).json({ error: "Sub-account id required" });
       const account = await storage.getTwilioSubAccount(id);
       if (!account) {
         return res.status(404).json({ error: "Sub-account not found" });
@@ -2425,7 +2480,13 @@ const webhooksUpdateSchema = z.object({
             codingAgent = allAgents[0] || null;
           }
           
-          let modelOptions: ModelOptions = {};
+          type SmsCodingModelOpts = {
+            hfToken?: string;
+            temperature?: number;
+            maxTokens?: number;
+            modelId?: string;
+          };
+          let modelOptions: SmsCodingModelOpts = {};
           if (codingAgent) {
             modelOptions = {
               hfToken: codingAgent.hfToken || undefined,
@@ -2437,7 +2498,7 @@ const webhooksUpdateSchema = z.object({
           }
           
           console.log(`[SMS Coding Agent] Using tool: ${toolName}`);
-          const result = await handleMCPToolCall(toolName, args, modelOptions);
+          const result = await runSmsCodingAssistant(toolName, args, modelOptions);
           
           // Truncate for SMS (keep it readable)
           let smsResponse = result;
@@ -2545,7 +2606,6 @@ const webhooksUpdateSchema = z.object({
       // Look up caller in customer database to personalize the response
       const customer = await storage.getCustomerByPhone(From);
       let assignedAgent = null;
-      let customerTasks: any[] = [];
       
       if (customer) {
         console.log(`[SMS Webhook] Caller ID matched: ${customer.name} (${customer.id})`);
@@ -2555,10 +2615,6 @@ const webhooksUpdateSchema = z.object({
           assignedAgent = await storage.getAgent(customer.agentId);
           console.log(`[SMS Webhook] Assigned agent: ${assignedAgent?.name || 'Unknown'}`);
         }
-        
-        // Get their active tasks/projects
-        customerTasks = await storage.getTasksByPhone(From);
-        console.log(`[SMS Webhook] Customer has ${customerTasks.length} tasks`);
       } else {
         console.log(`[SMS Webhook] No customer match for: ${From}`);
       }
@@ -2606,14 +2662,6 @@ const webhooksUpdateSchema = z.object({
       const existingMessages = await storage.getMessagesByConversation(conversation.id, 5);
       const isFirstMessage = existingMessages.length <= 1; // Only the message we just stored
       
-      // Build task context
-      let taskContext = '';
-      const activeTasks = customerTasks.filter(t => t.status !== 'completed' && t.status !== 'failed');
-      if (activeTasks.length > 0) {
-        taskContext = '\n\nActive projects/tasks for this customer:\n' + 
-          activeTasks.map(t => `- ${t.task} (Status: ${t.status})`).join('\n');
-      }
-      
       // Build customer context
       let customerContext = '';
       if (customer) {
@@ -2636,7 +2684,7 @@ THIS IS YOUR FIRST MESSAGE WITH THIS USER! Follow the 24-hour demo onboarding fl
 Be friendly and make them feel welcome! This is their first experience with Gateway.`;
       }
       
-      const fullPersonality = `${agentPersonality}${customerContext}${taskContext}${onboardingContext}\n\nAddress the customer by name when appropriate. Be warm, helpful, and reference their projects if relevant to the conversation.`;
+      const fullPersonality = `${agentPersonality}${customerContext}${onboardingContext}\n\nAddress the customer by name when appropriate. Be warm, helpful, and reference their projects if relevant to the conversation.`;
       
       // Generate AI response using Gemini
       let responseText = `Hi ${callerName}! Thank you for your message. An agent will respond shortly.`;
@@ -2727,7 +2775,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     };
   }
 
-  function resolvePublicVoiceStreamUrl(req: any): string {
+  function resolvePublicVoiceStreamUrl(req: any, siteConfigId?: string | null): string {
     const appUrl = process.env.APP_URL;
     const appHost = appUrl
       ? (() => {
@@ -2749,6 +2797,14 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
     if (!host || host.includes("localhost")) {
       throw new Error("Public voice stream host is not configured. Set APP_URL to your public HTTPS domain.");
+    }
+
+    // Feature flag: route to sovereign local pipeline instead of Gemini cloud
+    if (process.env.LOCAL_VOICE_TWILIO_STREAM === "true") {
+      const sovereignUrl = `wss://${host}/ws/twilio-sovereign`;
+      return siteConfigId
+        ? `${sovereignUrl}?siteConfigId=${encodeURIComponent(siteConfigId)}`
+        : sovereignUrl;
     }
 
     return `wss://${host}/ws/voice-stream`;
@@ -2779,6 +2835,21 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         customerEmail: customerProfile?.customerEmail || null,
         notes: callerContext.note,
       });
+
+      if (siteConfigId && CallSid) {
+        storage
+          .logConversationEvent({
+            siteConfigId,
+            callSid: CallSid,
+            eventType: "cgr_voice_hint",
+            metadata: {
+              channel: "pstn_narrowband",
+              audioBandwidthClass: "narrowband",
+              recommendedHandoffWhenVisual: "sms_canvas",
+            },
+          })
+          .catch(() => {});
+      }
       
       // Check firewall
       const allowedNumbers = config?.allowedNumbers || [];
@@ -2799,7 +2870,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       }
       
       // Twilio must receive a public WSS endpoint (never localhost).
-      const streamUrl = resolvePublicVoiceStreamUrl(req);
+      const streamUrl = resolvePublicVoiceStreamUrl(req, siteConfigId);
       
       console.log(`[Voice] Stream URL: ${streamUrl}, siteConfigId: ${siteConfigId ?? 'none'}`);
       
@@ -2814,8 +2885,8 @@ Be friendly and make them feel welcome! This is their first experience with Gate
             brandName = siteConfig.name;
             voiceSystemPrompt = `You are the phone assistant for ${siteConfig.name}. On your first response, briefly introduce ${siteConfig.name} and ask how you can help. Then continue naturally and concisely.`;
           }
-          if (siteConfig?.agentId) {
-            const agent = await storage.getAgent(siteConfig.agentId);
+          if (siteConfig?.assignedAgentId) {
+            const agent = await storage.getAgent(siteConfig.assignedAgentId);
             if (agent) {
               agentName = agent.name;
               voiceSystemPrompt = `${buildBehavioralPrompt(agent)}\n\nBrand rule: On your first spoken response, identify as ${brandName}.`;
@@ -2840,6 +2911,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       <Parameter name="agentName" value="${escapeXml(agentName)}"/>
       <Parameter name="systemPrompt" value="${escapeXml(effectiveVoicePrompt)}"/>
       ${siteConfigId ? `<Parameter name="siteConfigId" value="${escapeXml(siteConfigId)}"/>` : ''}
+      <Parameter name="callerId" value="${escapeXml(String(From ?? "Unknown"))}"/>
+      <Parameter name="callSid" value="${escapeXml(String(CallSid ?? ""))}"/>
+      <Parameter name="dialedNumber" value="${escapeXml(String(To ?? ""))}"/>
     </Stream>
   </Connect>
 </Response>`);
@@ -3030,7 +3104,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         }
       }
 
-      const streamUrl = resolvePublicVoiceStreamUrl(req);
+      // Pass siteConfigId into the WSS URL so /ws/twilio-sovereign can resolve promptCompiler
+      // context (matches /webhook/voice/stream; Twilio <Parameter> alone is not read by sovereign).
+      const streamUrl = resolvePublicVoiceStreamUrl(req, siteConfigId);
 
       // Bail-specific system prompt injected via custom parameter so voiceStream.ts
       // can use it in the Gemini setup message.
@@ -3060,6 +3136,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       <Parameter name="ptt"          value="1"/>
       ${siteConfigId ? `<Parameter name="siteConfigId" value="${escapeXml(siteConfigId)}"/>` : ""}
       <Parameter name="systemPrompt" value="${escapeXml(decodeURIComponent(jailPrompt))}"/>
+      <Parameter name="callerId" value="${escapeXml(String(From ?? "Unknown"))}"/>
+      <Parameter name="callSid" value="${escapeXml(String(CallSid ?? ""))}"/>
+      <Parameter name="dialedNumber" value="${escapeXml(String(To ?? ""))}"/>
     </Stream>
   </Connect>
   <Say>The call has ended. Goodbye.</Say>
@@ -3095,7 +3174,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
           if (siteConfigId) {
             // Check whether voiceStream already recorded usage for this call
-            const { db: _db } = await import('./db');
+            const { db: _db } = await import("../db");
             const { voiceUsageLogs: _vul } = await import('@shared/schema');
             const { eq: _eq } = await import('drizzle-orm');
             const existing = await _db
@@ -3416,7 +3495,8 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   // Get voice configuration for an agent
   router.get("/api/voice/config/:agentId", async (req, res) => {
     try {
-      const { agentId } = req.params;
+      const agentId = firstRouteParam(req.params.agentId);
+      if (!agentId) return res.status(400).json({ error: "agentId required" });
       
       const agent = await storage.getAgent(agentId);
       if (!agent) {
@@ -3440,7 +3520,8 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   // Update voice configuration for an agent
   router.post("/api/voice/config/:agentId", async (req, res) => {
     try {
-      const { agentId } = req.params;
+      const agentId = firstRouteParam(req.params.agentId);
+      if (!agentId) return res.status(400).json({ error: "agentId required" });
       const { model, voice, role, companyName, systemPrompt, voicePersona } = req.body;
       
       const allowedModels = [process.env.GEMINI_MODEL_ID, process.env.GEMINI_MODEL_FALLBACK].filter(Boolean) as string[];
@@ -3463,6 +3544,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       if (voicePersona !== undefined) updates.voicePersona = voicePersona;
       
       const updatedAgent = await storage.updateAgent(agentId, updates);
+      if (!updatedAgent) {
+        return res.status(500).json({ error: "Failed to update agent" });
+      }
       
       res.json({
         success: true,
@@ -3483,7 +3567,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
   
   // Get available voices for a model
   router.get("/api/voice/models/:modelId/voices", (req, res) => {
-    const { modelId } = req.params;
+    const modelId = firstRouteParam(req.params.modelId) ?? "";
     const defaultModelSlug = (process.env.GEMINI_MODEL_ID || "").replace(/^models\//, "");
     const modelVoices: Record<string, Array<{ id: string; name: string; gender: string; description: string }>> = {
       [defaultModelSlug]: [
@@ -3538,7 +3622,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       const audioBuffer = Buffer.from(audioBase64, 'base64');
       
       // Process with PTT service
-      const { getPTTService } = await import('./pttService');
+      const { getPTTService } = await import("../pttService");
       const pttService = getPTTService();
       const result = await pttService.processPTTAudio(
         audioBuffer,
@@ -3573,7 +3657,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       
       const audioBuffer = Buffer.from(audioBase64, 'base64');
       
-      const { getPTTService } = await import('./pttService');
+      const { getPTTService } = await import("../pttService");
       const pttService = getPTTService();
       const result = await pttService.transcribeAudio(audioBuffer);
       
@@ -3600,7 +3684,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         return res.status(400).json({ error: "Text required" });
       }
       
-      const { getPTTService } = await import('./pttService');
+      const { getPTTService } = await import("../pttService");
       const pttService = getPTTService();
       const result = await pttService.generateSpeech(text, voice || 'Puck');
       

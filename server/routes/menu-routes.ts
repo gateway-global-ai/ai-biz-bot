@@ -4,27 +4,22 @@ import {
   menus, 
   menuCategories, 
   menuItems, 
-  carts, 
-  cartItems, 
   orders, 
   orderItems,
   insertMenuSchema,
   insertMenuCategorySchema,
   insertMenuItemSchema,
-  insertCartSchema,
-  insertCartItemSchema,
   insertOrderSchema,
   insertOrderItemSchema,
   type Menu,
   type MenuItem,
-  type Cart,
   type Order
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { z } from "zod";
 
 /**
- * Register menu and cart management routes
+ * Register menu and order management routes
  */
 export function registerMenuRoutes(app: Express) {
   
@@ -280,175 +275,6 @@ export function registerMenuRoutes(app: Express) {
   });
   
   // ==========================================
-  // SHOPPING CART ROUTES
-  // ==========================================
-  
-  // Get or create cart for a session/customer
-  app.get("/api/cart/:siteConfigId", async (req, res) => {
-    try {
-      const { siteConfigId } = req.params;
-      const { sessionId, customerId } = req.query;
-      
-      let cart: Cart | undefined;
-      
-      if (customerId) {
-        cart = await db.query.carts.findFirst({
-          where: and(
-            eq(carts.siteConfigId, siteConfigId),
-            eq(carts.customerId, customerId as string),
-            eq(carts.status, "active")
-          ),
-        });
-      } else if (sessionId) {
-        cart = await db.query.carts.findFirst({
-          where: and(
-            eq(carts.siteConfigId, siteConfigId),
-            eq(carts.sessionId, sessionId as string),
-            eq(carts.status, "active")
-          ),
-        });
-      }
-      
-      if (!cart) {
-        // Create a new cart
-        const [newCart] = await db.insert(carts).values({
-          siteConfigId,
-          sessionId: sessionId as string | undefined,
-          customerId: customerId as string | undefined,
-          status: "active",
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-        }).returning();
-        cart = newCart;
-      }
-      
-      // Get cart items
-      const items = await db.query.cartItems.findMany({
-        where: eq(cartItems.cartId, cart.id),
-      });
-      
-      res.json({ cart, items });
-    } catch (error) {
-      console.error("Error fetching cart:", error);
-      res.status(500).json({ error: "Failed to fetch cart" });
-    }
-  });
-  
-  // Add item to cart
-  app.post("/api/cart/items", async (req, res) => {
-    try {
-      const itemData = insertCartItemSchema.parse(req.body);
-      
-      // Calculate total price
-      const totalPrice = Number(itemData.unitPrice) * itemData.quantity;
-      
-      const [newItem] = await db.insert(cartItems).values({
-        ...itemData,
-        totalPrice: totalPrice.toString(),
-      }).returning();
-      
-      // Update cart totals
-      await updateCartTotals(itemData.cartId);
-      
-      res.status(201).json(newItem);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: "Invalid cart item data", details: error.errors });
-      }
-      console.error("Error adding item to cart:", error);
-      res.status(500).json({ error: "Failed to add item to cart" });
-    }
-  });
-  
-  // Update cart item quantity
-  app.patch("/api/cart/items/:itemId", async (req, res) => {
-    try {
-      const { itemId } = req.params;
-      const { quantity } = req.body;
-      
-      if (!quantity || quantity < 1) {
-        return res.status(400).json({ error: "Invalid quantity" });
-      }
-      
-      const item = await db.query.cartItems.findFirst({
-        where: eq(cartItems.id, itemId),
-      });
-      
-      if (!item) {
-        return res.status(404).json({ error: "Cart item not found" });
-      }
-      
-      const totalPrice = Number(item.unitPrice) * quantity;
-      
-      const [updatedItem] = await db
-        .update(cartItems)
-        .set({ 
-          quantity, 
-          totalPrice: totalPrice.toString(),
-          updatedAt: new Date() 
-        })
-        .where(eq(cartItems.id, itemId))
-        .returning();
-      
-      // Update cart totals
-      await updateCartTotals(item.cartId);
-      
-      res.json(updatedItem);
-    } catch (error) {
-      console.error("Error updating cart item:", error);
-      res.status(500).json({ error: "Failed to update cart item" });
-    }
-  });
-  
-  // Remove item from cart
-  app.delete("/api/cart/items/:itemId", async (req, res) => {
-    try {
-      const { itemId } = req.params;
-      
-      const item = await db.query.cartItems.findFirst({
-        where: eq(cartItems.id, itemId),
-      });
-      
-      if (!item) {
-        return res.status(404).json({ error: "Cart item not found" });
-      }
-      
-      await db.delete(cartItems).where(eq(cartItems.id, itemId));
-      
-      // Update cart totals
-      await updateCartTotals(item.cartId);
-      
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error removing cart item:", error);
-      res.status(500).json({ error: "Failed to remove cart item" });
-    }
-  });
-  
-  // Clear cart
-  app.delete("/api/cart/:cartId", async (req, res) => {
-    try {
-      const { cartId } = req.params;
-      
-      await db.delete(cartItems).where(eq(cartItems.cartId, cartId));
-      await db
-        .update(carts)
-        .set({ 
-          subtotal: "0", 
-          taxAmount: "0", 
-          deliveryFee: "0", 
-          totalAmount: "0",
-          lastUpdatedAt: new Date()
-        })
-        .where(eq(carts.id, cartId));
-      
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error clearing cart:", error);
-      res.status(500).json({ error: "Failed to clear cart" });
-    }
-  });
-  
-  // ==========================================
   // ORDER/CHECKOUT ROUTES
   // ==========================================
   
@@ -464,37 +290,6 @@ export function registerMenuRoutes(app: Express) {
         ...orderData,
         orderNumber,
       }).returning();
-      
-      // If cartId is provided, copy cart items to order items
-      if (orderData.cartId) {
-        const items = await db.query.cartItems.findMany({
-          where: eq(cartItems.cartId, orderData.cartId),
-        });
-        
-        for (const item of items) {
-          const menuItem = await db.query.menuItems.findFirst({
-            where: eq(menuItems.id, item.menuItemId),
-          });
-          
-          await db.insert(orderItems).values({
-            orderId: newOrder.id,
-            menuItemId: item.menuItemId,
-            itemName: menuItem?.name || "Unknown Item",
-            itemDescription: menuItem?.description || "",
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice,
-            customizations: item.customizations,
-            specialInstructions: item.specialInstructions,
-          });
-        }
-        
-        // Mark cart as converted
-        await db
-          .update(carts)
-          .set({ status: "converted" })
-          .where(eq(carts.id, orderData.cartId));
-      }
       
       res.status(201).json(newOrder);
     } catch (error) {
@@ -605,30 +400,4 @@ export function registerMenuRoutes(app: Express) {
       res.status(500).json({ error: "Failed to update order status" });
     }
   });
-}
-
-/**
- * Helper function to update cart totals
- */
-async function updateCartTotals(cartId: string) {
-  const items = await db.query.cartItems.findMany({
-    where: eq(cartItems.cartId, cartId),
-  });
-  
-  const subtotal = items.reduce((sum, item) => sum + Number(item.totalPrice), 0);
-  const taxRate = 0.08; // TODO: Make this configurable per site/jurisdiction
-  const taxAmount = subtotal * taxRate;
-  const deliveryFee = 5.00; // TODO: Make this configurable per site
-  const totalAmount = subtotal + taxAmount + deliveryFee;
-  
-  await db
-    .update(carts)
-    .set({
-      subtotal: subtotal.toFixed(2),
-      taxAmount: taxAmount.toFixed(2),
-      deliveryFee: deliveryFee.toFixed(2),
-      totalAmount: totalAmount.toFixed(2),
-      lastUpdatedAt: new Date(),
-    })
-    .where(eq(carts.id, cartId));
 }

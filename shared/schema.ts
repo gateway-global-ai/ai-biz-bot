@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index, pgEnum, uuid, serial, bigserial, real, doublePrecision, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index, pgEnum, uuid, serial, bigserial, doublePrecision, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -326,10 +326,21 @@ export interface AIModelSettings {
   maxTokens: number;
 }
 
+/** Binding from registry swarm schematic (e.g. HOSPITALITY_SWARM_SCHEMATIC_V1.md). */
+export type SwarmRoleContractV1 = {
+  schematic_id: string;
+  bundle_version: string;
+  role_type: string;
+  integration_capability_set_ids: string[];
+  deploy_posture?: string;
+  api_version_lane?: string;
+};
+
 /** Structured controls on agent: mirroring + guardrails (always, never, believe). */
 export type StructuredControls = {
   mirroring?: { enabled?: boolean; intensity?: number };
   guardrails?: { always?: string[]; never?: string[]; believe?: string[] };
+  swarm_role_contract?: SwarmRoleContractV1;
 };
 
 /** User-directed guardrails at site level; merged with agent.structuredControls at compile time. */
@@ -401,6 +412,51 @@ export const agents = pgTable("agents", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+/** Control-plane orchestration run memory (swarm provision, gates, failures). */
+export const agentOrchestrationRuns = pgTable("agent_orchestration_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id")
+    .references(() => siteConfigs.id, { onDelete: "cascade" })
+    .notNull(),
+  agentId: varchar("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  currentState: text("current_state").notNull().default("init"),
+  step: text("step").notNull().default("orchestrator"),
+  /** Closed set: in_progress | blocked | failed | deferred | completed (see shared/agentOrchestrationConstants.ts) */
+  status: text("status").notNull().default("in_progress"),
+  blockers: jsonb("blockers").notNull().default(sql`'[]'::jsonb`),
+  failureRefs: jsonb("failure_refs").notNull().default(sql`'[]'::jsonb`),
+  metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+  aptitudeStatus: text("aptitude_status").notNull().default("deferred"),
+  requiredForDeploy: boolean("required_for_deploy").notNull().default(false),
+  clarityScore: integer("clarity_score"),
+  configurationCompleteness: integer("configuration_completeness"),
+  fallbackDefined: boolean("fallback_defined"),
+  firstValuePathPresent: boolean("first_value_path_present"),
+  /** Local agent plane audit columns (migration 0068) */
+  rawModelOutput: text("raw_model_output"),
+  parseError: text("parse_error"),
+  filesTouchedJson: jsonb("files_touched_json").notNull().default(sql`'[]'::jsonb`),
+  reviewRequired: boolean("review_required").notNull().default(true),
+  violationReason: text("violation_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/** Persisted orchestration violations (telemetry; distinct violation_type). */
+export const orchestrationViolations = pgTable("orchestration_violations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orchestrationRunId: varchar("orchestration_run_id").references(() => agentOrchestrationRuns.id, {
+    onDelete: "set null",
+  }),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
+  severity: text("severity").notNull(),
+  violationType: text("violation_type").notNull(),
+  routeOrSource: text("route_or_source"),
+  actorHint: text("actor_hint"),
+  detail: jsonb("detail").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertAgentSchema = createInsertSchema(agents).omit({
   id: true,
   createdAt: true,
@@ -465,37 +521,6 @@ export const insertCustomerSchema = createInsertSchema(customers).omit({
 
 export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
 export type Customer = typeof customers.$inferSelect;
-
-// MVP Tasks table - for 24-hour trial tasks
-export const tasks = pgTable("tasks", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userName: text("user_name").notNull(),
-  userPhone: text("user_phone").notNull(),
-  agentName: text("agent_name").notNull(),
-  personalityId: text("personality_id").notNull(), // achiever, collaborator, supporter, analyst
-  task: text("task").notNull(),
-  parsedTask: jsonb("parsed_task"), // Parsed task details from Kimi
-  status: text("status").notNull().default("pending"), // pending, started, in_progress, completed, failed
-  estimatedHours: integer("estimated_hours").default(24),
-  dominance: integer("dominance").default(50),
-  influence: integer("influence").default(50),
-  steadiness: integer("steadiness").default(50),
-  conscientiousness: integer("conscientiousness").default(50),
-  result: text("result"), // Final task result
-  nextUpdateAt: timestamp("next_update_at"), // When to send next SMS update
-  updatesCount: integer("updates_count").default(0), // Number of updates sent
-  startedAt: timestamp("started_at"),
-  completedAt: timestamp("completed_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const insertTaskSchema = createInsertSchema(tasks).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertTask = z.infer<typeof insertTaskSchema>;
-export type Task = typeof tasks.$inferSelect;
 
 // ── Resellers (Digital Franchise) ─────────────────────────────────────────────
 // Self-referential hierarchy: a reseller can have a parent (sub-reseller model).
@@ -873,172 +898,6 @@ export const insertA2pCampaignSchema = createInsertSchema(a2pCampaigns).omit({
 export type InsertA2pCampaign = z.infer<typeof insertA2pCampaignSchema>;
 export type A2pCampaign = typeof a2pCampaigns.$inferSelect;
 
-// Knowledge Topics - Tracks what people want to learn about (defined first for references)
-export const knowledgeTopics = pgTable("knowledge_topics", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  normalizedTopic: text("normalized_topic").notNull().unique(), // Lowercase, trimmed for matching
-  displayTopic: text("display_topic").notNull(), // Original user input
-  requestCount: integer("request_count").default(1),
-  currentVersion: integer("current_version").default(1),
-  bestLessonId: varchar("best_lesson_id"), // Reference to best performing lesson
-  tags: text("tags").array().default(sql`ARRAY[]::text[]`), // For topic clustering
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertKnowledgeTopicSchema = createInsertSchema(knowledgeTopics).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertKnowledgeTopic = z.infer<typeof insertKnowledgeTopicSchema>;
-export type KnowledgeTopic = typeof knowledgeTopics.$inferSelect;
-
-// Micro-Learning Lesson Plans - Self-Improving Knowledge Base
-export const lessonPlans = pgTable("lesson_plans", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  topicId: varchar("topic_id").references(() => knowledgeTopics.id),
-  version: integer("version").default(1),
-  topic: text("topic").notNull(),
-  title: text("title").notNull(),
-  syllabus: jsonb("syllabus"), // Array of {id, title, description}
-  initialContent: jsonb("initial_content"), // BoardContent object
-  quiz: jsonb("quiz"), // Array of QuizQuestion
-  environmentDescription: text("environment_description"),
-  instructorDescription: text("instructor_description"),
-  backgroundImageUrl: text("background_image_url"),
-  instructorImageUrl: text("instructor_image_url"),
-  completionCount: integer("completion_count").default(0),
-  avgQuizScore: integer("avg_quiz_score"), // Stored as 0-100
-  totalQuizAttempts: integer("total_quiz_attempts").default(0),
-  feedback: jsonb("feedback"), // Array of user feedback strings
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertLessonPlanSchema = createInsertSchema(lessonPlans).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertLessonPlan = z.infer<typeof insertLessonPlanSchema>;
-export type LessonPlan = typeof lessonPlans.$inferSelect;
-
-// Lesson Sessions - Tracks each learning session for improvement data
-export const lessonSessions = pgTable("lesson_sessions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  lessonPlanId: varchar("lesson_plan_id").references(() => lessonPlans.id),
-  userPhone: text("user_phone"), // Optional - for SMS-triggered lessons
-  startedAt: timestamp("started_at").defaultNow(),
-  completedAt: timestamp("completed_at"),
-  quizScore: integer("quiz_score"), // 0-100
-  slidesViewed: integer("slides_viewed").default(0),
-  totalSlides: integer("total_slides"),
-  feedback: text("feedback"),
-  rating: integer("rating"), // 1-5 stars
-});
-
-export const insertLessonSessionSchema = createInsertSchema(lessonSessions).omit({
-  id: true,
-  startedAt: true,
-});
-
-export type InsertLessonSession = z.infer<typeof insertLessonSessionSchema>;
-export type LessonSession = typeof lessonSessions.$inferSelect;
-
-// Organizations - Top-level grouping for projects (like GitHub orgs)
-export const organizations = pgTable("organizations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  description: text("description"),
-  avatarUrl: text("avatar_url"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertOrganizationSchema = createInsertSchema(organizations).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
-export type Organization = typeof organizations.$inferSelect;
-
-// Projects - Belong to an organization, have assigned agents
-export const projects = pgTable("projects", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  orgId: varchar("org_id").references(() => organizations.id).notNull(),
-  name: text("name").notNull(),
-  description: text("description"),
-  status: text("status").notNull().default("active"), // active, completed, archived
-  leadAgentId: varchar("lead_agent_id").references(() => agents.id),
-  agentIds: text("agent_ids").array().default(sql`ARRAY[]::text[]`),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertProjectSchema = createInsertSchema(projects).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertProject = z.infer<typeof insertProjectSchema>;
-export type Project = typeof projects.$inferSelect;
-
-// Project Tasks - Work items within a project
-export const projectTasks = pgTable("project_tasks", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  projectId: varchar("project_id").references(() => projects.id).notNull(),
-  title: text("title").notNull(),
-  description: text("description"),
-  status: text("status").notNull().default("todo"), // todo, in_progress, review, done
-  priority: text("priority").notNull().default("medium"), // low, medium, high, urgent
-  assignedAgentId: varchar("assigned_agent_id").references(() => agents.id),
-  dueDate: timestamp("due_date"),
-  completedAt: timestamp("completed_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({
-  id: true,
-  completedAt: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertProjectTask = z.infer<typeof insertProjectTaskSchema>;
-export type ProjectTask = typeof projectTasks.$inferSelect;
-
-// Bot Templates - pre-configured bot personalities (from Gateway Bot Matrix)
-export const botTemplates = pgTable("bot_templates", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  description: text("description"),
-  category: text("category").default("custom"),
-  defaultSystemPrompt: text("default_system_prompt").notNull(),
-  defaultModel: text("default_model").default("gemini"), // runtime uses process.env.GEMINI_MODEL_ID
-  defaultTools: jsonb("default_tools").default({}),
-  defaultUiConfig: jsonb("default_ui_config").default({}),
-  icon: text("icon").default("Bot"),
-  isPublic: boolean("is_public").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertBotTemplateSchema = createInsertSchema(botTemplates).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertBotTemplate = z.infer<typeof insertBotTemplateSchema>;
-export type BotTemplate = typeof botTemplates.$inferSelect;
-
 // Enum for the Reseller Franchise Hierarchy (MSA v1.1.0 Addendum §1)
 export const accountTypeEnum = pgEnum("account_type", [
   "DIRECT",       // Standard self-serve signup (default)
@@ -1345,6 +1204,11 @@ export const siteConfigs = pgTable("site_configs", {
   logoUrl: text("logo_url"),
   /** Primary website URL for custom businesses. */
   website: text("website"),
+  /** Communication Plane: disclosure, stability dials, principal-of-record — see shared/conversationGrounding.ts */
+  communicationGovernance: jsonb("communication_governance").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  /** SKU from last successful platform software license redemption (informational). */
+  platformLicenseSku: text("platform_license_sku"),
+  platformLicenseActivatedAt: timestamp("platform_license_activated_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1365,6 +1229,40 @@ export const insertSiteConfigSchema = createInsertSchema(siteConfigs).omit({
 export type InsertSiteConfig = z.infer<typeof insertSiteConfigSchema>;
 export type SiteConfig = typeof siteConfigs.$inferSelect;
 
+/** Admin-issued software license keys; full key shown once; DB stores prefix + SHA-256 hash only. */
+export const platformLicenseKeys = pgTable("platform_license_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  keyPrefix: varchar("key_prefix", { length: 24 }).notNull(),
+  secretHash: text("secret_hash").notNull(),
+  sku: text("sku").notNull(),
+  label: text("label"),
+  maxActivations: integer("max_activations"),
+  activationCount: integer("activation_count").notNull().default(0),
+  expiresAt: timestamp("expires_at"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  revokedAt: timestamp("revoked_at"),
+  createdByAdminId: varchar("created_by_admin_id").references(() => adminUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const platformLicenseActivations = pgTable("platform_license_activations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  licenseKeyId: uuid("license_key_id")
+    .references(() => platformLicenseKeys.id, { onDelete: "cascade" })
+    .notNull(),
+  siteConfigId: varchar("site_config_id")
+    .references(() => siteConfigs.id, { onDelete: "cascade" })
+    .notNull(),
+  customerAccountId: varchar("customer_account_id").references(() => customerAccounts.id, {
+    onDelete: "set null",
+  }),
+  activatedAt: timestamp("activated_at").notNull().defaultNow(),
+});
+
+export type PlatformLicenseKey = typeof platformLicenseKeys.$inferSelect;
+export type PlatformLicenseActivation = typeof platformLicenseActivations.$inferSelect;
+
 // ── Knowledge Artifacts — first-class KB docs with scope, visibility, agent_access_key ─
 export const knowledgeArtifacts = pgTable(
   "knowledge_artifacts",
@@ -1378,6 +1276,10 @@ export const knowledgeArtifacts = pgTable(
     content: text("content"),
     sourcePath: text("source_path"),
     groupLevel: text("group_level"),
+    /** KAP trust weight 0–10; platform governance anchors use 10. */
+    trustWeight: integer("trust_weight"),
+    /** Tags, provenance notes, etc. */
+    artifactMetadata: jsonb("artifact_metadata").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     ownerId: varchar("owner_id").references(() => customerAccounts.id, { onDelete: "set null" }),
     resellerId: varchar("reseller_id").references(() => resellers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow(),
@@ -1386,6 +1288,7 @@ export const knowledgeArtifacts = pgTable(
   (table) => [
     index("idx_knowledge_artifacts_site_config_id").on(table.siteConfigId),
     index("idx_knowledge_artifacts_scope_visibility").on(table.scope, table.visibility),
+    index("idx_knowledge_artifacts_scope_trust").on(table.scope, table.trustWeight),
   ]
 );
 
@@ -1396,6 +1299,59 @@ export const insertKnowledgeArtifactSchema = createInsertSchema(knowledgeArtifac
 });
 export type KnowledgeArtifact = typeof knowledgeArtifacts.$inferSelect;
 export type InsertKnowledgeArtifact = typeof knowledgeArtifacts.$inferInsert;
+
+/** Phase 5E — superadmin manual certification for a dimension (heuristic override, audited, expiring). */
+export const knowledgeCertificationOverrides = pgTable(
+  "knowledge_certification_overrides",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    siteConfigId: varchar("site_config_id")
+      .notNull()
+      .references(() => siteConfigs.id, { onDelete: "cascade" }),
+    dimensionId: text("dimension_id").notNull(),
+    overrideScore: integer("override_score").notNull(),
+    reasonText: text("reason_text").notNull(),
+    createdByAdminUserId: varchar("created_by_admin_user_id")
+      .notNull()
+      .references(() => adminUsers.id),
+    expiresAt: timestamp("expires_at").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    /** Deterministic Sentinel audit: true = needs human review on platform. */
+    reviewRequired: boolean("review_required").notNull().default(false),
+    auditDetail: jsonb("audit_detail").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  },
+  (table) => [
+    uniqueIndex("knowledge_cert_override_site_dim").on(table.siteConfigId, table.dimensionId),
+    index("idx_knowledge_cert_overrides_site_expires").on(table.siteConfigId, table.expiresAt),
+    index("idx_knowledge_cert_overrides_review").on(table.siteConfigId, table.reviewRequired),
+  ]
+);
+
+export type KnowledgeCertificationOverride = typeof knowledgeCertificationOverrides.$inferSelect;
+export type InsertKnowledgeCertificationOverride = typeof knowledgeCertificationOverrides.$inferInsert;
+
+/** Zero-LLM vault handoff — opaque token/refs from upstream vaults; never chat_logs. */
+export const secureVaultRefs = pgTable(
+  "secure_vault_refs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    siteConfigId: varchar("site_config_id")
+      .notNull()
+      .references(() => siteConfigs.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    opaqueReference: text("opaque_reference").notNull(),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    attestedAt: timestamp("attested_at").notNull(),
+    createdByAdminUserId: varchar("created_by_admin_user_id")
+      .notNull()
+      .references(() => adminUsers.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("idx_secure_vault_refs_site").on(table.siteConfigId)]
+);
+
+export type SecureVaultRef = typeof secureVaultRefs.$inferSelect;
+export type InsertSecureVaultRef = typeof secureVaultRefs.$inferInsert;
 
 // Session-scoped active document keys for in-chat KB overlay
 export const artifactSessionActivations = pgTable(
@@ -1903,40 +1859,6 @@ export const businessIntelligenceCache = pgTable("business_intelligence_cache", 
 
 export type BusinessIntelligenceCacheRow = typeof businessIntelligenceCache.$inferSelect;
 
-/** Tour specifications (YAML-derived or manual) for featured partners. */
-export const tourSpecifications = pgTable("tour_specifications", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  placeId: text("place_id"),
-  partnerId: text("partner_id"),
-  tourId: text("tour_id").notNull().unique(),
-  spec: jsonb("spec").notNull(), // { segments: TourSegment[] }
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export type TourSpecificationRow = typeof tourSpecifications.$inferSelect;
-
-/** Featured Partners - Preferential placement for Clear Voice partners (e.g. Boardwalk Suites). */
-export const featuredPartners = pgTable("featured_partners", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  grnHotelId: varchar("grn_hotel_id"),
-  googlePlaceId: text("google_place_id"),
-  businessName: text("business_name").notNull(),
-  cityCode: text("city_code").notNull(),
-  category: text("category"),
-  aiHook: text("ai_hook"),
-  aiTags: jsonb("ai_tags").$type<string[]>(),
-  aiStory: text("ai_story"),
-  aiTriggerConditions: jsonb("ai_trigger_conditions"),
-  uiThemeGlow: text("ui_theme_glow"),
-  badgeLabel: text("badge_label").default("Certified Local"),
-  storyVideoUrl: text("story_video_url"),
-  isActive: boolean("is_active").default(true),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export type FeaturedPartnerRow = typeof featuredPartners.$inferSelect;
-
 // =========================================
 // VoiceLeadMachine - Outbound Lead Generator
 // =========================================
@@ -1954,129 +1876,6 @@ export type GooglePhotoData = {
   width: number;
   height: number;
   htmlAttributions?: string[];
-};
-
-export const vlmProspects = pgTable("vlm_prospects", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  industry: text("industry").notNull(),
-  businessName: text("business_name").notNull(),
-  phone: text("phone"),
-  email: text("email"),
-  website: text("website"),
-  address: text("address"),
-  city: text("city"),
-  state: text("state"),
-  postalCode: text("postal_code"),
-  googlePlaceId: text("google_place_id").unique(),
-  sourceUrl: text("source_url"),
-  qualityScore: integer("quality_score").default(0).notNull(),
-  status: text("status").default("new").notNull(),
-  rating: numeric("rating", { precision: 2, scale: 1 }),
-  reviewCount: integer("review_count"),
-  editorialSummary: text("editorial_summary"),
-  generativeSummary: text("generative_summary"),
-  reviewSummary: text("review_summary"),
-  reviews: jsonb("reviews").$type<GoogleReviewData[]>(),
-  photos: jsonb("photos").$type<GooglePhotoData[]>(),
-  websiteQualityScore: integer("website_quality_score"),
-  websiteQualityReport: jsonb("website_quality_report"),
-  notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const insertVlmProspectSchema = createInsertSchema(vlmProspects, {
-  industry: z.string().min(1),
-  businessName: z.string().min(1),
-  phone: z.string().optional(),
-  email: z.string().email().optional().or(z.literal("")),
-  website: z.string().url().optional().or(z.literal("")),
-  qualityScore: z.number().int().min(0).max(100).optional(),
-  status: z.enum(["new", "queued", "called", "won", "lost"]).optional(),
-  rating: z.string().optional(),
-  reviewCount: z.number().int().optional(),
-}).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertVlmProspect = z.infer<typeof insertVlmProspectSchema>;
-export type VlmProspect = typeof vlmProspects.$inferSelect;
-
-export const vlmCampaigns = pgTable("vlm_campaigns", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  industry: text("industry").notNull(),
-  city: text("city").notNull(),
-  status: text("status").default("draft").notNull(),
-  telephonyConfigId: varchar("telephony_config_id").references(() => telephonyConfigs.id),
-  callerIdNumber: text("caller_id_number"),
-  scriptTemplate: text("script_template"),
-  maxCallsPerDay: integer("max_calls_per_day").default(50),
-  callsPerHour: integer("calls_per_hour").default(10),
-  retryAttempts: integer("retry_attempts").default(3),
-  retryDelayHours: integer("retry_delay_hours").default(24),
-  totalProspects: integer("total_prospects").default(0),
-  totalCalled: integer("total_called").default(0),
-  totalConnected: integer("total_connected").default(0),
-  totalSales: integer("total_sales").default(0),
-  startedAt: timestamp("started_at"),
-  completedAt: timestamp("completed_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const insertVlmCampaignSchema = createInsertSchema(vlmCampaigns, {
-  name: z.string().min(1),
-  industry: z.string().min(1),
-  city: z.string().min(1),
-  status: z.enum(["draft", "active", "paused", "completed"]).optional(),
-}).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertVlmCampaign = z.infer<typeof insertVlmCampaignSchema>;
-export type VlmCampaign = typeof vlmCampaigns.$inferSelect;
-
-export const vlmCallAttempts = pgTable("vlm_call_attempts", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  campaignId: varchar("campaign_id").references(() => vlmCampaigns.id),
-  prospectId: varchar("prospect_id").references(() => vlmProspects.id).notNull(),
-  attemptNumber: integer("attempt_number").default(1).notNull(),
-  callSid: text("call_sid"),
-  status: text("status").default("pending").notNull(),
-  outcome: text("outcome"),
-  duration: integer("duration").default(0),
-  recordingUrl: text("recording_url"),
-  notes: text("notes"),
-  calledAt: timestamp("called_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const insertVlmCallAttemptSchema = createInsertSchema(vlmCallAttempts, {
-  attemptNumber: z.number().int().min(1).max(10),
-  status: z.enum(["pending", "queued", "ringing", "in_progress", "completed", "failed", "no_answer", "busy"]).optional(),
-  outcome: z.enum(["connected", "voicemail", "no_answer", "rejected", "sale", "callback"]).optional(),
-}).omit({
-  id: true,
-  createdAt: true,
-});
-
-export type InsertVlmCallAttempt = z.infer<typeof insertVlmCallAttemptSchema>;
-export type VlmCallAttempt = typeof vlmCallAttempts.$inferSelect;
-
-export type VlmLeadBuilderOptions = {
-  city: string;
-  industry: string;
-  maxResults?: number;
-  enrichEmail?: boolean;
-};
-
-export type VlmCampaignConfig = {
-  name: string;
-  industry: string;
-  city: string;
-  callerIdNumber?: string;
-  scriptTemplate?: string;
 };
 
 // A2P Use Case definitions (from TCR matrix)
@@ -2126,207 +1925,6 @@ export const insertOgSettingsSchema = createInsertSchema(ogSettings).omit({
 
 export type InsertOgSettings = z.infer<typeof insertOgSettingsSchema>;
 export type OgSettings = typeof ogSettings.$inferSelect;
-
-// SWOT Analysis Results (legacy; workspace config is defined above with siteConfigId)
-export const swotAnalyses = pgTable("swot_analyses", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
-  
-  // Analysis Data (stored as JSON)
-  strengths: jsonb("strengths").notNull(),
-  weaknesses: jsonb("weaknesses").notNull(),
-  opportunities: jsonb("opportunities").notNull(),
-  threats: jsonb("threats").notNull(),
-  
-  // Recommendations
-  recommendations: jsonb("recommendations"),
-  agentTrainingData: jsonb("agent_training_data"),
-  
-  // Metadata
-  analysisSource: text("analysis_source"), // 'google_places' | 'manual' | 'ai_generated'
-  confidence: integer("confidence"), // 0-100
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertSwotAnalysisSchema = createInsertSchema(swotAnalyses).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertSwotAnalysis = z.infer<typeof insertSwotAnalysisSchema>;
-export type SwotAnalysis = typeof swotAnalyses.$inferSelect;
-
-// AI Biz Bot Consultations
-export const consultations = pgTable("consultations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  businessId: varchar("business_id").references(() => customerAccounts.id).notNull(),
-  workspaceConfigId: varchar("workspace_config_id").references(() => workspaceConfigurations.id),
-  swotAnalysisId: varchar("swot_analysis_id").references(() => swotAnalyses.id),
-  
-  // Consultation Data
-  conversationHistory: jsonb("conversation_history").notNull(), // Array of messages
-  consultationSummary: text("consultation_summary"),
-  insights: jsonb("insights"), // Extracted insights from conversation
-  
-  // Customization Results
-  customTools: jsonb("custom_tools"),
-  customizationApplied: boolean("customization_applied").default(false),
-  
-  // Status
-  status: text("status").default("in_progress"), // 'in_progress' | 'completed' | 'abandoned'
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-  completedAt: timestamp("completed_at"),
-});
-
-export const insertConsultationSchema = createInsertSchema(consultations).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertConsultation = z.infer<typeof insertConsultationSchema>;
-export type Consultation = typeof consultations.$inferSelect;
-
-// Agent Knowledge Base - Research and Documentation Storage
-export const agentKnowledgeBase = pgTable("agent_knowledge_base", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  
-  // Topic/Category
-  category: text("category").notNull(), // 'google_api' | 'business_tools' | 'integration' | 'research'
-  subcategory: text("subcategory"), // e.g., 'places_api', 'workspace', 'gmail', etc.
-  title: text("title").notNull(),
-  
-  // Content
-  content: text("content").notNull(), // Main research/documentation content (markdown)
-  summary: text("summary"), // Short summary for quick reference
-  metadata: jsonb("metadata"), // Flexible JSON for API details, costs, access info, etc.
-  
-  // Source Information
-  sources: jsonb("sources"), // Array of {url, title, date, credibility}
-  researchedBy: text("researched_by"), // Agent or user who created this
-  lastVerified: timestamp("last_verified"), // When info was last verified
-  
-  // Tags and Search
-  tags: text("tags").array().default(sql`ARRAY[]::text[]`),
-  keywords: text("keywords").array().default(sql`ARRAY[]::text[]`), // For search optimization
-  
-  // Usage Tracking
-  accessCount: integer("access_count").default(0),
-  lastAccessed: timestamp("last_accessed"),
-  
-  // Version Control
-  version: integer("version").default(1),
-  parentId: varchar("parent_id"), // For tracking document versions
-  
-  // Status
-  status: text("status").default("active"), // 'draft' | 'active' | 'archived' | 'outdated'
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertAgentKnowledgeBaseSchema = createInsertSchema(agentKnowledgeBase).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertAgentKnowledgeBase = z.infer<typeof insertAgentKnowledgeBaseSchema>;
-export type AgentKnowledgeBase = typeof agentKnowledgeBase.$inferSelect;
-
-// API Documentation - Specific to Google Business APIs
-export const apiDocumentation = pgTable("api_documentation", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  knowledgeBaseId: varchar("knowledge_base_id").references(() => agentKnowledgeBase.id),
-  
-  // API Details
-  apiName: text("api_name").notNull(), // e.g., "Google Places API", "Google Workspace API"
-  apiType: text("api_type").notNull(), // 'rest' | 'graphql' | 'grpc' | 'sdk'
-  version: text("version"), // API version
-  
-  // Access Information
-  accessType: text("access_type"), // 'public' | 'private' | 'enterprise' | 'restricted'
-  authenticationMethod: text("authentication_method"), // 'api_key' | 'oauth' | 'service_account'
-  requiresApproval: boolean("requires_approval").default(false),
-  
-  // Pricing
-  pricingModel: text("pricing_model"), // 'free' | 'pay_per_use' | 'subscription' | 'enterprise'
-  pricingDetails: jsonb("pricing_details"), // Detailed pricing tiers and costs
-  freeTier: jsonb("free_tier"), // Free tier limits if applicable
-  
-  // Rate Limits
-  rateLimits: jsonb("rate_limits"), // {requests_per_second, daily_limit, etc.}
-  quotas: jsonb("quotas"), // Usage quotas and limits
-  
-  // Documentation Links
-  officialDocs: text("official_docs"),
-  apiReference: text("api_reference"),
-  quickstartGuide: text("quickstart_guide"),
-  sdkLinks: jsonb("sdk_links"), // Links to various SDK implementations
-  
-  // Alternatives Analysis
-  canBeMirrored: boolean("can_be_mirrored").default(false),
-  alternativeApis: jsonb("alternative_apis"), // Array of alternative solutions
-  
-  // Integration Status
-  currentlyUsed: boolean("currently_used").default(false),
-  integrationStatus: text("integration_status"), // 'not_started' | 'in_progress' | 'completed' | 'deprecated'
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertApiDocumentationSchema = createInsertSchema(apiDocumentation).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertApiDocumentation = z.infer<typeof insertApiDocumentationSchema>;
-export type ApiDocumentation = typeof apiDocumentation.$inferSelect;
-
-// Research Tasks - Track ongoing research projects
-export const researchTasks = pgTable("research_tasks", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  
-  // Task Details
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  researchType: text("research_type").notNull(), // 'api_analysis' | 'competitor_research' | 'market_analysis' | 'technical_feasibility'
-  
-  // Assignment
-  assignedTo: text("assigned_to"), // Agent or user responsible
-  priority: text("priority").default("medium"), // 'low' | 'medium' | 'high' | 'urgent'
-  
-  // Findings
-  findings: jsonb("findings"), // Research results and insights
-  relatedKnowledgeIds: text("related_knowledge_ids").array().default(sql`ARRAY[]::text[]`), // Links to knowledge base entries
-  
-  // Status Tracking
-  status: text("status").default("pending"), // 'pending' | 'in_progress' | 'completed' | 'on_hold'
-  progress: integer("progress").default(0), // 0-100
-  
-  // Timeline
-  dueDate: timestamp("due_date"),
-  completedAt: timestamp("completed_at"),
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertResearchTaskSchema = createInsertSchema(researchTasks).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertResearchTask = z.infer<typeof insertResearchTaskSchema>;
-export type ResearchTask = typeof researchTasks.$inferSelect;
 
 // =========================================
 // Restaurant Menu & E-Commerce Features
@@ -2423,79 +2021,11 @@ export const insertMenuItemSchema = createInsertSchema(menuItems).omit({
 export type InsertMenuItem = z.infer<typeof insertMenuItemSchema>;
 export type MenuItem = typeof menuItems.$inferSelect;
 
-// Shopping Cart - Customer shopping carts
-export const carts = pgTable("carts", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
-  
-  // Customer Info
-  customerId: varchar("customer_id").references(() => customers.id),
-  sessionId: text("session_id"), // For anonymous users
-  customerName: text("customer_name"),
-  customerEmail: text("customer_email"),
-  customerPhone: text("customer_phone"),
-  
-  // Cart Status
-  status: text("status").default("active"), // 'active', 'abandoned', 'converted', 'expired'
-  
-  // Delivery Info
-  deliveryAddress: text("delivery_address"),
-  deliveryInstructions: text("delivery_instructions"),
-  
-  // Pricing
-  subtotal: numeric("subtotal", { precision: 10, scale: 2 }).default("0"),
-  taxAmount: numeric("tax_amount", { precision: 10, scale: 2 }).default("0"),
-  deliveryFee: numeric("delivery_fee", { precision: 10, scale: 2 }).default("0"),
-  totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).default("0"),
-  
-  // Timestamps
-  lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
-  expiresAt: timestamp("expires_at"), // Cart expiration time
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const insertCartSchema = createInsertSchema(carts).omit({
-  id: true,
-  createdAt: true,
-  lastUpdatedAt: true,
-});
-
-export type InsertCart = z.infer<typeof insertCartSchema>;
-export type Cart = typeof carts.$inferSelect;
-
-// Cart Items - Items in a shopping cart
-export const cartItems = pgTable("cart_items", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  cartId: varchar("cart_id").references(() => carts.id).notNull(),
-  menuItemId: varchar("menu_item_id").references(() => menuItems.id).notNull(),
-  
-  // Item Details
-  quantity: integer("quantity").notNull().default(1),
-  unitPrice: numeric("unit_price", { precision: 10, scale: 2 }).notNull(),
-  totalPrice: numeric("total_price", { precision: 10, scale: 2 }).notNull(),
-  
-  // Customizations
-  customizations: jsonb("customizations"), // Selected options and modifications
-  specialInstructions: text("special_instructions"),
-  
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const insertCartItemSchema = createInsertSchema(cartItems).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertCartItem = z.infer<typeof insertCartItemSchema>;
-export type CartItem = typeof cartItems.$inferSelect;
-
 // Orders - Completed purchases
 export const orders = pgTable("orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   siteConfigId: varchar("site_config_id").references(() => siteConfigs.id).notNull(),
-  cartId: varchar("cart_id").references(() => carts.id),
+  cartId: varchar("cart_id"),
   customerId: varchar("customer_id").references(() => customers.id),
   
   // Order Number
@@ -3020,3 +2550,28 @@ export const onboardingSessions = pgTable("onboarding_sessions", {
 
 export type OnboardingSession = typeof onboardingSessions.$inferSelect;
 export type InsertOnboardingSession = typeof onboardingSessions.$inferInsert;
+
+// ── Visitor Sessions (Buyer Journey Payload Node) ─────────────────────────────
+/** Cross-session visitor context accumulating buyer phase, pain points, and signals. */
+export const visitorSessions = pgTable("visitor_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  visitorId: text("visitor_id").notNull(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  channel: text("channel").default("web").notNull(),
+  /** Accumulated buyer journey state (BuyerJourney shape from conversationGrounding.ts). */
+  buyerJourney: jsonb("buyer_journey").$type<Record<string, unknown>>().default({}).notNull(),
+  /**
+   * Security classification for this visitor session.
+   * anonymous  — no identity verification performed
+   * phone_verified — OTP confirmed via Twilio Verify
+   * admin       — admin_users row matched + auth session created
+   */
+  securityLevel: text("security_level").default("anonymous").notNull(),
+  /** Phone number if verified, null for anonymous visitors */
+  verifiedPhone: text("verified_phone"),
+});
+
+export type VisitorSession = typeof visitorSessions.$inferSelect;
+export type InsertVisitorSession = typeof visitorSessions.$inferInsert;

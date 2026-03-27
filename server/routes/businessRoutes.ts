@@ -12,13 +12,18 @@ import { BusinessContext, AgentConfig } from '../../client/src/types/voice.js';
 
 const router = Router();
 
+function paramString(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
+
 /**
  * GET /api/business/:placeId/enriched-instruction
  * Returns a rich system instruction for the given business and agent config.
  */
 router.get('/:placeId/enriched-instruction', async (req, res) => {
   try {
-    const { placeId } = req.params;
+    const placeId = paramString(req.params.placeId);
     const { businessName, address, hours, services } = req.query;
 
     if (!placeId) {
@@ -26,6 +31,7 @@ router.get('/:placeId/enriched-instruction', async (req, res) => {
     }
 
     const business: BusinessContext = {
+      id: placeId,
       placeId,
       name: (businessName as string) || 'Business',
       address: (address as string) || '',
@@ -69,7 +75,7 @@ router.get('/:placeId/enriched-instruction', async (req, res) => {
  */
 router.get('/:placeId/enriched-data', async (req, res) => {
   try {
-    const { placeId } = req.params;
+    const placeId = paramString(req.params.placeId);
     const includeIntelligence = req.query.includeIntelligence === 'true';
     const includeOwnerData = req.query.includeOwnerData === 'true';
     const businessName = req.query.businessName as string | undefined;

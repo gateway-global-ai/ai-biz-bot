@@ -18,22 +18,23 @@ import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 import AIOSMark from '@/components/public/AIOSMark';
 import { NovaGate } from '@/components/nova/NovaGate';
+import { getPublicDemoSlug } from '@/lib/conciergeBusinessContext';
 
 const DEMO_BUSINESS = {
   id: 'platform_landing',
   placeId: '',
   name: 'Gateway Global AI',
-  address: 'AI Business Infrastructure Platform',
+  address: 'AI Front Desk & customer communication',
   hours: '24/7',
-  services: ['AI Voice Concierge', 'Business Automation', 'Lead Intelligence'],
+  services: ['AI Front Desk', 'QR-to-voice', 'Verified customers'],
   primaryColor: '#6366f1',
 };
 
 const DEMO_AGENT = {
   role: 'Platform Demo Agent',
-  personality: 'Energetic, informative, and helpful',
+  personality: 'Energetic, informative, and helpful — lead with front-desk outcomes',
   objectives: [
-    'Show the power of AI Biz Bot voice technology',
+    'Show AI Front Desk: voice + QR + less chaos for staff',
     'Explain how to get started with a business account',
     'Answer questions about pricing, features, and setup',
   ],
@@ -60,7 +61,7 @@ export default function AgentsLandingPage() {
   };
 
   const features = [
-    { icon: <Phone size={18} />, label: 'Voice AI Concierge', desc: 'Answers calls 24/7 with a human-like voice agent' },
+    { icon: <Phone size={18} />, label: 'AI Front Desk', desc: 'Missed calls and front-desk chaos replaced with voice + routing that runs itself' },
     { icon: <MessageSquare size={18} />, label: 'Smart Chat + PTT', desc: 'Push-to-talk and text chat in one unified interface' },
     { icon: <Zap size={18} />, label: 'Instant Lead Capture', desc: 'Qualifies and books inbound leads automatically' },
     { icon: <QrCode size={18} />, label: 'QR + Shareable Links', desc: 'One QR code connects customers to your AI agent' },
@@ -161,21 +162,20 @@ export default function AgentsLandingPage() {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-semibold uppercase tracking-wider mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            AI Business Router — Now Live
+            AI Front Desk — Now Live
           </div>
 
           {/* Headline */}
           <h1 className="text-4xl md:text-6xl font-black text-white leading-tight tracking-tight mb-6">
-            Your Business,
+            Turn your front desk
             <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">
-              Always Answering
+              into an AI system
             </span>
           </h1>
 
           <p className="text-slate-400 text-lg md:text-xl leading-relaxed mb-12 max-w-xl mx-auto">
-            Deploy a voice AI agent for your business in minutes.
-            Handles calls, captures leads, and books appointments — 24/7.
+            Every customer interaction — handled fast, without the friction your team hates: missed calls, repeating answers, and broken handoffs.
           </p>
 
           {/* CTA buttons */}
@@ -184,7 +184,7 @@ export default function AgentsLandingPage() {
               type="button"
               whileHover={{ scale: 1.02, y: -1 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => setView('demo')}
+              onClick={() => setLocation(`/biz/${encodeURIComponent(getPublicDemoSlug())}`)}
               className="group flex items-center justify-center gap-3 px-8 py-4 rounded-sui bg-slate-800/80 border border-indigo-500/30 text-white font-bold text-base hover:bg-indigo-500/10 hover:border-indigo-500/60 transition-all shadow-[0_0_30px_rgba(99,102,241,0.1)]"
             >
               <Bot size={20} className="text-indigo-400 group-hover:text-indigo-300 transition-colors" />

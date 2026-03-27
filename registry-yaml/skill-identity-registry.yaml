@@ -1,0 +1,76 @@
+# Skill Identity Layer — same id across Cursor, .system_design, and product references
+version: "1.0.0"
+
+skills:
+  - id: knowledge_engineering_lead
+    cursor_definition:
+      path: .cursor/skills/knowledge-engineering-lead
+    runtime_definition:
+      path: .system_design/skills/knowledge_engineering_lead.json
+    contract:
+      inputs: []
+      outputs: []
+      enforcement: required
+    rule:
+      same_id_across_all_planes: true
+
+  - id: governance_review
+    cursor_definition:
+      path: .cursor/skills/governance-review
+    runtime_definition:
+      path: .system_design/skills/governance_review.json
+    contract:
+      inputs: []
+      outputs: []
+      enforcement: required
+    rule:
+      same_id_across_all_planes: true
+
+  - id: governance_linter
+    cursor_definition:
+      path: .cursor/skills/governance-linter
+    runtime_definition:
+      path: .system_design/skills/governance_linter.json
+    contract:
+      inputs: []
+      outputs: []
+      enforcement: required
+    rule:
+      same_id_across_all_planes: true
+
+  - id: programmatic_sales_engine
+    cursor_definition:
+      path: .cursor/skills/programmatic-sales-engine
+    runtime_definition:
+      path: .system_design/skills/programmatic_sales_engine.json
+    contract:
+      inputs: []
+      outputs: []
+      enforcement: required
+    rule:
+      same_id_across_all_planes: true
+
+  - id: cloudbeds_hospitality
+    cursor_definition:
+      path: .cursor/skills/cloudbeds-hospitality
+    runtime_definition:
+      path: registry-yaml/cloudbeds-tool-registry.yaml
+    contract:
+      inputs:
+        - site_pms_integrations.pms_type = "cloudbeds"
+        - site_pms_integrations.is_active = true
+        - site_pms_integrations.property_id (or CLOUDBEDS_CLIENT_PROPERTY_ID)
+      outputs:
+        - get_hotel_inventory (read, all hospitality modes)
+        - pms_lookup_guest_journey (read, OTP gate when verification_guest_phone active)
+        - pms_get_housekeeping_status (read, MANAGER only)
+        - pms_get_hotel_dashboard (read, MANAGER only)
+        - post_reservation (write, requires_approval, OTP required — not yet wired as Gemini tool)
+      enforcement: required
+    rule:
+      same_id_across_all_planes: true
+    notes: >
+      Demo property: Boardwalk Suites Lafayette, propertyID 315701.
+      Bootstrap: scripts/setup-boardwalk-suites.ts + scripts/provision-boardwalk-agents.ts.
+      Voice governance: see docs-governance/archive/VOICE_BOARDWALK_DEMO_NOTE.md before
+      any voice demo quoting live rates.

@@ -67,7 +67,7 @@ export function setupAIStudioPTTProxy(server: Server): void {
     // #region agent log
     fetch('http://localhost:7243/ingest/6f0f5ac2-b8b0-4db0-890a-ab1f1e0dff06',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'aiStudioProxy.ts:connection',message:'Client connected',data:{hasToken:!!token,tokenLen:token?.length},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
     // #endregion
-    if (!validateAIStudioSessionToken(token)) {
+    if (!validateAIStudioSessionToken(token ?? undefined)) {
       console.warn("[AIStudioPTT] Rejected connection: missing or invalid session token");
       clientWs.close(4008, "Invalid or expired session token");
       return;

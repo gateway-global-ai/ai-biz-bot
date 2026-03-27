@@ -1,10 +1,43 @@
 /**
  * Voice AI System Type Definitions
- * 
+ *
  * Core types for the dual-engine voice system:
  * - Clear Voice (Premium): Ultra-low latency streaming via WebSocket
  * - Standard: Cost-efficient PTT with server-side audio analysis
+ *
+ * GOVERNANCE: The canonical governed types are imported from:
+ *   shared/siteRuntimeContext.ts — SiteRuntimeContext, PttSessionContext, VoiceTurnContext, PttRuntimeState
+ *   shared/canvasViewContract.ts — PttEvent union, CanvasSyscallEnvelope
+ *
+ * Legacy types in this file are retained for backward compat during the
+ * adapter phase. They will be removed when all consumers migrate to PttEvent.
  */
+
+// Re-export governed types so consumers can import from a single location
+export type {
+  SiteRuntimeContext,
+  SiteEntitlements,
+  PttSessionContext,
+  VoiceTurnContext,
+  PttRuntimeState,
+} from '../../../shared/siteRuntimeContext';
+
+export type {
+  PttEvent,
+  PttTranscriptPartialEvent,
+  PttTranscriptFinalEvent,
+  PttCanvasSyscallEvent,
+  PttSpeechOutputEvent,
+  PttAnalysisMetadataEvent,
+  PttErrorEvent,
+  CanvasSyscallEnvelope,
+  CanvasSyscallType,
+  CanvasRenderPayload,
+  CanvasResolveResult,
+  SpeechGroundingContext,
+} from '../../../shared/canvasViewContract';
+
+// ── Legacy types (backward compat — migrate consumers to PttEvent) ────────────
 
 export interface VoiceMessage {
   type: 'transcription' | 'response' | 'error' | 'metadata';
@@ -95,6 +128,21 @@ export interface BusinessContext {
   ownerId?: string | null;
   /** Business plan tier from site_configs.plan. */
   plan?: 'free' | 'pro' | 'voice' | 'enterprise' | null;
+  /**
+   * When true (site_configs.metadata.platformMarketingDemo), this surface is platform-owned
+   * marketing — not an SMB "claim this business" demo. Suppresses demo claim banner and
+   * customer-entry intent chrome per APP_SHELL_CONTRACT / VOICE_CONCIERGE_GATEWAY_AI_BIZ_BOTS.
+   */
+  platformMarketingDemo?: boolean;
+  /** Phased industry funnel keys (owner_salon_name, owner_city, demo_ready, …) for voice/sessionContext. */
+  funnelContextKeys?: Record<string, string | undefined>;
+  /**
+   * When the voice session is tied to an inbound PSTN leg, pass Twilio-derived ANI so
+   * guest_phone_verification / pms_lookup_guest_journey bind server-side (model phone ignored).
+   */
+  voiceTrustedCallerId?: string | null;
+  /** Optional Twilio CallSid for operator correlation when bridging PSTN into browser Live. */
+  voiceBridgeCallSid?: string | null;
 }
 
 export interface AgentConfig {

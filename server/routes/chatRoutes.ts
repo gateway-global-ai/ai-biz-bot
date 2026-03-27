@@ -26,6 +26,29 @@ import {
   resolveFieldWriteMode,
   resolveIntakePolicyConfig,
 } from "../services/intakePolicyService";
+import {
+  buildCgrForWebsiteChat,
+  buildCgrForAgentChat,
+  getCommunicationGovernanceFromSite,
+  loadBuyerJourney,
+} from "../services/conversationGrounding";
+import { validateArchEnvelope } from "../services/archEnvelopeValidator";
+import { analyzePppShadow, skippedPppShadowScore } from "../services/pppShadowValidator";
+import { enqueuePppShadowLog } from "../services/pppShadowAnalytics";
+
+/** When ARCH validation fails, apply deterministic fallback (see COMMUNICATION_PLANE_CONTRACT). */
+function applyArchFallback(
+  original: string,
+  archCheck: { ok: boolean; fallbackResponse?: string },
+): string {
+  if (archCheck.ok || !archCheck.fallbackResponse) return original;
+  const mode = (process.env.ARCH_HANDOFF_MODE || "replace").toLowerCase().trim();
+  const fb = archCheck.fallbackResponse;
+  if (mode === "append") {
+    return `${original.trim()}\n\n${fb}`;
+  }
+  return fb;
+}
 
 function buildSecureInputResponse(policy: any, siteConfigId?: string) {
   return {
@@ -65,6 +88,8 @@ const router = Router();
         businessPhone: z.string().optional(),
         siteConfigId: z.string().optional(),
         visitorId: z.string().optional(),
+        /** Phased industry funnel — keys for resolveCurrentPhase (see PHASED_INDUSTRY_FUNNEL_SPEC). */
+        funnelContextKeys: z.record(z.string()).optional(),
         history: z.array(z.object({
           role: z.enum(['user', 'assistant']),
           content: z.string(),
@@ -76,44 +101,19 @@ const router = Router();
         return res.status(400).json({ error: parsed.error.message });
       }
 
-      const { message, businessName, businessAddress, businessPhone, siteConfigId, visitorId, history } = parsed.data;
-      const sensitiveCheck = detectSensitiveInput(message);
-      if (sensitiveCheck.requiresSecureForm && sensitiveCheck.policy) {
-        if (siteConfig) {
-          const intakePolicy = resolveIntakePolicyConfig(siteConfig);
-          const writeMode = resolveFieldWriteMode(
-            intakePolicy,
-            sensitiveCheck.matchedFieldName ?? sensitiveCheck.policy.fieldName
-          );
-          if (writeMode === "denied") {
-            return res.status(200).json({
-              deniedInput: true,
-              response:
-                "This field cannot be updated through customer conversation. Please contact your receptionist.",
-            });
-          }
-          if (writeMode === "review") {
-            return res.status(200).json({
-              requiresReviewQueue: true,
-              reviewQueue: {
-                fieldName: sensitiveCheck.policy.fieldName,
-                reviewerRole:
-                  intakePolicy.fields[sensitiveCheck.policy.fieldName]?.reviewerRole ??
-                  "receptionist",
-              },
-              response:
-                "I captured your request and queued it for staff review before any account updates are committed.",
-            });
-          }
-        }
-        return res.status(200).json(buildSecureInputResponse(sensitiveCheck.policy, siteConfigId));
-      }
+      const { message, businessName, businessAddress, businessPhone, siteConfigId, visitorId, history, funnelContextKeys } = parsed.data;
 
       const isPlatformChat = siteConfigId === "platform-landing";
       let siteConfig: any = null;
       if (siteConfigId && !isPlatformChat) {
         siteConfig = await storage.getSiteConfig(siteConfigId);
       }
+
+      /** Load once before prompt compile so BusinessContext.buyerJourney is defined (see GOVERNANCE_EXECUTION_PLAN_V1 Phase 3). */
+      const buyerJourneyLoaded =
+        !isPlatformChat && siteConfigId
+          ? await loadBuyerJourney(visitorId, siteConfigId)
+          : null;
 
       const sensitiveCheck = detectSensitiveInput(message);
       if (sensitiveCheck.requiresSecureForm && sensitiveCheck.policy) {
@@ -187,6 +187,8 @@ const router = Router();
             address: businessAddress ?? (pd && typeof (pd as any).formattedAddress === "string" ? (pd as any).formattedAddress : typeof (pd as any).formatted_address === "string" ? (pd as any).formatted_address : undefined),
             phone: businessPhone ?? (pd && typeof (pd as any).formatted_phone_number === "string" ? (pd as any).formatted_phone_number : undefined),
             knowledgeCertification,
+            funnelContextKeys: funnelContextKeys ?? undefined,
+            buyerJourney: buyerJourneyLoaded ?? undefined,
           };
           systemPrompt = compileFullSystemPrompt(agent, siteConfig as any, businessContext) + knowledgeBlock;
         } else {
@@ -208,12 +210,43 @@ const router = Router();
       ];
 
       const { gatewayChat } = await import('../ai-gateway');
-      const { response, provider, model } = await gatewayChat({
+      let { response, provider, model } = await gatewayChat({
         messages: gatewayMessages,
         provider: resolvedProvider,
         model: resolvedModel,
         temperature: 0.7,
         max_tokens: 500,
+      });
+
+      const webAgentId =
+        !isPlatformChat && siteConfig
+          ? (siteConfig as { assignedAgentId?: string | null }).assignedAgentId
+          : null;
+      const archAgent = webAgentId ? await storage.getAgent(webAgentId) : null;
+      const cgr = buildCgrForWebsiteChat(siteConfigId, visitorId, siteConfig, archAgent ?? null, {
+        buyerJourney: buyerJourneyLoaded,
+      });
+      const archCheck = validateArchEnvelope(response, {
+        operationalMode: archAgent?.operationalMode ?? undefined,
+        archProfile: (archAgent?.archProfile ?? null) as import("@shared/schema").ArchProfile | null,
+      });
+      response = applyArchFallback(response, archCheck);
+
+      const govWeb = getCommunicationGovernanceFromSite(siteConfig);
+      const pppShadow = isPlatformChat
+        ? skippedPppShadowScore("platform_landing")
+        : analyzePppShadow(response, {
+            operationalMode: archAgent?.operationalMode,
+            pppEngagement: govWeb.pppEngagement,
+          });
+      const cgrWithPpp = { ...cgr, pppShadow };
+
+      enqueuePppShadowLog({
+        siteConfigId: isPlatformChat ? null : siteConfigId ?? null,
+        agentId: archAgent?.id ?? null,
+        channel: "website_chat",
+        operationalMode: archAgent?.operationalMode ?? null,
+        score: pppShadow,
       });
 
       if (siteConfigId && !isPlatformChat) {
@@ -225,7 +258,16 @@ const router = Router();
         }
       }
 
-      res.json({ response, provider, model });
+      res.json({
+        response,
+        provider,
+        model,
+        communication: {
+          cgr: cgrWithPpp,
+          archValidation: { ok: archCheck.ok, violations: archCheck.violations },
+          pppShadow,
+        },
+      });
     } catch (error: any) {
       console.error("[Website Chat] Error:", error.message);
       res.status(500).json({ error: "Failed to get response" });
@@ -260,7 +302,6 @@ const router = Router();
       const chatSchema = z.object({
         agentId: z.string().min(1),
         message: z.string().min(1).max(4000),
-        projectId: z.string().optional(),
         history: z.array(z.object({
           role: z.enum(['user', 'assistant']),
           content: z.string(),
@@ -272,7 +313,7 @@ const router = Router();
         return res.status(400).json({ error: parsed.error.message });
       }
 
-      const { agentId, message, history, projectId } = parsed.data;
+      const { agentId, message, history } = parsed.data;
       const sensitiveCheck = detectSensitiveInput(message);
       if (sensitiveCheck.requiresSecureForm && sensitiveCheck.policy) {
         return res.status(200).json(buildSecureInputResponse(sensitiveCheck.policy));
@@ -285,40 +326,6 @@ const router = Router();
 
       // Build character-first system prompt using DISC + ARCH + Memory layers
       let systemPrompt = buildBehavioralPrompt(agent);
-
-      // Inject project context if a projectId is provided
-      if (projectId) {
-        try {
-          const project = await storage.getProject(projectId);
-          if (project) {
-            const org = await storage.getOrganization(project.orgId);
-            const projectTasksList = await storage.getProjectTasks(project.id);
-            const todoTasks = projectTasksList.filter(t => t.status === 'todo');
-            const inProgressTasks = projectTasksList.filter(t => t.status === 'in_progress');
-            const reviewTasks = projectTasksList.filter(t => t.status === 'review');
-            const doneTasks = projectTasksList.filter(t => t.status === 'done');
-
-            let contextBlock = `\n\n--- PROJECT CONTEXT ---`;
-            if (org) contextBlock += `\nOrganization: ${org.name}${org.description ? ' - ' + org.description : ''}`;
-            contextBlock += `\nProject: ${project.name} (${project.status})`;
-            if (project.description) contextBlock += `\nDescription: ${project.description}`;
-            contextBlock += `\nTask Summary: ${todoTasks.length} to-do, ${inProgressTasks.length} in progress, ${reviewTasks.length} in review, ${doneTasks.length} done`;
-            
-            if (todoTasks.length > 0 || inProgressTasks.length > 0 || reviewTasks.length > 0) {
-              contextBlock += `\n\nActive Tasks:`;
-              [...inProgressTasks, ...reviewTasks, ...todoTasks].slice(0, 10).forEach(t => {
-                contextBlock += `\n- [${t.status.toUpperCase()}] ${t.title}${t.priority !== 'medium' ? ' (' + t.priority + ')' : ''}${t.description ? ': ' + t.description.slice(0, 100) : ''}`;
-              });
-            }
-            contextBlock += `\n--- END PROJECT CONTEXT ---`;
-            contextBlock += `\n\nYou are working on the "${project.name}" project. Reference the project tasks and context in your responses. Help the user manage, plan, and execute this project.`;
-            
-            systemPrompt += contextBlock;
-          }
-        } catch (err) {
-          console.warn('Failed to load project context for chat:', err);
-        }
-      }
 
       // Build conversation messages
       const messages = [
@@ -349,7 +356,38 @@ const router = Router();
         ({ response } = await gatewayChat({ messages, model: modelToUse, temperature: agentTemp, max_tokens: agentMaxTokens }));
       }
 
-      res.json({ response });
+      const archCheck = validateArchEnvelope(response, {
+        operationalMode: agent.operationalMode ?? undefined,
+        archProfile: (agent.archProfile ?? null) as import("@shared/schema").ArchProfile | null,
+      });
+      response = applyArchFallback(response, archCheck);
+
+      const siteForAgent =
+        agent.siteConfigId != null ? await storage.getSiteConfig(agent.siteConfigId) : null;
+      const cgrAgent = buildCgrForAgentChat(agent, siteForAgent);
+      const govAgent = getCommunicationGovernanceFromSite(siteForAgent);
+      const pppShadowAgent = analyzePppShadow(response, {
+        operationalMode: agent.operationalMode,
+        pppEngagement: govAgent.pppEngagement,
+      });
+      const cgrAgentWithPpp = { ...cgrAgent, pppShadow: pppShadowAgent };
+
+      enqueuePppShadowLog({
+        siteConfigId: agent.siteConfigId ?? null,
+        agentId: agent.id,
+        channel: "agent_chat",
+        operationalMode: agent.operationalMode ?? null,
+        score: pppShadowAgent,
+      });
+
+      res.json({
+        response,
+        communication: {
+          cgr: cgrAgentWithPpp,
+          archValidation: { ok: archCheck.ok, violations: archCheck.violations },
+          pppShadow: pppShadowAgent,
+        },
+      });
     } catch (error: any) {
       console.error('Chat error:', error);
       res.status(500).json({ error: error.message || 'Failed to generate response' });

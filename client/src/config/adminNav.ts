@@ -28,10 +28,11 @@ import {
   HelpCircle,
   Wrench,
   QrCode,
-  Zap,
   BarChart3,
   Activity,
   Brain,
+  Target,
+  Sparkles,
 } from "lucide-react";
 
 export type AdminScope = "platform" | "org" | "location" | "me";
@@ -58,11 +59,16 @@ export const platformNav: AdminNavItem[] = [
     children: [
       { id: "qr-code-manager", label: "QR Code Manager", path: "/platform/tools/qr-codes", icon: QrCode },
       { id: "call-tracking", label: "Call Tracking", path: "/platform/tools/call-tracking", icon: Phone },
-      { id: "lead-machine", label: "Lead Machine", path: "/platform/tools/lead-machine", icon: Zap },
       { id: "sites-leads", label: "Sites & Leads", path: "/platform/tools/sites-leads", icon: LayoutDashboard },
       { id: "campaigns", label: "Campaigns", path: "/platform/tools/campaigns", icon: BarChart3 },
       { id: "customers", label: "Customers", path: "/platform/tools/customers", icon: Users },
       { id: "sms-health", label: "SMS Health", path: "/platform/tools/sms-health", icon: Activity },
+      {
+        id: "readiness-gate",
+        label: "Readiness gate",
+        path: "/platform/tools/readiness-gate",
+        icon: Target,
+      },
       { id: "disc", label: "DISC Assessment", path: "/platform/tools/disc", icon: Brain },
     ],
   },
@@ -77,6 +83,7 @@ export const platformNav: AdminNavItem[] = [
       { id: "telephony", label: "Global Telephony", path: "/platform/settings/telephony", icon: Phone },
       { id: "ai-providers", label: "AI Providers", path: "/platform/settings/ai-providers", icon: Bot },
       { id: "agent-templates", label: "Agent Templates", path: "/platform/settings/agent-templates", icon: FileText },
+      { id: "agent-builder", label: "Agent Builder", path: "/admin/agents/build", icon: Sparkles },
       { id: "billing-engine", label: "Billing Engine", path: "/platform/settings/billing-engine", icon: Wallet },
       { id: "affiliate-program", label: "Affiliate Program", path: "/platform/settings/affiliate-program", icon: Link2 },
       { id: "audit-logs", label: "Audit Logs", path: "/platform/settings/audit-logs", icon: ClipboardList },

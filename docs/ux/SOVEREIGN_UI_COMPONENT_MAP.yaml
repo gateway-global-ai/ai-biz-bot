@@ -1,0 +1,139 @@
+# Sovereign UI Component Map — v1
+# Purpose: Single registry of where UI primitives come from; prevents drift and duplicate systems.
+# Scope: Client UI only. Server and prompts out of scope.
+
+meta:
+  version: 1
+  approved_base_kit_new_control_plane: mui_community
+  ui_core_root: client/src/ui-core
+  brand_source: client/src/config/brand.ts
+
+stack_layers:
+  legacy_shadcn_tailwind:
+    description: Existing shadcn-style components and Tailwind-heavy pages.
+    paths_glob:
+      - client/src/components/ui/**
+      - client/src/components/**/*.tsx
+    rule: Do not bulk-migrate. Touch only when task explicitly refactors a screen.
+  sovereign_ui_core:
+    description: Thin MUI wrappers + theme + domain control-plane widgets.
+    path: client/src/ui-core
+    rule: All NEW admin/control-plane generic primitives MUST import from here, not @mui/* directly.
+  domain_visualization:
+    description: Non-fungible system/experience visuals — NOT replaceable by generic MUI charts.
+    rule: Keep implementation; may wrap in SovereignCard/PageShell for layout; optional token alignment only.
+
+mui_packages:
+  v1_required:
+    - name: "@mui/material"
+      role: Primitives (Button, Dialog, TextField, etc.) behind wrappers.
+    - name: "@emotion/react"
+      role: MUI peer styling runtime.
+    - name: "@emotion/styled"
+      role: MUI peer styled API.
+  v1_optional_on_demand:
+    - name: "@mui/x-data-grid"
+      role: Community DataGrid only when a screen needs a real grid.
+      wrapper: SovereignDataGrid (deferred until package installed)
+  deferred:
+    - name: "@mui/x-charts"
+      role: Only if a control-plane screen needs standard charts; still wrap under ui-core.
+      note: "https://mui.com/x/react-charts/quickstart/#installation"
+
+wrappers_v1:
+  # All live under client/src/ui-core/components or layouts; export via client/src/ui-core/index.ts
+  - id: SovereignButton
+    mui_base: Button
+    notes: Primary/secondary variants mapped to sovereign palette.
+  - id: SovereignCard
+    mui_base: Card / CardContent
+    notes: Operational density; avoid purple primary per brand rules.
+  - id: SovereignModal
+    mui_base: Dialog
+    notes: Use for confirmations and inspectors.
+  - id: SovereignFormField
+    mui_base: TextField
+    notes: Label, error, helper slot; integrates with RHF if needed later.
+  - id: SovereignSelect
+    mui_base: Select / MenuItem
+  - id: SovereignAlert
+    mui_base: Alert
+  - id: SovereignEmptyState
+    mui_base: Stack + Typography (+ optional Button)
+    notes: Preferred empty pattern for admin lists.
+  - id: SovereignTableShell
+    mui_base: Box / Stack + Table (or slot for DataGrid)
+  - id: SovereignPageShell
+    mui_base: Box / Container
+    notes: Page title row + content padding for admin routes.
+  - id: SovereignSectionHeader
+    mui_base: Typography + Stack
+  - id: SovereignStack
+    mui_base: Stack
+    notes: Use from pages when layout is needed without importing @mui/material directly.
+  - id: SovereignTypography
+    mui_base: Typography
+    notes: Same — keeps feature files free of raw MUI.
+
+implementation_slice_v1:
+  doc: docs/ux/SOVEREIGN_UI_IMPLEMENTATION_SLICE_V1.md
+  example_screen: client/src/pages/admin/MeProfile.tsx
+
+implementation_slice_v2:
+  doc: docs/ux/SOVEREIGN_UI_IMPLEMENTATION_SLICE_V2.md
+  example_panel: client/src/pages/admin/PlatformBusinessOverviewPanel.tsx
+  parent_shell: client/src/pages/admin/PlatformBusinessManager.tsx
+  new_wrapper: SovereignSelect
+
+domain_widgets_control_plane:
+  # Composition over wrappers; may import server types via existing client services.
+  - id: OrchestrationTimeline
+    layer: ui-core/domain
+    visualization_policy: preserve_custom_timeline_or_canvas
+  - id: GovernanceViolationPanel
+    layer: ui-core/domain
+  - id: AgentStatusCard
+    layer: ui-core/domain
+  - id: SiteConfigSummaryCard
+    layer: ui-core/domain
+  - id: ProvisioningStatePanel
+    layer: ui-core/domain
+  - id: MetaPromptExecutionPanel
+    layer: ui-core/domain
+
+domain_visualization_do_not_replace:
+  description: >
+    These express system truth or multimodal UX; replacing with generic MUI chart primitives is blocked v1.
+  examples:
+    - path_glob: client/src/components/chat/ConciergePanel.tsx
+      note: Header, visualizer band, footer shell — sovereign-chat-lockdown + brand-tokens.
+    - path_glob: client/src/services/voice/**
+      note: Voice client UX; not admin ui-core scope.
+    - path_glob: client/src/**/DiscVisualizer*
+      note: Behavioral / DISC visualization — domain expression.
+    - path_glob: client/src/**/*Visualizer*
+      note: Review case-by-case; default treat as domain unless purely presentational.
+
+import_rules_summary:
+  new_admin_control_plane_screens:
+    allowed:
+      - "@/ui-core"
+      - "@/config/brand"
+      - "@/hooks/*"
+      - "@/services/*"
+      - "@/types/*"
+    forbidden_direct:
+      - "@mui/material"
+      - "@mui/icons-material"
+      - "@mui/x-data-grid"
+      - "@mui/x-charts"
+    exception: Files under client/src/ui-core/** only.
+
+example_first_refactor_candidates:
+  - file: client/src/pages/admin/AdminShell.tsx
+    rationale: Central admin chrome; can wrap one tab with ThemeProvider + SovereignPageShell.
+  - file: client/src/pages/owner/AiBizBotAdmin.tsx
+    rationale: Operator-facing control surface.
+  blocked_for_v1_example:
+    - client/src/components/chat/ConciergePanel.tsx
+    - client/src/components/StandardizedChatInterface.tsx

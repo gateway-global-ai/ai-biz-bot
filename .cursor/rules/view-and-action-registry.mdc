@@ -5,7 +5,7 @@ alwaysApply: true
 
 # View and Action Registry
 
-- Read `docs-governance/VIEW_REGISTRY.md` and `docs-governance/ACTION_REGISTRY.md` before adding UI states or executable actions.
+- Read `docs-governance/canonical/VIEW_REGISTRY.md` and `docs-governance/canonical/ACTION_REGISTRY.md` before adding UI states or executable actions.
 - Views must be declared by `viewId`, category, required context, and allowed actions.
 - Actions must be declared by `actionId`, required keys, mutation level, and handler.
 - Do not hide side-effect behavior inside UI components.

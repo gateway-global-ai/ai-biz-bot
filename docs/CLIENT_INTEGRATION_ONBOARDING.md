@@ -84,5 +84,6 @@ With a **customer** Bearer session (`requireCustomerAuth`):
 
 ## Related
 
+- **Platform-wide spec / prompt SSoT:** [docs-governance/CLIENT_SPEC_TREE_REGISTRY.md](../docs-governance/CLIENT_SPEC_TREE_REGISTRY.md) (how this doc fits tenant vs platform vs client notes).
 - Schema: `migrations/0021_site_pms_integrations.sql`
 - Handler: `server/routes/cloudbedsRoutes.ts` (`fetchCloudbedsAvailability`)

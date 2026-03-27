@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { getTwilioClient } from '../twilio';
 import { checkSovereignEnv, checkDopplerTokenEnv } from '../config/sovereignEnvGuard';
 import { storefrontCategories } from '@shared/schema';
+import { getAuditWriteFailureCount } from '../services/canvasAuditLog';
 
 const router = Router();
 
@@ -210,6 +211,7 @@ async function checkServerHostinger() {
 router.get('/api/health', async (_req: Request, res: Response) => {
   const sovereignEnvCheck = checkSovereignEnv();
   const dopplerTokenEnvCheck = checkDopplerTokenEnv();
+  const auditFailures = getAuditWriteFailureCount();
   const checks = await Promise.all([
     checkDatabase(),
     checkTwilio(),
@@ -229,6 +231,15 @@ router.get('/api/health', async (_req: Request, res: Response) => {
       message: dopplerTokenEnvCheck.message,
       tested: { envVar: 'DOPPLER_TOKEN', expectEnv: process.env.DOPPLER_EXPECT_ENV || null },
       ...(dopplerTokenEnvCheck.expected ? { expected: dopplerTokenEnvCheck.expected } : {}),
+    }),
+    Promise.resolve({
+      service: 'canvas_audit_log',
+      status: auditFailures === 0 ? 'ok' : auditFailures < 5 ? 'warn' : 'error',
+      message:
+        auditFailures === 0
+          ? 'Canvas audit log: no write failures since process start.'
+          : `Canvas audit log: ${auditFailures} write failure(s) since process start. Check DB connectivity and canvas_events table.`,
+      tested: { metric: 'canvasAuditWriteFailureCount', value: auditFailures },
     }),
   ]);
 

@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
+import { fetchOrchestrationRunForAgentCreate } from '@/lib/agentOrchestrationClient';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -114,13 +115,17 @@ export function AgentRosterPanel({
   }, [filtered, agentIdToPlans]);
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; voiceId: string; voiceName: string; status: string }) =>
-      apiRequest('POST', '/api/agents', {
+    mutationFn: async (data: { name: string; voiceId: string; voiceName: string; status: string }) => {
+      const orchestrationRunId = await fetchOrchestrationRunForAgentCreate(siteConfigId);
+      return apiRequest('POST', '/api/agents', {
         name: data.name,
         voiceId: data.voiceId,
         voiceName: VOICES.find((v) => v.id === data.voiceId)?.name ?? data.voiceId,
         status: data.status,
-      }),
+        siteConfigId,
+        orchestrationRunId,
+      });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
       setCreateOpen(false);

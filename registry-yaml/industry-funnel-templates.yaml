@@ -1,0 +1,9 @@
+# Governed industry funnel templates (see docs-governance/PHASED_INDUSTRY_FUNNEL_SPEC.md)
+# Apply via POST /api/site-configs/:id/funnels/apply-template { "templateId": "..." }
+
+templates:
+  - id: nail_salon_v1
+    name: "Nail Salon — AI Front Desk v1"
+    source: shared/industryFunnelTemplates/nailSalonV1.ts
+    industryVertical: nail_salon
+    description: "Phased owner acquisition per Nail_Salon_Funnel_v1 — snapshot, demo value, activation/offer."

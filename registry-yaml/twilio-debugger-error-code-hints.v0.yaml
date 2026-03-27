@@ -1,0 +1,33 @@
+# Debugger / Monitor error_code → platform failure_class_id (10b bridge)
+# Every failure_class_id MUST exist in twilio-platform-failure-classes.v0.yaml
+# Expand using https://www.twilio.com/docs/api/errors — do not invent class_ids here.
+
+schema_version: "0.1"
+registry_id: twilio_debugger_error_code_hints
+description: >
+  Hints for Twilio Debugger Payload.error_code (and compatible Monitor alert codes).
+  Policy engine (10c+) consumes failure_class_id; this file is the first registry-backed mapping.
+
+error_code_hints:
+  - twilio_error_code: "11200"
+    failure_class_id: webhook_failure
+  - twilio_error_code: "11201"
+    failure_class_id: webhook_failure
+  - twilio_error_code: "11202"
+    failure_class_id: webhook_failure
+  - twilio_error_code: "12100"
+    failure_class_id: webhook_failure
+  - twilio_error_code: "20003"
+    failure_class_id: auth_configuration_failure
+  - twilio_error_code: "20008"
+    failure_class_id: auth_configuration_failure
+  - twilio_error_code: "20404"
+    failure_class_id: auth_configuration_failure
+  - twilio_error_code: "21608"
+    failure_class_id: carrier_delivery_issue
+  - twilio_error_code: "21610"
+    failure_class_id: carrier_delivery_issue
+  - twilio_error_code: "31901"
+    failure_class_id: voice_runtime_failure
+  - twilio_error_code: "31920"
+    failure_class_id: voice_runtime_failure

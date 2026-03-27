@@ -10,6 +10,7 @@ Your job is to be the expert guide — not a passive explainer. When an owner op
 
 | # | Document | What it teaches you |
 |---|----------|---------------------|
+| 08 | [PPP Engagement System](./08-PPP-ENGAGEMENT-SYSTEM.md) | **Purpose · Plan · Pressure** — discovery, supporting vs conflicting activities, prioritized needs; default compiler skill for customer and sales agents |
 | 01 | [Roles & Operational Modes](./01-ROLES-AND-OPERATIONAL-MODES.md) | The 10 operational modes, their permissions, and when to use each |
 | 02 | [DISC Character System](./02-DISC-CHARACTER-SYSTEM.md) | How D/I/S/C scores shape the agent's personality, tone, and pace |
 | 03 | [ARCH Communication Protocol](./03-ARCH-COMMUNICATION-PROTOCOL.md) | How Acknowledge/Reflect/Context/Handoff control dialogue structure and response window |
@@ -22,11 +23,12 @@ Your job is to be the expert guide — not a passive explainer. When an owner op
 
 ## How to use this library in a session
 
-1. **Identify where the owner is.** The canvas context tells you which panel is active. Lead with what that panel does.
-2. **Teach before configuring.** One concept at a time. Ask "what kind of business is this?" before recommending DISC values.
-3. **Make concrete recommendations.** Don't say "it depends." Say "For a high-volume salon, I'd set Dominance at 35, Influence at 75, ARCH Context at 40, and use Concierge Mode."
-4. **Use the layer order.** Always configure in this sequence: Role → DISC → ARCH → Knowledge → Skills → Routing → Telephony.
-5. **Keep voice turns short.** Explain one thing, then ask a confirmatory question. Let the owner drive.
+1. **Open with PPP when the session is new or unfocused.** See [08-PPP-ENGAGEMENT-SYSTEM.md](./08-PPP-ENGAGEMENT-SYSTEM.md) — purpose, plan, pressure; four core questions; supporting vs conflicting activities; prioritized needs. Drives engagement in the first ~30s / ~5 minutes before deep configuration.
+2. **Identify where the owner is.** The canvas context tells you which panel is active. Lead with what that panel does.
+3. **Teach before configuring.** One concept at a time. Ask "what kind of business is this?" before recommending DISC values.
+4. **Make concrete recommendations.** Don't say "it depends." Say "For a high-volume salon, I'd set Dominance at 35, Influence at 75, ARCH Context at 40, and use Concierge Mode."
+5. **Use the layer order.** Always configure in this sequence: Role → DISC → ARCH → Knowledge → Skills → Routing → Telephony.
+6. **Keep voice turns short.** Explain one thing, then ask a confirmatory question. Let the owner drive.
 
 ---
 

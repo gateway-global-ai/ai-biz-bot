@@ -7,23 +7,20 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Phone, PhoneIncoming, PhoneOutgoing, MessageSquare, Zap,
+  Phone, PhoneIncoming, PhoneOutgoing, MessageSquare,
   Calendar, Clock, CheckCircle2, XCircle, PhoneMissed,
   Loader2, RefreshCw, Search, Eye, Users, Activity,
-  Mail, AlertCircle, Target
+  Mail, AlertCircle
 } from "lucide-react";
 import { format } from "date-fns";
 
 function LogsStats() {
   const { data: callLogs = [] } = useQuery<any[]>({ queryKey: ["/api/call-tracking"] });
   const { data: inquiries = [] } = useQuery<any[]>({ queryKey: ["/api/inquiries"] });
-  const { data: vlmStats } = useQuery<any>({ queryKey: ["/api/vlm/stats"] });
 
   const stats = [
     { label: "Total Calls", value: callLogs.length, icon: Phone, color: "text-blue-400" },
     { label: "Inquiries", value: inquiries.length, icon: MessageSquare, color: "text-purple-400" },
-    { label: "Campaigns", value: vlmStats?.totalCampaigns || 0, icon: Target, color: "text-emerald-400" },
-    { label: "Prospects", value: vlmStats?.totalProspects || 0, icon: Users, color: "text-yellow-400" },
   ];
 
   return (
@@ -69,13 +66,15 @@ function CallLogsPanel() {
   return (
     <div className="space-y-4">
       <div className="flex gap-3">
-        <Input
-          placeholder="Search calls..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="bg-slate-900 border-slate-700 text-white flex-1"
-          icon={<Search className="w-4 h-4 text-slate-400" />}
-        />
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <Input
+            placeholder="Search calls..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 border-slate-700 bg-slate-900 pl-9 text-white"
+          />
+        </div>
         <Button variant="outline" onClick={() => refetch()} className="border-slate-700">
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
@@ -156,13 +155,15 @@ function InquiriesPanel() {
   return (
     <div className="space-y-4">
       <div className="flex gap-3">
-        <Input
-          placeholder="Search inquiries..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="bg-slate-900 border-slate-700 text-white flex-1"
-          icon={<Search className="w-4 h-4 text-slate-400" />}
-        />
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <Input
+            placeholder="Search inquiries..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="bg-slate-900 border-slate-700 text-white flex-1 pl-9"
+          />
+        </div>
         <Button variant="outline" onClick={() => refetch()} className="border-slate-700">
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
@@ -216,70 +217,6 @@ function InquiriesPanel() {
   );
 }
 
-function CampaignLogsPanel() {
-  const { data: campaigns = [], isLoading } = useQuery<any[]>({
-    queryKey: ["/api/vlm/campaigns"],
-    queryFn: async () => {
-      try {
-        const res = await apiRequest("GET", "/api/vlm/campaigns?limit=20");
-        return res.json();
-      } catch (error) {
-        return [];
-      }
-    },
-  });
-
-  return (
-    <div className="space-y-4">
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
-        </div>
-      ) : campaigns.length === 0 ? (
-        <div className="text-center py-12 bg-slate-800/30 rounded-lg border border-slate-700">
-          <Zap className="w-12 h-12 mx-auto mb-3 text-slate-600" />
-          <p className="text-slate-400">No campaigns found</p>
-          <p className="text-slate-500 text-sm mt-2">
-            Create outbound campaigns in the Lead Machine
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {campaigns.map((campaign: any) => (
-            <Card key={campaign.id} className="bg-slate-800/50 border-slate-700 hover:bg-slate-800/70 transition-colors">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <Zap className="w-5 h-5 text-emerald-400 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-white font-medium">{campaign.name}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {campaign.status || 'active'}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-4 text-xs text-slate-400 mt-2">
-                      <span>Industry: {campaign.industry}</span>
-                      <span>•</span>
-                      <span>Location: {campaign.city}</span>
-                      <span>•</span>
-                      <span>Prospects: {campaign.totalProspects || 0}</span>
-                    </div>
-                    {campaign.createdAt && (
-                      <p className="text-xs text-slate-500 mt-1">
-                        Created {format(new Date(campaign.createdAt), "MMM d, yyyy")}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function TransparencyDashboard() {
   return (
     <div className="p-6 min-h-screen bg-slate-950">
@@ -307,10 +244,6 @@ export default function TransparencyDashboard() {
                 <MessageSquare className="w-4 h-4 mr-2" />
                 Inquiries
               </TabsTrigger>
-              <TabsTrigger value="campaigns" className="data-[state=active]:bg-slate-700">
-                <Zap className="w-4 h-4 mr-2" />
-                Campaigns
-              </TabsTrigger>
             </TabsList>
           </CardHeader>
 
@@ -323,9 +256,6 @@ export default function TransparencyDashboard() {
               <InquiriesPanel />
             </TabsContent>
 
-            <TabsContent value="campaigns">
-              <CampaignLogsPanel />
-            </TabsContent>
           </CardContent>
         </Tabs>
       </Card>

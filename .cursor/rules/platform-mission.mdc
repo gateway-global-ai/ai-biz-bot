@@ -31,7 +31,9 @@ Every architectural decision must protect or grow the Revenue Event conversion r
 
 - **No Hardcoding**: All model IDs, phone numbers, and API keys resolve via `process.env`. Never inline credentials or model strings.
 - **Asset Economy**: 98% image reduction is the standard. All UI assets must be WebP-crushed. No PNG in production.
-- **Model Monoculture**: Gemini 2.5 Native Multimodal is the sole AI engine. Do not fracture prompts across agnostic wrappers or introduce secondary LLM providers.
+- **Model Governance (Two-Plane)**:
+  - **Customer-Facing Runtime** — Gemini (or primary governed model) is the ONLY allowed execution engine for: voice concierge (Gemini Live WebSocket), ConciergePanel chat, all `siteConfig`-assigned agents, and any user-visible response path. Do not fracture this plane.
+  - **Internal Worker Runtime** — Local models (`aiModelProvider = 'local'`) are permitted ONLY for background/internal tasks (coding, analysis, governance linting, schema/UI generation, enforcement checks). Hard constraints: no direct user interaction, no voice path access, no autonomous publish to production, all outputs must pass the orchestration pipeline. See `.cursor/rules/local-agent-governance.mdc` for the full contract.
 - **Atomic Logic**: One file per domain — Identity, Telephony, Agents, Billing. Cross-domain coupling must be explicit and minimal.
 
 ## 5. Tier-2 Strategic Layer
@@ -49,5 +51,5 @@ When writing any new code, ask:
 1. Does this introduce a hardcoded value? → Move it to `process.env`.
 2. Does this add latency to the voice path? → Reject it.
 3. Does this create a zombie connection or unbounded state? → Add cleanup.
-4. Does this fracture the Gemini monoculture? → Reject it.
+4. Does this route a local model (`aiModelProvider = 'local'`) into a customer-facing or voice path? → Reject it and log as `local_model_voice_path_attempt` violation.
 5. Does this help convert an inbound call into a revenue event? → Ship it.

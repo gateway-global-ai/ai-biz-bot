@@ -69,6 +69,9 @@ export class GeminiStreamingClient implements IVoiceClient {
   /** Site config id from last `connect()` — used for verification passage heartbeat (not on VoiceConfig). */
   private sessionSiteConfigId: string | null = null;
   private verificationHeartbeatSent = false;
+  /** For async latency hints (Communication Plane) — first model audio chunk. */
+  private voiceSessionStartMs: number | null = null;
+  private firstModelAudioLogged = false;
 
   // Callbacks
   private messageCallback: (message: VoiceMessage) => void = () => {};
@@ -87,6 +90,8 @@ export class GeminiStreamingClient implements IVoiceClient {
     this.config = config;
     this.sessionSiteConfigId = business.id ?? null;
     this.verificationHeartbeatSent = false;
+    this.voiceSessionStartMs = null;
+    this.firstModelAudioLogged = false;
 
     try {
       this.currentStream = await navigator.mediaDevices.getUserMedia({ 
@@ -287,7 +292,7 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
           setup: {
             model: modelToUse,
             generation_config: {
-              response_modalities: ["audio"], // ✅ Fixed to lowercase for v1beta protocol
+              response_modalities: ["AUDIO"], // Protocol requires uppercase enum values per Google spec
               speech_config: {
                 voice_config: {
                   prebuilt_voice_config: { voice_name: this.config.voiceName || 'Puck' }
@@ -306,6 +311,17 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
             ...(business.id?.trim() ? { siteConfigId: business.id.trim() } : {}),
             ...(business.entryPointAgentId ? { agentId: business.entryPointAgentId } : {}),
             ...(business.entryPointMetaPrompt ? { metaPrompt: business.entryPointMetaPrompt } : {}),
+            ...(business.funnelContextKeys && Object.keys(business.funnelContextKeys).length > 0
+              ? { funnelContextKeys: Object.fromEntries(
+                  Object.entries(business.funnelContextKeys).filter(([, v]) => v != null && String(v).trim() !== '') as [string, string][]
+                ) }
+              : {}),
+            ...(business.voiceTrustedCallerId?.trim()
+              ? { trustedCallerId: business.voiceTrustedCallerId.trim() }
+              : {}),
+            ...(business.voiceBridgeCallSid?.trim()
+              ? { callSid: business.voiceBridgeCallSid.trim() }
+              : {}),
           },
         };
         
@@ -450,6 +466,121 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
     this.messageCallback = callback;
   }
 
+  /**
+   * New governed event handler — maps raw VoiceMessage to typed PttEvents.
+   * Additive: onMessage() is preserved as the backward-compat shim.
+   * VoiceTurnOrchestrator uses onEvent() exclusively.
+   *
+   * IMPORTANT: turnId is NOT generated here. The VoiceTurnOrchestrator is the
+   * sole authority for turnId (one UUID per PTT turn). All events emitted here
+   * carry an empty turnId that the orchestrator populates via its own context.
+   * See: canvas_control.md §12, SYSTEM_MANIFEST.md — Single Mutation Path Rule.
+   */
+  onEvent(callback: (event: import('@/types/voice').PttEvent) => void): void {
+    // Wrap into the new typed event dispatch
+    this.messageCallback = (msg: VoiceMessage) => {
+      // transcript.partial — turnId supplied by orchestrator, empty sentinel here
+      if (msg.type === 'transcription' && msg.isFinal === false) {
+        callback({
+          type: 'transcript.partial',
+          turnId: '',
+          sessionId: this.sessionSiteConfigId ?? '',
+          text: msg.text ?? '',
+        });
+        return;
+      }
+      // transcript.final — turnId is empty sentinel; orchestrator generates the real UUID
+      if (msg.type === 'transcription' && msg.isFinal === true) {
+        callback({
+          type: 'transcript.final',
+          turnId: '',
+          sessionId: this.sessionSiteConfigId ?? '',
+          text: msg.text ?? '',
+        });
+        return;
+      }
+      // canvas tool call — map to canvas.syscall event (legacy adapter path)
+      if (msg.type === 'response' && (msg.metadata?.tool_type === 'shared_canvas' || msg.metadata?.tool_type === 'canvas_control')) {
+        callback({
+          type: 'canvas.syscall',
+          turnId: '',
+          sessionId: this.sessionSiteConfigId ?? '',
+          syscallId: msg.metadata?.call_id ?? crypto.randomUUID(),
+          syscall: 'canvas.render',
+          result: null, // legacy adapter — result resolved by ToolRouter
+        });
+        return;
+      }
+      // speech.output (text response)
+      if (msg.type === 'response' && msg.text) {
+        callback({
+          type: 'speech.output',
+          turnId: '',
+          sessionId: this.sessionSiteConfigId ?? '',
+          text: msg.text,
+          audioState: 'streaming',
+        });
+        return;
+      }
+      // analysis.metadata (DISC / emotion / sentiment from tool results)
+      if (msg.type === 'metadata' || (msg.type === 'response' && msg.metadata?.emotion)) {
+        callback({
+          type: 'analysis.metadata',
+          turnId: '',
+          sessionId: this.sessionSiteConfigId ?? '',
+          emotion: msg.metadata?.emotion,
+          sentiment: msg.metadata?.sentiment,
+          disc: msg.metadata?.disc,
+        });
+        return;
+      }
+      // error passthrough
+      if (msg.type === 'error') {
+        callback({
+          type: 'error',
+          turnId: undefined,
+          sessionId: this.sessionSiteConfigId ?? '',
+          code: 'VOICE_ERROR',
+          message: msg.text ?? 'Voice error',
+        });
+      }
+    };
+  }
+
+  /**
+   * Interrupt active TTS speech.
+   * VoiceTurnOrchestrator is the SOLE caller — never call this directly from components.
+   */
+  interruptSpeech(): void {
+    this.activeSources.forEach(source => { try { source.stop(); } catch (e) {} });
+    this.activeSources.clear();
+    if (this.outputAudioContext) {
+      this.nextStartTime = this.outputAudioContext.currentTime;
+    }
+    this.currentInputText = '';
+    console.log('[GeminiStreamingClient] interruptSpeech() called by VoiceTurnOrchestrator');
+  }
+
+  /**
+   * Pass grounded speech context to Gemini for canvas-aware narration.
+   * Called by VoiceTurnOrchestrator after canvas.render is committed.
+   */
+  sendGroundedSpeechContext(ctx: import('@/types/voice').SpeechGroundingContext): void {
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      console.warn('[GeminiStreamingClient] sendGroundedSpeechContext: socket not open');
+      return;
+    }
+    // Inject canvas state as a system grounding message to the proxy
+    const groundingPayload = {
+      type: 'canvas_grounding',
+      turnId: ctx.turnId,
+      currentViewId: ctx.currentViewId,
+      screenSummary: ctx.screenSummary,
+      speakingInstructions: ctx.speakingInstructions,
+    };
+    this.socket.send(JSON.stringify(groundingPayload));
+  }
+
   onVolumeChange(callback: (volume: number) => void): void {
     this.volumeCallback = callback;
   }
@@ -521,7 +652,10 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
 
       // Step 4: Listen for audio data from the background thread
       this.workletNode.port.onmessage = (event) => {
-        const { audioData, volume } = event.data;
+        // audioData arrives as a transferred ArrayBuffer (zero-copy from worklet thread).
+        // Wrap it in Float32Array view — no allocation needed, just a typed view.
+        const audioData = new Float32Array(event.data.audioData);
+        const { volume } = event.data;
         this.volumeCallback(volume);
         if (this.streaming && this.socket && this.socket.readyState === WebSocket.OPEN) {
           const pcmBlob = this.createPcmBlob(audioData);
@@ -559,6 +693,7 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
           }).catch(() => {});
         }
         this.connected = true;
+        this.voiceSessionStartMs = Date.now();
         this.connectionCallback(true);
       } catch (err: any) {
         console.error('[GeminiStreamingClient] setupAudioProcessing failed, staying disconnected:', err?.message ?? err);
@@ -611,12 +746,16 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
         if (toolCall) {
           console.log("[GeminiStreamingClient] 🛠️ Tool call received:", toolCall.name);
           
-          // Specifically route 'request_manual_input' to the UI
+          // Normalize tool names to UI routing keys
+          const toolNameMap: Record<string, string> = {
+            request_manual_input: 'manual_input',
+            show_canvas: 'shared_canvas',
+          };
           this.messageCallback({
             type: 'response',
             text: '', 
             metadata: {
-              tool_type: toolCall.name === 'request_manual_input' ? 'manual_input' : toolCall.name,
+              tool_type: toolNameMap[toolCall.name] ?? toolCall.name,
               call_id: toolCall.call_id || toolCall.callId,
               ...toolCall.args
             }
@@ -627,6 +766,19 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
         const inlineData = part.inline_data || part.inlineData;
         if (inlineData?.data) {
           console.log("[GeminiStreamingClient] Playing model audio chunk");
+          if (!this.firstModelAudioLogged && this.voiceSessionStartMs != null) {
+            this.firstModelAudioLogged = true;
+            const msToFirstToken = Date.now() - this.voiceSessionStartMs;
+            fetch("/api/analytics/voice-latency-hint", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                siteConfigId: this.sessionSiteConfigId ?? undefined,
+                msToFirstToken,
+                sessionKind: "web_voice",
+              }),
+            }).catch(() => {});
+          }
           this.playAudio(inlineData.data);
         }
         if (part.text) {
@@ -659,15 +811,14 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
         // Non-fatal: localStorage may be unavailable
       }
 
+      // Spread all tool payload fields. Canvas fields (canvas_type, title, items, etc.)
+      // arrive at the top level of the message — NOT nested under .data — so we must
+      // exclude only the transport keys and forward everything else as metadata.
+      const { type: _t, tool_name: _n, ...toolPayload } = message;
       this.messageCallback({
         type: 'response',
         text: '',
-        metadata: {
-          tool_type: message.tool_type,
-          ui_action: message.ui_action,
-          audio_cue: message.audio_cue,
-          ...message.data,
-        }
+        metadata: toolPayload
       });
     }
   }

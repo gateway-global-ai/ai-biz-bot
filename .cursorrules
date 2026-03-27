@@ -6,17 +6,19 @@ You are an architect of the **Gateway Global AI OS**. You do not build undiffere
 
 ## CORE PHYSICS
 
-1. **GOVERNANCE FIRST** — Before material architecture, routing, views, or prompt behavior changes, consult [`docs-governance/`](docs-governance/). Anchor documents include [`SAFE_MODE_CONTRACT.md`](docs-governance/SAFE_MODE_CONTRACT.md), [`KNOWLEDGE_PLAN_ORCHESTRATOR.md`](docs-governance/KNOWLEDGE_PLAN_ORCHESTRATOR.md), [`EXECUTION_PLANE_BOUNDARY_SPEC.md`](docs-governance/EXECUTION_PLANE_BOUNDARY_SPEC.md), [`PROMPT_RUNTIME_GOVERNANCE.md`](docs-governance/PROMPT_RUNTIME_GOVERNANCE.md). For core platform structure, read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+1. **GOVERNANCE FIRST** — Before material architecture, routing, views, or prompt behavior changes, consult [`docs-governance/`](docs-governance/). Anchor documents include [`SAFE_MODE_CONTRACT.md`](docs-governance/canonical/SAFE_MODE_CONTRACT.md), [`KNOWLEDGE_PLAN_ORCHESTRATOR.md`](docs-governance/canonical/KNOWLEDGE_PLAN_ORCHESTRATOR.md), [`EXECUTION_PLANE_BOUNDARY_SPEC.md`](docs-governance/canonical/EXECUTION_PLANE_BOUNDARY_SPEC.md), [`PROMPT_RUNTIME_GOVERNANCE.md`](docs-governance/canonical/PROMPT_RUNTIME_GOVERNANCE.md). For core platform structure, read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 2. **THE AUDIT PLANE** — Knowledge certification is **structured** (gap analysis, [`server/services/knowledgeCertificationContext.ts`](server/services/knowledgeCertificationContext.ts), tool gates). Do not use prompt-only tuning as a substitute for certification, policy, or missing data.
 
-3. **EXECUTION PLANE INTEGRITY** — Keep UI, orchestration, and lockdown execution paths separate. No heavy domain logic or unbounded database work on voice hot paths. See [`docs-governance/EXECUTION_PLANE_BOUNDARY_SPEC.md`](docs-governance/EXECUTION_PLANE_BOUNDARY_SPEC.md).
+3. **EXECUTION PLANE INTEGRITY** — Keep UI, orchestration, and lockdown execution paths separate. No heavy domain logic or unbounded database work on voice hot paths. See [`docs-governance/canonical/EXECUTION_PLANE_BOUNDARY_SPEC.md`](docs-governance/canonical/EXECUTION_PLANE_BOUNDARY_SPEC.md).
 
 4. **TYPE DISCIPLINE** — Prefer strict typing in **new** code; avoid `any` unless justified. Repo-wide `tsc` cleanup may require a dedicated pass.
 
 5. **SECRET INTEGRITY** — No hardcoded API keys or model IDs in source. Use Doppler / Secret Manager. See [`docs-governance/`](docs-governance/) and [`.cursor/rules/api-lockdown.mdc`](.cursor/rules/api-lockdown.mdc).
 
-6. **TIERED RULES** — The root file is **Tier 1**. Scoped rules live in [`.cursor/rules/*.mdc`](.cursor/rules). The map is [`docs-governance/CURSOR_RULES_INDEX.md`](docs-governance/CURSOR_RULES_INDEX.md). Do not assume one file replaces path-scoped `.mdc` rules.
+6. **TIERED RULES** — The root file is **Tier 1**. Scoped rules live in [`.cursor/rules/*.mdc`](.cursor/rules). The map is [`docs-governance/canonical/CURSOR_RULES_INDEX.md`](docs-governance/canonical/CURSOR_RULES_INDEX.md). Do not assume one file replaces path-scoped `.mdc` rules.
+
+7. **CANONICAL PHASE ORDER** — Platform hardening and registry work follow [`docs-governance/canonical/GOVERNANCE_EXECUTION_PLAN_V1.md`](docs-governance/canonical/GOVERNANCE_EXECUTION_PLAN_V1.md). Do not skip **integrity (Phase 3)** before claiming registry authority (Phase 4+).
 
 ---
 
@@ -32,7 +34,7 @@ You are an architect of the **Gateway Global AI OS**. You do not build undiffere
 
 # VOICE / LIVE API (SUMMARY)
 
-The Gemini Native Audio pipeline and related files are **frozen infrastructure**. Do not modify handshake, sample rates, or route paths without an explicit **voice governance task**. The canonical protected file list is in [`.cursor/rules/sovereign-voice-lockdown.mdc`](.cursor/rules/sovereign-voice-lockdown.mdc) (includes [`server/geminiVoice.ts`](server/geminiVoice.ts), [`server/voiceStream.ts`](server/voiceStream.ts), [`server/voiceGemini.ts`](server/voiceGemini.ts), [`server/voiceSession.ts`](server/voiceSession.ts), [`server/audioCodec.ts`](server/audioCodec.ts), [`server/config/geminiLiveProtocol.ts`](server/config/geminiLiveProtocol.ts), client voice services, [`client/public/clear-voice-processor.js`](client/public/clear-voice-processor.js), etc.). Certification bridge notes: [`docs-governance/VOICE_PHASE_5D_BRIDGE.md`](docs-governance/VOICE_PHASE_5D_BRIDGE.md).
+The Gemini Native Audio pipeline and related files are **frozen infrastructure**. Do not modify handshake, sample rates, or route paths without an explicit **voice governance task**. The canonical protected file list is in [`.cursor/rules/sovereign-voice-lockdown.mdc`](.cursor/rules/sovereign-voice-lockdown.mdc) (includes [`server/geminiVoice.ts`](server/geminiVoice.ts), [`server/voiceStream.ts`](server/voiceStream.ts), [`server/voiceGemini.ts`](server/voiceGemini.ts), [`server/voiceSession.ts`](server/voiceSession.ts), [`server/audioCodec.ts`](server/audioCodec.ts), [`server/config/geminiLiveProtocol.ts`](server/config/geminiLiveProtocol.ts), client voice services, [`client/public/clear-voice-processor.js`](client/public/clear-voice-processor.js), etc.). Certification bridge notes: [`docs-governance/canonical/VOICE_PHASE_5D_BRIDGE.md`](docs-governance/canonical/VOICE_PHASE_5D_BRIDGE.md).
 
 ---
 

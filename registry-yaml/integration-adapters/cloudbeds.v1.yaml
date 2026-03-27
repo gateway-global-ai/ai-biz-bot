@@ -1,0 +1,56 @@
+# Adapter manifest — Cloudbeds hospitality
+# Outputs policy: docs-governance/canonical/ADAPTER_GENERATION_POLICY.md
+
+spec: integration_adapter_manifest_v1
+version: "1.0.0"
+vendor_id: cloudbeds
+adapter_status: deployable
+
+authority:
+  source_of_truth: registry-yaml/integration-adapters/cloudbeds.v1.yaml
+
+credential_anchor: sitePmsIntegrations
+schema_anchor_registry_ref: sitePmsIntegrations
+
+implementation:
+  primary_module: server/tools/cloudbedsSwarmTools.ts
+  inventory_module: server/tools/hotelInventoryHandler.ts
+  routes_module: server/routes/cloudbedsRoutes.ts
+
+capabilities_bound:
+  - capability_id: cb_inventory_quote
+    handler_entry: fetchCloudbedsAvailability
+  - capability_id: cb_guest_journey_lookup
+    handler_entry: pms_lookup_guest_journey
+  - capability_id: cb_housekeeping_status
+    handler_entry: pms_get_housekeeping_status
+  - capability_id: cb_hotel_dashboard
+    handler_entry: pms_get_hotel_dashboard
+  - capability_id: cb_post_reservation
+    handler_entry: postReservation
+    notes: Route POST /api/cloudbeds/reservations; Gemini tool not wired.
+
+error_taxonomy:
+  - error_class_id: auth
+    vendor_http_status: [401, 403]
+    behavior: refuse
+  - error_class_id: rate_limit
+    vendor_http_status: [429]
+    behavior: retry_bounded
+  - error_class_id: validation
+    vendor_http_status: [400, 422]
+    behavior: refuse
+  - error_class_id: not_found
+    vendor_http_status: [404]
+    behavior: degrade
+  - error_class_id: unknown
+    vendor_http_status: []
+    behavior: refuse
+
+test_references:
+  - scripts/cloudbeds-smoke-test.ts
+  - npm_script: test:cloudbeds
+
+idempotency_notes: >
+  Read endpoints are safe. postReservation MUST NOT be retried blindly until
+  vendor idempotency is documented; use human_handoff on ambiguous failures.

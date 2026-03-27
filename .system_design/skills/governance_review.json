@@ -1,0 +1,20 @@
+{
+  "id": "governance_review",
+  "version": "1.1.0",
+  "description": "GOVERNANCE_REVIEW_AGENT — Phase 1 artifact preflight (PF-* codes); Phase 2 approve|approve_with_conditions|reject|escalate; overall_decision invalid if preflight not ready",
+  "cursor_skill_path": ".cursor/skills/governance-review",
+  "contract": {
+    "inputs": [
+      "docs/governance/GOVERNANCE_ALIGNMENT_REPORT.md",
+      "docs/governance/artifacts/governance_alignment_report.yaml",
+      "docs/governance/GOVERNANCE_SYNC_ACTIONS.md",
+      "changed_files"
+    ],
+    "outputs": [
+      "docs/governance/GOVERNANCE_REVIEW_DECISION.md",
+      "docs/governance/artifacts/governance_review_decision.yaml",
+      "docs/governance/GOVERNANCE_REVIEW_CHECKLIST.md"
+    ],
+    "enforcement": "required"
+  }
+}
