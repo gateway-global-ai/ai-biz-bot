@@ -3,8 +3,19 @@
 // Run with: doppler run -- npx tsx scripts/check-google-key-permissions.ts
 // Correct Grounding Lite endpoint: https://mapstools.googleapis.com/mcp/search_places (MCP standard).
 //
-// API routes (no key permit required): POST /api/analytics/recovery-success (Error Navigator recovery log).
+// API routes (no key permit required): POST /api/analytics/recovery-success (Error Navigator recovery log);
+// POST /api/analytics/voice-latency-hint (async TTFT metrics; no Gemini key on client).
+// POST /api/intelligence/ppp-snapshot — server-side SerpAPI; auth + SERPAPI key (not Gemini permit).
+// POST /api/intelligence/orchestration-runs — auth only; starts DB run for gated POST /api/agents (no Gemini permit).
+// POST /api/local-llm-batch/complete — admin session + Ollama at LOCAL_LLM_BASE_URL; no Gemini key (see docs-governance/VOICE_CONCIERGE_LOCAL_LLM_BATCH.md).
+// GET /api/site-configs/:id/design-studio — admin session + design_studio.access; no Gemini key.
+// PATCH /api/site-configs/:id/design-studio — admin session + design_studio.access; no Gemini key.
+// POST /api/site-configs/:id/design-studio/handoff — admin session + design_studio.access; no Gemini key.
+// POST /api/site-configs/:id/design-studio/publish — admin session + design_studio.publish; no Gemini key.
+// GET /openapi/business-resonance-gpt.json — OpenAPI 3 for ChatGPT Actions import; no Gemini key (see docs-governance/GPT_ACTIONS_BUSINESS_RESONANCE.md).
+// GET /api/v1/admin/readiness-gate-v1/metrics — platform admin session + role; in-process counters; no Gemini key.
 // Future: POST /api/v1/verification/* — Twilio-backed only; no Gemini permit (see docs-governance/NOVA_VERIFICATION_GOVERNANCE.md).
+// POST /api/twilio/monitor/debug-event — Twilio Console Debugger webhook; X-Twilio-Signature + TWILIO_AUTH_TOKEN only; no Gemini permit.
 
 import axios from 'axios';
 import twilio from 'twilio';

@@ -18,6 +18,8 @@ You are an architect of the **Gateway Global AI OS**. You do not build undiffere
 
 6. **TIERED RULES** — The root file is **Tier 1**. Scoped rules live in [`.cursor/rules/*.mdc`](.cursor/rules). The map is [`docs-governance/canonical/CURSOR_RULES_INDEX.md`](docs-governance/canonical/CURSOR_RULES_INDEX.md). Do not assume one file replaces path-scoped `.mdc` rules.
 
+7. **CANONICAL PHASE ORDER** — Platform hardening and registry work follow [`docs-governance/canonical/GOVERNANCE_EXECUTION_PLAN_V1.md`](docs-governance/canonical/GOVERNANCE_EXECUTION_PLAN_V1.md). Do not skip **integrity (Phase 3)** before claiming registry authority (Phase 4+).
+
 ---
 
 # GLOBAL ARCHITECTURE MANDATE (CRITICAL)

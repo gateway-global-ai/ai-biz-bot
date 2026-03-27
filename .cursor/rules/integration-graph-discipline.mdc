@@ -1,0 +1,20 @@
+---
+description: Protects the integration intelligence graph — no runtime shortcuts, vendor docs are not authority, sets stay aligned with tools and modes.
+alwaysApply: true
+---
+
+# Integration Graph Discipline
+
+Read [`docs-governance/canonical/INTEGRATION_GRAPH_DISCIPLINE.md`](docs-governance/canonical/INTEGRATION_GRAPH_DISCIPLINE.md) before changing PMS/vendor integration code or `registry-yaml/integration-*`.
+
+## Absolute requirements
+
+1. **No runtime shortcut:** Models and agents use **Gemini tool names** only (`geminiToolDeclarations.ts`). Do not add model-visible vendor HTTP as the primary contract. Handlers implement **capabilities** backed by `registry-yaml/integration-capabilities/*.yaml`. Do not wire new vendor calls without updating the graph when the call is part of a declared capability.
+
+2. **Vendor docs are inputs only:** OpenAPI/Postman/IR output is **not** authority. Authoritative rows live under `registry-yaml/integration-entities/`, `integration-endpoints/`, `integration-capabilities/`, `integration-adapters/`, `integration-capability-sets.yaml`.
+
+3. **No silent drift:** After editing capabilities, sets, `TOOL_DECLARATIONS`, or `operationalModes.ts`, run `npm run validate:integration-registry`. Model-facing sets (non-empty `resolved_tool_names`) MUST declare `requires_modes_superset` matching **tools only** (not prose). Empty `resolved_tool_names` MUST set `exposure_type: non_model_facing` or `requires_tool_resolution: false`, and MUST NOT declare a non-empty `requires_modes_superset`.
+
+## If you think you need to bypass this
+
+You do not. Escalate a governance change to `INTEGRATION_GRAPH_DISCIPLINE.md` and the validator in the same PR.

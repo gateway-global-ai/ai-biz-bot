@@ -1,0 +1,271 @@
+# Cloudbeds Tool Registry — Governed Contract
+#
+# Split-registry mirror (integration intelligence): registry-yaml/integration-entities/,
+# integration-endpoints/, integration-capabilities/, integration-adapters/,
+# integration-capability-sets.yaml — CI: npm run validate:integration-registry
+#
+# Machine-readable spec for every Cloudbeds-backed tool available to
+# hospitality swarm agents on the Gateway Global AI OS.
+#
+# Source of truth for:
+#   - Tool names (must match server/config/geminiToolDeclarations.ts exactly)
+#   - Cloudbeds API method mapped to each tool
+#   - Mutation level and approval requirements
+#   - Required runtime dependencies
+#   - Mode allowlist (must be declared in server/config/operationalModes.ts)
+#
+# Implementation: server/tools/cloudbedsSwarmTools.ts
+#                 server/tools/hotelInventoryHandler.ts
+#                 server/routes/cloudbedsRoutes.ts
+#
+# Auth: resolved per-site via site_pms_integrations (api_key or OAuth Bearer)
+# Never: global Doppler key as the only credential path for tenant tools.
+#
+# OpenAPI source: docs/knowledge-base/cloudbeds/api/pms-v1.3-openapi.yaml
+# Endpoint map:   docs/knowledge-base/cloudbeds/supplemental/CLOUDBEDS_ENDPOINT_MAPPING.md
+# Runbook:        docs-governance/canonical/HOSPITALITY_SWARM_RUNBOOK.md
+
+version: "1.0.0"
+pms: "cloudbeds"
+api_base: "https://api.cloudbeds.com/api/v1.3"
+schema_anchor: "sitePmsIntegrations"
+
+# ── Runtime prerequisites ─────────────────────────────────────────────────────
+prerequisites:
+  - id: pms_row_active
+    description: >
+      site_pms_integrations row for this siteConfigId with pms_type=cloudbeds,
+      is_active=true, and either api_key or access_token populated.
+  - id: property_id_set
+    description: >
+      site_pms_integrations.property_id is set, OR
+      CLOUDBEDS_CLIENT_PROPERTY_ID Doppler var is set as fallback.
+  - id: cloudbeds_api_reachable
+    description: >
+      GET https://api.cloudbeds.com/api/v1.3/getAvailableRoomTypes responds 200.
+
+# ── Tool Definitions ──────────────────────────────────────────────────────────
+tools:
+
+  # 1. Availability & Room Inventory
+  - name: get_hotel_inventory
+    cloudbeds_method: getAvailableRoomTypes
+    mutation_level: read
+    requires_approval: false
+    description: >
+      Fetch available room types and live rates for given dates.
+      Returns sovereignName, netPrice, currency, ratePlanCode, roomsAvailable,
+      photos, and features for each room type. Used for quoting and canvas display.
+    required_params:
+      - checkIn         # ISO date YYYY-MM-DD
+      - checkOut        # ISO date YYYY-MM-DD
+    optional_params:
+      - adults          # default 2
+      - children        # default 0
+      - rooms           # default 1
+    returns:
+      - hotelName
+      - totalAvailable
+      - rooms           # array of room type objects
+      - bookingUrl      # direct booking engine URL
+      - uiComponent     # always "HOTEL_INVENTORY_GRID"
+    mode_allowlist:
+      - RECEPTIONIST
+      - SALES
+      - MANAGER
+    canvas_component: HOTEL_INVENTORY_GRID
+    notes: >
+      Voice path: Gemini tool declaration in server/config/geminiToolDeclarations.ts.
+      Implementation: server/tools/hotelInventoryHandler.ts → fetchCloudbedsAvailability().
+      For spoken responses, also quote bookingUrl for direct booking.
+
+  # 2. PMS Guest Journey Lookup
+  - name: pms_lookup_guest_journey
+    cloudbeds_method: getReservations
+    mutation_level: read
+    requires_approval: false
+    description: >
+      Look up a guest's reservation history and classify their journey stage
+      (in_house, upcoming_stay, recent_checkout, past_guest, no_pms_match)
+      using phone digit match. Searches ±1 year from today.
+    required_params:
+      - phone           # E.164 or US 10-digit; normalized before lookup
+    optional_params:
+      - _sessionSiteConfigId  # injected by runtime from session context
+    returns:
+      - journey         # GuestJourneyKind enum
+      - summary         # human-readable journey description
+      - matchCount      # number of reservations matched
+      - reservations    # up to 8 matching reservation objects
+      - privacyNote     # standard privacy disclosure
+    mode_allowlist:
+      - RECEPTIONIST
+      - SALES
+      - MANAGER
+      - CUSTOMER_SERVICE
+      - CONCIERGE
+    otp_gate: >
+      When site skill verification_guest_phone is active, OTP verification via
+      guest_phone_verification MUST precede this tool call.
+      Error returned: { requiresVerification: true } if gate not cleared.
+    notes: >
+      Phone match uses last-10-digit comparison (phoneDigitsMatch).
+      Window: checkInFrom = today - 1yr, checkInTo = today + 1yr.
+      Tune window in server/tools/cloudbedsSwarmTools.ts addYears() helper.
+      Do NOT surface folio or payment detail — direct to OTP-verified flow.
+
+  # 3. Housekeeping Status
+  - name: pms_get_housekeeping_status
+    cloudbeds_method: getHousekeepingStatus
+    mutation_level: read
+    requires_approval: false
+    description: >
+      Retrieve current housekeeping status for all rooms.
+      Optionally filter by roomCondition (clean or dirty).
+    required_params: []
+    optional_params:
+      - roomCondition   # "clean" | "dirty"
+      - pageSize        # default 100, max 5000
+      - _sessionSiteConfigId
+    returns:
+      - data            # raw Cloudbeds housekeeping response
+    mode_allowlist:
+      - MANAGER
+    notes: >
+      Management-only tool. Not available in RECEPTIONIST or SALES mode.
+      Useful for real-time front-desk check-in readiness queries.
+
+  # 4. Hotel Dashboard
+  - name: pms_get_hotel_dashboard
+    cloudbeds_method: getDashboard
+    mutation_level: read
+    requires_approval: false
+    description: >
+      Fetch the operational dashboard for a specific date — occupancy,
+      today's arrivals, today's departures, in-house count.
+    required_params: []
+    optional_params:
+      - date            # ISO date YYYY-MM-DD; default today
+      - _sessionSiteConfigId
+    returns:
+      - data            # raw Cloudbeds dashboard response (occupancy, arrivals, departures)
+    mode_allowlist:
+      - MANAGER
+    notes: >
+      Management-only. Gives front-desk ops a real-time snapshot without
+      opening the Cloudbeds dashboard directly.
+
+  # 5. Post Reservation (write — requires approval)
+  - name: post_reservation
+    cloudbeds_method: postReservation
+    mutation_level: write
+    requires_approval: true
+    description: >
+      Create a new reservation in Cloudbeds PMS. High-mutation tool —
+      always requires operator confirmation before dispatch.
+      Defaults sendEmailConfirmation: true.
+      Guest must be OTP-verified before this tool may be called.
+    required_params:
+      - propertyID      # injected from site_pms_integrations
+      - startDate       # ISO date check-in
+      - endDate         # ISO date check-out
+      - roomTypeID      # from get_hotel_inventory response
+      - guestFirstName
+      - guestLastName
+      - guestEmail
+    optional_params:
+      - guestPhone
+      - adults
+      - children
+      - sendEmailConfirmation  # default true
+      - ratePlanID
+    returns:
+      - reservationID
+      - status
+      - confirmationNumber
+    mode_allowlist:
+      - SALES
+      - CASHIER
+    otp_gate: >
+      Guest identity MUST be OTP-verified before post_reservation is dispatched.
+      Any agent calling this tool without a cleared OTP gate will be logged as
+      an orchestration_violation (governance_violation severity: high).
+    implementation_status: routes_only
+    notes: >
+      Route exists: POST /api/cloudbeds/reservations (requireCustomerAuth).
+      Not yet wired as a Gemini swarm tool in geminiToolDeclarations.ts.
+      Wire this tool only after OTP gate enforcement is confirmed end-to-end.
+      Until then, agents MUST quote inventory and hand guests off to bookingUrl.
+
+# ── Booking fallback (when post_reservation is not yet wired) ─────────────────
+booking_fallback:
+  strategy: direct_url_handoff
+  property_id: "315701"
+  booking_engine_url: "https://hotels.cloudbeds.com/reservation/YCNwpF"
+  agent_instruction: >
+    When a guest wants to book, quote the rate and room type from get_hotel_inventory,
+    then say: "You can complete your reservation directly at our booking link —
+    I'll share it with you now." Then emit the booking URL as a shared canvas
+    card or SMS send-payment-link.
+
+# ── Boardwalk Suites Lafayette — property constants ───────────────────────────
+boardwalk_suites_lafayette:
+  property_id: "315701"
+  place_id: "ChIJB4qU6oXvJIgR_2p602OaK_U"
+  address: "1605 N University Ave, Lafayette, LA 70506"
+  currency: "USD"
+  room_types:
+    - id: "629879"
+      name: "King Suite Level 1"
+      short: "SK1"
+      base_rate: 69
+      max_guests: 2
+      features: ["Air-conditioning", "Microwave", "WiFi", "Refrigerator", "LED Mirror", "Sofa Sleeper"]
+    - id: "630321"
+      name: "King Suite Level 2"
+      short: "SK2"
+      base_rate: 69
+      max_guests: 2
+      features: ["Air-conditioning", "Microwave", "WiFi", "Refrigerator", "50in Smart TV"]
+    - id: "630599"
+      name: "Double Suite Interior"
+      short: "DSI"
+      base_rate: 99
+      max_guests: 4
+      features: ["WiFi", "Air-conditioning", "Microwave", "Refrigerator", "50in Smart TV", "Workspace", "Bathtub"]
+    - id: "631047"
+      name: "King Suite Interior"
+      short: "SKI"
+      base_rate: 89
+      max_guests: 2
+      features: ["WiFi", "Microwave", "Refrigerator", "Bathtub", "Workspace", "50in Smart TV"]
+    - id: "642569"
+      name: "VIP King Suite"
+      short: "SKV"
+      base_rate: 89
+      max_guests: 2
+      features: ["WiFi", "Cable TV", "Microwave", "Shared Kitchen Access", "Laundry Room Access"]
+      notes: "Fully renovated. Can be joined to form 3-bedroom family suite."
+    - id: "649980"
+      name: "Double Suite Exterior"
+      short: "DSE"
+      base_rate: 79
+      max_guests: 4
+      features: ["Air-conditioning", "Microwave", "WiFi"]
+
+# ── Governance ────────────────────────────────────────────────────────────────
+governance:
+  voice_note: >
+    VOICE_BOARDWALK_DEMO_NOTE.md: geminiVoice.ts injects PRICING_RULE anti-booking copy
+    that can contradict live inventory quotes in spoken demos. Do NOT modify geminiVoice.ts
+    as a side effect of this integration. Open a separate voice governance task before
+    running a live voice demo that quotes real rates.
+  no_new_routes: >
+    Tools are server-side only. No new routes added to server/routes.ts.
+    cloudbedsRoutes.ts handles OAuth and reservation proxy.
+  sms_payment_links: >
+    Payment links use POST /api/share/send-payment-link with CUSTOMER_CARE pipe.
+    Never use marketing SMS pipe for checkout flows.
+  pms_credentials: >
+    All Cloudbeds credentials stored per-site in site_pms_integrations.
+    Global Doppler CLOUDBEDS_* vars are fallback only (legacy + smoke tests).

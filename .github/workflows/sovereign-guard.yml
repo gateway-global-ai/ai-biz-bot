@@ -43,6 +43,12 @@ jobs:
           echo "$CHANGED" > /tmp/changed-files.txt
           npx tsx scripts/sovereign-guard.ts --file-list /tmp/changed-files.txt
 
+      - name: Validate integration registry
+        run: npm run validate:integration-registry
+
+      - name: Validate swarm schematic
+        run: npm run validate:swarm-schematic
+
       - name: Check env manifest cleanliness
         run: npx tsx scripts/check-env-manifest.ts
         if: always()

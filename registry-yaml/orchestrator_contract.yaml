@@ -1,0 +1,74 @@
+# SOVEREIGN_OS_V1 — orchestrator_contract (registry anchor)
+# Implementation: reject_prompt_compilation_without_orchestrator applies to
+# persistence of deployed prompt truth, not per-session compile (execution plane).
+version: "1.0.0"
+
+orchestrator_contract:
+  required_for:
+    - create_agent
+    - update_agent
+    - deploy_agent
+    - assign_skills
+    - generate_funnel
+
+  enforcement:
+    reject_direct_route_calls: true
+    reject_manual_db_inserts: true
+    reject_prompt_compilation_without_orchestrator: true
+
+  audit:
+    log_all_attempts: true
+    classify_violations: true
+
+agent_creation_pipeline:
+  required_flow:
+    - orchestrator
+    - skill_mapping
+    - aptitude_test
+    - governance_gate
+    - provisioning
+
+  restrictions:
+    no_direct_creation: true
+    no_partial_pipeline: true
+    no_skip_steps: true
+
+failure_pipeline:
+  triggers:
+    - governance_violation
+    - skill_failure
+    - state_machine_error
+    - missing_input
+    - policy_conflict
+
+  actions:
+    - log_failure
+    - classify_failure
+    - assign_owner
+    - determine_severity
+    - trigger_recovery
+
+  enforcement:
+    critical:
+      - block_execution
+    high:
+      - require_retry
+    medium:
+      - log_and_continue
+
+customer_outcome:
+  metrics:
+    clarity_score: "0-100"
+    completion_rate: "%"
+    friction_events: count
+    time_to_resolution: seconds
+
+  enforcement:
+    minimum_thresholds:
+      clarity_score: 80
+      completion_rate: 90
+
+    failure_action:
+      - trigger_rewrite
+      - escalate
+      - fallback_flow

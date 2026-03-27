@@ -8,6 +8,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { storage } from "../storage";
 import { requireAuth } from "../auth";
+import { firstRouteParam } from "../utils/expressParams";
 
 const router = Router();
 
@@ -34,7 +35,11 @@ router.get("/", async (req: Request, res: Response) => {
 
 router.get("/:slug", async (req: Request, res: Response) => {
   try {
-    const { slug } = req.params;
+    const slug = firstRouteParam(req.params.slug);
+    if (!slug) {
+      res.status(400).json({ error: "slug required" });
+      return;
+    }
     const deck = await storage.getPitchDeckBySlug(slug);
     if (!deck) {
       res.status(404).json({ error: "Pitch deck not found" });

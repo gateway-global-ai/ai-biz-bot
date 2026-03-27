@@ -1,0 +1,139 @@
+# Canonical entities — Cloudbeds hospitality slice (reference bundle)
+# Normative shapes: docs-governance/canonical/INTEGRATION_CANONICAL_OBJECT_MODEL.md
+# Subgraph rules: docs-governance/canonical/INTEGRATION_CAPABILITY_GRAPH_SPEC_V1.md
+
+spec: integration_entities_bundle_v1
+version: "1.0.0"
+vendor_id: cloudbeds
+
+authority:
+  source_of_truth: registry-yaml/integration-entities/cloudbeds_hospitality.v1.yaml
+  openapi_reference: docs/knowledge-base/cloudbeds/api/pms-v1.3-openapi.yaml
+
+entities:
+  - canonical_entity_id: property
+    spec_version: "1.0.0"
+    display_name: Property
+    description: Hotel or lodging property in Cloudbeds PMS.
+    parent_entity_id: null
+    identity_anchors: [property_id]
+    unsupported_claims: [pci_card_data]
+    confidence_aggregate: high
+    vendor_mappings:
+      - vendor_id: cloudbeds
+        vendor_object_name: Property
+        equivalence: approximate
+        nuance_notes: >
+          Cloudbeds propertyID scopes API calls; platform uses site_pms_integrations.property_id.
+        field_mappings:
+          - canonical_field_id: external_id
+            vendor_field_path: propertyID
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: high
+
+  - canonical_entity_id: room_type
+    spec_version: "1.0.0"
+    display_name: Room type
+    description: Sellable room category for availability and booking.
+    parent_entity_id: property
+    identity_anchors: [room_type_id]
+    unsupported_claims: []
+    confidence_aggregate: high
+    vendor_mappings:
+      - vendor_id: cloudbeds
+        vendor_object_name: RoomType
+        equivalence: approximate
+        nuance_notes: Rates and availability come from getAvailableRoomTypes aggregate response.
+        field_mappings:
+          - canonical_field_id: external_id
+            vendor_field_path: roomTypeID
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: high
+
+  - canonical_entity_id: reservation
+    spec_version: "1.0.0"
+    display_name: Reservation
+    description: Guest stay record including dates and status.
+    parent_entity_id: property
+    identity_anchors: [reservation_id]
+    unsupported_claims: [full_folio_without_otp]
+    confidence_aggregate: high
+    vendor_mappings:
+      - vendor_id: cloudbeds
+        vendor_object_name: Reservation
+        equivalence: approximate
+        nuance_notes: Phone-digit match used for lookup; not full PMS guest record equivalence.
+        field_mappings:
+          - canonical_field_id: external_id
+            vendor_field_path: reservationID
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: high
+
+  - canonical_entity_id: guest
+    spec_version: "1.0.0"
+    display_name: Guest
+    description: Person associated with reservations.
+    parent_entity_id: null
+    identity_anchors: [guest_id]
+    unsupported_claims: [pci_card_data]
+    confidence_aggregate: medium
+    vendor_mappings:
+      - vendor_id: cloudbeds
+        vendor_object_name: Guest
+        equivalence: lossy
+        nuance_notes: Inferred from reservation payloads; OTP gate applies for sensitive tools.
+        field_mappings:
+          - canonical_field_id: phone
+            vendor_field_path: guestPhone
+            direction: read
+            transform: coerce
+            transform_ref: e164_normalize
+            confidence: medium
+
+  - canonical_entity_id: housekeeping_room
+    spec_version: "1.0.0"
+    display_name: Housekeeping room
+    description: Physical room housekeeping status.
+    parent_entity_id: property
+    identity_anchors: [room_id]
+    unsupported_claims: []
+    confidence_aggregate: high
+    vendor_mappings:
+      - vendor_id: cloudbeds
+        vendor_object_name: HousekeepingStatus
+        equivalence: approximate
+        nuance_notes: Mapped from getHousekeepingStatus response rows.
+        field_mappings:
+          - canonical_field_id: status
+            vendor_field_path: roomCondition
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: high
+
+  - canonical_entity_id: operations_dashboard
+    spec_version: "1.0.0"
+    display_name: Operations dashboard
+    description: Daily operational snapshot (occupancy, arrivals, departures).
+    parent_entity_id: property
+    identity_anchors: [property_id]
+    unsupported_claims: []
+    confidence_aggregate: high
+    vendor_mappings:
+      - vendor_id: cloudbeds
+        vendor_object_name: Dashboard
+        equivalence: approximate
+        nuance_notes: Single-date slice from getDashboard.
+        field_mappings:
+          - canonical_field_id: snapshot_date
+            vendor_field_path: date
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: high

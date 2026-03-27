@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { storage } from "../storage";
+import { firstRouteParam } from "../utils/expressParams";
 import { db } from "../db";
 import { eq, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -57,7 +58,7 @@ const upload = multer({ storage: multer.memoryStorage() });
   // Workspace status for a site (DB)
   router.get("/api/workspace/status/:siteConfigId", async (req, res) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
       const row = await db.query.workspaceConfigurations.findFirst({
         where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
       });
@@ -79,7 +80,7 @@ const upload = multer({ storage: multer.memoryStorage() });
   // OAuth URL for connecting workspace (state = siteConfigId)
   router.get("/api/workspace/connect/:siteConfigId", (req, res) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
       const service = createGoogleWorkspaceService();
       const authUrl = service.getAuthUrl(siteConfigId);
       res.json({ authUrl });
@@ -152,7 +153,7 @@ const upload = multer({ storage: multer.memoryStorage() });
   // Save workspace preferences (enabledApps, etc.)
   router.patch("/api/workspace/save/:siteConfigId", async (req, res) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
       const { enabledApps, status } = req.body as { enabledApps?: Record<string, boolean>; status?: string };
       const existing = await db.query.workspaceConfigurations.findFirst({
         where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
@@ -179,13 +180,13 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   // Check if site has Google Workspace connected
   router.get("/api/workspace/connection/:siteConfigId", async (req, res) => {
-    const { siteConfigId } = req.params;
+    const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
     const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
     res.json({ connected: !!credentials });
   });
 
   router.get("/api/google/connection/:siteConfigId", async (req, res) => {
-    const { siteConfigId } = req.params;
+    const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
     const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
     res.json({ connected: !!credentials });
   });
@@ -221,7 +222,7 @@ const upload = multer({ storage: multer.memoryStorage() });
   // Disconnect Google Workspace (clear tokens, keep row)
   router.delete("/api/workspace/connection/:siteConfigId", async (req, res) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
       const existing = await db.query.workspaceConfigurations.findFirst({
         where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
       });
@@ -246,7 +247,7 @@ const upload = multer({ storage: multer.memoryStorage() });
   });
 
   router.delete("/api/google/connection/:siteConfigId", async (req, res) => {
-    const { siteConfigId } = req.params;
+    const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
     const existing = await db.query.workspaceConfigurations.findFirst({
       where: eq(workspaceConfigurations.siteConfigId, siteConfigId),
     });
@@ -268,7 +269,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.get("/api/google/drive/drives/:siteConfigId", async (req, res) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
       const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
@@ -283,7 +284,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.get("/api/google/drive/files/:siteConfigId", async (req, res) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
       const { folderId = 'root', pageToken, pageSize } = req.query;
       const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
@@ -303,7 +304,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.post("/api/google/drive/folder/:siteConfigId", async (req, res) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
       const { name, parentId } = req.body;
       if (!name) return res.status(400).json({ success: false, error: "Folder name is required" });
       const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
@@ -320,7 +321,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.post("/api/google/drive/upload/:siteConfigId", upload.single('file'), async (req, res) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
       const { parentId } = req.body;
       const file = (req as any).file;
       if (!file) return res.status(400).json({ success: false, error: "No file provided" });
@@ -338,7 +339,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.delete("/api/google/drive/files/:siteConfigId/:fileId", async (req, res) => {
     try {
-      const { siteConfigId, fileId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
+      const fileId = firstRouteParam(req.params.fileId)!;
       const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
@@ -355,7 +357,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.get("/api/google/calendar/events/:siteConfigId", async (req, res) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
       const { maxResults, timeMin } = req.query;
       const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
@@ -374,7 +376,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.post("/api/google/calendar/events/:siteConfigId", async (req, res) => {
     try {
-      const { siteConfigId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
       const { summary, description, startTime, endTime, attendees } = req.body;
       if (!summary || !startTime || !endTime) {
         return res.status(400).json({ success: false, error: "summary, startTime, and endTime are required" });
@@ -393,7 +395,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.patch("/api/google/calendar/events/:siteConfigId/:eventId", async (req, res) => {
     try {
-      const { siteConfigId, eventId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
+      const eventId = firstRouteParam(req.params.eventId)!;
       const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
@@ -408,7 +411,8 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.delete("/api/google/calendar/events/:siteConfigId/:eventId", async (req, res) => {
     try {
-      const { siteConfigId, eventId } = req.params;
+      const siteConfigId = firstRouteParam(req.params.siteConfigId)!;
+      const eventId = firstRouteParam(req.params.eventId)!;
       const credentials = await getWorkspaceCredentialsBySiteConfigId(siteConfigId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
@@ -425,9 +429,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.get("/api/google/tasks/:businessId", async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const businessId = firstRouteParam(req.params.businessId)!;
       const { maxResults } = req.query;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(businessId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -441,12 +445,12 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.post("/api/google/tasks/:businessId", async (req, res) => {
     try {
-      const { businessId } = req.params;
+      const businessId = firstRouteParam(req.params.businessId)!;
       const { title, notes, dueDate } = req.body;
       if (!title) {
         return res.status(400).json({ success: false, error: "title is required" });
       }
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(businessId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -460,8 +464,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.patch("/api/google/tasks/:businessId/:taskId", async (req, res) => {
     try {
-      const { businessId, taskId } = req.params;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const businessId = firstRouteParam(req.params.businessId)!;
+      const taskId = firstRouteParam(req.params.taskId)!;
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(businessId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }
@@ -475,8 +480,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 
   router.delete("/api/google/tasks/:businessId/:taskId", async (req, res) => {
     try {
-      const { businessId, taskId } = req.params;
-      const credentials = googleWorkspaceCredentials.get(businessId);
+      const businessId = firstRouteParam(req.params.businessId)!;
+      const taskId = firstRouteParam(req.params.taskId)!;
+      const credentials = await getWorkspaceCredentialsBySiteConfigId(businessId);
       if (!credentials) {
         return res.status(401).json({ success: false, error: "Google Workspace not connected", requiresAuth: true });
       }

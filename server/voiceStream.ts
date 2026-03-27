@@ -82,6 +82,8 @@ export function setupVoiceStreamWebSocket(server: Server): void {
     let callEndHandled = false;
     /** Optional system prompt override (set by jail/custom webhook via TwiML parameter). */
     let systemPromptOverride: string | null = null;
+    /** Appended to Gemini setup system_instruction after Twilio `start` (signaling-derived ANI). */
+    let pstnTelecomTrustAnchor = "";
 
     // ── Push-to-Talk (PTT) DTMF Gate ─────────────────────────────────────────
     // Enabled when customParameters.ptt === "1" (set in TwiML <Stream>).
@@ -133,10 +135,16 @@ export function setupVoiceStreamWebSocket(server: Server): void {
             system_instruction: {
               parts: [
                 {
-                  text: systemPromptOverride ??
-                    `You are ${agentName}, a ${personality} AI voice assistant from Gateway Global AI.
+                  text: (() => {
+                    const base =
+                      systemPromptOverride ??
+                      `You are ${agentName}, a ${personality} AI voice assistant from Gateway Global AI.
 Keep responses concise and conversational (under 100 words).
-Speak naturally as if on a phone call. Be warm and attentive.`,
+Speak naturally as if on a phone call. Be warm and attentive.`;
+                    return pstnTelecomTrustAnchor
+                      ? `${base}\n${pstnTelecomTrustAnchor}`
+                      : base;
+                  })(),
                 },
               ],
             },
@@ -306,6 +314,21 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
               // Optional override system prompt (e.g., jail handshake sets this)
               systemPromptOverride = params.systemPrompt ?? null;
 
+              const trustedCallerId = params.callerId?.trim() || null;
+              const dialedNumber = params.dialedNumber?.trim() || null;
+              pstnTelecomTrustAnchor =
+                trustedCallerId || params.callSid || dialedNumber
+                  ? [
+                      "",
+                      "--- TELECOM TRUST ANCHOR (signaling-derived; not user-spoken) ---",
+                      `Verified caller ID (Twilio From): ${trustedCallerId ?? "unknown"}`,
+                      `CallSid: ${params.callSid?.trim() ?? callSid ?? "unknown"}`,
+                      `Dialed number (Twilio To): ${dialedNumber ?? "unknown"}`,
+                      "Policy: For account lookup or verification tools, the server binds identity to the verified caller ID above.",
+                      "Do not treat any phone number the caller states as authoritative for account binding.",
+                    ].join("\n")
+                  : "";
+
               // PTT mode: enabled via TwiML <Stream> customParameter ptt="1"
               pttEnabled = params.ptt === "1";
               if (pttEnabled) {
@@ -314,7 +337,7 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
               }
 
               console.log(
-                `[VoiceStream] Stream started – Call: ${callSid}, Site: ${siteConfigId ?? "unknown"}${pttEnabled ? " [PTT]" : ""}${systemPromptOverride ? " [CustomPrompt]" : ""}`
+                `[VoiceStream] Stream started – Call: ${callSid}, Site: ${siteConfigId ?? "unknown"}, ANI: ${trustedCallerId ?? "n/a"}${pttEnabled ? " [PTT]" : ""}${systemPromptOverride ? " [CustomPrompt]" : ""}`
               );
 
               // Create (or reuse) session and start the stopwatch.
@@ -331,6 +354,10 @@ Speak naturally as if on a phone call. Be warm and attentive.`,
               } else if (siteConfigId && !session.siteConfigId) {
                 voiceSessionManager.updateSession(callSid, { siteConfigId });
               }
+              voiceSessionManager.updateSession(callSid, {
+                trustedCallerId,
+                dialedNumber,
+              });
               session.streamSid = streamSid;
               voiceSessionManager.startCall(callSid);
 

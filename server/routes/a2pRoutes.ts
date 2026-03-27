@@ -2,14 +2,14 @@ import { Router } from "express";
 import { storage } from "../storage";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import twilio from "twilio";
 import {
   a2pBrands,
   a2pCampaigns,
   type A2pBrand,
 } from "@shared/schema";
 import { db } from "../db";
-// All Stripe calls use dynamic imports: await import('../stripeClient')
+import { getTwilioClient } from "../twilio";
+// Stripe: dynamic import('../stripeClient') where used below
 
 const router = Router();
 

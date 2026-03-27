@@ -47,13 +47,15 @@ class ClearVoiceProcessor extends AudioWorkletProcessor {
         }
         const rms = Math.sqrt(sum / this.bufferSize);
 
-        // Send audio data + volume to main thread
-        this.port.postMessage({
-          audioData: this.buffer.slice(), // Clone the buffer
-          volume: rms
-        });
+        // Transfer the underlying ArrayBuffer to the main thread instead of copying it.
+        // Transferring detaches the buffer from this thread (zero-copy), eliminating the
+        // constant GC pressure caused by buffer.slice() cloning every few milliseconds.
+        // We immediately re-allocate a fresh buffer so this thread can continue writing.
+        const transferBuffer = this.buffer.buffer;
+        this.port.postMessage({ audioData: transferBuffer, volume: rms }, [transferBuffer]);
 
-        // Reset buffer
+        // Re-allocate for the next chunk (the old buffer is now owned by the main thread)
+        this.buffer = new Float32Array(this.bufferSize);
         this.bufferIndex = 0;
       }
     }

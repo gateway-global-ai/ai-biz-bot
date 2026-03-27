@@ -1,7 +1,29 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
-import { insertInquirySchema } from "@shared/schema";
+import { insertInquirySchema, type InsertInquiry } from "@shared/schema";
 import { z } from "zod";
+
+function paramString(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
+
+const INQUIRY_STATUS_SET = new Set<string>([
+  "new",
+  "viewed",
+  "in_progress",
+  "resolved",
+  "closed",
+]);
+
+function coerceInquiryStatus(
+  value: string | null | undefined,
+): NonNullable<InsertInquiry["status"]> {
+  if (value != null && INQUIRY_STATUS_SET.has(value)) {
+    return value as NonNullable<InsertInquiry["status"]>;
+  }
+  return "new";
+}
 
 export function registerInquiryRoutes(app: Express) {
   // Get all inquiries with optional filters
@@ -33,114 +55,7 @@ export function registerInquiryRoutes(app: Express) {
     }
   });
 
-  // Get a single inquiry by ID
-  app.get("/api/inquiries/:id", async (req: Request, res: Response) => {
-    try {
-      const inquiry = await storage.getInquiry(req.params.id);
-      
-      if (!inquiry) {
-        return res.status(404).json({ error: "Inquiry not found" });
-      }
-      
-      let updatedInquiry = inquiry;
-      // Mark as viewed if not already viewed
-      if (!inquiry.viewedAt) {
-        updatedInquiry = await storage.updateInquiry(inquiry.id, {
-          status: inquiry.status === 'new' ? 'viewed' : inquiry.status,
-          viewedAt: new Date(),
-        });
-      }
-      
-      res.json(updatedInquiry);
-    } catch (error: any) {
-      console.error("[Inquiries] Error fetching inquiry:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Create a new inquiry
-  app.post("/api/inquiries", async (req: Request, res: Response) => {
-    try {
-      const parsed = insertInquirySchema.safeParse(req.body);
-      
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-      
-      // Add IP address and user agent for tracking
-      const inquiryData = {
-        ...parsed.data,
-        ipAddress: req.ip || req.headers['x-forwarded-for'] as string || 'unknown',
-        userAgent: req.headers['user-agent'] || 'unknown',
-        referrer: req.headers.referer || req.headers.referrer as string,
-      };
-      
-      const inquiry = await storage.createInquiry(inquiryData);
-      
-      res.status(201).json(inquiry);
-    } catch (error: any) {
-      console.error("[Inquiries] Error creating inquiry:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Update an inquiry
-  app.patch("/api/inquiries/:id", async (req: Request, res: Response) => {
-    try {
-      const updateSchema = z.object({
-        status: z.enum(['new', 'viewed', 'in_progress', 'resolved', 'closed']).optional(),
-        priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
-        assignedTo: z.string().optional(),
-        response: z.string().optional(),
-        internalNotes: z.string().optional(),
-      });
-      
-      const parsed = updateSchema.safeParse(req.body);
-      
-      if (!parsed.success) {
-        return res.status(400).json({ error: parsed.error.message });
-      }
-      
-      // Fetch existing inquiry so timestamps can be set only once
-      const existingInquiry = await storage.getInquiry(req.params.id);
-      
-      const updates: any = { ...parsed.data };
-      
-      // Set timestamps based on status changes, only if not already set
-      if (parsed.data.response && existingInquiry && !existingInquiry.respondedAt) {
-        updates.respondedAt = new Date();
-      }
-      
-      if (parsed.data.status === 'resolved' && existingInquiry && !existingInquiry.resolvedAt) {
-        updates.resolvedAt = new Date();
-      }
-      
-      const inquiry = await storage.updateInquiry(req.params.id, updates);
-      
-      if (!inquiry) {
-        return res.status(404).json({ error: "Inquiry not found" });
-      }
-      
-      res.json(inquiry);
-    } catch (error: any) {
-      console.error("[Inquiries] Error updating inquiry:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Delete an inquiry
-  app.delete("/api/inquiries/:id", async (req: Request, res: Response) => {
-    try {
-      await storage.deleteInquiry(req.params.id);
-      
-      res.json({ success: true });
-    } catch (error: any) {
-      console.error("[Inquiries] Error deleting inquiry:", error.message);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Get inquiry statistics
+  // Get inquiry statistics (must be registered before /:id or "stats" is treated as an id)
   app.get("/api/inquiries/stats", async (req: Request, res: Response) => {
     try {
       // Fetch all inquiries to ensure stats are computed over the full dataset
@@ -226,6 +141,134 @@ export function registerInquiryRoutes(app: Express) {
       res.json(stats);
     } catch (error: any) {
       console.error("[Inquiries] Error fetching stats:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get a single inquiry by ID
+  app.get("/api/inquiries/:id", async (req: Request, res: Response) => {
+    try {
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Missing inquiry id" });
+      }
+
+      const inquiry = await storage.getInquiry(id);
+
+      if (!inquiry) {
+        return res.status(404).json({ error: "Inquiry not found" });
+      }
+
+      let updatedInquiry = inquiry;
+      // Mark as viewed if not already viewed
+      if (!inquiry.viewedAt) {
+        const statusNow = coerceInquiryStatus(inquiry.status);
+        const nextStatus: NonNullable<InsertInquiry["status"]> =
+          statusNow === "new" ? "viewed" : statusNow;
+        const afterUpdate = await storage.updateInquiry(inquiry.id, {
+          status: nextStatus,
+          viewedAt: new Date(),
+        });
+        if (!afterUpdate) {
+          return res.status(500).json({ error: "Failed to update inquiry" });
+        }
+        updatedInquiry = afterUpdate;
+      }
+
+      res.json(updatedInquiry);
+    } catch (error: any) {
+      console.error("[Inquiries] Error fetching inquiry:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Create a new inquiry
+  app.post("/api/inquiries", async (req: Request, res: Response) => {
+    try {
+      const parsed = insertInquirySchema.safeParse(req.body);
+      
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+      
+      // Add IP address and user agent for tracking
+      const inquiryData = {
+        ...parsed.data,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] as string || 'unknown',
+        userAgent: req.headers['user-agent'] || 'unknown',
+        referrer: req.headers.referer || req.headers.referrer as string,
+      };
+      
+      const inquiry = await storage.createInquiry(inquiryData);
+      
+      res.status(201).json(inquiry);
+    } catch (error: any) {
+      console.error("[Inquiries] Error creating inquiry:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Update an inquiry
+  app.patch("/api/inquiries/:id", async (req: Request, res: Response) => {
+    try {
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Missing inquiry id" });
+      }
+
+      const updateSchema = z.object({
+        status: z.enum(['new', 'viewed', 'in_progress', 'resolved', 'closed']).optional(),
+        priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+        assignedTo: z.string().optional(),
+        response: z.string().optional(),
+        internalNotes: z.string().optional(),
+      });
+      
+      const parsed = updateSchema.safeParse(req.body);
+      
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+      
+      // Fetch existing inquiry so timestamps can be set only once
+      const existingInquiry = await storage.getInquiry(id);
+      
+      const updates: Partial<InsertInquiry> = { ...parsed.data };
+      
+      // Set timestamps based on status changes, only if not already set
+      if (parsed.data.response && existingInquiry && !existingInquiry.respondedAt) {
+        updates.respondedAt = new Date();
+      }
+      
+      if (parsed.data.status === 'resolved' && existingInquiry && !existingInquiry.resolvedAt) {
+        updates.resolvedAt = new Date();
+      }
+      
+      const inquiry = await storage.updateInquiry(id, updates);
+      
+      if (!inquiry) {
+        return res.status(404).json({ error: "Inquiry not found" });
+      }
+      
+      res.json(inquiry);
+    } catch (error: any) {
+      console.error("[Inquiries] Error updating inquiry:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Delete an inquiry
+  app.delete("/api/inquiries/:id", async (req: Request, res: Response) => {
+    try {
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Missing inquiry id" });
+      }
+      await storage.deleteInquiry(id);
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("[Inquiries] Error deleting inquiry:", error.message);
       res.status(500).json({ error: error.message });
     }
   });

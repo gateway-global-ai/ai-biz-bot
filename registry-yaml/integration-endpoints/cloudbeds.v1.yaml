@@ -1,0 +1,243 @@
+# Normalized endpoints — Cloudbeds API v1.3 (reference slice)
+# Shape: docs-governance/canonical/INTEGRATION_CAPABILITY_GRAPH_SPEC_V1.md §4
+
+spec: integration_endpoints_bundle_v1
+version: "1.0.0"
+vendor_id: cloudbeds
+api_base: "https://api.cloudbeds.com/api/v1.3"
+
+anchors:
+  - anchor_id: property_id
+    canonical_entity_id: property
+    detection_sources: [openapi_param, manual]
+    confidence: high
+    patterns:
+      - name_regex: "^propertyID$"
+    lifecycle:
+      creates: []
+      reads: [cb_v13_getAvailableRoomTypes, cb_v13_getDashboard, cb_v13_getHousekeepingStatus]
+      updates: []
+      deletes: []
+      lists: [cb_v13_getReservations]
+
+  - anchor_id: reservation_id
+    canonical_entity_id: reservation
+    detection_sources: [openapi_property, manual]
+    confidence: high
+    patterns:
+      - name_regex: "^reservationID$"
+    lifecycle:
+      creates: [cb_v13_postReservation]
+      reads: [cb_v13_getReservations]
+      updates: []
+      deletes: []
+      lists: [cb_v13_getReservations]
+
+  - anchor_id: guest_id
+    canonical_entity_id: guest
+    detection_sources: [manual]
+    confidence: medium
+    patterns:
+      - name_regex: "^guestID$"
+    lifecycle:
+      creates: [cb_v13_postReservation]
+      reads: [cb_v13_getReservations]
+      updates: []
+      deletes: []
+      lists: []
+
+  - anchor_id: room_type_id
+    canonical_entity_id: room_type
+    detection_sources: [openapi_param, manual]
+    confidence: high
+    patterns:
+      - name_regex: "^roomTypeID$"
+    lifecycle:
+      creates: []
+      reads: [cb_v13_getAvailableRoomTypes]
+      updates: []
+      deletes: []
+      lists: [cb_v13_getAvailableRoomTypes]
+
+endpoints:
+  - endpoint_id: cb_v13_getAvailableRoomTypes
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds
+    source_tier: openapi
+    method: GET
+    path_template: /getAvailableRoomTypes
+    operation_name: getAvailableRoomTypes
+    security_requirements:
+      - scheme_id: OAuth2
+        scopes: [read:reservation, read:guest]
+    path_parameters: []
+    query_parameters:
+      - name: propertyID
+        schema_ref: "#/components/schemas/propertyID"
+        required: true
+        anchor_id: property_id
+      - name: startDate
+        schema_ref: "#/components/schemas/date"
+        required: true
+        anchor_id: null
+      - name: endDate
+        schema_ref: "#/components/schemas/date"
+        required: true
+        anchor_id: null
+    request_body: null
+    responses:
+      "200":
+        schema_ref: "#/components/schemas/AvailableRoomTypesResponse"
+    pagination_mode: none
+    rate_limit_class: standard
+    idempotency: supported
+    side_effect_level: read
+    entity_anchors: [property_id]
+    creates_anchors: []
+    consumes_anchors: [property_id]
+    related_capability_ids: [cb_inventory_quote]
+    stability_score: 1.0
+    documentation_source: docs/knowledge-base/cloudbeds/api/pms-v1.3-openapi.yaml
+    adapter_status: deployable
+
+  - endpoint_id: cb_v13_getReservations
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds
+    source_tier: openapi
+    method: GET
+    path_template: /getReservations
+    operation_name: getReservations
+    security_requirements:
+      - scheme_id: OAuth2
+        scopes: [read:reservation]
+    path_parameters: []
+    query_parameters:
+      - name: propertyID
+        schema_ref: "#/components/schemas/propertyID"
+        required: true
+        anchor_id: property_id
+      - name: checkInFrom
+        schema_ref: "#/components/schemas/date"
+        required: false
+        anchor_id: null
+      - name: checkInTo
+        schema_ref: "#/components/schemas/date"
+        required: false
+        anchor_id: null
+    request_body: null
+    responses:
+      "200":
+        schema_ref: "#/components/schemas/ReservationsResponse"
+    pagination_mode: vendor_token
+    rate_limit_class: standard
+    idempotency: supported
+    side_effect_level: read
+    entity_anchors: [property_id, reservation_id]
+    creates_anchors: []
+    consumes_anchors: [property_id]
+    related_capability_ids: [cb_guest_journey_lookup]
+    stability_score: 0.95
+    documentation_source: docs/knowledge-base/cloudbeds/api/pms-v1.3-openapi.yaml
+    adapter_status: deployable
+
+  - endpoint_id: cb_v13_getHousekeepingStatus
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds
+    source_tier: openapi
+    method: GET
+    path_template: /getHousekeepingStatus
+    operation_name: getHousekeepingStatus
+    security_requirements:
+      - scheme_id: OAuth2
+        scopes: [read:housekeeping]
+    path_parameters: []
+    query_parameters:
+      - name: propertyID
+        schema_ref: "#/components/schemas/propertyID"
+        required: true
+        anchor_id: property_id
+    request_body: null
+    responses:
+      "200":
+        schema_ref: "#/components/schemas/HousekeepingResponse"
+    pagination_mode: offset
+    rate_limit_class: standard
+    idempotency: supported
+    side_effect_level: read
+    entity_anchors: [property_id]
+    creates_anchors: []
+    consumes_anchors: [property_id]
+    related_capability_ids: [cb_housekeeping_status]
+    stability_score: 0.95
+    documentation_source: docs/knowledge-base/cloudbeds/api/pms-v1.3-openapi.yaml
+    adapter_status: deployable
+
+  - endpoint_id: cb_v13_getDashboard
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds
+    source_tier: openapi
+    method: GET
+    path_template: /getDashboard
+    operation_name: getDashboard
+    security_requirements:
+      - scheme_id: OAuth2
+        scopes: [read:dashboard]
+    path_parameters: []
+    query_parameters:
+      - name: propertyID
+        schema_ref: "#/components/schemas/propertyID"
+        required: true
+        anchor_id: property_id
+      - name: date
+        schema_ref: "#/components/schemas/date"
+        required: false
+        anchor_id: null
+    request_body: null
+    responses:
+      "200":
+        schema_ref: "#/components/schemas/DashboardResponse"
+    pagination_mode: none
+    rate_limit_class: standard
+    idempotency: supported
+    side_effect_level: read
+    entity_anchors: [property_id]
+    creates_anchors: []
+    consumes_anchors: [property_id]
+    related_capability_ids: [cb_hotel_dashboard]
+    stability_score: 0.95
+    documentation_source: docs/knowledge-base/cloudbeds/api/pms-v1.3-openapi.yaml
+    adapter_status: deployable
+
+  - endpoint_id: cb_v13_postReservation
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds
+    source_tier: openapi
+    method: POST
+    path_template: /postReservation
+    operation_name: postReservation
+    security_requirements:
+      - scheme_id: OAuth2
+        scopes: [write:reservation]
+    path_parameters: []
+    query_parameters: []
+    request_body:
+      content_types: [application/json]
+      schema_ref: "#/components/schemas/PostReservationRequest"
+      required: true
+    responses:
+      "200":
+        schema_ref: "#/components/schemas/PostReservationResponse"
+    pagination_mode: none
+    rate_limit_class: strict
+    idempotency: unknown
+    side_effect_level: financial
+    entity_anchors: [property_id, reservation_id, room_type_id, guest_id]
+    creates_anchors: [reservation_id]
+    consumes_anchors: [property_id, room_type_id]
+    related_capability_ids: [cb_post_reservation]
+    stability_score: 0.65
+    documentation_source: docs/knowledge-base/cloudbeds/api/pms-v1.3-openapi.yaml
+    adapter_status: draft
+    stability_notes: Idempotency unknown; tool not wired to Gemini; OTP gate required.
+
+unsupported_endpoints: []

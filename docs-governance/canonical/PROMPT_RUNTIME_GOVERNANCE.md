@@ -97,3 +97,20 @@ When emotional friction is detected or expected:
 - maintain enough Acknowledge and Reflect budget
 - avoid collapsing too quickly into context or handoff
 - let emotion, DISC, and ARCH work together instead of relying on a single tone instruction
+
+## Meta prompt envelopes (orchestration / workflow steps)
+
+For **step-bound** LLM assists inside the control plane (agent spec, skill mapping, aptitude summarization, etc.), use **governed meta prompts** as **assignment envelopes** — not as routing, policy, or phase engines.
+
+**Canonical law:** [`META_PROMPT_ENVELOPES.md`](./META_PROMPT_ENVELOPES.md)  
+**Runtime contract (resolver + telemetry + enforcement):** [`META_PROMPT_RUNTIME_CONTRACT.md`](./META_PROMPT_RUNTIME_CONTRACT.md)  
+**Artifacts:** [`.system_design/meta_prompts/`](../../.system_design/meta_prompts/)  
+**Registry:** [`registry-yaml/state_meta_prompt_binding.yaml`](../../registry-yaml/state_meta_prompt_binding.yaml)
+
+Rules in short: state machine owns sequencing; governance owns authority; meta prompts only shape behavior **inside** the active step; **non-optional** contract — **no LLM execution without registry binding**, **no free-floating prompts**, **mandatory telemetry** (state, artifact version, inputs, validity, failure), **hard block** on missing inputs / state mismatch / invalid output (**no exceptions**). See canonical doc for deterministic (non-LLM) states.
+
+## Related
+
+- [`META_PROMPT_ENVELOPES.md`](./META_PROMPT_ENVELOPES.md) — meta prompt law, LangChain positioning note, audit requirements
+- [`META_PROMPT_RUNTIME_CONTRACT.md`](./META_PROMPT_RUNTIME_CONTRACT.md) — resolver, telemetry schema, `meta-prompt-runtime-wire` acceptance criteria
+- [`COMMUNICATION_PLANE_CONTRACT.md`](./COMMUNICATION_PLANE_CONTRACT.md) — compiled voice/chat shape vs control-plane meta prompts

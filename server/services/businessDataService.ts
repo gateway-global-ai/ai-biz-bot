@@ -37,6 +37,8 @@ export interface OwnerSpecificData {
   ownerStory?: string;
   customHours?: string;
   contactPreferences?: Record<string, unknown>;
+  /** Owner-curated amenity labels for voice/instruction copy (subset of review-derived list). */
+  publicAmenities?: string[];
 }
 
 /** Business intelligence from review mining (SerpAPI + Gemini). Amenities are from reviews, not GMP. */

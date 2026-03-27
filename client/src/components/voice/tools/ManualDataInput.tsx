@@ -4,7 +4,7 @@
  * manual data correction or specific field input.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, useAnimationControls } from 'framer-motion'; 
 import { Send, X, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -13,6 +13,8 @@ interface ManualDataInputProps {
   onSubmit: (value: string) => void;
   onCancel: () => void;
   fields?: string[];
+  /** From tool metadata.prefill / initialValue — ask only what is still missing. */
+  initialValue?: string;
 }
 
 export const ManualDataInput: React.FC<ManualDataInputProps> = ({ 
@@ -20,11 +22,16 @@ export const ManualDataInput: React.FC<ManualDataInputProps> = ({
   onSubmit, 
   onCancel,
   fields = ['value'],
+  initialValue = '',
 }) => {
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState(initialValue);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
+  useEffect(() => {
+    setInputValue(initialValue);
+  }, [initialValue]);
+
   // Controls for the shake animation
   const controls = useAnimationControls();
 

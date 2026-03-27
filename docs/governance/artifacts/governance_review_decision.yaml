@@ -1,0 +1,10 @@
+governance_review:
+  generated_at: ""
+  preflight:
+    status: incomplete
+    failure_codes:
+      - PF-006
+    failures:
+      - code: PF-006
+        detail: "Placeholder alignment YAML; run governance-linter to populate required fields"
+  overall_decision: invalid

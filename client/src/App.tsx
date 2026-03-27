@@ -13,6 +13,7 @@ import { Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Check, Cl
 
 // ── Eager: first-paint critical paths only ────────────────────────────────────
 import PlatformHomePage from "@/pages/public/PlatformHomePage";
+import DemoPublicRedirect from "@/pages/public/DemoPublicRedirect";
 import NotFound from "@/pages/admin/not-found";
 
 // ── Lazy: everything else — loaded only when the route is visited ─────────────
@@ -29,6 +30,7 @@ const OnboardingFlow        = lazy(() => import("@/pages/agents/OnboardingFlow")
 const DiscAssessment        = lazy(() => import("@/pages/showcase/DiscAssessment"));
 const MockConversation      = lazy(() => import("@/pages/showcase/MockConversation"));
 const AgentManager          = lazy(() => import("@/pages/agents/AgentManager"));
+const AgentBuilderPage      = lazy(() => import("@/pages/agents/AgentBuilderPage"));
 const AgentDashboard        = lazy(() => import("@/pages/agents/AgentDashboard"));
 const AgentsLandingPage     = lazy(() => import("@/pages/public/AgentsLandingPage"));
 const CustomerManager       = lazy(() => import("@/pages/biz-dashboard/CustomerManager"));
@@ -47,6 +49,7 @@ const GoogleTasksPage       = lazy(() => import("@/pages/biz-dashboard/GoogleTas
 const AiBizBotAdmin         = lazy(() => import("@/pages/owner/AiBizBotAdmin"));
 const Login                 = lazy(() => import("@/pages/account/Login"));
 const SdkShowcase           = lazy(() => import("@/pages/showcase/SdkShowcase"));
+const UiPrimitivesComparisonPage = lazy(() => import("@/pages/showcase/UiPrimitivesComparisonPage"));
 const GooglePlacesSdk       = lazy(() => import("@/pages/integrations/GooglePlacesSdk"));
 const MyAccount             = lazy(() => import("@/pages/account/MyAccount"));
 const CustomerSiteManager   = lazy(() => import("@/pages/owner/CustomerSiteManager"));
@@ -58,6 +61,7 @@ const PhonePage             = lazy(() => import("@/pages/public/PhonePage"));
 const ClearVoiceLogoCenteredPage = lazy(() => import("@/pages/public/ClearVoiceLogoCenteredPage"));
 const PlatformBuyPage       = lazy(() => import("@/pages/public/PlatformBuyPage"));
 const PlatformInfoPage      = lazy(() => import("@/pages/public/PlatformInfoPage"));
+const IndustryFunnelPage    = lazy(() => import("@/pages/public/IndustryFunnelPage"));
 const SitesAndLeads         = lazy(() => import("@/pages/owner/SitesAndLeads"));
 const MixingBoard           = lazy(() => import("@/pages/reseller/MixingBoard"));
 const ResellerDashboard     = lazy(() => import("@/pages/reseller/ResellerDashboard"));
@@ -85,7 +89,7 @@ const StorefrontsIndex      = lazy(() => import("@/pages/storefronts/Storefronts
 const StorefrontCategoryPage = lazy(() => import("@/pages/storefronts/StorefrontCategoryPage"));
 const BrandAdminPage        = lazy(() => import("@/pages/brand-admin"));
 const AdminShell            = lazy(() => import("@/pages/admin/AdminShell").then(m => ({ default: m.AdminShell })));
-const MissionControlRuntime = lazy(() => import("../../os-core/src/app/MissionControlRuntime"));
+const MissionControlApp = lazy(() => import("./mission-control/MissionControlApp"));
 
 function ServerPanel() {
   return (
@@ -292,11 +296,13 @@ function AppRouter() {
     <Switch>
       <Route path="/">{() => <Redirect to="/dashboard" />}</Route>
       <Route path="/onboard" component={OnboardingFlow} />
-      <Route path="/agents" component={AgentsLandingPage} />
+      {/* /agents legacy marketing page — redirected to platform home */}
+      <Route path="/agents">{() => <Redirect to="/" />}</Route>
       <Route path="/dashboard" component={AgentDashboard} />
       <Route path="/agent/:agentId/telephony" component={AgentTelephony} />
       <Route path="/brand-admin" component={BrandAdminPage} />
       <Route path="/agent-manager" component={AgentManager} />
+      <Route path="/admin/agents/build" component={AgentBuilderPage} />
       <Route path="/customers" component={CustomerManager} />
       <Route path="/gateway-admin" component={GatewayAdmin} />
       <Route path="/telephony" component={TelephonyManager} />
@@ -419,9 +425,10 @@ function App() {
               {/* Public routes */}
               <Route path="/" component={PlatformHomePage} />
               <Route path="/business" component={BusinessPage} />
-              <Route path="/demo" component={AgentsLandingPage} />
+              <Route path="/demo" component={DemoPublicRedirect} />
               <Route path="/buy" component={PlatformBuyPage} />
               <Route path="/more-info" component={PlatformInfoPage} />
+              <Route path="/industry/:slug" component={IndustryFunnelPage} />
               <Route path="/login" component={Login} />
               <Route path="/contact" component={ContactForm} />
               <Route path="/sms-consent" component={SmsConsent} />
@@ -433,6 +440,7 @@ function App() {
               <Route path="/storefronts/:categorySlug" component={StorefrontCategoryPage} />
               {/* voice-demo route — handled by Gemini Live on homepage */}
               <Route path="/sdk" component={SdkShowcase} />
+              <Route path="/sdk/ui-primitives" component={UiPrimitivesComparisonPage} />
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
               {/* ClearVoice Developer UI Kit — public URL; content gated inside page (dev or VITE_UI_KIT). Not LiveKit. */}
               <Route path="/dev/ui-kit" component={UiKitPage} />
@@ -455,15 +463,16 @@ function App() {
               <Route path="/test-b2b-olympic" component={OlympicB2b} />
               <Route path="/test-b2b-wireframe" component={TestB2b} />
               {/* Public business pages — shareable, no auth required */}
-              <Route path="/agents" component={AgentsLandingPage} />
+              {/* /agents legacy marketing page — redirected to platform home */}
+              <Route path="/agents">{() => <Redirect to="/" />}</Route>
               <Route path="/biz/:slug" component={PublicBusinessPage} />
               <Route path="/agent/:slug" component={AgentPage} />
               <Route path="/kiosk/:slug" component={KioskPage} />
               {/* Standalone Clear Voice phone UI — QR-codeable, no app shell. Params: ?siteConfigId=uuid | ?slug=url-slug */}
               <Route path="/phone" component={PhonePage} />
               <Route path="/clearvoice-logo" component={ClearVoiceLogoCenteredPage} />
-              <Route path="/mission-control" component={MissionControlRuntime} />
-              <Route path="/mission-control/*" component={MissionControlRuntime} />
+              <Route path="/mission-control" component={MissionControlApp} />
+              <Route path="/mission-control/*" component={MissionControlApp} />
               {/* Customer account routes */}
               <Route path="/my-account" component={MyAccount} />
               <Route path="/my-account/site/:siteId" component={CustomerSiteManager} />

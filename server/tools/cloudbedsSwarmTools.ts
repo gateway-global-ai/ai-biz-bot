@@ -67,7 +67,7 @@ export async function handlePmsLookupGuestJourney(args: {
 
   const siteRow = await loadSiteConfigRow(siteId);
   if (siteRow) {
-    const skills = getVerificationSkillsFromSiteConfig(siteRow.config);
+    const skills = getVerificationSkillsFromSiteConfig(siteRow.metadata);
     if (siteRequiresOtpForGuestPmsLookup(skills)) {
       const ok = await hasRecentGuestVerification(siteId, phoneRaw);
       if (!ok) {

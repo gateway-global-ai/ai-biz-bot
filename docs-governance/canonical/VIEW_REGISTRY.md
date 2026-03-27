@@ -120,3 +120,49 @@ These views are admin-only, rendered inside the ConciergePanel canvas. Each step
 - **dataContract**: `{ sales_funnels: SalesFunnelEntry[] }` — optional `conversationWorkflow` per [PHASED_INDUSTRY_FUNNEL_SPEC.md](./PHASED_INDUSTRY_FUNNEL_SPEC.md); client may edit JSON and context key fields; drag-and-drop graph editor is deferred.
 - **renderHints**: `SalesFunnelsEditor` in ConciergePanel canvas; Zod-validated PATCH to `/api/site-configs/:id/funnels`.
 - **policyGate**: `requireAuth`, business owner or admin
+
+---
+
+## AI Design Studio (governed pipeline)
+
+**Normative spec:** [`AI_DESIGN_STUDIO_GOVERNED_SPEC_V1.md`](./AI_DESIGN_STUDIO_GOVERNED_SPEC_V1.md). **SDK manifest:** [`gateway-sdk-manifest.yaml`](../../registry-yaml/gateway-sdk-manifest.yaml).
+
+### design_studio_landing
+
+- **viewId**: `design_studio_landing`
+- **category**: `intent_entry` (paired with shell; voice + canvas actions)
+- **requiredContextKeys**: `siteConfigId`, `design_handoff` (or equivalent session payload), optional `designProjectId`
+- **allowedActions**: `design_studio.learn_more`, `design_studio.new_project`, `start_voice` (shell)
+- **dataContract**: `{ handoffReason?, intentSummary?, referringAgentId?, entrySurface? }`
+- **renderHints**: Title **AI DESIGN STUDIO**, presenter line, buttons **LEARN MORE** / **NEW PROJECT**; voice copy from prompt fragments only.
+- **policyGate**: owner/authenticated session per product decision
+
+### design_studio_learn
+
+- **viewId**: `design_studio_learn`
+- **category**: `form` or `inspector`
+- **requiredContextKeys**: `siteConfigId`, `designProjectId?`
+- **allowedActions**: `design_studio.back_landing`, `design_studio.new_project`
+- **dataContract**: `{ processSteps: string[] }`
+- **renderHints**: “Getting started” / process steps from spec §8.
+- **policyGate**: same as landing
+
+### design_studio_path
+
+- **viewId**: `design_studio_path`
+- **category**: `confirmation` or `controller`
+- **requiredContextKeys**: `siteConfigId`, `designProjectId`
+- **allowedActions**: `design_studio.choose_build_view`, `design_studio.choose_build_app`
+- **dataContract**: `{ buildMode: 'view' | 'app' }`
+- **renderHints**: Branch **Individual views** vs **Multi-step apps**; both use `design_studio_step` with same 8-phase engine.
+- **policyGate**: same as landing
+
+### design_studio_step
+
+- **viewId**: `design_studio_step`
+- **category**: `form` or `controller` (phase-dependent)
+- **requiredContextKeys**: `siteConfigId`, `designProjectId`, `buildMode`, `stepIndex`, `stepKey`
+- **allowedActions**: `design_studio.advance_phase`, `design_studio.approve_plan`, `design_studio.commit_theme`, `design_studio.map_data_source`, `design_studio.map_data_destination`, `design_studio.select_components`, `design_studio.run_test`, `design_studio.save_artifact`, `design_studio.configure_knowledge`, `design_studio.configure_behavior`, `design_studio.publish` (see [`ACTION_REGISTRY.md`](./ACTION_REGISTRY.md) and [`actions.yaml`](../../registry-yaml/actions.yaml)).
+- **dataContract**: Per [`AI_DESIGN_STUDIO_GOVERNED_SPEC_V1.md`](./AI_DESIGN_STUDIO_GOVERNED_SPEC_V1.md) §8 phase outputs.
+- **renderHints**: Single parameterized step shell; talk → canvas updates via governed events.
+- **policyGate**: `requireAuth`, intake / verification when PII

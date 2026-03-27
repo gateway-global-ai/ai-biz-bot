@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 import { useAuth } from '@/lib/auth';
+import { SHELL } from '@/config/brand';
+import { buildConciergeBusinessFromSite } from '@/lib/conciergeBusinessContext';
 
 const GLOBAL_ADMIN_ROLES = new Set(['superadmin', 'platform_admin', 'admin']);
 
@@ -51,7 +53,12 @@ export default function AgentPage() {
         if (!r.ok) throw new Error('Agent not found');
         return r.json();
       })
-      .then(data => { setSiteData(data); setLoading(false); })
+      .then((data: any) => {
+        const { readiness_gate_v1, ...sitePayload } = data;
+        void readiness_gate_v1;
+        setSiteData(sitePayload);
+        setLoading(false);
+      })
       .catch(err => { setError(err.message); setLoading(false); });
   }, [slug]);
 
@@ -69,7 +76,7 @@ export default function AgentPage() {
       .catch(() => {});
   }, [siteData, qrTriggered]);
 
-  const publicUrl = `${window.location.origin}/agent/${slug}`;
+  const publicUrl = `${window.location.origin}/biz/${encodeURIComponent(slug ?? '')}`;
 
   const copyLink = useCallback(() => {
     navigator.clipboard.writeText(publicUrl).then(() => {
@@ -86,7 +93,7 @@ export default function AgentPage() {
 
   if (loading || authLoading) {
     return (
-      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: SHELL.bg }}>
         <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
       </div>
     );
@@ -94,7 +101,7 @@ export default function AgentPage() {
 
   if (error || !siteData) {
     return (
-      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center flex-col gap-6">
+      <div className="min-h-screen flex items-center justify-center flex-col gap-6" style={{ backgroundColor: SHELL.bg }}>
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -114,30 +121,11 @@ export default function AgentPage() {
     );
   }
 
-  // Build business context from site data
   const placeData = siteData.placeData || {};
   const heroImageUrl =
     siteData.heroImageUrl ??
     (siteData.placeId ? `/api/places/photo-proxy/${encodeURIComponent(siteData.placeId)}?maxWidth=1200` : undefined);
-  const businessContext = {
-    id: siteData.id,
-    placeId: siteData.placeId || placeData.place_id || '',
-    name: placeData.name || siteData.name || 'Agent',
-    address: placeData.formatted_address || '',
-    hours: placeData.opening_hours?.weekday_text || [],
-    services: [],
-    rating: placeData.rating,
-    userRatingsTotal: placeData.user_ratings_total,
-    phone: placeData.formatted_phone_number || placeData.international_phone_number,
-    types: (placeData.types || []).filter((t: string) => !['point_of_interest', 'establishment'].includes(t)),
-    heroImageUrl,
-    lat: placeData.geometry?.location?.lat,
-    lng: placeData.geometry?.location?.lng,
-    workspaceState: siteData.workspaceState ?? 'demo',
-    claimStatus: siteData.claimStatus ?? null,
-    ownerId: siteData.ownerId ?? null,
-    plan: siteData.plan ?? 'free',
-  };
+  const businessContext = buildConciergeBusinessFromSite(siteData as Record<string, unknown>, slug ?? '');
 
   const agentConfig = {
     role: 'concierge',
@@ -149,7 +137,7 @@ export default function AgentPage() {
   const qrImageUrl = `/qr/img/${slug}`;
 
   return (
-    <div className="min-h-screen bg-[#0F172A] flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: SHELL.bg }}>
       {/* QR + Share bar — only visible to site owners and admins */}
       {isOwner && (
         <motion.div

@@ -5,7 +5,7 @@ import {
   Server, Settings, Play, Activity, ShieldAlert, MessageSquare, Phone,
   Terminal, Building2, Sparkles, ClipboardCheck, AudioLines, Bot, Users,
   LayoutDashboard, Globe, Stethoscope, CreditCard, HardDrive, Calendar,
-  ListTodo, Zap, Eye,
+  ListTodo, Eye,
   ChevronDown, ChevronRight, MessageCircle, Archive, LayoutGrid,
 } from 'lucide-react';
 /** Clear Voice AI logo (POWERED BY CLEAR VOICE AI — globe + G). */
@@ -52,7 +52,6 @@ const OPERATIONS_ITEMS = [
   { id: 'billing', label: 'Billing', path: '/billing', icon: CreditCard },
   { id: 'twilio-health', label: 'SMS Health Check', path: '/twilio-health', icon: Stethoscope },
   { id: 'system-health', label: 'System Health', path: '/system-health', icon: Activity },
-  { id: 'lead-machine', label: 'Lead Machine', path: '/lead-machine', icon: Zap },
   { id: 'sites-leads', label: 'Sites & Leads', path: '/sites-leads', icon: Eye },
 ];
 

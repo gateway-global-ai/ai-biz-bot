@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
+import { fetchOrchestrationRunForAgentCreate } from '@/lib/agentOrchestrationClient';
 import { useLocation, useSearch } from 'wouter';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -91,7 +92,18 @@ export default function AgentDashboard() {
   };
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof newAgent) => apiRequest('POST', '/api/agents', data),
+    mutationFn: async (data: typeof newAgent) => {
+      if (!siteConfigId) {
+        throw new Error('Add ?siteConfigId=… to the URL to create an agent for a site.');
+      }
+      const orchestrationRunId = await fetchOrchestrationRunForAgentCreate(siteConfigId);
+      const res = await apiRequest('POST', '/api/agents', {
+        ...data,
+        siteConfigId,
+        orchestrationRunId,
+      });
+      return res.json();
+    },
     onSuccess: () => {
       invalidateAgentQueries();
       setIsCreateOpen(false);

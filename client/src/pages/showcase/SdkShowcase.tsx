@@ -437,10 +437,12 @@ function SplitPanelDemo() {
   );
 }
 
+type WidgetChatMessage = { role: 'user' | 'assistant'; content: string };
+
 function FloatingWidgetDemo() {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([
-    { role: 'assistant' as const, content: 'Hello! How can I help you today?' },
+  const [messages, setMessages] = useState<WidgetChatMessage[]>([
+    { role: 'assistant', content: 'Hello! How can I help you today?' },
   ]);
   const [inputVal, setInputVal] = useState('');
 
@@ -577,7 +579,14 @@ export default function SdkShowcase() {
               <p className="text-[10px] text-slate-500">Component Library & Design System</p>
             </div>
           </div>
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-2">
+            <a
+              href="/sdk/ui-primitives"
+              className="mr-2 px-3 py-1.5 text-xs font-semibold text-indigo-300 border border-indigo-500/30 rounded-lg hover:bg-indigo-500/10 transition-colors"
+              data-testid="link-ui-primitives-comparison"
+            >
+              UI primitives vs MUI
+            </a>
             {NAV_SECTIONS.map(s => (
               <a key={s.id} href={`#${s.id}`} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/50 transition-colors" data-testid={`link-nav-${s.id}`}>{s.label}</a>
             ))}
@@ -588,6 +597,13 @@ export default function SdkShowcase() {
         </div>
         {mobileNav && (
           <div className="md:hidden border-t border-slate-800 px-6 py-3 flex flex-wrap gap-2">
+            <a
+              href="/sdk/ui-primitives"
+              onClick={() => setMobileNav(false)}
+              className="px-3 py-1.5 text-xs font-semibold text-indigo-300 border border-indigo-500/30 rounded-lg w-full text-center"
+            >
+              UI primitives vs MUI
+            </a>
             {NAV_SECTIONS.map(s => (
               <a key={s.id} href={`#${s.id}`} onClick={() => setMobileNav(false)} className="px-3 py-1.5 text-xs text-slate-400 bg-slate-800/50 rounded-lg">{s.label}</a>
             ))}

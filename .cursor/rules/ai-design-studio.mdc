@@ -1,0 +1,20 @@
+---
+description: AI Design Studio — governed design-to-deployment pipeline (Chad), manifest, and Shadcn MCP discovery rules.
+globs:
+  - registry-yaml/gateway-sdk-manifest.yaml
+  - docs-governance/canonical/AI_DESIGN_STUDIO_GOVERNED_SPEC_V1.md
+  - client/**/DesignStudio*
+  - server/**/designStudio*
+alwaysApply: false
+---
+
+# AI Design Studio (governed)
+
+Before implementing Design Studio views, handoff, prompt fragments, or manifest entries:
+
+1. Read [`docs-governance/canonical/AI_DESIGN_STUDIO_GOVERNED_SPEC_V1.md`](../../docs-governance/canonical/AI_DESIGN_STUDIO_GOVERNED_SPEC_V1.md) — **SSoT** for pipeline, component/theme authority, canvas rules, and deployment gates.
+2. Update [`VIEW_REGISTRY.md`](../../docs-governance/canonical/VIEW_REGISTRY.md) and [`ACTION_REGISTRY.md`](../../docs-governance/canonical/ACTION_REGISTRY.md) for any new `viewId` / `actionId`; sync [`registry-yaml/views.yaml`](../../registry-yaml/views.yaml) when lazy imports exist.
+3. **Product surface** imports: **`@/ui-core` only** for hand-written control-plane code per [`SOVEREIGN_UI_GOVERNANCE_RULES.md`](../../docs/ux/SOVEREIGN_UI_GOVERNANCE_RULES.md). Shadcn MCP is **discovery_only** until **promotion** (wrap, theme tokens, manifest).
+4. **No** inline styles / raw colors on governed outputs; themes **`light-apple` | `dark-apple` | `crystal-glass`** must map to **token bundles** — never model-invented palettes.
+5. **Chat OS** width/mode rules in the spec **must not** contradict [`sovereign-chat-lockdown.mdc`](./sovereign-chat-lockdown.mdc) until governance explicitly amends them.
+

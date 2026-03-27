@@ -29,7 +29,7 @@ Deliver a **repeatable path** from an empty or single-agent site to a **full ind
 
 **Endpoint:** `POST /api/intelligence/provision`  
 **Router:** [`server/routes/intelligenceRoutes.ts`](../server/routes/intelligenceRoutes.ts)  
-**Implementation:** [`provisionAgentsForBusiness`](../server/services/agentProvisioning.ts)
+**Implementation:** [`runAgentSwarmProvisionOrchestrated`](../../server/services/agentOrchestration.ts) → [`provisionAgentsForBusiness`](../../server/services/agentProvisioning.ts) (see [SOVEREIGN_OS_V1_SPEC.md](./SOVEREIGN_OS_V1_SPEC.md)). **Default path:** `POST /api/site-configs` also runs the orchestrated provision after site create.
 
 ### Request body (JSON)
 

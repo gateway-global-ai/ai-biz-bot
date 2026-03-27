@@ -26,6 +26,10 @@ Deploying industry agent teams and tuning the **Communication Plane** are docume
 
 For **optional** enterprise-scale themes (measurable skill contracts, certification, roster planning) without treating them as current product fact, see [ENTERPRISE_MATURITY_EXTENSIONS.md](./ENTERPRISE_MATURITY_EXTENSIONS.md).
 
+### Control-plane skills (orchestration / dev parity)
+
+These are **not** `siteConfigs.config.skills` activations. They unify **Cursor** (`.cursor/skills/`) with **runtime manifests** (`.system_design/skills/*.json`) via [skill-identity-registry.yaml](../../registry-yaml/skill-identity-registry.yaml). See [SOVEREIGN_OS_V1_SPEC.md](./SOVEREIGN_OS_V1_SPEC.md). Validate locally: `npm run validate:skill-identity`.
+
 Each skill unlocks a set of menu items, agent behaviors, and/or OS features once its preflight
 steps are completed. No skill is active by default.
 

@@ -20,6 +20,7 @@ import crypto from "crypto";
 import { db } from "../db";
 import { siteConfigs, customerAccounts } from "@shared/schema";
 import { eq, and, gt } from "drizzle-orm";
+import { invalidateSiteRuntimeCache } from "../services/siteRuntimeResolver";
 import { sendSms, getTwilioFromPhoneNumber, sendVerification, checkVerification } from "../twilio";
 import { getStripeClient, STRIPE_PRICE_IDS } from "../stripeClient";
 import { storage } from "../storage";
@@ -33,6 +34,12 @@ function normalizePhone(phone: string): string {
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
   return `+${digits}`;
+}
+
+/** Express `req.params` values are `string | string[]`; Drizzle `eq()` needs a single string. */
+function paramString(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function buildClaimUrl(req: Request, token: string): string {
@@ -80,8 +87,12 @@ router.post(
   requireAdminOrReseller as any,
   async (req: Request, res: Response) => {
     try {
-      const { siteId } = req.params;
+      const siteId = paramString(req.params.siteId);
       const { phone, message: customMessage } = req.body as { phone?: string; message?: string };
+
+      if (!siteId) {
+        return res.status(400).json({ error: "siteId is required" });
+      }
 
       if (!phone) {
         return res.status(400).json({ error: "phone is required" });
@@ -118,6 +129,7 @@ router.post(
           updatedAt: new Date(),
         })
         .where(eq(siteConfigs.id, siteId));
+      invalidateSiteRuntimeCache(siteId);
 
       // Build URLs
       const claimUrl  = buildClaimUrl(req, claimToken);
@@ -174,7 +186,10 @@ router.post(
 // Public endpoint — validates token and returns safe preview data.
 router.get("/api/claim/:token", async (req: Request, res: Response) => {
   try {
-    const { token } = req.params;
+    const token = paramString(req.params.token);
+    if (!token) {
+      return res.status(400).json({ error: "token is required" });
+    }
 
     const [site] = await db
       .select({
@@ -239,7 +254,10 @@ router.get("/api/claim/:token", async (req: Request, res: Response) => {
 // Sends an OTP to the assigned phone to verify identity before checkout.
 router.post("/api/claim/:token/send-otp", async (req: Request, res: Response) => {
   try {
-    const { token } = req.params;
+    const token = paramString(req.params.token);
+    if (!token) {
+      return res.status(400).json({ error: "token is required" });
+    }
 
     const [site] = await db
       .select({
@@ -284,7 +302,10 @@ router.post("/api/claim/:token/send-otp", async (req: Request, res: Response) =>
 // Verifies OTP, creates/finds customer account, and returns a Stripe Checkout URL.
 router.post("/api/claim/:token/verify-otp", async (req: Request, res: Response) => {
   try {
-    const { token } = req.params;
+    const token = paramString(req.params.token);
+    if (!token) {
+      return res.status(400).json({ error: "token is required" });
+    }
     const { code, name, email } = req.body as { code?: string; name?: string; email?: string };
 
     if (!code) {
@@ -343,6 +364,7 @@ router.post("/api/claim/:token/verify-otp", async (req: Request, res: Response) 
       .update(siteConfigs)
       .set({ claimStatus: "payment_pending", updatedAt: new Date() })
       .where(eq(siteConfigs.id, site.id));
+    invalidateSiteRuntimeCache(site.id);
 
     // Build Stripe Checkout session
     const stripe = getStripeClient();
@@ -388,6 +410,7 @@ router.post("/api/claim/:token/verify-otp", async (req: Request, res: Response) 
       .update(siteConfigs)
       .set({ claimCheckoutSessionId: session.id, updatedAt: new Date() })
       .where(eq(siteConfigs.id, site.id));
+    invalidateSiteRuntimeCache(site.id);
 
     res.json({ url: session.url, sessionId: session.id });
   } catch (err: any) {
@@ -401,7 +424,10 @@ router.post("/api/claim/:token/verify-otp", async (req: Request, res: Response) 
 // actual activation, but this endpoint lets the frontend poll for readiness).
 router.get("/api/claim/:token/success", async (req: Request, res: Response) => {
   try {
-    const { token } = req.params;
+    const token = paramString(req.params.token);
+    if (!token) {
+      return res.status(400).json({ error: "token is required" });
+    }
 
     const [site] = await db
       .select({
@@ -457,6 +483,7 @@ export async function handleClaimCheckoutCompleted(session: {
         updatedAt:   new Date(),
       })
       .where(eq(siteConfigs.id, siteId));
+    invalidateSiteRuntimeCache(siteId);
 
     console.log(`[Claim] Site ${siteId} activated for customer ${customerId}`);
 

@@ -1,0 +1,486 @@
+# Machine-readable triage output. Regenerated 2026-03-25 from `npm run check` (tsc).
+# Total errors: 99 across 29 files. Schema: .cursor/skills/technical-debt-triage/SKILL.md
+#
+# Quarantine invariant: client/src/** and server/** (excluding quarantine/) must not import quarantine/**
+
+error_triage:
+  - file: server/routes/billingRoutes.ts
+    errors: 12
+    category: core_runtime
+    v1_relevance: critical
+    action: fix_now
+    risk: high
+    rationale: Billing router references missing modules (stripeClient, services/*) and undefined handler — breaks typecheck for payment spine.
+    runtime_surface: public
+    affects_customer_ready: false
+    severity: P0
+    error_kinds: [missing_import, syntax_type]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+        path: /api (billing mount)
+    importers: []
+    reviewer: billing
+
+  - file: server/routes/platformProductRoutes.ts
+    errors: 10
+    category: secondary_admin
+    v1_relevance: medium
+    action: fix_now
+    risk: medium
+    rationale: Multiple TS errors in platform product catalog route — impacts operator tooling if mounted.
+    runtime_surface: admin
+    affects_customer_ready: false
+    severity: P2
+    error_kinds: [syntax_type]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/routes/storefrontRoutes.ts
+    errors: 8
+    category: secondary_admin
+    v1_relevance: medium
+    action: defer
+    risk: low
+    rationale: Storefront industry pages — secondary surface; fix after core billing/claim.
+    runtime_surface: public
+    affects_customer_ready: false
+    severity: P2
+    error_kinds: [syntax_type, schema_drift]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/routes/claimRoutes.ts
+    errors: 7
+    category: core_runtime
+    v1_relevance: critical
+    action: fix_now
+    risk: high
+    rationale: Express param typing (string|string[]) vs Drizzle eq() — claim/checkout path.
+    runtime_surface: public
+    affects_customer_ready: true
+    severity: P1
+    error_kinds: [syntax_type, architecture_violation]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/routes.ts
+    errors: 0
+    category: core_runtime
+    v1_relevance: high
+    action: fix_now
+    risk: medium
+    rationale: "2026-03-25: VLM leads 410; command-chat VLM context removed; /api/mcp/code 410. Prior: getVlmProspects/getVlmCampaigns/ModelOptions."
+    runtime_surface: internal
+    affects_customer_ready: false
+    severity: P1
+    error_kinds: [schema_drift, obsolete_feature]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/routes/novaSovereignRoutes.ts
+    errors: 6
+    category: core_runtime
+    v1_relevance: high
+    action: fix_now
+    risk: medium
+    rationale: Nova / billing integration typing issues on mounted API.
+    runtime_surface: public
+    affects_customer_ready: true
+    severity: P1
+    error_kinds: [syntax_type]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/routes/inquiry-routes.ts
+    errors: 6
+    category: secondary_admin
+    v1_relevance: medium
+    action: defer
+    risk: medium
+    rationale: Inquiry management routes — fix in secondary wave.
+    runtime_surface: admin
+    affects_customer_ready: false
+    severity: P2
+    error_kinds: [syntax_type]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/routes/agentSystemRoutes.ts
+    errors: 0
+    category: core_runtime
+    v1_relevance: critical
+    action: fix_now
+    risk: medium
+    rationale: "2026-03-25: paramString() normalization applied. Prior: req.params union vs storage."
+    runtime_surface: public
+    affects_customer_ready: true
+    severity: P1
+    error_kinds: [syntax_type, route_drift]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/routes/workspaceRoutes.ts
+    errors: 4
+    category: secondary_admin
+    v1_relevance: medium
+    action: defer
+    risk: medium
+    rationale: Google Workspace integration — secondary to public voice/biz path.
+    runtime_surface: admin
+    affects_customer_ready: false
+    severity: P2
+    error_kinds: [syntax_type]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/storage.ts
+    errors: 0
+    category: core_runtime
+    v1_relevance: critical
+    action: fix_now
+    risk: medium
+    rationale: "2026-03-25: structuredControls cast + updateAgent set typing; getQrRoutes search narrow. Prior: Drizzle insert/update + TS18048."
+    runtime_surface: internal
+    affects_customer_ready: true
+    severity: P1
+    error_kinds: [schema_drift, syntax_type]
+    mounts: []
+    importers: [server/routes.ts, server/routes/*.ts]
+    reviewer: platform
+
+  - file: server/services/systemInstructionBuilder.ts
+    errors: 3
+    category: core_runtime
+    v1_relevance: high
+    action: fix_now
+    risk: medium
+    rationale: Prompt/instruction assembly — affects voice/handover quality when invoked.
+    runtime_surface: internal
+    affects_customer_ready: true
+    severity: P1
+    error_kinds: [syntax_type]
+    mounts: []
+    importers: [server/services/*]
+    reviewer: platform
+
+  - file: server/routes/qrCodeRoutes.ts
+    errors: 3
+    category: secondary_admin
+    v1_relevance: high
+    action: fix_now
+    risk: medium
+    rationale: QR generation used for public share flows — align types with shadow telecom.
+    runtime_surface: public
+    affects_customer_ready: false
+    severity: P2
+    error_kinds: [syntax_type]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: registry
+
+  - file: os-core/src/views/system/SystemTelemetryView.tsx
+    errors: 3
+    category: r_and_d_legacy
+    v1_relevance: low
+    action: defer
+    risk: low
+    rationale: os-core Slider props mismatch — separate from Concierge client bundle.
+    runtime_surface: internal
+    affects_customer_ready: false
+    severity: P3
+    error_kinds: [syntax_type]
+    mounts:
+      - type: react_route
+        registered_in: os-core (mission control)
+    importers: []
+    reviewer: platform
+
+  - file: client/src/pages/showcase/SdkShowcase.tsx
+    errors: 3
+    category: showcase_legacy
+    v1_relevance: none
+    action: archive_candidate
+    risk: low
+    rationale: SDK demo chat state typed as assistant-only — showcase drift.
+    runtime_surface: public
+    affects_customer_ready: false
+    severity: P3
+    error_kinds: [syntax_type]
+    mounts:
+      - type: react_route
+        path: /sdk
+        registered_in: client/src/App.tsx
+    importers: []
+    reviewer: platform
+
+  - file: server/tools/grnHotelsHandler.ts
+    errors: 2
+    category: r_and_d_legacy
+    v1_relevance: low
+    action: archive_candidate
+    risk: low
+    rationale: GRN B2B hotel handler — not v1 sovereign concierge path.
+    runtime_surface: internal
+    affects_customer_ready: false
+    severity: P3
+    error_kinds: [schema_drift]
+    mounts: []
+    importers: [server/tools/*]
+    reviewer: platform
+
+  - file: server/tools/dataIngestionHandler.ts
+    errors: 2
+    category: secondary_admin
+    v1_relevance: medium
+    action: defer
+    risk: medium
+    rationale: Review ingestion typing — knowledge pipeline adjacent.
+    runtime_surface: internal
+    affects_customer_ready: false
+    severity: P2
+    error_kinds: [syntax_type, schema_drift]
+    mounts: []
+    importers: []
+    reviewer: platform
+
+  - file: server/routes/a2pRoutes.ts
+    errors: 2
+    category: core_runtime
+    v1_relevance: critical
+    action: fix_now
+    risk: high
+    rationale: Missing getTwilioClient import — A2P compliance surface.
+    runtime_surface: admin
+    affects_customer_ready: false
+    severity: P0
+    error_kinds: [missing_import]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: client/src/pages/biz-dashboard/TransparencyDashboard.tsx
+    errors: 2
+    category: secondary_admin
+    v1_relevance: low
+    action: defer
+    risk: low
+    rationale: Input component `icon` prop not on shadcn Input — admin campaigns UI.
+    runtime_surface: admin
+    affects_customer_ready: false
+    severity: P2
+    error_kinds: [syntax_type]
+    mounts:
+      - type: react_route
+        registered_in: client/src/pages/admin/AdminShell.tsx
+    importers: []
+    reviewer: platform
+
+  - file: server/tools/cloudbedsSwarmTools.ts
+    errors: 1
+    category: r_and_d_legacy
+    v1_relevance: low
+    action: archive_candidate
+    risk: low
+    rationale: Cloudbeds swarm tooling — vertical-specific R&D.
+    runtime_surface: internal
+    affects_customer_ready: false
+    severity: P3
+    error_kinds: [syntax_type]
+    mounts: []
+    importers: []
+    reviewer: platform
+
+  - file: server/services/commission.ts
+    errors: 1
+    category: secondary_admin
+    v1_relevance: medium
+    action: defer
+    risk: medium
+    rationale: Reseller commission helper — billing-adjacent.
+    runtime_surface: internal
+    affects_customer_ready: false
+    severity: P2
+    error_kinds: [syntax_type]
+    mounts: []
+    importers: []
+    reviewer: billing
+
+  - file: server/routes/pitchDeckRoutes.ts
+    errors: 1
+    category: showcase_legacy
+    v1_relevance: low
+    action: defer
+    risk: low
+    rationale: Pitch deck public flow — fix in secondary pass.
+    runtime_surface: public
+    affects_customer_ready: false
+    severity: P3
+    error_kinds: [syntax_type]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/routes/businessTelephonyRoutes.ts
+    errors: 1
+    category: core_runtime
+    v1_relevance: high
+    action: fix_now
+    risk: medium
+    rationale: Telephony provisioning — Promise/api typing.
+    runtime_surface: admin
+    affects_customer_ready: false
+    severity: P1
+    error_kinds: [syntax_type]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/routes/businessRoutes.ts
+    errors: 1
+    category: core_runtime
+    v1_relevance: high
+    action: fix_now
+    risk: medium
+    rationale: BusinessContext missing required id in object literal.
+    runtime_surface: public
+    affects_customer_ready: true
+    severity: P1
+    error_kinds: [schema_drift]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/routes/bailRescueRoutes.ts
+    errors: 1
+    category: showcase_legacy
+    v1_relevance: none
+    action: archive_candidate
+    risk: low
+    rationale: Bail/rescue demo — Stripe API version literal mismatch.
+    runtime_surface: public
+    affects_customer_ready: false
+    severity: P3
+    error_kinds: [obsolete_feature]
+    mounts:
+      - type: express_route
+        registered_in: server/routes.ts
+    importers: []
+    reviewer: platform
+
+  - file: server/aiStudioProxy.ts
+    errors: 1
+    category: secondary_admin
+    v1_relevance: medium
+    action: defer
+    risk: low
+    rationale: null vs undefined for optional string param.
+    runtime_surface: internal
+    affects_customer_ready: false
+    severity: P2
+    error_kinds: [syntax_type]
+    mounts: []
+    importers: []
+    reviewer: platform
+
+  - file: client/src/pages/showcase/TestB2b.tsx
+    errors: 1
+    category: showcase_legacy
+    v1_relevance: none
+    action: archive_candidate
+    risk: low
+    rationale: B2B test page — unknown as ReactNode.
+    runtime_surface: public
+    affects_customer_ready: false
+    severity: P3
+    error_kinds: [syntax_type]
+    mounts:
+      - type: react_route
+        path: /test-b2b
+        registered_in: client/src/App.tsx
+    importers: []
+    reviewer: platform
+
+  - file: client/src/pages/public/PlatformHomePage.tsx
+    errors: 1
+    category: core_runtime
+    v1_relevance: critical
+    action: fix_now
+    risk: high
+    rationale: Featured product union missing optional badge — public home (/) type error.
+    runtime_surface: public
+    affects_customer_ready: true
+    severity: P1
+    error_kinds: [syntax_type]
+    mounts:
+      - type: react_route
+        path: /
+        registered_in: client/src/App.tsx
+    importers: []
+    reviewer: platform
+
+  - file: client/src/pages/biz-dashboard/CallTracking.tsx
+    errors: 1
+    category: secondary_admin
+    v1_relevance: low
+    action: defer
+    risk: low
+    rationale: Same Input `icon` prop issue as TransparencyDashboard.
+    runtime_surface: admin
+    affects_customer_ready: false
+    severity: P2
+    error_kinds: [syntax_type]
+    mounts:
+      - type: react_route
+        registered_in: client/src/pages/admin/AdminShell.tsx
+    importers: []
+    reviewer: platform
+
+  - file: client/src/components/showcase/EventSearchPanel.tsx
+    errors: 1
+    category: showcase_legacy
+    v1_relevance: none
+    action: archive_candidate
+    risk: low
+    rationale: Showcase component — status on message type.
+    runtime_surface: internal
+    affects_customer_ready: false
+    severity: P3
+    error_kinds: [syntax_type]
+    mounts: []
+    importers: [client/src/pages/showcase/*]
+    reviewer: platform

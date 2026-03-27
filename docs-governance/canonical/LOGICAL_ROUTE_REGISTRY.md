@@ -38,6 +38,17 @@ Each route definition should declare:
 - `verification.sessions.detail`
 - `billing.orders.detail`
 - `support.entry`
+- `public.demo.redirect` — short URL `/demo` → browser redirect to `/biz/:slug`; `requiredContextKeys`: none; `optionalBrowserPath`: `/demo`; canonical public business chrome (see [`DEMO_SURFACE_V1_SLICE.md`](../../docs/product/DEMO_SURFACE_V1_SLICE.md)).
+- `public.business.by_slug` — customer entry `/biz/:slug`; `GET /api/site-configs/by-slug/:slug`; attaches soft `readiness_gate_v1`; `requiredContextKeys`: `slug`.
+- `public.agent.by_slug` — owner/operator entry `/agent/:slug` (same `business` contract as `/biz` via `buildConciergeBusinessFromSite`); `requiredContextKeys`: `slug`.
+- `admin.tools.readiness_gate_v1` — `GET /api/v1/admin/readiness-gate-v1/metrics`; platform admin session; optional browser path `/platform/tools/readiness-gate`.
+
+## Retired HTTP surfaces (v1 discipline)
+
+These are **not** logical customer routes; documented so agents do not “repair” dead contracts.
+
+- **`GET /api/admin/sites/leads`** — **410 Gone** (2026-03-25). VLM prospect merge removed from v1; client [`SitesAndLeads`](../../client/src/pages/owner/SitesAndLeads.tsx) handles 410. Prefer site summaries + governed operator tooling.
+- **`POST /api/mcp/code`** — **410 Gone** (2026-03-25), same policy as `/api/mcp/tools` and `/api/mcp/tools/:toolName`.
 
 ## Rules
 - No browser route may exist without a logical route id.

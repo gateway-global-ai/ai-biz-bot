@@ -11,6 +11,8 @@ import WarrantResultsPanel, { WarrantResultsData } from './WarrantResultsPanel';
 import { KioskOnboarding } from './KioskOnboarding';
 import { PlanManager } from './PlanManager';
 import { SharedCanvasPanel } from './SharedCanvasPanel';
+import { pickInitialManualValue } from '@/lib/intakePrefillFromContext';
+import type { CanvasRenderPayload } from '../../../../../shared/canvasViewContract';
 
 interface ToolRouterProps {
   toolType: string;
@@ -37,6 +39,7 @@ export const ToolRouter: React.FC<ToolRouterProps> = ({
           prompt={metadata.prompt || "Please enter the requested information:"}
           onSubmit={onSubmit}
           onCancel={onCancel}
+          initialValue={pickInitialManualValue(metadata)}
         />
       );
     case 'get_business_details':
@@ -68,6 +71,8 @@ export const ToolRouter: React.FC<ToolRouterProps> = ({
         />
       );
     case 'shared_canvas':
+    case 'show_canvas': // LEGACY ADAPTER — routes to SharedCanvasPanel; will be removed after p5-deprecate
+      console.warn('[ToolRouter] DEPRECATED path: tool_type', toolType, '— migrate to canvas_control syscall');
       return (
         <SharedCanvasPanel
           metadata={metadata}
@@ -76,6 +81,23 @@ export const ToolRouter: React.FC<ToolRouterProps> = ({
           onCancel={onCancel}
         />
       );
+    case 'canvas_control': {
+      // New governed path — payload is a CanvasRenderPayload via CanvasSyscallEnvelope
+      const renderPayload = metadata as CanvasRenderPayload | null;
+      if (!renderPayload?.viewId) {
+        console.warn('[ToolRouter] canvas_control: missing viewId in payload');
+        return null;
+      }
+      // Render via SharedCanvasPanel with typed data until CanvasRuntimeRenderer is wired
+      return (
+        <SharedCanvasPanel
+          metadata={{ ...renderPayload, canvas_type: renderPayload.viewId, tool_type: 'canvas_control' }}
+          onTriggerSpeech={onTriggerSpeech}
+          onContextUpdate={onContextUpdate}
+          onCancel={onCancel}
+        />
+      );
+    }
     default:
       console.warn(`[ToolRouter] Unknown tool type: ${toolType}`);
       return null;

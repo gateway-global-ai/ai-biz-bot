@@ -324,9 +324,12 @@ export default function TestB2b() {
                       {r.grn && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-800 text-emerald-200">GRN: {r.grn.hotelCode}</span>
                       )}
-                      {r.grn?.rawResponse && typeof (r.grn.rawResponse as { net_price?: number }).net_price === "number" && (
-                        <span className="text-slate-400 text-xs">Net ${(r.grn.rawResponse as { net_price: number }).net_price}</span>
-                      )}
+                      {typeof (r.grn?.rawResponse as { net_price?: number } | null | undefined)?.net_price ===
+                      "number" ? (
+                        <span className="text-slate-400 text-xs">
+                          Net ${(r.grn!.rawResponse as { net_price: number }).net_price}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <button

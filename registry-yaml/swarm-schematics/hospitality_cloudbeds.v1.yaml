@@ -1,0 +1,123 @@
+# Hospitality travel × Cloudbeds — swarm member schematic (v1)
+# Canonical prose: docs-governance/canonical/HOSPITALITY_SWARM_SCHEMATIC_V1.md
+# Validated by: npm run validate:swarm-schematic
+
+spec: hospitality_swarm_schematic_v1
+version: "1.0.0"
+schematic_id: hospitality_cloudbeds
+industry_group: hospitality_travel
+pms_vendor: cloudbeds
+
+authority:
+  source_of_truth: registry-yaml/swarm-schematics/hospitality_cloudbeds.v1.yaml
+
+members:
+  - role_type: concierge
+    default_operational_mode: RECEPTIONIST
+    integration_capability_set_ids:
+      - cloudbeds_hospitality_front_desk
+    resolved_tool_names:
+      - get_hotel_inventory
+      - pms_lookup_guest_journey
+    optional_skill_dispatch_ids: []
+    knowledge_claim_classes:
+      - structured_fields
+      - external_api
+      - knowledge_library
+    required_proficiency_probe_ids:
+      - hosp_v1_concierge_inventory_handoff
+    api_version_lane: cloudbeds_v1_3
+    deploy_posture: review_required
+    storage_target: structured_controls.swarm_role_contract
+
+  - role_type: booking_coordinator
+    default_operational_mode: SALES
+    integration_capability_set_ids:
+      - cloudbeds_hospitality_front_desk
+    resolved_tool_names:
+      - get_hotel_inventory
+      - pms_lookup_guest_journey
+    optional_skill_dispatch_ids: []
+    knowledge_claim_classes:
+      - structured_fields
+      - external_api
+      - knowledge_library
+    required_proficiency_probe_ids:
+      - hosp_v1_booking_quote_and_handoff
+    api_version_lane: cloudbeds_v1_3
+    deploy_posture: review_required
+    storage_target: structured_controls.swarm_role_contract
+
+  - role_type: lead_qualifier
+    default_operational_mode: MANAGER
+    integration_capability_set_ids:
+      - cloudbeds_hospitality_manager_ops
+    resolved_tool_names:
+      - pms_get_housekeeping_status
+      - pms_get_hotel_dashboard
+      - get_hotel_inventory
+      - pms_lookup_guest_journey
+    optional_skill_dispatch_ids: []
+    knowledge_claim_classes:
+      - structured_fields
+      - external_api
+      - knowledge_library
+    required_proficiency_probe_ids:
+      - hosp_v1_manager_ops_snapshot
+    api_version_lane: cloudbeds_v1_3
+    deploy_posture: review_required
+    storage_target: structured_controls.swarm_role_contract
+
+  - role_type: retention_empath
+    default_operational_mode: CUSTOMER_SERVICE
+    integration_capability_set_ids:
+      - cloudbeds_hospitality_guest_lookup_only
+    resolved_tool_names:
+      - pms_lookup_guest_journey
+    optional_skill_dispatch_ids: []
+    knowledge_claim_classes:
+      - structured_fields
+      - external_api
+      - knowledge_library
+    required_proficiency_probe_ids:
+      - hosp_v1_support_guest_lookup_privacy
+    api_version_lane: cloudbeds_v1_3
+    deploy_posture: review_required
+    storage_target: structured_controls.swarm_role_contract
+
+  - role_type: billing_analyst
+    default_operational_mode: MANAGER
+    integration_capability_set_ids:
+      - cloudbeds_hospitality_manager_ops
+    resolved_tool_names:
+      - pms_get_housekeeping_status
+      - pms_get_hotel_dashboard
+      - get_hotel_inventory
+      - pms_lookup_guest_journey
+    optional_skill_dispatch_ids: []
+    knowledge_claim_classes:
+      - structured_fields
+      - external_api
+    required_proficiency_probe_ids:
+      - hosp_v1_billing_ops_readonly
+    api_version_lane: cloudbeds_v1_3
+    deploy_posture: review_required
+    storage_target: structured_controls.swarm_role_contract
+
+  - role_type: gatekeeper
+    default_operational_mode: RECEPTIONIST
+    integration_capability_set_ids:
+      - cloudbeds_hospitality_front_desk
+    resolved_tool_names:
+      - get_hotel_inventory
+      - pms_lookup_guest_journey
+    optional_skill_dispatch_ids: []
+    knowledge_claim_classes:
+      - structured_fields
+      - external_api
+      - knowledge_library
+    required_proficiency_probe_ids:
+      - hosp_v1_gatekeeper_intake_and_lookup
+    api_version_lane: cloudbeds_v1_3
+    deploy_posture: review_required
+    storage_target: structured_controls.swarm_role_contract

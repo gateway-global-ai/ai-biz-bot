@@ -1,0 +1,110 @@
+# Agent capability — ui_agent (local internal worker)
+# Aligns with .cursor/rules/local-agent-governance.mdc (ui_agent jurisdiction)
+spec: agent_capability_v0
+id: ui_agent
+version: "0.1.0"
+display_name: UI Agent (local worker)
+plane: internal_worker_runtime
+
+authority:
+  source_of_truth: registry-yaml/agent-capabilities/ui_agent.v0.yaml
+  derived_fields:
+    - agents.structuredControls.forbidden_domains
+    - agents.structuredControls.allowed_domains
+
+plane_status:
+  customer_facing_runtime: active
+  internal_worker_runtime: active
+  background_scheduled: reserved_v1
+
+capabilities:
+  - id: ui_core_components
+    description: Create and modify Sovereign-wrapped components under ui-core
+    scope:
+      paths:
+        - client/src/ui-core/**
+      actions:
+        - create
+        - modify
+        - refactor
+        - read
+  - id: admin_and_app_surfaces
+    description: Pages and components for admin, agents, and product surfaces (no server)
+    scope:
+      paths:
+        - client/src/pages/**
+        - client/src/components/**
+      actions:
+        - create
+        - modify
+        - refactor
+        - read
+
+boundaries:
+  forbidden_logical_domains:
+    - server_plane
+    - migrations_plane
+    - schema_anchor
+    - voice_runtime
+    - customer_channel
+  forbidden_paths:
+    - server/**
+    - migrations/**
+    - shared/schema.ts
+    - server/geminiVoice.ts
+    - server/voiceStream.ts
+    - server/voiceGemini.ts
+    - server/voiceSession.ts
+    - server/audioCodec.ts
+    - server/config/geminiLiveProtocol.ts
+    - client/src/services/voice/**
+    - client/public/clear-voice-processor.js
+  allowed_logical_domains:
+    - ui_core
+    - client_pages
+    - client_components
+  allowed_paths:
+    - client/src/ui-core/**
+    - client/src/pages/**
+    - client/src/components/**
+
+contracts:
+  input:
+    taskType: ui
+    payload_schema_ref: null
+  output:
+    format: local_agent_output
+    parse_required: true
+
+execution:
+  deterministic_output_required: true
+  structured_output_only: true
+
+orchestration:
+  requires_run_row: true
+  violation_types:
+    - missing_orchestration_run
+    - unauthorized_domain_access
+    - local_model_voice_path_attempt
+
+escalation:
+  on_boundary_hit: fail_closed
+  handoff_to:
+    - governance_review
+
+tests:
+  npm_scripts:
+    - test:local-agent-aptitude
+  scenarios: []
+
+scoring:
+  violation_registry: agent_orchestration_runs.violation_type
+  readiness_hooks:
+    - integration:readiness
+
+governance:
+  policy_refs:
+    - docs-governance/canonical/AGENT_POLICY_REGISTRY.md
+    - docs-governance/canonical/SAFE_MODE_CONTRACT.md
+    - .cursor/skills/shadcn-ui-agent/SKILL.md
+  review_required: true

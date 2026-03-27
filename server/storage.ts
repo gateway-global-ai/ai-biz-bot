@@ -7,6 +7,7 @@ import {
   type InsertCallLog,
   type Agent,
   type InsertAgent,
+  type StructuredControls,
   type Customer,
   type InsertCustomer,
   type SmsConversation,
@@ -113,6 +114,7 @@ import {
 import type { Reseller } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, ilike, or, isNull, isNotNull, and, gt, inArray, sql, type InferInsertModel } from "drizzle-orm";
+import { invalidateSiteRuntimeCache } from "./services/siteRuntimeResolver";
 import {
   redactSensitiveMetadata,
   redactSensitiveText,
@@ -493,14 +495,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAgent(agent: InsertAgent): Promise<Agent> {
-    const [created] = await db.insert(agents).values(agent).returning();
+    const structuredControls =
+      agent.structuredControls === undefined || agent.structuredControls === null
+        ? agent.structuredControls
+        : (agent.structuredControls as StructuredControls);
+    const [created] = await db
+      .insert(agents)
+      .values({ ...agent, structuredControls })
+      .returning();
     return created;
   }
 
   async updateAgent(id: string, updates: Partial<InsertAgent>): Promise<Agent | undefined> {
+    const { structuredControls: sc, ...rest } = updates;
+    const patch: Partial<InsertAgent> & { updatedAt: Date } = {
+      ...rest,
+      updatedAt: new Date(),
+    };
+    if (sc !== undefined) {
+      patch.structuredControls =
+        sc === null ? null : (sc as StructuredControls);
+    }
     const [updated] = await db
       .update(agents)
-      .set({ ...updates, updatedAt: new Date() })
+      .set(patch as Partial<InferInsertModel<typeof agents>>)
       .where(eq(agents.id, id))
       .returning();
     return updated;
@@ -958,6 +976,9 @@ export class DatabaseStorage implements IStorage {
       .set({ ...updates, updatedAt: new Date() } as Partial<InferInsertModel<typeof siteConfigs>>)
       .where(eq(siteConfigs.id, id))
       .returning();
+    // Invalidate the in-memory SiteRuntimeContext cache so the next request
+    // reads the authoritative updated values, not stale entitlements.
+    invalidateSiteRuntimeCache(id);
     return updated;
   }
 
@@ -1541,13 +1562,14 @@ export class DatabaseStorage implements IStorage {
   // QR Routes (shadow telecom); optional search filters by label, destination, variable (URL/id); siteConfigId filters to that site
   async getQrRoutes(page = 1, limit = 50, search?: string, siteConfigId?: string | null): Promise<{ routes: QrRoute[]; total: number }> {
     const offset = (page - 1) * limit;
-    const pattern = search?.trim() ? `%${search.trim().replace(/%/g, "\\%")}%` : null;
-    const searchCond = pattern
+    const trimmedSearch = search?.trim();
+    const pattern = trimmedSearch ? `%${trimmedSearch.replace(/%/g, "\\%")}%` : null;
+    const searchCond = pattern && trimmedSearch
       ? or(
           ilike(qrRoutes.label, pattern),
           ilike(qrRoutes.destination, pattern),
           ilike(sql`${qrRoutes.variable}::text`, pattern),
-          sql`${qrRoutes.id}::text = ${search.trim()}`
+          sql`${qrRoutes.id}::text = ${trimmedSearch}`
         )
       : undefined;
     const siteCond = siteConfigId ? eq(qrRoutes.siteConfigId, siteConfigId) : undefined;

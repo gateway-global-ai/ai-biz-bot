@@ -950,6 +950,12 @@ app.use((req, res, next) => {
   // WebSocket: Sovereign OS local chained pipeline (/ws/local-voice) — operator-only sandbox
   setupLocalVoiceProxy(httpServer);
 
+  // WebSocket: Sovereign Twilio stream (/ws/twilio-sovereign) — local STT/LLM/TTS for PSTN calls
+  if (process.env.LOCAL_VOICE_TWILIO_STREAM === "true") {
+    const { setupTwilioSovereignStream } = await import("./twilioSovereignStream");
+    setupTwilioSovereignStream(httpServer);
+  }
+
   // Initialize the WebSocket router (must be AFTER all routes are registered)
   const { setupWebSocketRouter } = await import("./websocketRouter");
   setupWebSocketRouter(httpServer);

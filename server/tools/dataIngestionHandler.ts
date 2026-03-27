@@ -263,7 +263,10 @@ export async function compile_knowledge_base(
   if (reviews.length === 0) throw new Error('[DataIngestion] No reviews to analyze.');
 
   // Gemini SWOT analysis
-  const analysis = await analyzeReviewsWithGemini(place_info.title, reviews);
+  const analysis = await analyzeReviewsWithGemini(
+    place_info.title,
+    reviews as unknown as Array<{ snippet?: string; [key: string]: unknown }>,
+  );
 
   // Auto-tune DISC from review language
   const disc = deriveDISCFromReviews(reviews, topics);
@@ -336,7 +339,7 @@ Based on ${reviews.length} reviews, the ideal agent for this business:
 
 ## Owner Action Plan
 
-${analysis.action_plan.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n')}
+${analysis.owner_insights.action_plan.map((a: string, i: number) => `${i + 1}. ${a}`).join('\n')}
 `;
 
   // Insert into siteConfigs.knowledgeLibrary

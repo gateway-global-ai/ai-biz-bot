@@ -16,6 +16,83 @@
 
 import type { Agent } from '@shared/schema';
 import { getOperationalMode, getModeInstruction, getModeArchOverride } from '../config/operationalModes';
+import { buildDisclosureFragment } from './disclosurePolicy';
+import {
+  resolveStabilityDials,
+  stabilityDialsToPromptFragment,
+  principalOfRecordFragment,
+} from './stabilityDials';
+import { parseCommunicationGovernance } from '@shared/conversationGrounding';
+import type { BuyerJourney } from '@shared/conversationGrounding';
+import { getCommunicationGovernanceFromSite } from './conversationGrounding';
+import { buildPppEngagementFragment } from './pppEngagementFragment';
+import { buildDesignStudioPromptFragments } from './designStudioPromptFragments';
+import { parseDesignStudioFromMetadata } from '@shared/designStudioState';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as yaml from 'js-yaml';
+
+// ── Skill Registry loader ─────────────────────────────────────────────────────
+interface SkillEntry {
+  skillId: string;
+  label: string;
+  description: string;
+  intentPatterns: string[];
+  allowedSecurityLevels: string[];
+  canvasViewId: string;
+  requiresConfirm: boolean;
+}
+
+interface SkillRegistry {
+  skills: SkillEntry[];
+  securityLevels: Record<string, { allowedSkills: string[] }>;
+}
+
+let _skillRegistry: SkillRegistry | null = null;
+function loadSkillRegistry(): SkillRegistry {
+  if (_skillRegistry) return _skillRegistry;
+  try {
+    const registryPath = path.resolve(process.cwd(), 'registry-yaml/skill-dispatch-registry.yaml');
+    const raw = fs.readFileSync(registryPath, 'utf-8');
+    _skillRegistry = yaml.load(raw) as SkillRegistry;
+  } catch (_) {
+    _skillRegistry = { skills: [], securityLevels: {} };
+  }
+  return _skillRegistry;
+}
+
+/**
+ * Build a skill context fragment for the given visitor security level.
+ * Injected into the prompt so the AI knows what actions it can dispatch.
+ */
+export function buildSkillContextFragment(securityLevel: 'anonymous' | 'phone_verified' | 'admin' = 'anonymous'): string {
+  const registry = loadSkillRegistry();
+  const allowed = registry.securityLevels[securityLevel]?.allowedSkills ?? [];
+  const skills = registry.skills.filter(s => allowed.includes(s.skillId));
+  if (skills.length === 0) return '';
+
+  const lines = skills.map(s => {
+    const patterns = s.intentPatterns.slice(0, 3).join('", "');
+    return `- **${s.label}** (${s.skillId}): ${s.description.trim()} Trigger phrases: "${patterns}". ${s.requiresConfirm ? 'Requires user confirmation before executing.' : ''}`;
+  });
+
+  return `### AVAILABLE SKILLS — CANVAS ACTIONS\nBased on this visitor's security level (${securityLevel}), you may dispatch the following actions by recognizing intent:\n\n${lines.join('\n')}\n\nWhen a skill is triggered, respond with a brief confirmation of what you're about to do, then emit a canvas:dispatch event with the skillId.`;
+}
+import {
+  conversationWorkflowSchema,
+  formatPhasePromptFragment,
+  resolveCurrentPhase,
+} from '@shared/conversationWorkflow';
+import {
+  ANTI_PLATFORM_DOCTRINE,
+  GATEWAY_BRAND_POSITIONING,
+  GATEWAY_PRODUCT_FACTS,
+  OBJECTION_HANDLING,
+  CONNECTION_PRINCIPLES,
+  SALES_ENGINE_PRINCIPLES,
+  FOUNDER_VOICE_APPLICABLE_MODES,
+  FOUNDER_VOICE_APPLICABLE_ROLES,
+} from '../config/founderVoicePack';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -71,6 +148,10 @@ export interface BusinessContext {
   keyOfferings?: string[];
   /** When set, injects mandatory certification / fallback posture into the compiled prompt. */
   knowledgeCertification?: KnowledgeCertificationInput;
+  /** Phased industry funnel — keys collected for resolveCurrentPhase (e.g. owner_salon_name). */
+  funnelContextKeys?: Record<string, string | undefined>;
+  /** Persistent buyer journey payload — injected into prompt as [VISITOR CONTEXT] when present. */
+  buyerJourney?: BuyerJourney | null;
 }
 
 function buildKnowledgeCertificationFragment(cert: KnowledgeCertificationInput): string {
@@ -104,6 +185,131 @@ function buildKnowledgeCertificationFragment(cert: KnowledgeCertificationInput):
     lines.push("", "Audit notes:", ...cert.notes.map((n) => `- ${n}`));
   }
   return lines.join("\n");
+}
+
+// ── Buyer Journey Fragment ────────────────────────────────────────────────────
+
+export function buildBuyerJourneyFragment(journey: BuyerJourney | null | undefined): string {
+  if (!journey) return '';
+
+  const lines: string[] = ['### [VISITOR CONTEXT]'];
+
+  const phaseLabels: Record<string, string> = {
+    awareness: 'Awareness (first exposure)',
+    consideration: 'Consideration (evaluating options)',
+    demo: 'Demo (has seen the product in action)',
+    trial: 'Trial (actively trying the platform)',
+    activation: 'Activation (paying customer)',
+    retention: 'Retention (established customer)',
+  };
+  lines.push(`Phase: ${phaseLabels[journey.phase] ?? journey.phase}`);
+
+  if (journey.sessionCount > 0) {
+    lines.push(`Prior sessions: ${journey.sessionCount}`);
+  }
+  if (journey.lastSessionAt) {
+    try {
+      const days = Math.floor((Date.now() - new Date(journey.lastSessionAt).getTime()) / 86400000);
+      if (days === 0) lines.push('Last seen: today');
+      else if (days === 1) lines.push('Last seen: yesterday');
+      else lines.push(`Last seen: ${days} days ago`);
+    } catch { /* skip */ }
+  }
+  if (journey.industry) {
+    lines.push(`Industry: ${journey.industry}`);
+  }
+  if (journey.painPointsExpressed.length) {
+    lines.push(`Pain points expressed: ${journey.painPointsExpressed.slice(0, 5).map(p => `"${p}"`).join(', ')}`);
+  }
+  if (journey.pricingObjectionsRaised.length) {
+    lines.push(`Pricing objections raised: ${journey.pricingObjectionsRaised.slice(0, 3).map(o => `"${o}"`).join(', ')}`);
+  }
+  if (journey.needsExpressed.length) {
+    lines.push(`Needs expressed: ${journey.needsExpressed.slice(0, 5).map(n => `"${n}"`).join(', ')}`);
+  }
+  if (journey.demoViewedAt) {
+    lines.push(`Demo viewed: yes`);
+  }
+
+  // Behavioural instruction based on phase
+  const phaseInstructions: Partial<Record<BuyerJourney['phase'], string>> = {
+    awareness: 'This is a first-impression conversation. Build trust before features.',
+    consideration: 'This visitor is evaluating options. Focus on what makes Gateway different, not just features.',
+    demo: 'They have seen the demo. Move toward the test drive or trial activation.',
+    trial: 'They are actively testing. Resolve blockers and build confidence.',
+    activation: 'Established customer. Focus on expansion and referrals.',
+    retention: 'Long-term customer. Deepen the relationship and identify new use cases.',
+  };
+  const instruction = phaseInstructions[journey.phase];
+  if (instruction) lines.push(instruction);
+
+  return lines.join('\n');
+}
+
+// ── Founder Voice Fragment (Anti-Platform Brand Doctrine) ─────────────────────
+
+/**
+ * Injects the Gateway Global AI brand voice and Anti-Platform doctrine into the system prompt.
+ * Only fires for customer-facing roles and modes where brand positioning is appropriate.
+ * Never fires for CASHIER, INTAKE, EMERGENCY, or other operational-only modes.
+ */
+export function buildFounderVoiceFragment(
+  modeId: string | null | undefined,
+  roleType: string | null | undefined,
+  opts?: { includeProductFacts?: boolean; includeObjectionHandling?: boolean }
+): string {
+  const mode = String(modeId ?? '').toUpperCase().trim();
+  const role = String(roleType ?? '').toLowerCase().trim();
+
+  const modeApplicable = FOUNDER_VOICE_APPLICABLE_MODES.has(mode as never);
+  const roleApplicable = FOUNDER_VOICE_APPLICABLE_ROLES.has(role as never);
+
+  if (!modeApplicable && !roleApplicable) return '';
+
+  const lines: string[] = [
+    '### [GATEWAY VOICE DOCTRINE — ANTI-PLATFORM CANON]',
+    '',
+    '## Brand Position',
+    `${GATEWAY_BRAND_POSITIONING.tagline}`,
+    `${GATEWAY_BRAND_POSITIONING.corePromise}`,
+    '',
+    '## What We Are Not',
+    ...GATEWAY_BRAND_POSITIONING.notThis.map(n => `- ${n}`),
+    '',
+    '## The Problem We Solve',
+    ...ANTI_PLATFORM_DOCTRINE.slice(0, 4).map(d => `- ${d}`),
+    '',
+    '## How You Speak',
+    ...CONNECTION_PRINCIPLES.tonePrinciples.map(p => `- ${p}`),
+    '',
+    '## Language You Never Use',
+    ...CONNECTION_PRINCIPLES.forbiddenPhrasing.map(p => `- "${p}"`),
+    '',
+    '## Sales Principles (Every Interaction)',
+    `Core: ${SALES_ENGINE_PRINCIPLES.corePrinciple}`,
+    ...SALES_ENGINE_PRINCIPLES.salesLaws.map(l => `- ${l}`),
+  ];
+
+  if (opts?.includeProductFacts) {
+    const approvedFacts = GATEWAY_PRODUCT_FACTS.filter(f => f.approved);
+    if (approvedFacts.length) {
+      lines.push('', '## Approved Product Facts');
+      for (const fact of approvedFacts.slice(0, 5)) {
+        lines.push(`- **${fact.topic.replace(/_/g, ' ')}**: ${fact.fact}`);
+      }
+    }
+  }
+
+  if (opts?.includeObjectionHandling) {
+    lines.push('', '## Objection Handling (When the owner pushes back)');
+    for (const [key, response] of Object.entries(OBJECTION_HANDLING).slice(0, 5)) {
+      lines.push(`- *${key.replace(/_/g, ' ')}*: ${response}`);
+    }
+  }
+
+  lines.push('', `## The Sovereign Moment`, GATEWAY_BRAND_POSITIONING.sovereignMoment);
+
+  return lines.join('\n');
 }
 
 // ── DISC → Natural Language ───────────────────────────────────────────────────
@@ -243,6 +449,65 @@ export function buildBehavioralPrompt(
     }
   }
 
+  // ── Communication Plane: progressive disclosure + stability dials + principal-of-record ──
+  if (siteConfig) {
+    const gov = getCommunicationGovernanceFromSite(siteConfig);
+    const riskClass =
+      businessContext?.knowledgeCertification?.atRisk === true ? "high" : "low";
+    sections.push(
+      buildDisclosureFragment(gov.disclosurePolicyId, {
+        riskClass,
+        experimentVariant: gov.disclosureExperimentVariant,
+      })
+    );
+    const dials = resolveStabilityDials(siteConfig, agent);
+    sections.push(stabilityDialsToPromptFragment(dials));
+    sections.push(
+      principalOfRecordFragment(gov.principalOfRecord, gov.principalConflictPossible === true)
+    );
+  }
+
+  const govForPpp = siteConfig
+    ? getCommunicationGovernanceFromSite(siteConfig)
+    : parseCommunicationGovernance({});
+  const salesEmphasis =
+    String(modeId ?? "").toUpperCase() === "SALES" ||
+    govForPpp.pppEngagement?.mode === "sales_emphasis";
+  const pppFrag = buildPppEngagementFragment({
+    modeId,
+    ppp: govForPpp.pppEngagement,
+    salesEmphasis,
+  });
+  if (pppFrag) {
+    sections.push(pppFrag);
+  }
+
+  // ── Buyer Journey Context (persistent cross-session payload) ──────────────
+  const buyerFrag = buildBuyerJourneyFragment(businessContext?.buyerJourney);
+  if (buyerFrag) {
+    sections.push(buyerFrag);
+  }
+
+  // ── Gateway Founder Voice Doctrine (Anti-Platform Canon) ──────────────────
+  // Injected for sales, concierge, and brand-facing roles only.
+  // Gives the agent the brand conviction it needs before DISC shapes HOW it expresses that conviction.
+  const founderVoiceFrag = buildFounderVoiceFragment(modeId, (agent as { roleType?: string | null }).roleType, {
+    includeProductFacts: mode?.toUpperCase() === 'SALES' || mode?.toUpperCase() === 'ADVISOR',
+    includeObjectionHandling: mode?.toUpperCase() === 'SALES',
+  });
+  if (founderVoiceFrag) {
+    sections.push(founderVoiceFrag);
+  }
+
+  // ── Design Studio (Chad) — governed playbook + VIEW1 entry (metadata.designStudio) ──
+  const designStudioRole = String((agent as { roleType?: string | null }).roleType ?? '')
+    .toLowerCase()
+    .trim();
+  if (designStudioRole === 'design_studio' && siteConfig) {
+    const dsState = parseDesignStudioFromMetadata(siteConfig.metadata);
+    sections.push(buildDesignStudioPromptFragments(dsState));
+  }
+
   const kcFrag = businessContext?.knowledgeCertification
     ? buildKnowledgeCertificationFragment(businessContext.knowledgeCertification)
     : "";
@@ -260,10 +525,32 @@ export function buildBehavioralPrompt(
     ? archOverrideForMode
     : (agent.archProfile as ArchProfile | null) ?? {};
 
-  const d = agent.dominance ?? 20;
-  const i = agent.influence ?? 45;
-  const s = agent.steadiness ?? 80;
-  const c = agent.conscientiousness ?? 75;
+  // ── Gateway DISC/ARCH Defaults for Sales & Platform Roles ─────────────────
+  // When an agent is in a sales/concierge role and has NOT been explicitly profiled
+  // (i.e., all four values are at default 0 or the canonical defaults), apply the
+  // Gateway Voice doctrine DISC profile. This enforces brand-level behavioral governance
+  // before any platform demo agent falls back to generic values.
+  const agentRoleForVoice = String((agent as { roleType?: string | null }).roleType ?? '').toLowerCase();
+  const modeForVoice = String(modeId ?? '').toUpperCase();
+  const isGatewayVoiceApplicable =
+    FOUNDER_VOICE_APPLICABLE_MODES.has(modeForVoice as never) ||
+    FOUNDER_VOICE_APPLICABLE_ROLES.has(agentRoleForVoice as never);
+
+  // Use Gateway Sales DISC defaults when: applicable role AND agent has no custom DISC set
+  const agentHasNoDISC =
+    agent.dominance === null || agent.dominance === undefined;
+  const gatewayDiscOverride = isGatewayVoiceApplicable && agentHasNoDISC;
+
+  const d = agent.dominance ?? (gatewayDiscOverride ? 50 : 20);
+  const i = agent.influence ?? (gatewayDiscOverride ? 68 : 45);
+  const s = agent.steadiness ?? (gatewayDiscOverride ? 72 : 80);
+  const c = agent.conscientiousness ?? (gatewayDiscOverride ? 55 : 75);
+
+  // Apply Gateway ARCH defaults if no archProfile is set
+  const agentHasNoARCH = !agent.archProfile || Object.keys(agent.archProfile as Record<string, unknown>).length === 0;
+  const effectiveArch: ArchProfile = (!arch.acknowledge && isGatewayVoiceApplicable && agentHasNoARCH)
+    ? { acknowledge: 75, reflect: 62, context: 58, handoff: 78, responseWindowSeconds: 25 }
+    : arch;
 
   // ── Layer 1a: Short-Term Memory Grounding ─────────────────────────────────
   if (stm?.specialty || stm?.focus) {
@@ -348,11 +635,21 @@ export function buildBehavioralPrompt(
     sections.push(funnelBlock);
   }
 
+  // ── Layer 1e: Phased conversation workflow (industry funnel) ───────────────
+  const wfRaw = primaryFunnel?.conversationWorkflow;
+  if (wfRaw && siteConfig) {
+    const parsed = conversationWorkflowSchema.safeParse(wfRaw);
+    if (parsed.success) {
+      const phase = resolveCurrentPhase(parsed.data, businessContext?.funnelContextKeys ?? {});
+      sections.push(formatPhasePromptFragment(phase, parsed.data));
+    }
+  }
+
   // ── Layer 2: DISC Behavioral Narrative ────────────────────────────────────
   sections.push(discToBehavior(d, i, s, c));
 
   // ── Layer 3: ARCH Conversation Mechanics ──────────────────────────────────
-  sections.push(archToMechanics(arch));
+  sections.push(archToMechanics(effectiveArch));
 
   // ── Layer 4: Business Context (optional) ─────────────────────────────────
   if (businessContext?.name) {
@@ -369,6 +666,13 @@ export function buildBehavioralPrompt(
     sections.push(
       `### GUARD RAIL (MVP)\nYou may only answer questions about this business using the information provided above (business details, hours, services, and reviews). Do not invent information or use external knowledge. For anything outside this scope, suggest the visitor call, text, or visit the website.`
     );
+  }
+
+  // ── Layer 5: Available Skills (security-level gated) ─────────────────────
+  const visitorSecurityLevel = (businessContext as any)?.visitorSecurityLevel as 'anonymous' | 'phone_verified' | 'admin' | undefined;
+  const skillFragment = buildSkillContextFragment(visitorSecurityLevel ?? 'anonymous');
+  if (skillFragment) {
+    sections.push(skillFragment);
   }
 
   // ── Fallback: bare-minimum identity if no memory structures ──────────────

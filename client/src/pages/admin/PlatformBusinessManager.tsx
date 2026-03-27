@@ -12,26 +12,28 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AgentRosterPanel } from "@/components/admin/AgentRosterPanel";
 import { QRRoutesManager } from "@/components/account/QRRoutesManager";
 import TelephonyPanelFull from "@/pages/developer/TelephonyPanel";
 import { ProductsServicePanel } from "@/components/admin/ProductsServicePanel";
 import {
   ArrowLeft, Building2, Bot, Package, QrCode, Phone, BookOpen, Shield,
-  Globe, Sparkles, MapPin, Loader2, Save, ExternalLink, Check, Settings,
+  Globe, Sparkles, MapPin, Loader2, ExternalLink, Check, Settings,
 } from "lucide-react";
-import { VoiceActivationPulse } from "@/components/admin/VoiceActivationPulse";
 import {
   KnowledgeProficiencyCard,
   knowledgeGapReportQueryOptions,
 } from "@/components/admin/KnowledgeProficiencyCard";
 import { SovereignVerificationCanvas } from "@/components/auth/SovereignVerificationCanvas";
-import { PlatformGovernanceHealthCard } from "@/components/admin/PlatformGovernanceHealthCard";
+import {
+  PlatformBusinessOverviewPanel,
+  type PlatformBusinessOverviewSite,
+} from "./PlatformBusinessOverviewPanel";
 
 type BusinessTab = "overview" | "agents" | "products" | "routing" | "telephony" | "knowledge" | "security";
+
+type SiteConfig = PlatformBusinessOverviewSite;
 
 const TABS: { id: BusinessTab; label: string; icon: any }[] = [
   { id: "overview", label: "Overview", icon: Building2 },
@@ -42,159 +44,6 @@ const TABS: { id: BusinessTab; label: string; icon: any }[] = [
   { id: "knowledge", label: "Knowledge", icon: BookOpen },
   { id: "security", label: "Security certification", icon: Shield },
 ];
-
-interface SiteConfig {
-  id: string;
-  name: string;
-  plan: string | null;
-  businessType?: string | null;
-  businessDescription?: string | null;
-  logoUrl?: string | null;
-  website?: string | null;
-  domain?: string | null;
-  slug?: string | null;
-  placeData?: any;
-  assignedAgentId?: string | null;
-  provisionedPhoneNumber?: string | null;
-  heroImageUrl?: string | null;
-}
-
-function OverviewTab({
-  site,
-  onSave,
-  token,
-}: {
-  site: SiteConfig;
-  onSave: (updates: Partial<SiteConfig>) => void;
-  token: string | null;
-}) {
-  const [name, setName] = useState(site.name || "");
-  const [description, setDescription] = useState(site.businessDescription || "");
-  const [website, setWebsite] = useState(site.website || "");
-  const [logoUrl, setLogoUrl] = useState(site.logoUrl || "");
-  const [domain, setDomain] = useState(site.domain || "");
-  const [plan, setPlan] = useState(site.plan || "free");
-  const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await onSave({ name, businessDescription: description, website, logoUrl, domain, plan: plan as any });
-      toast({ title: "Saved" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const address = (site.placeData as any)?.formatted_address;
-  const isCustom = site.businessType === "custom" || !site.placeData;
-
-  return (
-    <div className="space-y-6 max-w-2xl">
-      {/* Identity card */}
-      <div className="rounded-sui bg-slate-900/40 border border-indigo-500/20 p-6 space-y-5">
-        <h3 className="text-sm font-bold text-slate-300 uppercase tracking-wider">Business Identity</h3>
-
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-sui bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
-            {logoUrl ? (
-              <img src={logoUrl} alt={name} className="w-full h-full object-cover" />
-            ) : isCustom ? (
-              <Sparkles className="w-7 h-7 text-indigo-400" />
-            ) : (
-              <MapPin className="w-7 h-7 text-slate-400" />
-            )}
-          </div>
-          <div>
-            <p className="font-bold text-white text-lg">{site.name}</p>
-            {address && <p className="text-xs text-slate-400">{address}</p>}
-            {site.slug && (
-              <a
-                href={`/biz/${site.slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 mt-0.5"
-              >
-                /biz/{site.slug}
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
-            {site.slug && (
-              <a
-                href={`/agent/${site.slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
-              >
-                /agent/{site.slug}
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-slate-400">Business Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)}
-              className="bg-slate-800 border-slate-700 text-white" />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-slate-400">Plan</Label>
-            <Select value={plan} onValueChange={setPlan}>
-              <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-slate-900 border-slate-700">
-                {["free", "pro", "voice", "enterprise"].map((p) => (
-                  <SelectItem key={p} value={p} className="text-white capitalize">{p}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label className="text-slate-400">Description</Label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)}
-              placeholder="Short description of this business"
-              className="bg-slate-800 border-slate-700 text-white" />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-slate-400">Website</Label>
-            <Input value={website} onChange={(e) => setWebsite(e.target.value)}
-              placeholder="https://" className="bg-slate-800 border-slate-700 text-white" />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-slate-400">Custom Domain</Label>
-            <Input value={domain} onChange={(e) => setDomain(e.target.value)}
-              placeholder="app.mybusiness.com" className="bg-slate-800 border-slate-700 text-white" />
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label className="text-slate-400">Logo URL</Label>
-            <Input value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder="https://..." className="bg-slate-800 border-slate-700 text-white" />
-          </div>
-        </div>
-
-        <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={saving} className="bg-indigo-600 hover:bg-indigo-500 gap-2">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save Changes
-          </Button>
-        </div>
-      </div>
-
-      <PlatformGovernanceHealthCard
-        siteConfigId={site.id}
-        token={token}
-        slug={site.slug ?? null}
-        siteName={site.name}
-      />
-
-      <VoiceActivationPulse siteConfigId={site.id} days={14} />
-    </div>
-  );
-}
 
 interface CertificationOverrideRow {
   id: string;
@@ -512,7 +361,11 @@ export function PlatformBusinessManager() {
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
         {activeTab === "overview" && (
-          <OverviewTab site={site} onSave={(updates) => updateMutation.mutate(updates)} token={token ?? null} />
+          <PlatformBusinessOverviewPanel
+            site={site}
+            onSave={(updates) => updateMutation.mutate(updates)}
+            token={token ?? null}
+          />
         )}
         {activeTab === "agents" && (
           <AgentRosterPanel

@@ -22,6 +22,11 @@ import { handleVineLookupAndDispatch } from "../tools/vineDispatchHandler";
 import { getPlaceDetails } from "../tools/placesHandler";
 import { resolveIntakePolicyConfig } from "./intakePolicyService";
 import { assertKnowledgeToolForSession } from "./knowledgeCertificationContext";
+import {
+  guestPhoneVerificationModelSchema,
+  pmsLookupGuestJourneyModelSchema,
+  resolveBoundPhoneForGuestTools,
+} from "./guestToolPhoneBinding";
 
 /**
  * Interface for the tool call structure received from the Gemini v1beta protocol
@@ -34,6 +39,10 @@ interface ToolCall {
 
 export interface ToolCallContext {
   siteConfigId?: string | null;
+  /** Twilio `From` (or bridged ANI) — when set, guest phone tools ignore model-supplied phone. */
+  trustedCallerId?: string | null;
+  /** Correlation for audit / warnings when binding PSTN identity. */
+  callSid?: string | null;
 }
 
 async function handleGetInboundCallerIdentity(context?: ToolCallContext) {
@@ -443,18 +452,38 @@ export async function handleToolCall(toolCall: ToolCall, context?: ToolCallConte
 
       case "guest_phone_verification": {
         const sid = context?.siteConfigId ?? toolCall.args?.siteConfigId;
+        const parsed = guestPhoneVerificationModelSchema.safeParse(toolCall.args ?? {});
+        if (!parsed.success) {
+          const msg = parsed.error.issues.map((i) => i.message).join("; ") || "Invalid guest_phone_verification arguments";
+          return { success: false, error: msg };
+        }
+        const phoneRes = resolveBoundPhoneForGuestTools(parsed.data.phone, {
+          trustedCallerId: context?.trustedCallerId,
+          callSid: context?.callSid,
+        });
+        if (!phoneRes.ok) return { success: false, error: phoneRes.error };
         return await toolGuestPhoneVerification({
-          action: toolCall.args?.action,
-          phone: toolCall.args?.phone,
-          otp_code: toolCall.args?.otp_code,
+          action: parsed.data.action,
+          phone: phoneRes.phone,
+          otp_code: parsed.data.otp_code,
           _sessionSiteConfigId: sid ?? undefined,
         });
       }
 
       case "pms_lookup_guest_journey": {
         const sid = context?.siteConfigId ?? toolCall.args?.siteConfigId;
+        const parsed = pmsLookupGuestJourneyModelSchema.safeParse(toolCall.args ?? {});
+        if (!parsed.success) {
+          const msg = parsed.error.issues.map((i) => i.message).join("; ") || "Invalid pms_lookup_guest_journey arguments";
+          return { success: false, error: msg };
+        }
+        const phoneRes = resolveBoundPhoneForGuestTools(parsed.data.phone, {
+          trustedCallerId: context?.trustedCallerId,
+          callSid: context?.callSid,
+        });
+        if (!phoneRes.ok) return { success: false, error: phoneRes.error };
         return await handlePmsLookupGuestJourney({
-          phone: toolCall.args?.phone,
+          phone: phoneRes.phone,
           _sessionSiteConfigId: sid ?? undefined,
         });
       }

@@ -326,10 +326,21 @@ export interface AIModelSettings {
   maxTokens: number;
 }
 
+/** Binding from registry swarm schematic (e.g. HOSPITALITY_SWARM_SCHEMATIC_V1.md). */
+export type SwarmRoleContractV1 = {
+  schematic_id: string;
+  bundle_version: string;
+  role_type: string;
+  integration_capability_set_ids: string[];
+  deploy_posture?: string;
+  api_version_lane?: string;
+};
+
 /** Structured controls on agent: mirroring + guardrails (always, never, believe). */
 export type StructuredControls = {
   mirroring?: { enabled?: boolean; intensity?: number };
   guardrails?: { always?: string[]; never?: string[]; believe?: string[] };
+  swarm_role_contract?: SwarmRoleContractV1;
 };
 
 /** User-directed guardrails at site level; merged with agent.structuredControls at compile time. */
@@ -399,6 +410,51 @@ export const agents = pgTable("agents", {
   startupLastRunAt: timestamp("startup_last_run_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+/** Control-plane orchestration run memory (swarm provision, gates, failures). */
+export const agentOrchestrationRuns = pgTable("agent_orchestration_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id")
+    .references(() => siteConfigs.id, { onDelete: "cascade" })
+    .notNull(),
+  agentId: varchar("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  currentState: text("current_state").notNull().default("init"),
+  step: text("step").notNull().default("orchestrator"),
+  /** Closed set: in_progress | blocked | failed | deferred | completed (see shared/agentOrchestrationConstants.ts) */
+  status: text("status").notNull().default("in_progress"),
+  blockers: jsonb("blockers").notNull().default(sql`'[]'::jsonb`),
+  failureRefs: jsonb("failure_refs").notNull().default(sql`'[]'::jsonb`),
+  metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+  aptitudeStatus: text("aptitude_status").notNull().default("deferred"),
+  requiredForDeploy: boolean("required_for_deploy").notNull().default(false),
+  clarityScore: integer("clarity_score"),
+  configurationCompleteness: integer("configuration_completeness"),
+  fallbackDefined: boolean("fallback_defined"),
+  firstValuePathPresent: boolean("first_value_path_present"),
+  /** Local agent plane audit columns (migration 0068) */
+  rawModelOutput: text("raw_model_output"),
+  parseError: text("parse_error"),
+  filesTouchedJson: jsonb("files_touched_json").notNull().default(sql`'[]'::jsonb`),
+  reviewRequired: boolean("review_required").notNull().default(true),
+  violationReason: text("violation_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/** Persisted orchestration violations (telemetry; distinct violation_type). */
+export const orchestrationViolations = pgTable("orchestration_violations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orchestrationRunId: varchar("orchestration_run_id").references(() => agentOrchestrationRuns.id, {
+    onDelete: "set null",
+  }),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
+  severity: text("severity").notNull(),
+  violationType: text("violation_type").notNull(),
+  routeOrSource: text("route_or_source"),
+  actorHint: text("actor_hint"),
+  detail: jsonb("detail").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const insertAgentSchema = createInsertSchema(agents).omit({
@@ -2494,3 +2550,28 @@ export const onboardingSessions = pgTable("onboarding_sessions", {
 
 export type OnboardingSession = typeof onboardingSessions.$inferSelect;
 export type InsertOnboardingSession = typeof onboardingSessions.$inferInsert;
+
+// ── Visitor Sessions (Buyer Journey Payload Node) ─────────────────────────────
+/** Cross-session visitor context accumulating buyer phase, pain points, and signals. */
+export const visitorSessions = pgTable("visitor_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  visitorId: text("visitor_id").notNull(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "cascade" }).notNull(),
+  firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  channel: text("channel").default("web").notNull(),
+  /** Accumulated buyer journey state (BuyerJourney shape from conversationGrounding.ts). */
+  buyerJourney: jsonb("buyer_journey").$type<Record<string, unknown>>().default({}).notNull(),
+  /**
+   * Security classification for this visitor session.
+   * anonymous  — no identity verification performed
+   * phone_verified — OTP confirmed via Twilio Verify
+   * admin       — admin_users row matched + auth session created
+   */
+  securityLevel: text("security_level").default("anonymous").notNull(),
+  /** Phone number if verified, null for anonymous visitors */
+  verifiedPhone: text("verified_phone"),
+});
+
+export type VisitorSession = typeof visitorSessions.$inferSelect;
+export type InsertVisitorSession = typeof visitorSessions.$inferInsert;

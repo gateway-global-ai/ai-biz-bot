@@ -321,12 +321,28 @@ function VisitorsTab() {
   );
 }
 
+type LeadsQueryResult = { leads: SiteLead[]; vlmRetired: boolean };
+
 function LeadsTab() {
   const [searchTerm, setSearchTerm] = useState('');
 
-  const { data: leads = [], isLoading } = useQuery<SiteLead[]>({
+  const { data, isLoading, isError } = useQuery<LeadsQueryResult>({
     queryKey: ['/api/admin/sites/leads'],
+    queryFn: async () => {
+      const res = await fetch('/api/admin/sites/leads', { credentials: 'include' });
+      if (res.status === 410) {
+        return { leads: [], vlmRetired: true };
+      }
+      if (!res.ok) {
+        throw new Error((await res.text()) || `HTTP ${res.status}`);
+      }
+      const leads = (await res.json()) as SiteLead[];
+      return { leads, vlmRetired: false };
+    },
   });
+
+  const leads = data?.leads ?? [];
+  const vlmRetired = data?.vlmRetired ?? false;
 
   const filtered = leads.filter(l =>
     l.siteName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -344,6 +360,15 @@ function LeadsTab() {
 
   return (
     <div className="space-y-4">
+      {!isLoading && !isError && vlmRetired ? (
+        <Card className="rounded-sui bg-amber-950/30 border border-amber-500/30 backdrop-blur-xl">
+          <CardContent className="py-3 px-4">
+            <p className="text-sm text-amber-200/90">
+              VLM-backed lead merge is <span className="font-medium">retired for v1</span> (API returns 410). Use Visitors &amp; Chats and governed operator tools.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'Total Leads', value: stats.total, icon: Building2, color: 'text-blue-400' },
@@ -383,8 +408,17 @@ function LeadsTab() {
         <Card className="rounded-sui bg-slate-900/40 backdrop-blur-xl border border-indigo-500/20">
           <CardContent className="py-12 text-center">
             <Building2 className="w-10 h-10 text-slate-400 mx-auto mb-3" />
-            <p className="text-slate-400">No leads with generated sites yet</p>
-            <p className="text-xs text-slate-500 mt-1">Run the Auto Agent pipeline to discover leads and generate sites</p>
+            {vlmRetired ? (
+              <>
+                <p className="text-slate-400">No lead list in v1</p>
+                <p className="text-xs text-slate-500 mt-1">Prospect merge endpoint is gone; see notice above.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-slate-400">No leads with generated sites yet</p>
+                <p className="text-xs text-slate-500 mt-1">Run the Auto Agent pipeline to discover leads and generate sites</p>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (

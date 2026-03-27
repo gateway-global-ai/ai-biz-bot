@@ -1,12 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, CheckCircle2, Clock, MessageSquare, Zap, Lock, Mic } from 'lucide-react';
-import { apiRequest } from '@/lib/queryClient';
-
 type Step = 'input' | 'submitting' | 'success';
 
 interface PersonalityOption {
@@ -27,32 +24,10 @@ export default function LandingV2() {
   const [name, setName] = useState('');
   const [selectedPersonality, setSelectedPersonality] = useState<string | null>(null);
 
-  const submitTask = useMutation({
-    mutationFn: async (data: { task: string; phone: string; name: string; personality: string }) => {
-      const response = await apiRequest('POST', '/api/tasks/submit', {
-        ...data,
-        agentName: 'AI Assistant',
-        personality: {
-          id: data.personality,
-          name: data.personality === 'analyst' ? 'The Analyst' : 'The Strategist',
-          description: data.personality === 'analyst' ? 'Detailed & precise' : 'Big-picture & creative',
-          disc: data.personality === 'analyst' 
-            ? { dominance: 40, influence: 30, steadiness: 50, conscientiousness: 80 }
-            : { dominance: 60, influence: 70, steadiness: 40, conscientiousness: 50 }
-        }
-      });
-      return response.json();
-    },
-    onSuccess: () => {
-      setStep('success');
-    },
-  });
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (task.trim() && phone.trim() && name.trim() && selectedPersonality) {
-      setStep('submitting');
-      submitTask.mutate({ task, phone, name, personality: selectedPersonality });
+      setStep('success');
     }
   };
 

@@ -1,0 +1,7 @@
+{
+  "id": "knowledge_engineering_lead",
+  "version": "1.0.0",
+  "description": "Runtime manifest anchor for Cursor skill knowledge-engineering-lead",
+  "cursor_skill_path": ".cursor/skills/knowledge-engineering-lead",
+  "contract": { "inputs": [], "outputs": [], "enforcement": "required" }
+}

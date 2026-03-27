@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { RouteComponentProps } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { queryClient, apiRequest } from '@/lib/queryClient';
+import { fetchOrchestrationRunForAgentCreate } from '@/lib/agentOrchestrationClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { UIButton } from '@/ui/foundation';
 import { Input } from '@/components/ui/input';
@@ -234,7 +235,18 @@ export default function AgentManager({ siteConfigId, params: _params }: AgentMan
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: typeof newAgent) => apiRequest('POST', '/api/agents', { ...data, siteConfigId }), // Ensure siteConfigId is sent
+    mutationFn: async (data: typeof newAgent) => {
+      if (!siteConfigId) {
+        throw new Error('siteConfigId is required to create an agent');
+      }
+      const orchestrationRunId = await fetchOrchestrationRunForAgentCreate(siteConfigId);
+      const res = await apiRequest('POST', '/api/agents', {
+        ...data,
+        siteConfigId,
+        orchestrationRunId,
+      });
+      return res.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [siteConfigId ? `/api/agents?siteConfigId=${siteConfigId}` : '/api/agents'] });
       setIsCreateOpen(false);
@@ -261,6 +273,38 @@ export default function AgentManager({ siteConfigId, params: _params }: AgentMan
       queryClient.invalidateQueries({ queryKey: [siteConfigId ? `/api/agents?siteConfigId=${siteConfigId}` : '/api/agents'] });
       if (selectedAgent) setSelectedAgent(null);
       toast({ title: 'Agent deleted successfully' });
+    },
+    onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
+  });
+
+  const { data: siteGovernance } = useQuery<Record<string, unknown>>({
+    queryKey: siteConfigId ? [`/api/site-configs/${siteConfigId}`] : ['__skip_site__'],
+    enabled: !!siteConfigId,
+  });
+
+  const [govDisclosure, setGovDisclosure] = useState<'early' | 'contextual' | 'late_experiment'>('contextual');
+  const [govPrincipal, setGovPrincipal] = useState<'customer' | 'owner' | 'organization'>('customer');
+  const [govConflict, setGovConflict] = useState(false);
+
+  useEffect(() => {
+    const g = (siteGovernance as { communicationGovernance?: Record<string, unknown> })?.communicationGovernance;
+    if (g?.disclosurePolicyId) setGovDisclosure(g.disclosurePolicyId as 'early' | 'contextual' | 'late_experiment');
+    if (g?.principalOfRecord) setGovPrincipal(g.principalOfRecord as 'customer' | 'owner' | 'organization');
+    if (typeof g?.principalConflictPossible === 'boolean') setGovConflict(g.principalConflictPossible);
+  }, [siteGovernance]);
+
+  const saveGovMutation = useMutation({
+    mutationFn: () =>
+      apiRequest('PATCH', `/api/site-configs/${siteConfigId}`, {
+        communicationGovernance: {
+          disclosurePolicyId: govDisclosure,
+          principalOfRecord: govPrincipal,
+          principalConflictPossible: govConflict,
+        },
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/site-configs/${siteConfigId}`] });
+      toast({ title: 'Communication governance saved' });
     },
     onError: (error: any) => toast({ title: 'Error', description: error.message, variant: 'destructive' }),
   });
@@ -588,7 +632,7 @@ export default function AgentManager({ siteConfigId, params: _params }: AgentMan
                     <span className="text-slate-300">{agentArch.reflect}%</span>
                   </div>
                   <Slider
-                    value={[agentArch.acknowledge]}
+                    value={[agentArch.reflect]}
                     onValueChange={(v) => updateArch('reflect', v)}
                     max={100}
                     step={1}
@@ -628,6 +672,62 @@ export default function AgentManager({ siteConfigId, params: _params }: AgentMan
               </CardContent>
             </Card>
           </div>
+
+          {siteConfigId && (
+            <Card className="bg-slate-900 border-slate-700 mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-slate-400">Communication governance (site)</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 max-w-xl">
+                <p className="text-xs text-slate-500">
+                  Progressive disclosure and principal-of-record feed the prompt compiler (not ad-hoc prompts).
+                </p>
+                <div className="space-y-1">
+                  <Label className="text-slate-400 text-xs">Disclosure policy</Label>
+                  <Select value={govDisclosure} onValueChange={(v) => setGovDisclosure(v as typeof govDisclosure)}>
+                    <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700">
+                      <SelectItem value="contextual">Contextual (default)</SelectItem>
+                      <SelectItem value="early">Early</SelectItem>
+                      <SelectItem value="late_experiment">Late / experiment</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-slate-400 text-xs">Principal-of-record</Label>
+                  <Select value={govPrincipal} onValueChange={(v) => setGovPrincipal(v as typeof govPrincipal)}>
+                    <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700">
+                      <SelectItem value="customer">Customer</SelectItem>
+                      <SelectItem value="owner">Owner</SelectItem>
+                      <SelectItem value="organization">Organization</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={govConflict}
+                    onChange={(e) => setGovConflict(e.target.checked)}
+                    className="rounded border-slate-600"
+                  />
+                  Principal conflict possible (upsell vs welfare)
+                </label>
+                <UIButton
+                  type="button"
+                  className="bg-indigo-600 hover:bg-indigo-500 text-white"
+                  disabled={saveGovMutation.isPending}
+                  onClick={() => saveGovMutation.mutate()}
+                >
+                  Save governance
+                </UIButton>
+              </CardContent>
+            </Card>
+          )}
 
           {showSystemPrompts && (
             <div className="mt-6">

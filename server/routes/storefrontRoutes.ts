@@ -9,8 +9,13 @@ import { eq } from 'drizzle-orm';
 import { generateIndustryReport } from '../services/storefrontReportService.js';
 import { generateCategoryImages, getCategoryImageUrls } from '../services/storefrontImageService.js';
 import { storage } from '../storage.js';
-import { provisionAgentsForBusiness } from '../services/agentProvisioning.js';
+import { runAgentSwarmProvisionOrchestrated } from '../services/agentOrchestration.js';
 import { getPlaceDetails } from '../tools/placesHandler.js';
+
+function paramString(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
 
 function generateSlug(name: string): string {
   const base = name
@@ -45,7 +50,8 @@ router.get('/', async (_req: Request, res: Response) => {
 /** GET /api/storefronts/place-details/:placeId — fetch place details (phone, website) for demo (define before :categorySlug) */
 router.get('/place-details/:placeId', async (req: Request, res: Response) => {
   try {
-    const placeId = req.params.placeId?.replace(/^places\//i, '') || req.params.placeId;
+    const raw = paramString(req.params.placeId);
+    const placeId = raw?.replace(/^places\//i, '') || raw;
     if (!placeId) return res.status(400).json({ error: 'placeId required' });
     const details = await getPlaceDetails(placeId);
     res.json(details);
@@ -91,7 +97,8 @@ router.post('/demo/claim', async (req: Request, res: Response) => {
 /** PATCH /api/storefronts/demo/:siteConfigId — update static routes for a demo (define before :categorySlug) */
 router.patch('/demo/:siteConfigId', async (req: Request, res: Response) => {
   try {
-    const { siteConfigId } = req.params;
+    const siteConfigId = paramString(req.params.siteConfigId);
+    if (!siteConfigId) return res.status(400).json({ error: 'siteConfigId required' });
     const { staticRoutes } = req.body as { staticRoutes?: Record<string, { enabled: boolean; value?: string }> };
     if (!staticRoutes) return res.status(400).json({ error: 'staticRoutes required' });
     const updated = await storage.updateSiteConfig(siteConfigId, { staticRoutes } as any);
@@ -106,7 +113,8 @@ router.patch('/demo/:siteConfigId', async (req: Request, res: Response) => {
 /** GET /api/storefronts/:categorySlug — category config + report + image URLs */
 router.get('/:categorySlug', async (req: Request, res: Response) => {
   try {
-    const { categorySlug } = req.params;
+    const categorySlug = paramString(req.params.categorySlug);
+    if (!categorySlug) return res.status(400).json({ error: 'categorySlug required' });
     const [cat] = await db.select().from(storefrontCategories).where(eq(storefrontCategories.slug, categorySlug)).limit(1);
     if (!cat) return res.status(404).json({ error: 'Category not found' });
 
@@ -138,7 +146,8 @@ router.get('/:categorySlug', async (req: Request, res: Response) => {
 /** POST /api/storefronts/:categorySlug/report — generate or refresh industry report */
 router.post('/:categorySlug/report', async (req: Request, res: Response) => {
   try {
-    const { categorySlug } = req.params;
+    const categorySlug = paramString(req.params.categorySlug);
+    if (!categorySlug) return res.status(400).json({ error: 'categorySlug required' });
     const report = await generateIndustryReport(categorySlug);
     res.json(report);
   } catch (e: unknown) {
@@ -150,7 +159,8 @@ router.post('/:categorySlug/report', async (req: Request, res: Response) => {
 /** POST /api/storefronts/:categorySlug/generate-images — generate 5 Flux images for category */
 router.post('/:categorySlug/generate-images', async (req: Request, res: Response) => {
   try {
-    const { categorySlug } = req.params;
+    const categorySlug = paramString(req.params.categorySlug);
+    if (!categorySlug) return res.status(400).json({ error: 'categorySlug required' });
     const urls = await generateCategoryImages(categorySlug);
     res.json({ imageUrls: urls });
   } catch (e: unknown) {
@@ -164,7 +174,8 @@ router.post('/:categorySlug/generate-images', async (req: Request, res: Response
 /** POST /api/storefronts/:categorySlug/demo — create or get demo (place data + static routes) */
 router.post('/:categorySlug/demo', async (req: Request, res: Response) => {
   try {
-    const { categorySlug } = req.params;
+    const categorySlug = paramString(req.params.categorySlug);
+    if (!categorySlug) return res.status(400).json({ error: 'categorySlug required' });
     const body = req.body as {
       placeId?: string;
       name?: string;
@@ -202,9 +213,14 @@ router.post('/:categorySlug/demo', async (req: Request, res: Response) => {
     } as any);
 
     try {
-      await provisionAgentsForBusiness(config.id, placeTypes, name);
+      await runAgentSwarmProvisionOrchestrated({
+        siteConfigId: config.id,
+        placeTypes,
+        businessName: name,
+        source: 'storefront_demo',
+      });
     } catch (provisionErr: unknown) {
-      console.warn('[Storefronts] Provision failed (demo created):', (provisionErr as Error)?.message);
+      console.warn('[Storefronts] Orchestrated provision failed (demo created):', (provisionErr as Error)?.message);
     }
 
     const baseUrl = getBaseUrl(req);

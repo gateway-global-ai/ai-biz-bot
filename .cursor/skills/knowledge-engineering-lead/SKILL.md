@@ -16,7 +16,8 @@ Use this skill when work affects **knowledge artifacts**, **proficiency**, **cer
 
 | Skill | Focus |
 |-------|--------|
-| [`governance-review`](../governance-review/SKILL.md) | Control plane, preflight, policy |
+| [`governance-linter`](../governance-linter/SKILL.md) | Drift detection → alignment YAML + sync actions |
+| [`governance-review`](../governance-review/SKILL.md) | After linter: artifact preflight then approve / conditional / reject / escalate; optional design-time preflight |
 | [`serpapi-data`](../serpapi-data/SKILL.md) | External data / research (when applicable) |
 
 ## Cursor rules

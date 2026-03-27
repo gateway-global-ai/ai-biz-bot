@@ -1,0 +1,43 @@
+# state_meta_prompt_binding — binds workflow state IDs to versioned meta prompt artifacts.
+# Canonical law: docs-governance/canonical/META_PROMPT_ENVELOPES.md
+# Runtime contract: docs-governance/canonical/META_PROMPT_RUNTIME_CONTRACT.md
+#
+# NON-OPTIONAL (meta-prompted LLM execution):
+#   1) Every state that invokes an LLM MUST have a bindings entry → registered artifact.
+#   2) No free-floating prompts — artifacts listed here only, versioned.
+#   3) Every run MUST log: state, artifact id/version, inputs present/missing, output validity, failure reason.
+#   4) MUST block if required inputs missing, state mismatch, or output shape invalid — no exceptions.
+#
+# States that NEVER call an LLM MUST be listed under deterministic_states_without_meta_prompt
+# so absence of a binding is explicit (not an accident).
+
+version: 1
+
+# Explicit non-LLM orchestration states (no meta prompt; must not invoke model from these steps).
+# Extend as the canonical workflow state registry grows.
+deterministic_states_without_meta_prompt: []
+
+artifacts:
+  META_AGENT_SPEC_CREATION_v1:
+    path: .system_design/meta_prompts/META_AGENT_SPEC_CREATION_v1.md
+    status: active
+  META_SKILL_MAPPING_v1:
+    path: .system_design/meta_prompts/META_SKILL_MAPPING_v1.md
+    status: active
+  META_APTITUDE_TEST_v1:
+    path: .system_design/meta_prompts/META_APTITUDE_TEST_v1.md
+    status: active
+  # Planned expansions (add file + set status: active when shipped):
+  # META_INTENT_CAPTURE_v1:
+  # META_CONTEXT_VALIDATION_v1:
+  # META_PERSONA_DEFINITION_v1:
+  # META_KNOWLEDGE_VERIFICATION_v1:
+  # META_FUNNEL_DESIGN_v1:
+  # META_SWARM_TOPOLOGY_DESIGN_v1:
+  # META_GOVERNANCE_REVIEW_v1:
+
+bindings:
+  AGENT_SPEC_CREATION: META_AGENT_SPEC_CREATION_v1
+  SKILL_MAPPING: META_SKILL_MAPPING_v1
+  APTITUDE_TEST: META_APTITUDE_TEST_v1
+  # SWARM_TOPOLOGY_DESIGN: META_SWARM_TOPOLOGY_DESIGN_v1

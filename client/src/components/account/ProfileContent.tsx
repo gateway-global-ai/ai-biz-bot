@@ -869,24 +869,57 @@ export function ProfileContent({ section: embeddedSection }: { section?: Command
 
         {showMyBusinesses && (
         <Card className="bg-slate-900/80 backdrop-blur-xl border border-slate-700 rounded-2xl shadow-2xl p-6" data-testid="card-my-businesses">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-sui">
-              <Building2 className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-white">My Businesses</h2>
-              <p className="text-sm text-slate-300">Add prospects, invite via SMS, and track earnings in the Reseller Dashboard.</p>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-sui">
+                <Building2 className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-white">My Businesses</h2>
+                <p className="text-sm text-slate-400">Your connected AI-powered locations</p>
+              </div>
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => setLocation("/app/reseller")}
-            className="border-indigo-500/40 text-indigo-300 hover:border-indigo-400 hover:bg-indigo-500/10"
-            data-testid="button-open-reseller-dashboard"
-          >
-            <ExternalLink className="w-4 h-4 mr-2" />
-            Open Reseller Dashboard
-          </Button>
+
+          {businessesQuery.isLoading ? (
+            <div className="text-slate-400 text-sm py-4 text-center">Loading businesses…</div>
+          ) : businesses.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-slate-400 text-sm mb-4">No businesses linked to your account yet.</p>
+              <p className="text-slate-500 text-xs">Contact support to claim your business or start onboarding.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {businesses.map((biz: any) => (
+                <div
+                  key={biz.id}
+                  className="flex items-center justify-between p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 hover:border-indigo-500/40 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg flex-shrink-0">
+                      <Building2 className="w-4 h-4 text-indigo-400" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-white font-medium truncate">{biz.name}</p>
+                      {biz.businessAddress && (
+                        <p className="text-slate-400 text-xs truncate">{biz.businessAddress}</p>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setLocation(`/biz/${biz.slug}`)}
+                    className="text-indigo-300 hover:text-indigo-200 hover:bg-indigo-500/10 flex-shrink-0 ml-2"
+                    data-testid={`button-open-biz-${biz.slug}`}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-1" />
+                    View
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
         )}
       </div>

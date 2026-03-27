@@ -98,7 +98,10 @@ export async function handleEnrichHotelsWithRates(args: {
 
     // Phase 3: Price via GRN Connect API
     const apiCodes = validMatches
-      .map((m) => toGrnApiCode(m.grn?.grn_hotel_id))
+      .map((m) => {
+        const id = (m.grn as { grn_hotel_id?: string | number } | undefined)?.grn_hotel_id;
+        return toGrnApiCode(id != null ? String(id) : undefined);
+      })
       .filter(Boolean) as string[];
 
     const availability = await getGrnAvailability(
@@ -112,7 +115,8 @@ export async function handleEnrichHotelsWithRates(args: {
     // Final Merge + optional persistence
     const enrichedResults = await Promise.all(
       validMatches.map(async (match) => {
-        const apiCode = toGrnApiCode(match.grn?.grn_hotel_id);
+        const rawGrnId = (match.grn as { grn_hotel_id?: string | number } | undefined)?.grn_hotel_id;
+        const apiCode = toGrnApiCode(rawGrnId != null ? String(rawGrnId) : undefined);
         const liveData = availability.hotels?.find(
           (h: any) => h.hotel_code === apiCode
         );

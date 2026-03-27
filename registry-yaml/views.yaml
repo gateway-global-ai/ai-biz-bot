@@ -141,3 +141,104 @@ views:
     requiredContextKeys: [siteConfigId, agentId]
     allowedActions: [mutate_agent_behavior]
     policyGate: agent_behavior_control
+  - viewId: design_studio_landing
+    category: view
+    viewType: view
+    viewStateType: view
+    lazyImportKey: DesignStudioPlaceholder
+    allowedModes: [view, ptt_first]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [design_studio.learn_more, design_studio.new_project]
+    policyGate: design_studio.access
+  - viewId: design_studio_learn
+    category: view
+    viewType: view
+    viewStateType: view
+    lazyImportKey: DesignStudioPlaceholder
+    allowedModes: [view]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [design_studio.back_landing, design_studio.new_project]
+    policyGate: design_studio.access
+  - viewId: design_studio_path
+    category: view
+    viewType: view
+    viewStateType: view
+    lazyImportKey: DesignStudioPlaceholder
+    allowedModes: [view]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [design_studio.choose_build_view, design_studio.choose_build_app]
+    policyGate: design_studio.access
+  - viewId: design_studio_step
+    category: form
+    viewType: form
+    viewStateType: form
+    lazyImportKey: DesignStudioPlaceholder
+    allowedModes: [view]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [design_studio.advance_phase]
+    policyGate: design_studio.access
+
+# ── Canvas Control OS Views (Canvas Control Syscall Layer v1.0) ────────────────
+  - viewId: welcome
+    category: ptt_first
+    viewType: ptt_first
+    lazyImportKey: WelcomeView
+    allowedModes: [ptt_first]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [open_service_menu, open_faq, open_support, open_account, verify_identity]
+    policyGate: public
+
+  - viewId: support_home
+    category: ptt_first
+    viewType: ptt_first
+    lazyImportKey: SupportHomeView
+    allowedModes: [ptt_first]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [open_faq, escalate]
+    policyGate: public
+
+  - viewId: disambiguation_menu
+    category: ptt_first
+    viewType: ptt_first
+    lazyImportKey: DisambiguationView
+    allowedModes: [ptt_first]
+    requiredContextKeys: [siteConfigId, turnId]
+    allowedActions: []
+    policyGate: public
+
+  - viewId: agent_roster
+    category: controller
+    viewType: controller
+    lazyImportKey: AgentRosterView
+    allowedModes: [ptt_first]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [manage_agents, build_knowledge, run_aptitude_test]
+    policyGate: admin_access
+
+  - viewId: knowledge_library_builder
+    category: controller
+    viewType: controller
+    lazyImportKey: KnowledgeLibraryBuilderView
+    allowedModes: [ptt_first]
+    requiredContextKeys: [siteConfigId, agentId]
+    allowedActions: [upload_knowledge, delete_knowledge]
+    policyGate: admin_access
+
+  - viewId: aptitude_test_runner
+    category: controller
+    viewType: controller
+    lazyImportKey: AptitudeTestRunnerView
+    allowedModes: [ptt_first]
+    requiredContextKeys: [siteConfigId, agentId]
+    allowedActions: [run_aptitude_test]
+    policyGate: admin_access
+
+  - viewId: identity_verify
+    category: form
+    viewType: form
+    lazyImportKey: IdentityVerifyView
+    allowedModes: [ptt_first]
+    requiredContextKeys: [siteConfigId]
+    allowedActions: [verify_identity]
+    policyGate: public
+

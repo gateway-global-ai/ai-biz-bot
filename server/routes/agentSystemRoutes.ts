@@ -8,10 +8,24 @@ import {
   DISC_WORD_SETS, DISC_STYLE_DESCRIPTIONS,
   insertAgentSchema,
   type DiscAssessmentResult,
+  type InsertAgent,
 } from "@shared/schema";
 import { handleAdminToolCall, ADMIN_TOOL_DEFINITIONS } from "../tools/adminToolHandlers";
+import {
+  assertRunAllowsSingleAgentCreate,
+  completeSingleAgentCreateRun,
+  envAgentCreateBypass,
+  persistOrchestrationViolation,
+} from "../services/agentOrchestration";
+import { assertSiteAccessForSession } from "../utils/siteScopedAccess";
 
 const router = Router();
+
+/** Express `req.params` values are `string | string[]`; storage/Drizzle expect a single string. */
+function paramString(value: string | string[] | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value[0] : value;
+}
 
 // ── DISC + Conversation + Agents ──────────────────────────────────────────────────────
 
@@ -25,7 +39,8 @@ const router = Router();
 
   // Get a single question set
   router.get("/api/disc/questions/:setNumber", (req, res) => {
-    const setNumber = parseInt(req.params.setNumber);
+    const setRaw = paramString(req.params.setNumber);
+    const setNumber = setRaw !== undefined ? parseInt(setRaw, 10) : NaN;
     const wordSet = DISC_WORD_SETS.find(s => s.setNumber === setNumber);
     
     if (!wordSet) {
@@ -329,7 +344,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Get single agent
   router.get("/api/agents/:id", async (req, res) => {
     try {
-      const agent = await storage.getAgent(req.params.id);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      const agent = await storage.getAgent(id);
       if (!agent) {
         return res.status(404).json({ error: "Agent not found" });
       }
@@ -339,14 +358,103 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
     }
   });
 
-  // Create agent — requires auth; configuration changes require superadmin
+  const createAgentRequestSchema = insertAgentSchema.and(
+    z.object({ orchestrationRunId: z.string().uuid().optional() }),
+  );
+
+  // Create agent — requires auth + valid orchestration run (unless ORCHESTRATION_AGENT_CREATE_BYPASS=true)
   router.post("/api/agents", requireAuth, async (req, res) => {
     try {
-      const parsed = insertAgentSchema.safeParse(req.body);
+      const parsed = createAgentRequestSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ error: parsed.error.message });
       }
-      const agent = await storage.createAgent(parsed.data);
+      const { orchestrationRunId, ...agentFields } = parsed.data as InsertAgent & {
+        orchestrationRunId?: string;
+      };
+      const bypass = envAgentCreateBypass();
+      const siteConfigId = agentFields.siteConfigId ?? null;
+
+      if (!bypass && !siteConfigId) {
+        return res.status(400).json({
+          error: "siteConfigId is required for orchestrated agent creation",
+          code: "SITE_CONFIG_REQUIRED",
+        });
+      }
+
+      if (siteConfigId) {
+        const siteAccess = await assertSiteAccessForSession(req, siteConfigId);
+        if (!siteAccess.ok) {
+          const session = (req as { session?: { adminUserId?: string } }).session;
+          await persistOrchestrationViolation({
+            violationType: "governance_violation",
+            severity: "medium",
+            siteConfigId,
+            routeOrSource: "POST /api/agents",
+            actorHint: session?.adminUserId ?? undefined,
+            detail: {
+              reason: "site_access_denied",
+              httpStatus: siteAccess.status,
+              orchestrationRunId: orchestrationRunId ?? null,
+            },
+          });
+          return res.status(siteAccess.status).json({
+            error: siteAccess.error,
+            code: "SITE_ACCESS_DENIED",
+          });
+        }
+      }
+
+      if (!bypass) {
+        const sid = siteConfigId as string;
+        if (!orchestrationRunId) {
+          await persistOrchestrationViolation({
+            violationType: "orchestration_bypass_attempt",
+            severity: "high",
+            siteConfigId: sid,
+            routeOrSource: "POST /api/agents",
+            actorHint: (req as { session?: { adminUserId?: string } }).session?.adminUserId ?? undefined,
+            detail: { reason: "missing_orchestration_run_id" },
+          });
+          return res.status(403).json({
+            error:
+              "Orchestration run required: POST /api/intelligence/orchestration-runs then include orchestrationRunId in body",
+            code: "ORCHESTRATION_REQUIRED",
+          });
+        }
+        const gate = await assertRunAllowsSingleAgentCreate({
+          orchestrationRunId,
+          siteConfigId: sid,
+        });
+        if (!gate.ok) {
+          await persistOrchestrationViolation({
+            violationType: "governance_violation",
+            severity: "medium",
+            orchestrationRunId,
+            siteConfigId: sid,
+            routeOrSource: "POST /api/agents",
+            detail: { reason: gate.reason },
+          });
+          return res.status(400).json({ error: gate.reason, code: "ORCHESTRATION_RUN_INVALID" });
+        }
+      }
+
+      if (bypass && !orchestrationRunId) {
+        await persistOrchestrationViolation({
+          violationType: "orchestration_bypass_attempt",
+          severity: "medium",
+          siteConfigId: siteConfigId ?? undefined,
+          routeOrSource: "POST /api/agents",
+          detail: { reason: "env_ORCHESTRATION_AGENT_CREATE_BYPASS" },
+        });
+      }
+
+      const agent = await storage.createAgent(agentFields as InsertAgent);
+
+      if (!bypass && orchestrationRunId) {
+        await completeSingleAgentCreateRun({ runId: orchestrationRunId, agentId: agent.id });
+      }
+
       res.json(agent);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -356,6 +464,10 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Update agent — requires auth; core configuration fields restricted to superadmin
   router.patch("/api/agents/:id", requireAuth, async (req, res) => {
     try {
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
       const session = (req as any).session;
       const configOnlyFields = ['systemPrompt', 'safeMode', 'roleType', 'name', 'dominance', 'influence', 'steadiness', 'conscientiousness'];
       const requestedFields = Object.keys(req.body);
@@ -363,7 +475,7 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       if (touchesConfig && session?.role !== 'superadmin') {
         return res.status(403).json({ error: "Agent configuration changes require superadmin privileges" });
       }
-      const agent = await storage.updateAgent(req.params.id, req.body);
+      const agent = await storage.updateAgent(id, req.body);
       if (!agent) {
         return res.status(404).json({ error: "Agent not found" });
       }
@@ -376,7 +488,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Delete agent — requires auth
   router.delete("/api/agents/:id", requireAuth, async (req, res) => {
     try {
-      await storage.deleteAgent(req.params.id);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      await storage.deleteAgent(id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -455,7 +571,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
       if (parsed.data.startupScript !== undefined) updates.startupScript = parsed.data.startupScript;
       if (parsed.data.startupBudgetUsd !== undefined) updates.startupBudgetUsd = parsed.data.startupBudgetUsd;
 
-      const agent = await storage.updateAgent(req.params.id, updates);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      const agent = await storage.updateAgent(id, updates);
       if (!agent) return res.status(404).json({ error: "Agent not found" });
       res.json(agent);
     } catch (error: any) {
@@ -466,7 +586,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Get agent budget summary
   router.get("/api/agents/:id/budget", async (req, res) => {
     try {
-      const agent = await storage.getAgent(req.params.id);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      const agent = await storage.getAgent(id);
       if (!agent) return res.status(404).json({ error: "Agent not found" });
 
       // Check if budget period has reset
@@ -506,7 +630,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Run agent startup script — requires auth
   router.post("/api/agents/:id/startup-run", requireAuth, async (req, res) => {
     try {
-      const agent = await storage.getAgent(req.params.id);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      const agent = await storage.getAgent(id);
       if (!agent) return res.status(404).json({ error: "Agent not found" });
 
       if (!agent.startupScript || agent.startupScript.trim().length === 0) {
@@ -591,7 +719,11 @@ Keep the response conversational, warm, and under 100 words. Speak directly as t
   // Reset agent budget spending — requires auth
   router.post("/api/agents/:id/budget-reset", requireAuth, async (req, res) => {
     try {
-      const agent = await storage.getAgent(req.params.id);
+      const id = paramString(req.params.id);
+      if (!id) {
+        return res.status(400).json({ error: "Agent id is required" });
+      }
+      const agent = await storage.getAgent(id);
       if (!agent) return res.status(404).json({ error: "Agent not found" });
       
       await storage.updateAgent(agent.id, {

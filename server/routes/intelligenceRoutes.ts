@@ -5,9 +5,12 @@
  * POST /resolve  — resolve data_id or placeTypes (accepts query or placeId)
  * POST /ingest   — full autonomous pipeline: resolve → harvest → analyze → store
  * POST /provision — provision 6 agents for a site from industry templates
+ * POST /orchestration-runs — start run for manual single-agent create (POST /api/agents)
+ * POST /ppp-snapshot — bounded PPP profile from Places/Serp (inferred; optional persist to knowledge library)
  * GET /status/:siteConfigId — intelligence brief status
  */
 
+import { randomUUID } from 'crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { storage } from '../storage.js';
@@ -18,7 +21,12 @@ import {
   compile_knowledge_base,
 } from '../tools/dataIngestionHandler.js';
 import { fetchSerpApiReviews, type SerpApiReview, type SerpApiTopic } from '../services/serpapi-reviews.js';
-import { provisionAgentsForBusiness } from '../services/agentProvisioning.js';
+import {
+  runAgentSwarmProvisionOrchestrated,
+  createSingleAgentOrchestrationRun,
+  persistOrchestrationViolation,
+} from '../services/agentOrchestration.js';
+import { assertSiteAccessForSession } from '../utils/siteScopedAccess';
 
 const router = Router();
 
@@ -100,15 +108,39 @@ router.post('/provision', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid request', details: parsed.error.message });
   }
 
+  const provisionSiteAccess = await assertSiteAccessForSession(req, parsed.data.siteConfigId);
+  if (!provisionSiteAccess.ok) {
+    const session = (req as { session?: { adminUserId?: string } }).session;
+    await persistOrchestrationViolation({
+      violationType: 'governance_violation',
+      severity: 'medium',
+      siteConfigId: parsed.data.siteConfigId,
+      routeOrSource: 'POST /api/intelligence/provision',
+      actorHint: session?.adminUserId ?? undefined,
+      detail: {
+        reason: 'site_access_denied',
+        httpStatus: provisionSiteAccess.status,
+        orchestrationRunId: null,
+      },
+    });
+    return res.status(provisionSiteAccess.status).json({
+      error: provisionSiteAccess.error,
+      code: 'SITE_ACCESS_DENIED',
+    });
+  }
+
   try {
-    const result = await provisionAgentsForBusiness(
-      parsed.data.siteConfigId,
-      parsed.data.placeTypes,
-      parsed.data.businessName,
-    );
+    const { provisionResult: result, runId, finalStatus } = await runAgentSwarmProvisionOrchestrated({
+      siteConfigId: parsed.data.siteConfigId,
+      placeTypes: parsed.data.placeTypes,
+      businessName: parsed.data.businessName,
+      source: 'intelligence_provision',
+    });
 
     return res.json({
       success: true,
+      orchestrationRunId: runId,
+      orchestrationFinalStatus: finalStatus,
       agentsCreated: result.agentsCreated,
       agentIds: result.agentIds,
       industryGroup: result.industryGroup,
@@ -116,6 +148,47 @@ router.post('/provision', requireAuth, async (req, res) => {
     });
   } catch (err: any) {
     console.error('[IntelligenceRoutes] provision error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /orchestration-runs — manual single-agent create (gate for POST /api/agents) ──
+
+router.post('/orchestration-runs', requireAuth, async (req, res) => {
+  const schema = z.object({
+    siteConfigId: z.string().min(1),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid request', details: parsed.error.message });
+  }
+  const siteAccess = await assertSiteAccessForSession(req, parsed.data.siteConfigId);
+  if (!siteAccess.ok) {
+    const session = (req as { session?: { adminUserId?: string } }).session;
+    await persistOrchestrationViolation({
+      violationType: 'governance_violation',
+      severity: 'medium',
+      siteConfigId: parsed.data.siteConfigId,
+      routeOrSource: 'POST /api/intelligence/orchestration-runs',
+      actorHint: session?.adminUserId ?? undefined,
+      detail: {
+        reason: 'site_access_denied',
+        httpStatus: siteAccess.status,
+        orchestrationRunId: null,
+      },
+    });
+    return res.status(siteAccess.status).json({
+      error: siteAccess.error,
+      code: 'SITE_ACCESS_DENIED',
+    });
+  }
+  try {
+    const { runId } = await createSingleAgentOrchestrationRun({
+      siteConfigId: parsed.data.siteConfigId,
+    });
+    return res.status(201).json({ runId, orchestrationRunId: runId });
+  } catch (err: any) {
+    console.error('[IntelligenceRoutes] orchestration-runs error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -223,6 +296,145 @@ router.post('/ingest', async (req, res) => {
     });
   } catch (err: any) {
     console.error('[IntelligenceRoutes] ingest error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /ppp-snapshot — bounded Purpose · Plan · Pressure signals (inferred) ──
+
+router.post('/ppp-snapshot', requireAuth, async (req, res) => {
+  const schema = z.object({
+    siteConfigId: z.string().min(1),
+    placeId: z.string().min(1).max(200).optional(),
+    businessName: z.string().max(200).optional(),
+    persist: z.boolean().optional(),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid request', details: parsed.error.message });
+  }
+
+  const { siteConfigId, persist } = parsed.data;
+  let { placeId, businessName } = parsed.data;
+
+  try {
+    const site = await storage.getSiteConfigById(siteConfigId);
+    if (!site) {
+      return res.status(404).json({ error: 'Site config not found' });
+    }
+
+    placeId = placeId || (site as { placeId?: string | null }).placeId || undefined;
+    if (!placeId) {
+      return res.status(400).json({
+        error: 'placeId required (or set on site config)',
+      });
+    }
+
+    const apiKey = process.env.SERPAPI_API_KEY ?? process.env.SERPAPI_KEY ?? process.env.SERP_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'SERPAPI not configured' });
+    }
+
+    const result = await fetchSerpApiReviews(placeId, apiKey, { num: 12 });
+    if (!result) {
+      return res.status(502).json({ error: 'Failed to fetch place data' });
+    }
+
+    const title = businessName || result.place_info.title;
+    const supportingSignals: string[] = [];
+    const conflictingSignals: string[] = [];
+
+    if (result.place_info.rating >= 4.0) supportingSignals.push('public_rating_strong');
+    if (result.place_info.reviews >= 10) supportingSignals.push('review_volume_present');
+    const negRe = /\b(slow|rude|dirty|never again|worst|disappoint|overpriced|ignored|waited)\b/i;
+    let lowStars = 0;
+    for (const r of result.reviews) {
+      if (r.rating <= 2) lowStars++;
+      if (negRe.test(r.snippet)) {
+        conflictingSignals.push('negative_theme_in_review_snippet');
+        break;
+      }
+    }
+    if (lowStars >= 2) conflictingSignals.push('multiple_low_star_reviews');
+
+    const prioritizedNeedsInferred = result.topics
+      .slice()
+      .sort((a, b) => b.mentions - a.mentions)
+      .slice(0, 3)
+      .map((t) => `${t.keyword} (${t.mentions} mentions)`);
+
+    const purposeSignals = [
+      `Inferred category: ${result.place_info.type}`,
+      `Listed business name: ${result.place_info.title}`,
+    ];
+
+    const planArtifacts = [
+      result.place_info.address ? `Address on listing: ${result.place_info.address}` : null,
+    ].filter(Boolean) as string[];
+
+    const pressureSignals: string[] = [
+      'Public listing shows current rating and review count — use for positioning, not as internal KPI.',
+    ];
+
+    const snapshot = {
+      success: true,
+      confidence: (result.reviews.length >= 5 ? 'medium' : 'low') as 'low' | 'medium',
+      businessName: title,
+      placeId,
+      purposeSignals,
+      planArtifacts,
+      pressureSignals,
+      supportingSignals: [...new Set(supportingSignals)],
+      conflictingSignals: [...new Set(conflictingSignals)],
+      prioritizedNeedsInferred,
+      disclaimer:
+        'All fields are inferred from public listing data and a bounded review sample — not internal strategy.',
+    };
+
+    if (persist) {
+      const md = [
+        `# PPP Snapshot (inferred) — ${title}`,
+        '',
+        snapshot.disclaimer,
+        '',
+        '## Purpose (signals)',
+        ...purposeSignals.map((s) => `- ${s}`),
+        '',
+        '## Plan artifacts',
+        ...planArtifacts.map((s) => `- ${s}`),
+        '',
+        '## Pressure (signals)',
+        ...pressureSignals.map((s) => `- ${s}`),
+        '',
+        '## Supporting (signals)',
+        ...snapshot.supportingSignals.map((s) => `- ${s}`),
+        '',
+        '## Conflicting (signals)',
+        ...snapshot.conflictingSignals.map((s) => `- ${s}`),
+        '',
+        '## Prioritized needs (from review topics)',
+        ...prioritizedNeedsInferred.map((s) => `- ${s}`),
+      ].join('\n');
+
+      const existing = Array.isArray((site as { knowledgeLibrary?: unknown }).knowledgeLibrary)
+        ? ((site as { knowledgeLibrary: { id: string; title: string; content: string; addedAt: string }[] }).knowledgeLibrary)
+        : [];
+      const doc = {
+        id: randomUUID(),
+        title: 'PPP Snapshot (inferred)',
+        content: md,
+        addedAt: new Date().toISOString(),
+      };
+      await storage.updateSiteConfig(siteConfigId, {
+        knowledgeLibrary: [...existing, doc],
+      } as any);
+      return res.json({ ...snapshot, persisted: true, knowledgeEntryId: doc.id });
+    }
+
+    return res.json({ ...snapshot, persisted: false });
+  } catch (err: any) {
+    console.error('[IntelligenceRoutes] ppp-snapshot error:', err.message);
     return res.status(500).json({ error: err.message });
   }
 });

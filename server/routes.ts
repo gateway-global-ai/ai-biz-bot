@@ -23,6 +23,7 @@ import { registerMenuRoutes } from "./routes/menu-routes";
 import healthRoutes from "./routes/healthRoutes";
 import platformMetricsRoutes from "./routes/platformMetricsRoutes";
 import adminAnalyticsRoutes from "./routes/adminAnalyticsRoutes";
+import readinessGateMetricsRoutes from "./routes/readinessGateMetricsRoutes";
 import knowledgeGapRoutes from "./routes/knowledgeGapRoutes";
 import analyticsHintRoutes from "./routes/analyticsHintRoutes";
 import secureVaultRoutes from "./routes/secureVaultRoutes";
@@ -33,6 +34,7 @@ import placesImageRoutes from "./routes/placesImageRoutes";
 import { registerInquiryRoutes } from "./routes/inquiry-routes";
 import { registerB2bRoutes } from "./routes/b2b-routes";
 import telephonyRoutes from "./routes/telephonyRoutes"; // Platinum Core: Telephony, Voice, SMS, Webhooks, TTS, PTT
+import twilioMonitorRoutes from "./routes/twilioMonitorRoutes"; // Twilio Console Debugger → structured logs (Phase 10a)
 import billingRoutes from "./routes/billingRoutes";       // Support Spine: Reseller, Stripe, Subscription, Billing
 import platformLicenseRoutes from "./routes/platformLicenseRoutes"; // Platform software license keys (admin + customer redeem)
 import a2pRoutes from "./routes/a2pRoutes";             // Support Spine: A2P 10-DLC Compliance
@@ -41,6 +43,12 @@ import intelligenceRoutes from "./routes/intelligenceRoutes"; // Business Intell
 import agentSystemRoutes from "./routes/agentSystemRoutes"; // DISC + Agents + Orgs + Projects + BotTemplates
 import chatRoutes from "./routes/chatRoutes";           // Website Chat + Chat + Conversations
 import localLlmBatchRoutes from "./routes/localLlmBatchRoutes";
+import localAgentRoutes from "./routes/localAgentRoutes";
+import visitorSessionRoutes from "./routes/visitorSessionRoutes";
+import unifiedAuthRoutes from "./routes/unifiedAuthRoutes";
+import salesDocIngestionRoutes from "./routes/salesDocIngestionRoutes";
+import industryFunnelRoutes from "./routes/industryFunnelRoutes";
+import workspaceAgentRoutes from "./routes/workspaceAgentRoutes";
 import gptActionsOpenApiRoutes from "./routes/gptActionsOpenApiRoutes";
 import investorDemoRoutes from "./routes/investorDemoRoutes"; // Investor report SMS gate + view tracking
 import aiStudioRoutes from "./routes/aiStudioRoutes"; // AI Studio OAuth/Webhook + PTT session initiation
@@ -51,7 +59,10 @@ import { qrAdminRouter, qrRedirectRouter } from "./routes/qrManagementRoutes"; /
 import storefrontRoutes from "./routes/storefrontRoutes"; // Storefronts: industry landing pages, reports, images, demo
 import brandingRoutes from "./routes/brandingRoutes";
 import businessTelephonyRoutes from "./routes/businessTelephonyRoutes"; // Per-business sub-account + number provisioning
+import skillDispatchRoutes from "./routes/skillDispatchRoutes"; // PTT Canvas OS — unified skill dispatch
+import canvasControlRoutes from "./routes/canvasControlRoutes"; // Canvas Control Syscall Layer — governed canvas mutations
 import platformProductRoutes from "./routes/platformProductRoutes"; // Platform products/services catalog with Stripe sync
+import reportProxyRoutes from "./routes/reportProxyRoutes"; // AIOS Report interactive features proxy (Gemini server-side)
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -82,7 +93,6 @@ import { enrichBusinessData } from "./services/businessDataService";
 import { buildRichSystemInstruction } from "./services/systemInstructionBuilder";
 import { getFreshPlaceId, getFreshPlaceIdWithSource } from "./services/placeDiscoveryService";
 import { enrichBusinessProfile } from "./services/enrichBusinessProfile";
-import { provisionAgentsForBusiness } from "./services/agentProvisioning";
 import { handleAdminToolCall, ADMIN_TOOL_DEFINITIONS } from "./tools/adminToolHandlers";
 // MCP K2 routes decommissioned; use Gemini.
 import { GoogleWorkspaceService, createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "./mcp/googleWorkspace";
@@ -154,12 +164,14 @@ export async function registerRoutes(
   app.use(gptActionsOpenApiRoutes);
   app.use(platformMetricsRoutes);
   app.use(adminAnalyticsRoutes);
+  app.use(readinessGateMetricsRoutes);
   app.use(knowledgeGapRoutes);
   app.use(analyticsHintRoutes);
   app.use(secureVaultRoutes);
 
   // Platinum Core: Telephony, Voice, SMS, Webhooks, TTS, PTT
   app.use(telephonyRoutes);
+  app.use(twilioMonitorRoutes);
   app.use(twilioWebhooks); // A2P opt-out compliance — TCPA/CTIA STOP keyword receiver
 
   // Support Spine: Billing, Reseller, Stripe, Subscription
@@ -191,7 +203,9 @@ export async function registerRoutes(
   app.use("/api/storefronts", storefrontRoutes);
   app.use("/api/branding", brandingRoutes);
   app.use("/api/telephony/business", businessTelephonyRoutes);
+  app.use("/api/skills", skillDispatchRoutes);
   app.use("/api/platform-products", platformProductRoutes);
+  app.use("/api/report", reportProxyRoutes); // AIOS Report interactive features
 
   // Agent System: DISC, Agents, Organizations, Projects, BotTemplates
   app.use(agentSystemRoutes);
@@ -199,6 +213,13 @@ export async function registerRoutes(
   // AI Chat: website-chat, chat, conversations
   app.use(chatRoutes);
   app.use("/api/local-llm-batch", localLlmBatchRoutes);
+  app.use("/api/local-agent", localAgentRoutes);
+  app.use("/api/visitor-session", visitorSessionRoutes);
+  app.use("/api/auth/unified-otp", unifiedAuthRoutes);
+  app.use("/api/knowledge", salesDocIngestionRoutes);
+  app.use("/api/industry-funnels", industryFunnelRoutes);
+  app.use("/api/workspace-agent", workspaceAgentRoutes);
+  app.use("/api/canvas-control", canvasControlRoutes); // Canvas Control Syscall Layer
 
   app.use(async (req, res, next) => {
     const ua = req.headers["user-agent"] || "";
@@ -1505,39 +1526,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/site-configs", async (req, res) => {
-    try {
-      const schema = z.object({
-        name: z.string().min(1).max(200),
-        domain: z.string().optional(),
-        placeId: z.string().optional(),
-        placeData: z.any().optional(),
-        heroImageUrl: z.string().optional(),
-        assignedAgentId: z.string().nullable().optional(),
-        systemPromptOverride: z.string().optional(),
-        chatbotEnabled: z.boolean().optional(),
-        voiceConciergeEnabled: z.boolean().optional(),
-        widgetPosition: z.string().optional(),
-        widgetColor: z.string().optional(),
-        greetingMessage: z.string().optional(),
-      });
-      const parsed = schema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
-      const payload = parsed.data;
-      const heroImageUrl =
-        payload.heroImageUrl ?? (payload.placeId ? `/api/places/photo-proxy/${payload.placeId}?maxWidth=1200` : undefined);
-      const config = await storage.createSiteConfig({ ...payload, heroImageUrl });
-      try {
-        const placeTypes = (config.placeData as { types?: string[] } | null)?.types ?? ['establishment'];
-        await provisionAgentsForBusiness(config.id, placeTypes, config.name);
-      } catch (provisionErr: any) {
-        console.error('[SiteConfig] Agent provisioning failed (site created):', provisionErr?.message ?? provisionErr);
-      }
-      res.status(201).json(config);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+  // POST /api/site-configs — canonical handler in server/routes/siteConfigRoutes.ts (orchestrated provision + slug)
 
   app.patch("/api/site-configs/:id", async (req, res) => {
     try {
@@ -1919,37 +1908,12 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/sites/leads", async (_req, res) => {
-    try {
-      const sites = await storage.getSiteConfigs();
-      const prospects = await storage.getVlmProspects({ limit: 10000 });
-      const leads = sites.map(site => {
-        const placeData = site.placeData as any;
-        const matchedProspect = prospects.find(p => p.googlePlaceId && p.googlePlaceId === site.placeId);
-        return {
-          siteId: site.id,
-          siteName: site.name,
-          placeId: site.placeId,
-          domain: site.domain,
-          chatbotEnabled: site.chatbotEnabled,
-          voiceConciergeEnabled: site.voiceConciergeEnabled,
-          createdAt: site.createdAt,
-          businessPhone: placeData?.phone || matchedProspect?.phone || null,
-          businessAddress: placeData?.address || null,
-          industry: placeData?.industry || matchedProspect?.industry || null,
-          rating: placeData?.rating || null,
-          reviewCount: placeData?.reviewCount || null,
-          prospectId: matchedProspect?.id || null,
-          qualityScore: matchedProspect?.qualityScore || null,
-          prospectStatus: matchedProspect?.status || null,
-          smsSent: matchedProspect?.notes?.includes("SMS sent") || false,
-          siteGenerated: matchedProspect?.notes?.includes("Site generated") || false,
-        };
-      });
-      res.json(leads);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
+  // VLM prospect merge retired for v1 — was `getVlmProspects`-backed; not core wedge.
+  app.get("/api/admin/sites/leads", (_req, res) => {
+    res.status(410).json({
+      error: "VLM lead aggregation removed in v1. Use site summaries and governed sales-engine paths when available.",
+      code: "VLM_LEADS_RETIRED",
+    });
   });
 
   // ============================================
@@ -1989,14 +1953,10 @@ export async function registerRoutes(
           allChatLogs.push(...logs);
         }
         const chatLogs = allChatLogs;
-        const prospects = await storage.getVlmProspects({ limit: 10000 });
-        const campaigns = await storage.getVlmCampaigns();
 
         const activeSites = sites.filter(s => s.chatbotEnabled || s.voiceConciergeEnabled);
         const totalVisitors = new Set(chatLogs.map((l: any) => l.visitorId).filter(Boolean)).size;
         const totalMessages = chatLogs.length;
-        const wonProspects = prospects.filter(p => p.status === 'won');
-        const calledProspects = prospects.filter(p => p.status === 'called');
         const newCustomers = customers.filter((c: any) => c.status === 'new');
         const activeCustomers = customers.filter((c: any) => c.status === 'active');
 
@@ -2005,8 +1965,6 @@ SITES: ${sites.length} total, ${activeSites.length} active (with chatbot/voice e
 VISITORS: ${totalVisitors} unique visitors across all sites
 MESSAGES: ${totalMessages} total chat messages
 CUSTOMERS: ${customers.length} total (${newCustomers.length} new, ${activeCustomers.length} active)
-LEADS/PROSPECTS: ${prospects.length} total, ${calledProspects.length} called, ${wonProspects.length} converted
-CAMPAIGNS: ${campaigns.length || 0} VLM campaigns
 
 Top Sites by Activity:`;
 
@@ -2027,13 +1985,6 @@ Top Sites by Activity:`;
           });
         }
 
-        if (prospects.length > 0) {
-          businessContext += `\n\nRecent Prospects:`;
-          prospects.slice(0, 5).forEach((p: any) => {
-            businessContext += `\n- ${p.businessName} (${p.status}, score:${p.qualityScore || 'N/A'})${p.phone ? ' Ph:' + p.phone : ''}`;
-          });
-        }
-
         businessContext += `\n--- END BUSINESS CONTEXT ---`;
       } catch (contextError) {
         console.warn('Failed to gather business context:', contextError);
@@ -2048,9 +1999,7 @@ You are in ADMIN COMMAND MODE. The admin is using you to manage and monitor busi
 
 Your capabilities in this mode:
 - Report on site analytics, visitor activity, and chat history
-- Analyze lead quality scores and conversion rates
 - Summarize customer status and pipeline health
-- Advise on VoiceLeadMachine campaign strategy
 - Help configure agent settings and telephony
 - Provide actionable business intelligence and recommendations
 
@@ -2105,47 +2054,8 @@ ${businessContext}`;
     res.status(410).json({ error: "Legacy MCP server decommissioned. Use Gemini tool declarations." });
   });
 
-  // Quick coding task - auto-selects best tool
-  app.post("/api/mcp/code", async (req, res) => {
-    try {
-      const { task, code, language, error: errorMsg, _hfToken, _temperature, _maxTokens, _modelId } = req.body;
-      
-      const options: ModelOptions = {
-        hfToken: _hfToken,
-        temperature: _temperature,
-        maxTokens: _maxTokens,
-        modelId: _modelId,
-      };
-      
-      let toolName: string;
-      let args: Record<string, any>;
-      
-      if (errorMsg) {
-        toolName = "diagnose_error";
-        args = { error: errorMsg, context: code, language };
-      } else if (code && task?.toLowerCase().includes("fix")) {
-        toolName = "fix_code";
-        args = { code, language, issue: task };
-      } else if (code && task?.toLowerCase().includes("explain")) {
-        toolName = "explain_code";
-        args = { code, language };
-      } else if (code) {
-        toolName = "analyze_code";
-        args = { code, language, focus: task };
-      } else {
-        toolName = "generate_code";
-        args = { task, language: language || "typescript" };
-      }
-      
-      console.log(`[MCP] Auto-selected tool: ${toolName}`);
-      
-      // Legacy MCP decommissioned — return 410
-      res.status(410).json({ error: "Legacy MCP code tasks decommissioned.", tool: toolName });
-      return;
-    } catch (error: any) {
-      console.error(`[MCP] Code task error: ${error.message}`);
-      res.status(500).json({ error: error.message });
-    }
+  app.post("/api/mcp/code", (_req, res) => {
+    res.status(410).json({ error: "Legacy MCP code tasks decommissioned. Use Gemini tool declarations." });
   });
 
   // ← extracted to server/routes/billingRoutes.ts or a2pRoutes.ts

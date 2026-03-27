@@ -43,6 +43,7 @@ Naming constitution for [`.env.example`](../.env.example): every **active** (unc
 | `SYSTEM_TWILIO_ACCOUNT_SID` | System-level primary account SID. |
 | `SYSTEM_TWILIO_AUTH_TOKEN` | System-level auth token. |
 | `SYSTEM_TWILIO_PHONE_NUMBER` | System-level number. |
+| `TWILIO_WEBHOOK_SIGNATURE_BASE_URL` | Optional public HTTPS origin (no trailing slash) for `X-Twilio-Signature` validation when TLS terminates at a proxy; appended with `req.originalUrl` (e.g. Debugger `POST /api/twilio/monitor/debug-event`). |
 
 ## Stripe
 
@@ -50,7 +51,9 @@ Naming constitution for [`.env.example`](../.env.example): every **active** (unc
 |-----|---------|
 | `STRIPE_SECRET_KEY` | Server-side secret key. |
 | `STRIPE_PUBLISHABLE_KEY` | Client-safe publishable key. |
-| `STRIPE_WEBHOOK_SECRET` | Webhook signing secret. |
+| `STRIPE_WEBHOOK_SECRET` | Webhook signing secret for `/api/stripe/webhook/subscriptions`. |
+
+See **[Stripe billing bootstrap](deployment/STRIPE_BILLING_BOOTSTRAP.md)** for test vs live mode, webhook URLs, `STRIPE_PRICE_*` catalog variables, and the `bootstrap-stripe-plan-prices` script.
 
 ## Application URLs & process
 
@@ -72,6 +75,16 @@ Naming constitution for [`.env.example`](../.env.example): every **active** (unc
 | `NOVA_RSA_PUBLIC_KEY` | PEM for verifying Nova billing signatures (optional). |
 | `SESSION_SECRET` | Session HMAC/encryption (32+ chars). |
 | `ENCRYPTION_KEY` | App encryption for sensitive fields (32+ chars). |
+
+## Agent orchestration (optional)
+
+Documented as comments in [`.env.example`](../.env.example); set in Doppler only when needed. See `docs-governance/worklogs/WL-AGENT-ORCHESTRATION.md`.
+
+| Key | Purpose |
+|-----|---------|
+| `ORCHESTRATION_AGENT_CREATE_BYPASS` | When `true`, skips the orchestration-run gate on `POST /api/agents` (server still logs a bypass violation). |
+| `ORCHESTRATION_APTITUDE_REQUIRED_FOR_DEPLOY` | When `true`, failed/incomplete aptitude blocks provision finalization. |
+| `ORCHESTRATION_CUSTOMER_OUTCOME_REQUIRED` | When `true`, minimal customer-outcome fields are required before provision runs complete. |
 
 ## Feature flags
 

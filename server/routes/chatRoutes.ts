@@ -30,6 +30,7 @@ import {
   buildCgrForWebsiteChat,
   buildCgrForAgentChat,
   getCommunicationGovernanceFromSite,
+  loadBuyerJourney,
 } from "../services/conversationGrounding";
 import { validateArchEnvelope } from "../services/archEnvelopeValidator";
 import { analyzePppShadow, skippedPppShadowScore } from "../services/pppShadowValidator";
@@ -108,6 +109,12 @@ const router = Router();
         siteConfig = await storage.getSiteConfig(siteConfigId);
       }
 
+      /** Load once before prompt compile so BusinessContext.buyerJourney is defined (see GOVERNANCE_EXECUTION_PLAN_V1 Phase 3). */
+      const buyerJourneyLoaded =
+        !isPlatformChat && siteConfigId
+          ? await loadBuyerJourney(visitorId, siteConfigId)
+          : null;
+
       const sensitiveCheck = detectSensitiveInput(message);
       if (sensitiveCheck.requiresSecureForm && sensitiveCheck.policy) {
         if (siteConfig) {
@@ -181,6 +188,7 @@ const router = Router();
             phone: businessPhone ?? (pd && typeof (pd as any).formatted_phone_number === "string" ? (pd as any).formatted_phone_number : undefined),
             knowledgeCertification,
             funnelContextKeys: funnelContextKeys ?? undefined,
+            buyerJourney: buyerJourneyLoaded ?? undefined,
           };
           systemPrompt = compileFullSystemPrompt(agent, siteConfig as any, businessContext) + knowledgeBlock;
         } else {
@@ -215,7 +223,9 @@ const router = Router();
           ? (siteConfig as { assignedAgentId?: string | null }).assignedAgentId
           : null;
       const archAgent = webAgentId ? await storage.getAgent(webAgentId) : null;
-      const cgr = buildCgrForWebsiteChat(siteConfigId, visitorId, siteConfig, archAgent ?? null);
+      const cgr = buildCgrForWebsiteChat(siteConfigId, visitorId, siteConfig, archAgent ?? null, {
+        buyerJourney: buyerJourneyLoaded,
+      });
       const archCheck = validateArchEnvelope(response, {
         operationalMode: archAgent?.operationalMode ?? undefined,
         archProfile: (archAgent?.archProfile ?? null) as import("@shared/schema").ArchProfile | null,

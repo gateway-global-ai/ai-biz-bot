@@ -14,7 +14,8 @@
  * 4-card panel can update quotas without being silently stripped.
  */
 
-import { Router } from 'express';
+import { Router, type Response } from 'express';
+import { firstRouteParam } from '../utils/expressParams';
 import multer from 'multer';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
@@ -25,7 +26,19 @@ import sharp from 'sharp';
 import { storage } from '../storage';
 import { requireAuth } from '../auth';
 import { assertSiteScopedAccess, type SitePolicyKey } from '../utils/siteScopedAccess';
+import {
+  parseDesignStudioFromMetadata,
+  mergeDesignStudioPatch,
+  designStudioPatchSchema,
+  applyDesignStudioHandoff,
+  markDesignStudioProjectPublished,
+  DesignStudioMergeError,
+  isDesignStudioReadyForPublish,
+  getDesignStudioPublishBlockers,
+} from '@shared/designStudioState';
+import { designStudioHandoffRequestSchema } from '@shared/designStudioHandoff';
 import { preloadBusinessAndReviews } from '../services/preloadBusinessKnowledge';
+import { runAgentSwarmProvisionOrchestrated } from '../services/agentOrchestration';
 import { handleGetHotelInventory } from '../tools/hotelInventoryHandler';
 import { classifyKnowledgeDocument } from '../services/knowledgeClassificationService';
 import { frontDeskOutcomeEventRequestSchema } from '../contracts/frontDeskSessionContract';
@@ -35,9 +48,10 @@ import {
   intakeChangeRequests,
   patientVendorRelationships,
   vendors,
-  siteConfigs, 
-  users, 
-  agents
+  siteConfigs,
+  users,
+  agents,
+  type StructuredControls,
 } from '@shared/schema';
 import { and, desc, eq } from 'drizzle-orm';
 import { getSensitiveInputPolicyById } from '../config/sensitiveInputPolicy';
@@ -53,6 +67,11 @@ import {
   resolveVerificationPolicyConfig,
 } from '../services/verificationPolicyService';
 import { assessBizPageOgReadiness } from '../services/socialOgReadiness';
+import {
+  evaluateReadinessGateV1WithDiagnostics,
+  logReadinessGateV1Event,
+} from '../services/readinessGateV1';
+import { recordReadinessGateV1Metric } from '../services/readinessGateV1Metrics';
 
 /** Converts a business name into a URL-safe slug with a 4-char random suffix. */
 function generateSlug(name: string): string {
@@ -155,6 +174,25 @@ const crmConfigSchema = z.object({
   defaultStatus: z.string().optional()
 }).nullable().optional();
 
+const communicationGovernanceSchema = z
+  .object({
+    disclosurePolicyId: z.enum(["early", "contextual", "late_experiment"]).optional(),
+    principalOfRecord: z.enum(["customer", "owner", "organization"]).optional(),
+    disclosureExperimentVariant: z.string().max(64).optional(),
+    stabilityDials: z
+      .object({
+        emotionalIntensity: z.number().int().min(0).max(2).optional(),
+        friendliness: z.number().int().min(0).max(3).optional(),
+        formality: z.number().int().min(0).max(3).optional(),
+        directness: z.number().int().min(0).max(3).optional(),
+      })
+      .optional(),
+    principalConflictPossible: z.boolean().optional(),
+  })
+  .passthrough()
+  .nullable()
+  .optional();
+
 const createSchema = z.object({
   name: z.string().min(1).max(200),
   domain: z.string().optional(),
@@ -197,6 +235,7 @@ const patchSchema = createSchema.partial().extend({
   serviceMenu: serviceMenuSchema,
   faqs: faqsSchema,
   crmConfig: crmConfigSchema,
+  communicationGovernance: communicationGovernanceSchema,
 });
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
@@ -233,23 +272,17 @@ router.post('/', async (req, res) => {
     data.slug = generateSlug(data.name);
     const config = await storage.createSiteConfig(data as any);
     try {
-      // Bootstrap a single Voice Concierge in strict safe mode.
-      // Additional agents are created only via the AI Bot Builder flow after
-      // the owner completes all 5 onboarding steps and approves deployment.
-      const concierge = await storage.createAgent({
+      const placeTypes =
+        (config.placeData as { types?: string[] } | null | undefined)?.types ?? ['establishment'];
+      await runAgentSwarmProvisionOrchestrated({
         siteConfigId: config.id,
-        name: `${config.name} Concierge`,
-        roleType: 'concierge',
-        safeMode: 'strict',
-        dominance: '20', influence: '45', steadiness: '80', conscientiousness: '75',
-        acknowledge: '30', reflect: '30', context: '60', handoff: '20',
-        responseWindowSeconds: 10,
-        isActive: true,
-      } as any);
-      // Set this concierge as the assigned agent for the site
-      await storage.updateSiteConfig(config.id, { assignedAgentId: concierge.id });
-    } catch (provisionErr: any) {
-      console.error('[SiteConfig] Concierge bootstrap failed (site created):', provisionErr?.message ?? provisionErr);
+        placeTypes,
+        businessName: config.name,
+        source: 'site_config_create',
+      });
+    } catch (provisionErr: unknown) {
+      const msg = provisionErr instanceof Error ? provisionErr.message : String(provisionErr);
+      console.error('[SiteConfig] Orchestrated agent provisioning failed (site created):', msg);
     }
     if (config.placeId || config.placeData) {
       preloadBusinessAndReviews(config.id).catch((err) =>
@@ -275,6 +308,10 @@ router.post('/', async (req, res) => {
  */
 router.patch('/:id', requireAuth, async (req, res) => {
   try {
+    const siteConfigId = firstRouteParam(req.params.id);
+    if (!siteConfigId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.message });
@@ -283,13 +320,13 @@ router.patch('/:id', requireAuth, async (req, res) => {
     if ('slug' in data) {
       data.slug = (data.slug && normalizeSlugInput(String(data.slug))) || null;
     }
-    const updated = await storage.updateSiteConfig(req.params.id, data);
+    const updated = await storage.updateSiteConfig(siteConfigId, data);
     if (!updated) {
       return res.status(404).json({ error: 'Site config not found' });
     }
     const hasPlace = parsed.data && ('placeId' in parsed.data || 'placeData' in parsed.data);
     if (hasPlace && (parsed.data.placeId || parsed.data.placeData)) {
-      preloadBusinessAndReviews(req.params.id).catch((err) =>
+      preloadBusinessAndReviews(siteConfigId).catch((err) =>
         console.warn('[SiteConfig] Preload business/reviews failed (async):', err?.message ?? err)
       );
     }
@@ -312,7 +349,10 @@ router.post('/:id/domain/verify-ownership', async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.message });
     }
-    const siteId = req.params.id;
+    const siteId = firstRouteParam(req.params.id);
+    if (!siteId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
     const site = await storage.getSiteConfigById(siteId);
     if (!site) {
       return res.status(404).json({ error: 'Site config not found' });
@@ -382,14 +422,18 @@ router.post('/refresh-all-hero-images', async (_req, res) => {
  */
 router.post('/:id/refresh-hero-image', async (req, res) => {
   try {
-    const site = await storage.getSiteConfigById(req.params.id);
+    const siteConfigId = firstRouteParam(req.params.id);
+    if (!siteConfigId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
+    const site = await storage.getSiteConfigById(siteConfigId);
     if (!site) return res.status(404).json({ error: 'Site not found' });
     const placeId = (site as { placeId?: string | null }).placeId;
     if (!placeId || placeId.length < 20) {
       return res.status(400).json({ error: 'Site has no Google Place ID; cannot refresh hero image' });
     }
     const proxyUrl = `/api/places/photo-proxy/${encodeURIComponent(placeId)}?maxWidth=1200`;
-    await storage.updateSiteConfig(req.params.id, { heroImageUrl: proxyUrl } as any);
+    await storage.updateSiteConfig(siteConfigId, { heroImageUrl: proxyUrl } as any);
     res.json({ heroImageUrl: proxyUrl });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -401,7 +445,11 @@ router.post('/:id/refresh-hero-image', async (req, res) => {
  */
 router.delete('/:id', requireAuth, async (req, res) => {
   try {
-    await storage.deleteSiteConfig(req.params.id);
+    const siteConfigId = firstRouteParam(req.params.id);
+    if (!siteConfigId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
+    await storage.deleteSiteConfig(siteConfigId);
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -416,7 +464,10 @@ router.delete('/:id', requireAuth, async (req, res) => {
  */
 router.get('/:id/hotel-availability', async (req, res) => {
   try {
-    const siteConfigId = req.params.id;
+    const siteConfigId = firstRouteParam(req.params.id);
+    if (!siteConfigId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
     const checkIn = (req.query.checkIn as string) || new Date().toISOString().slice(0, 10);
     const checkOut = (req.query.checkOut as string) || (() => {
       const d = new Date();
@@ -442,7 +493,7 @@ router.get('/:id/hotel-availability', async (req, res) => {
  */
 router.get('/:id/chat-logs', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -465,7 +516,11 @@ router.get('/:id/chat-logs', requireAuth, async (req: any, res) => {
  */
 router.get('/:id/knowledge', async (req, res) => {
   try {
-    const site = await storage.getSiteConfigById(req.params.id);
+    const siteConfigId = firstRouteParam(req.params.id);
+    if (!siteConfigId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
+    const site = await storage.getSiteConfigById(siteConfigId);
     if (!site) return res.status(404).json({ error: 'Site not found' });
     const lib = (site as any).knowledgeLibrary;
     res.json(Array.isArray(lib) ? lib : []);
@@ -480,6 +535,10 @@ router.get('/:id/knowledge', async (req, res) => {
  */
 router.post('/:id/knowledge', async (req, res) => {
   try {
+    const siteConfigId = firstRouteParam(req.params.id);
+    if (!siteConfigId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
     const schema = z.object({
       content: z.string().min(1).max(500000),
     });
@@ -487,7 +546,7 @@ router.post('/:id/knowledge', async (req, res) => {
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.message });
     }
-    const site = await storage.getSiteConfigById(req.params.id);
+    const site = await storage.getSiteConfigById(siteConfigId);
     if (!site) return res.status(404).json({ error: 'Site not found' });
 
     const existing = Array.isArray((site as any).knowledgeLibrary)
@@ -506,7 +565,7 @@ router.post('/:id/knowledge', async (req, res) => {
       documentDate,
     };
     const next = [...existing, doc];
-    await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: next } as any);
+    await storage.updateSiteConfig(siteConfigId, { knowledgeLibrary: next } as any);
     res.json(next);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -520,7 +579,11 @@ router.post('/:id/knowledge', async (req, res) => {
 const knowledgeUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } }); // 15MB per file
 router.post('/:id/knowledge/upload', knowledgeUpload.array('files', 20), async (req, res) => {
   try {
-    const site = await storage.getSiteConfigById(req.params.id);
+    const siteConfigId = firstRouteParam(req.params.id);
+    if (!siteConfigId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
+    const site = await storage.getSiteConfigById(siteConfigId);
     if (!site) return res.status(404).json({ error: 'Site not found' });
     const documentDate = new Date().toISOString().slice(0, 10);
     const files = (req.files as Express.Multer.File[]) ?? [];
@@ -560,7 +623,7 @@ router.post('/:id/knowledge/upload', knowledgeUpload.array('files', 20), async (
       added.push(doc);
     }
 
-    await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: existing } as any);
+    await storage.updateSiteConfig(siteConfigId, { knowledgeLibrary: existing } as any);
     res.json({ added: added.length, knowledgeLibrary: existing });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -573,11 +636,15 @@ router.post('/:id/knowledge/upload', knowledgeUpload.array('files', 20), async (
  */
 router.get('/:id/knowledge/search', async (req, res) => {
   try {
-    const site = await storage.getSiteConfigById(req.params.id);
+    const siteConfigId = firstRouteParam(req.params.id);
+    if (!siteConfigId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
+    const site = await storage.getSiteConfigById(siteConfigId);
     if (!site) return res.status(404).json({ error: 'Site not found' });
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     const limit = Math.min(20, Math.max(1, parseInt(String(req.query.limit), 10) || 5));
-    const results = await storage.searchKnowledgeLibrary(req.params.id, q, limit);
+    const results = await storage.searchKnowledgeLibrary(siteConfigId, q, limit);
     res.json({ results });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -590,14 +657,19 @@ router.get('/:id/knowledge/search', async (req, res) => {
  */
 router.delete('/:id/knowledge/:docId', async (req, res) => {
   try {
-    const site = await storage.getSiteConfigById(req.params.id);
+    const siteConfigId = firstRouteParam(req.params.id);
+    const docId = firstRouteParam(req.params.docId);
+    if (!siteConfigId || !docId) {
+      return res.status(400).json({ error: 'Site config id and document id required' });
+    }
+    const site = await storage.getSiteConfigById(siteConfigId);
     if (!site) return res.status(404).json({ error: 'Site not found' });
 
     const existing = Array.isArray((site as any).knowledgeLibrary)
       ? (site as any).knowledgeLibrary
       : [];
-    const next = existing.filter((d: any) => d.id !== req.params.docId);
-    await storage.updateSiteConfig(req.params.id, { knowledgeLibrary: next } as any);
+    const next = existing.filter((d: any) => d.id !== docId);
+    await storage.updateSiteConfig(siteConfigId, { knowledgeLibrary: next } as any);
     res.json({ success: true, knowledgeLibrary: next });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -617,14 +689,36 @@ router.get('/by-slug/:slug', async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(204).end();
 
   try {
-    const config = await storage.getSiteConfigBySlug(req.params.slug);
+    const slug = firstRouteParam(req.params.slug);
+    if (!slug) {
+      return res.status(400).json({ error: 'Slug required' });
+    }
+    const config = await storage.getSiteConfigBySlug(slug);
     if (!config) return res.status(404).json({ error: 'Business not found.' });
     if (req.query.from === 'qr') {
       storage.recordSlugLanding(config.id, 'qr').catch((err) =>
         console.warn('[SiteConfig] Slug landing record failed:', err?.message ?? err)
       );
     }
-    res.json(config);
+    const agentsForSite = await storage.getAgentsBySiteConfigId(config.id);
+    const evaluation = evaluateReadinessGateV1WithDiagnostics(config, agentsForSite);
+    const readiness_gate_v1 = {
+      customer_ready: evaluation.customer_ready,
+      mode: evaluation.mode,
+    };
+    logReadinessGateV1Event({
+      evaluation,
+      site_config_id: config.id,
+      slug: config.slug ?? slug,
+      from_qr: req.query.from === "qr",
+    });
+    recordReadinessGateV1Metric({
+      evaluation,
+      site_config_id: config.id,
+      slug: config.slug ?? slug,
+      from_qr: req.query.from === "qr",
+    });
+    res.json({ ...config, readiness_gate_v1 });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -644,8 +738,12 @@ router.post('/:id/share', async (req, res) => {
     const parsed = shareSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
 
+    const siteConfigId = firstRouteParam(req.params.id);
+    if (!siteConfigId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
     const updated = await storage.recordShareEvent(
-      req.params.id,
+      siteConfigId,
       parsed.data.platform,
       parsed.data.referrerUserId,
     );
@@ -661,7 +759,7 @@ router.post('/:id/share', async (req, res) => {
  */
 router.get('/:id/agents', async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') {
       return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     }
@@ -679,7 +777,7 @@ router.get('/:id/agents', async (req, res) => {
  */
 router.get('/:id/qr-stats', async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') {
       return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     }
@@ -698,7 +796,7 @@ router.get('/:id/qr-stats', async (req, res) => {
  */
 router.get('/:id/conversation-events/summary', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -722,7 +820,7 @@ router.get('/:id/conversation-events/summary', requireAuth, async (req: any, res
  */
 router.get('/:id/conversation-events', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -749,7 +847,7 @@ router.get('/:id/conversation-events', requireAuth, async (req: any, res) => {
  */
 router.get('/:id/frontdesk/sessions', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -787,7 +885,7 @@ router.get('/:id/frontdesk/sessions', requireAuth, async (req: any, res) => {
  */
 router.get('/:id/intake-policy', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -809,7 +907,7 @@ router.get('/:id/intake-policy', requireAuth, async (req: any, res) => {
  */
 router.patch('/:id/intake-policy', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -848,7 +946,7 @@ router.patch('/:id/intake-policy', requireAuth, async (req: any, res) => {
  */
 router.get('/:id/verification-policy', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -869,7 +967,7 @@ router.get('/:id/verification-policy', requireAuth, async (req: any, res) => {
  */
 router.patch('/:id/verification-policy', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -907,7 +1005,7 @@ router.patch('/:id/verification-policy', requireAuth, async (req: any, res) => {
  */
 router.get('/:id/intake/library', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -951,7 +1049,8 @@ router.get('/:id/intake/library', requireAuth, async (req: any, res) => {
  */
 router.get('/:id/intake/library/:workflowId', requireAuth, async (req: any, res) => {
   try {
-    const { id, workflowId } = req.params;
+    const id = firstRouteParam(req.params.id);
+    const workflowId = firstRouteParam(req.params.workflowId);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -991,7 +1090,8 @@ router.get('/:id/intake/library/:workflowId', requireAuth, async (req: any, res)
  */
 router.get('/:id/intake/secure-form/:policyId', requireAuth, async (req: any, res) => {
   try {
-    const { id, policyId } = req.params;
+    const id = firstRouteParam(req.params.id);
+    const policyId = firstRouteParam(req.params.policyId);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -1025,7 +1125,7 @@ router.get('/:id/intake/secure-form/:policyId', requireAuth, async (req: any, re
  */
 router.post('/:id/intake/secure-submit', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -1246,7 +1346,7 @@ router.post('/:id/intake/secure-submit', requireAuth, async (req: any, res) => {
  */
 router.get('/:id/intake/review-queue', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -1274,8 +1374,10 @@ router.get('/:id/intake/review-queue', requireAuth, async (req: any, res) => {
  */
 router.patch('/:id/intake/review-queue/:requestId', requireAuth, async (req: any, res) => {
   try {
-    const { id, requestId } = req.params;
+    const id = firstRouteParam(req.params.id);
+    const requestId = firstRouteParam(req.params.requestId);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
+    if (!requestId) return res.status(400).json({ error: 'requestId is required' });
     const access = await assertSiteScopedAccess({
       req,
       siteConfigId: id,
@@ -1331,7 +1433,7 @@ router.patch('/:id/intake/review-queue/:requestId', requireAuth, async (req: any
  */
 router.post('/:id/intake/module-status', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -1373,7 +1475,7 @@ router.post('/:id/intake/module-status', requireAuth, async (req: any, res) => {
  */
 router.post('/:id/verification/status', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -1429,7 +1531,7 @@ router.post('/:id/verification/status', requireAuth, async (req: any, res) => {
  */
 router.post('/:id/telephony/activate', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -1487,7 +1589,7 @@ router.post('/:id/telephony/activate', requireAuth, async (req: any, res) => {
  */
 router.post('/:id/outcomes/event', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
 
     const parsed = frontDeskOutcomeEventRequestSchema.safeParse(req.body);
@@ -1542,7 +1644,7 @@ router.post('/:id/outcomes/event', requireAuth, async (req: any, res) => {
  */
 router.get('/:id/outcomes/summary', requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === 'undefined') return res.status(400).json({ error: 'A valid site configuration ID is required.' });
     const access = await assertSiteScopedAccess({
       req,
@@ -1647,6 +1749,12 @@ router.post('/admin/ensure-joint-site', async (_req, res) => {
     });
 
     // Create the agent as well
+    const jointStructuredControls: StructuredControls = {
+      guardrails: {
+        always: ['Use kiosk onboarding and appointment check tools when the patient requests them.'],
+        never: ['Share PHI without verified identity.'],
+      },
+    };
     await db.insert(agents).values({
       id: randomUUID(),
       siteConfigId: newSiteId,
@@ -1654,14 +1762,10 @@ router.post('/admin/ensure-joint-site', async (_req, res) => {
       roleType: "receptionist",
       voiceId: "Puck",
       voiceName: "Puck",
-      isActive: true,
+      status: 'active',
       systemPrompt: "You are the receptionist for The Joint Chiropractic.",
       operationalMode: "RECEPTIONIST",
-      structuredControls: {
-        allowed_tools: ["kiosk_onboarding", "check_appointment"],
-        escalation_path: "manager",
-        refusal_behavior: "polite_decline"
-      }
+      structuredControls: jointStructuredControls,
     });
 
     res.json({ success: true, message: "Site created", siteId: newSiteId });
@@ -1677,7 +1781,7 @@ router.post('/admin/ensure-joint-site', async (_req, res) => {
  */
 router.get("/:id/social-preview-readiness", requireAuth, async (req: any, res) => {
   try {
-    const { id } = req.params;
+    const id = firstRouteParam(req.params.id);
     if (!id || id === "undefined") {
       return res.status(400).json({ error: "A valid site configuration ID is required." });
     }
@@ -1711,6 +1815,219 @@ router.get("/:id/social-preview-readiness", requireAuth, async (req: any, res) =
 });
 
 /**
+ * GET /api/site-configs/:id/design-studio
+ * Returns validated metadata.designStudio (stub persistence).
+ */
+router.get("/:id/design-studio", requireAuth, async (req: any, res) => {
+  try {
+    const id = firstRouteParam(req.params.id);
+    if (!id || id === "undefined") {
+      return res.status(400).json({ error: "A valid site configuration ID is required." });
+    }
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: "design_studio.access",
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: "Site not found" });
+
+    const state = parseDesignStudioFromMetadata(site.metadata);
+    return res.json({ siteConfigId: id, designStudio: state });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Failed to load design studio state";
+    console.error("[SiteConfigRoutes] GET design-studio:", e);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+/**
+ * PATCH /api/site-configs/:id/design-studio
+ * Merges a partial patch into metadata.designStudio (Zod-validated).
+ */
+router.patch("/:id/design-studio", requireAuth, async (req: any, res) => {
+  try {
+    const id = firstRouteParam(req.params.id);
+    if (!id || id === "undefined") {
+      return res.status(400).json({ error: "A valid site configuration ID is required." });
+    }
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: "design_studio.access",
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const parsed = designStudioPatchSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
+    }
+
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: "Site not found" });
+
+    const meta =
+      site.metadata && typeof site.metadata === "object" && !Array.isArray(site.metadata)
+        ? { ...(site.metadata as Record<string, unknown>) }
+        : {};
+
+    const base = parseDesignStudioFromMetadata(meta);
+    const next = mergeDesignStudioPatch(base, parsed.data);
+    meta.designStudio = next;
+
+    await storage.updateSiteConfig(id, { metadata: meta });
+    return res.json({ siteConfigId: id, designStudio: next });
+  } catch (e: unknown) {
+    if (e instanceof DesignStudioMergeError) {
+      return res.status(400).json({
+        error: e.message,
+        code: e.code,
+      });
+    }
+    const msg = e instanceof Error ? e.message : "Failed to update design studio state";
+    console.error("[SiteConfigRoutes] PATCH design-studio:", e);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+
+/**
+ * POST /api/site-configs/:id/design-studio/handoff
+ * Handoff law: only this product route may create a new projects[id] row.
+ */
+router.post("/:id/design-studio/handoff", requireAuth, async (req: any, res) => {
+  try {
+    const id = firstRouteParam(req.params.id);
+    if (!id || id === "undefined") {
+      return res.status(400).json({ error: "A valid site configuration ID is required." });
+    }
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: "design_studio.access",
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const parsed = designStudioHandoffRequestSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
+    }
+    if (parsed.data.siteConfigId !== id) {
+      return res.status(400).json({
+        error: "siteConfigId in body must match URL parameter",
+        code: "SITE_CONFIG_MISMATCH",
+      });
+    }
+
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: "Site not found" });
+
+    const meta =
+      site.metadata && typeof site.metadata === "object" && !Array.isArray(site.metadata)
+        ? { ...(site.metadata as Record<string, unknown>) }
+        : {};
+
+    const base = parseDesignStudioFromMetadata(meta);
+    const projectId = parsed.data.designProjectId?.trim() || randomUUID();
+    const next = applyDesignStudioHandoff(base, {
+      projectId,
+      intentSummary: parsed.data.intentSummary,
+      handoffReason: parsed.data.handoffReason,
+      referringAgentId: parsed.data.referringAgentId,
+      entrySurface: parsed.data.entrySurface,
+    });
+    meta.designStudio = next;
+
+    await storage.updateSiteConfig(id, { metadata: meta });
+    return res.json({
+      siteConfigId: id,
+      designStudio: next,
+      designProjectId: projectId,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Failed to apply design studio handoff";
+    console.error("[SiteConfigRoutes] POST design-studio/handoff:", e);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+const designStudioPublishBodySchema = z
+  .object({
+    projectId: z.string().min(1).optional(),
+  })
+  .strict();
+
+/**
+ * POST /api/site-configs/:id/design-studio/publish
+ * Requires design_studio.publish + publish readiness gate.
+ */
+router.post("/:id/design-studio/publish", requireAuth, async (req: any, res) => {
+  try {
+    const id = firstRouteParam(req.params.id);
+    if (!id || id === "undefined") {
+      return res.status(400).json({ error: "A valid site configuration ID is required." });
+    }
+    const access = await assertSiteScopedAccess({
+      req,
+      siteConfigId: id,
+      requiredPolicy: "design_studio.publish",
+    });
+    if (!access.ok) return res.status(access.status).json({ error: access.error });
+
+    const parsed = designStudioPublishBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid body", details: parsed.error.flatten() });
+    }
+
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: "Site not found" });
+
+    const meta =
+      site.metadata && typeof site.metadata === "object" && !Array.isArray(site.metadata)
+        ? { ...(site.metadata as Record<string, unknown>) }
+        : {};
+
+    const base = parseDesignStudioFromMetadata(meta);
+    const targetId = parsed.data.projectId ?? base.activeProjectId;
+    if (!targetId) {
+      return res.status(400).json({
+        error: "No projectId provided and no activeProjectId on design studio state",
+        code: "NO_ACTIVE_PROJECT",
+      });
+    }
+    const project = base.projects[targetId];
+    if (!project) {
+      return res.status(404).json({ error: "Unknown design project", code: "UNKNOWN_PROJECT" });
+    }
+    if (project.project_status === "published") {
+      return res.status(400).json({
+        error: "Project is already published",
+        code: "ALREADY_PUBLISHED",
+      });
+    }
+    if (!isDesignStudioReadyForPublish(project)) {
+      return res.status(409).json({
+        error: "Publish gates not satisfied",
+        code: "PUBLISH_BLOCKED",
+        publishBlockers: getDesignStudioPublishBlockers(project),
+      });
+    }
+
+    const next = markDesignStudioProjectPublished(base, targetId);
+    meta.designStudio = next;
+    await storage.updateSiteConfig(id, { metadata: meta });
+    return res.json({ siteConfigId: id, designStudio: next, publishedProjectId: targetId });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Failed to publish design studio project";
+    console.error("[SiteConfigRoutes] POST design-studio/publish:", e);
+    return res.status(500).json({ error: msg });
+  }
+});
+
+
+/**
  * GET /api/site-configs/:id
  * The "Handover Service" endpoint — fetches the pre-validated site config
  * (including systemPromptOverride) for the ConciergePanel.
@@ -1726,7 +2043,7 @@ router.get("/:id/social-preview-readiness", requireAuth, async (req: any, res) =
  * /knowledge, /knowledge/:docId) are matched first.
  */
 router.get('/:id', async (req, res) => {
-  const { id } = req.params;
+  const id = firstRouteParam(req.params.id);
 
   // Allow the SDK (running on any third-party origin) to fetch the config.
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1787,7 +2104,7 @@ router.get('/:id', async (req, res) => {
  * Body: { tasks: [{ id, label, description?, required }] }
  */
 router.patch('/:id/task-order', async (req: any, res: Response) => {
-  const { id } = req.params;
+  const id = firstRouteParam(req.params.id);
   const { tasks } = req.body;
 
   if (!id) return res.status(400).json({ error: 'Site config id required' });
@@ -1829,7 +2146,10 @@ function computePreflightComplete(site: any): boolean {
  * Returns brand_governance + sales completion metadata.
  */
 router.get('/:id/brand', async (req: any, res: Response) => {
-  const { id } = req.params;
+  const id = firstRouteParam(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: 'Site config id required' });
+  }
   try {
     const site = await storage.getSiteConfigById(id);
     if (!site) return res.status(404).json({ error: 'Site not found' });
@@ -1849,7 +2169,10 @@ router.get('/:id/brand', async (req: any, res: Response) => {
  * Body: Partial<BrandGovernance>
  */
 router.patch('/:id/brand', async (req: any, res: Response) => {
-  const { id } = req.params;
+  const id = firstRouteParam(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: 'Site config id required' });
+  }
   const updates = req.body ?? {};
 
   try {
@@ -1899,7 +2222,10 @@ router.patch('/:id/brand', async (req: any, res: Response) => {
  * No external calls — uses ingested data only.
  */
 router.post('/:id/brand/generate', async (req: any, res: Response) => {
-  const { id } = req.params;
+  const id = firstRouteParam(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: 'Site config id required' });
+  }
   try {
     const site = await storage.getSiteConfigById(id);
     if (!site) return res.status(404).json({ error: 'Site not found' });
@@ -1979,7 +2305,10 @@ router.post('/:id/brand/generate', async (req: any, res: Response) => {
  * Requires paid plan (voicePlanActive or plan !== 'free').
  */
 router.post('/:id/brand/deep-research-prompt', async (req: any, res: Response) => {
-  const { id } = req.params;
+  const id = firstRouteParam(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: 'Site config id required' });
+  }
   try {
     const site = await storage.getSiteConfigById(id);
     if (!site) return res.status(404).json({ error: 'Site not found' });
@@ -2066,7 +2395,10 @@ Output Format: Return as structured JSON matching this schema exactly:
  * Returns the sales_funnels array.
  */
 router.get('/:id/funnels', async (req: any, res: Response) => {
-  const { id } = req.params;
+  const id = firstRouteParam(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: 'Site config id required' });
+  }
   try {
     const site = await storage.getSiteConfigById(id);
     if (!site) return res.status(404).json({ error: 'Site not found' });
@@ -2083,7 +2415,10 @@ router.get('/:id/funnels', async (req: any, res: Response) => {
  * Body: { funnels: SalesFunnel[] }
  */
 router.patch('/:id/funnels', async (req: any, res: Response) => {
-  const { id } = req.params;
+  const id = firstRouteParam(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: 'Site config id required' });
+  }
   const { funnels } = req.body;
 
   if (!Array.isArray(funnels)) return res.status(400).json({ error: 'funnels must be an array' });
@@ -2092,11 +2427,75 @@ router.patch('/:id/funnels', async (req: any, res: Response) => {
     const site = await storage.getSiteConfigById(id);
     if (!site) return res.status(404).json({ error: 'Site not found' });
 
-    await storage.updateSiteConfig(id, { sales_funnels: funnels } as any);
-    res.json({ sales_funnels: funnels });
+    const { parseSalesFunnelsArray } = await import('../contracts/salesFunnels');
+    const validated = parseSalesFunnelsArray(funnels);
+    if (!validated.success) {
+      return res.status(400).json({
+        error: 'Invalid sales_funnels payload',
+        details: validated.error.flatten(),
+      });
+    }
+
+    await storage.updateSiteConfig(id, { sales_funnels: validated.data } as any);
+    res.json({ sales_funnels: validated.data });
   } catch (error: any) {
     console.error('[SiteConfigRoutes] PATCH funnels error:', error);
     res.status(500).json({ error: error.message ?? 'Failed to update funnels' });
+  }
+});
+
+/**
+ * POST /api/site-configs/:id/funnels/apply-template
+ * Appends a governed industry funnel template (e.g. nail_salon_v1). Auth: same as site owner flows — use requireAuth + scope in production; for now requireAuth if available.
+ * Body: { templateId: 'nail_salon_v1' }
+ */
+router.post('/:id/funnels/apply-template', requireAuth, async (req: any, res: Response) => {
+  const id = firstRouteParam(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: 'Site config id required' });
+  }
+  const templateId = typeof req.body?.templateId === 'string' ? req.body.templateId.trim() : '';
+  if (!templateId) return res.status(400).json({ error: 'templateId is required' });
+
+  try {
+    const site = await storage.getSiteConfigById(id);
+    if (!site) return res.status(404).json({ error: 'Site not found' });
+
+    const { NAIL_SALON_FUNNEL_V1_ENTRY } = await import('@shared/industryFunnelTemplates/nailSalonV1');
+    const { parseSalesFunnelsArray } = await import('../contracts/salesFunnels');
+
+    let next: unknown[] = Array.isArray((site as any).sales_funnels) ? [...((site as any).sales_funnels as unknown[])] : [];
+
+    if (templateId === 'nail_salon_v1') {
+      const dup = next.some(
+        (f: any) => f?.name === (NAIL_SALON_FUNNEL_V1_ENTRY as any).name || f?.conversationWorkflow?.industryVertical === 'nail_salon'
+      );
+      if (dup) {
+        const validatedExisting = parseSalesFunnelsArray(next);
+        if (!validatedExisting.success) {
+          return res.status(500).json({ error: 'Existing funnels invalid', details: validatedExisting.error.flatten() });
+        }
+        return res.json({
+          sales_funnels: validatedExisting.data,
+          applied: templateId,
+          duplicateSkipped: true,
+        });
+      }
+      next = [...next, NAIL_SALON_FUNNEL_V1_ENTRY];
+    } else {
+      return res.status(400).json({ error: `Unknown templateId: ${templateId}` });
+    }
+
+    const validated = parseSalesFunnelsArray(next);
+    if (!validated.success) {
+      return res.status(500).json({ error: 'Template produced invalid funnels', details: validated.error.flatten() });
+    }
+
+    await storage.updateSiteConfig(id, { sales_funnels: validated.data } as any);
+    res.json({ sales_funnels: validated.data, applied: templateId, duplicateSkipped: false });
+  } catch (error: any) {
+    console.error('[SiteConfigRoutes] apply-template error:', error);
+    res.status(500).json({ error: error.message ?? 'Failed to apply template' });
   }
 });
 
@@ -2111,7 +2510,11 @@ router.patch('/:id/funnels', async (req: any, res: Response) => {
  */
 router.post('/:id/generate-hero-image', async (req: any, res: any) => {
   try {
-    const site = await storage.getSiteConfigById(req.params.id) as any;
+    const siteConfigId = firstRouteParam(req.params.id);
+    if (!siteConfigId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
+    const site = await storage.getSiteConfigById(siteConfigId) as any;
     if (!site) return res.status(404).json({ error: 'Site not found' });
 
     // Idempotent: return existing url unless force is requested
@@ -2170,11 +2573,11 @@ high quality, natural light, no text, no logos, 16:9 aspect ratio.
 
     const uploadDir = path.join(process.cwd(), 'server', 'uploads', 'heroes');
     fs.mkdirSync(uploadDir, { recursive: true });
-    const filename = `${req.params.id}.webp`;
+    const filename = `${siteConfigId}.webp`;
     fs.writeFileSync(path.join(uploadDir, filename), optimized);
 
     const heroImageUrl = `/uploads/heroes/${filename}`;
-    await storage.updateSiteConfig(req.params.id, { heroImageUrl, heroImagePrompt: prompt } as any);
+    await storage.updateSiteConfig(siteConfigId, { heroImageUrl, heroImagePrompt: prompt } as any);
 
     res.json({ heroImageUrl, generated: true });
   } catch (error: any) {
@@ -2185,17 +2588,21 @@ high quality, natural light, no text, no logos, 16:9 aspect ratio.
 
 /**
  * POST /api/site-configs/:id/go-live
- * Enforces 5 preflight conditions before transitioning workspaceState to 'live'.
+ * Enforces preflight conditions (active agent, assigned agent, identity, system prompt, operational mode, assigned agent active) before workspaceState → 'live'.
  */
 router.post('/:id/go-live', requireAuth, async (req: any, res) => {
   try {
-    const config = await storage.getSiteConfig(req.params.id);
+    const siteConfigId = firstRouteParam(req.params.id);
+    if (!siteConfigId) {
+      return res.status(400).json({ error: 'Site config id required' });
+    }
+    const config = await storage.getSiteConfig(siteConfigId);
     if (!config) return res.status(404).json({ error: 'Site config not found' });
 
-    const agents = await storage.getAgentsBySiteConfigId(req.params.id);
-    const activeAgent = agents.find((a: any) => a.isActive);
+    const siteAgents = await storage.getAgentsBySiteConfigId(siteConfigId);
+    const activeAgent = siteAgents.find((a: any) => a.status === 'active');
     const assignedAgent = config.assignedAgentId
-      ? agents.find((a: any) => a.id === config.assignedAgentId)
+      ? siteAgents.find((a: any) => a.id === config.assignedAgentId)
       : null;
 
     const preflight = {
@@ -2203,7 +2610,10 @@ router.post('/:id/go-live', requireAuth, async (req: any, res) => {
       hasAssignedAgent:     !!config.assignedAgentId,
       hasBusinessIdentity:  !!(config.name && config.businessType),
       hasSystemPrompt:      !!(assignedAgent?.systemPrompt && assignedAgent.systemPrompt.trim().length > 0),
-      hasSafeMode:          assignedAgent?.safeMode != null,
+      /** Governance posture is explicitly configured (any mode — not limited to SAFE). */
+      hasOperationalMode:   !!assignedAgent?.operationalMode,
+      /** Assigned agent row is active (revenue / upgraded agents are not blocked). */
+      isActive:             assignedAgent?.status === 'active',
     };
 
     const failures = Object.entries(preflight)
@@ -2218,7 +2628,7 @@ router.post('/:id/go-live', requireAuth, async (req: any, res) => {
       });
     }
 
-    const updated = await storage.updateSiteConfig(req.params.id, { workspaceState: 'live' });
+    const updated = await storage.updateSiteConfig(siteConfigId, { workspaceState: 'live' });
     res.json({ success: true, workspaceState: 'live', config: updated });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

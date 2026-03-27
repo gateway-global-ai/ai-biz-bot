@@ -5,6 +5,7 @@ import { ConciergePanel } from '@/components/chat/ConciergePanel';
 import { BusinessHeroIdle } from '@/components/biz/BusinessHeroIdle';
 import { VoiceClientFactory } from '@/services/voice/VoiceClientFactory';
 import { useAuth } from '@/lib/auth';
+import { buildConciergeBusinessFromSite } from '@/lib/conciergeBusinessContext';
 import type { OSCapabilities } from '@/hooks/useOSMenu';
 
 /**
@@ -65,9 +66,11 @@ export default function PublicBusinessPage() {
         if (!r.ok) throw new Error('Business not found');
         return r.json();
       })
-      .then(data => {
-        if (modeFromQr && !data.workspaceState) data.workspaceState = modeFromQr;
-        setSiteData(data);
+      .then((data: any) => {
+        const { readiness_gate_v1, ...sitePayload } = data;
+        void readiness_gate_v1; // Soft v1: server attaches readiness_gate_v1; strip so Concierge payload stays unchanged
+        if (modeFromQr && !sitePayload.workspaceState) sitePayload.workspaceState = modeFromQr;
+        setSiteData(sitePayload);
         setLoading(false);
       })
       .catch(err => { setError(err.message); setLoading(false); });
@@ -81,15 +84,12 @@ export default function PublicBusinessPage() {
     [siteData]
   );
 
-  const businessContext = useMemo(() => ({
-    id: siteData?.id ?? '',
-    placeId: siteData?.placeId || placeData.place_id || '',
-    name: placeData.name,
-    address: placeData.formatted_address || '',
-    hours: placeData.opening_hours?.weekday_text?.join(', '),
-    services: placeData.types,
-    primaryColor: '#3b82f6',
-  }), [siteData, placeData]);
+  const businessContext = useMemo(() => {
+    if (!siteData || !slug) {
+      return { id: '', placeId: '', name: '', address: '' };
+    }
+    return buildConciergeBusinessFromSite(siteData as Record<string, unknown>, slug);
+  }, [siteData, slug]);
 
   const agentConfig = useMemo(() => ({
     role: 'CONCIERGE',

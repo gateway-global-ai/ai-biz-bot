@@ -1,0 +1,191 @@
+# Integration capabilities — Cloudbeds (facades exposed as Gemini tools where wired)
+# Shape: docs-governance/canonical/INTEGRATION_CAPABILITY_GRAPH_SPEC_V1.md §5
+
+spec: integration_capabilities_bundle_v1
+version: "1.0.0"
+vendor_id: cloudbeds
+
+authority:
+  source_of_truth: registry-yaml/integration-capabilities/cloudbeds.v1.yaml
+  legacy_tool_registry: registry-yaml/cloudbeds-tool-registry.yaml
+
+capabilities:
+  - capability_id: cb_inventory_quote
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds
+    title: Quote available room types
+    description: >
+      Read-only availability and rates for date range; surfaces HOTEL_INVENTORY_GRID.
+    mutation_level: read
+    required_anchors: [property_id]
+    optional_anchors: []
+    required_inputs:
+      - name: checkIn
+        type_ref: date_iso
+        source: body
+      - name: checkOut
+        type_ref: date_iso
+        source: body
+    optional_inputs:
+      - name: adults
+        type_ref: integer
+        source: body
+    returns:
+      - name: rooms
+        type_ref: array
+      - name: bookingUrl
+        type_ref: string
+    endpoint_flow:
+      steps:
+        - endpoint_id: cb_v13_getAvailableRoomTypes
+          purpose: read
+          on_failure: retry_bounded
+      completion_predicate: Single GET succeeds with 200 and non-empty rooms or documented empty state.
+    side_effect_level: read
+    tool_name: get_hotel_inventory
+    operational_mode_allowlist: [RECEPTIONIST, SALES, MANAGER]
+    confidence: high
+    fallback:
+      mode: refuse
+      user_visible_message_ref: integration.fallback.inventory_unavailable
+      max_retries: 1
+
+  - capability_id: cb_guest_journey_lookup
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds
+    title: Guest journey from phone match
+    description: >
+      Classify guest journey using reservation search and phone digit match; OTP gate may apply.
+    mutation_level: read
+    required_anchors: [property_id]
+    optional_anchors: [reservation_id]
+    required_inputs:
+      - name: phone
+        type_ref: phone_e164_or_us10
+        source: body
+    optional_inputs: []
+    returns:
+      - name: journey
+        type_ref: string
+      - name: reservations
+        type_ref: array
+    endpoint_flow:
+      steps:
+        - endpoint_id: cb_v13_getReservations
+          purpose: list
+          on_failure: retry_bounded
+      completion_predicate: Reservations loaded and filtered by phone match policy in handler.
+    side_effect_level: read
+    tool_name: pms_lookup_guest_journey
+    operational_mode_allowlist: [RECEPTIONIST, SALES, MANAGER, CUSTOMER_SUPPORT, CUSTOMER_SERVICE, CASHIER]
+    confidence: high
+    fallback:
+      mode: degrade
+      user_visible_message_ref: integration.fallback.pms_lookup_failed
+      max_retries: 1
+
+  - capability_id: cb_housekeeping_status
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds
+    title: Housekeeping status
+    description: Read housekeeping grid for property; manager mode only at tool layer.
+    mutation_level: read
+    required_anchors: [property_id]
+    optional_anchors: []
+    required_inputs: []
+    optional_inputs:
+      - name: roomCondition
+        type_ref: string_enum
+        source: query
+    returns:
+      - name: data
+        type_ref: object
+    endpoint_flow:
+      steps:
+        - endpoint_id: cb_v13_getHousekeepingStatus
+          purpose: read
+          on_failure: retry_bounded
+      completion_predicate: GET returns housekeeping payload.
+    side_effect_level: read
+    tool_name: pms_get_housekeeping_status
+    operational_mode_allowlist: [MANAGER]
+    confidence: high
+    fallback:
+      mode: refuse
+      user_visible_message_ref: integration.fallback.hk_unavailable
+      max_retries: 1
+
+  - capability_id: cb_hotel_dashboard
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds
+    title: Operational dashboard snapshot
+    description: Occupancy and arrivals/departures for a date; manager mode only at tool layer.
+    mutation_level: read
+    required_anchors: [property_id]
+    optional_anchors: []
+    required_inputs: []
+    optional_inputs:
+      - name: date
+        type_ref: date_iso
+        source: query
+    returns:
+      - name: data
+        type_ref: object
+    endpoint_flow:
+      steps:
+        - endpoint_id: cb_v13_getDashboard
+          purpose: read
+          on_failure: retry_bounded
+      completion_predicate: GET returns dashboard payload.
+    side_effect_level: read
+    tool_name: pms_get_hotel_dashboard
+    operational_mode_allowlist: [MANAGER]
+    confidence: high
+    fallback:
+      mode: refuse
+      user_visible_message_ref: integration.fallback.dashboard_unavailable
+      max_retries: 1
+
+  - capability_id: cb_post_reservation
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds
+    title: Create reservation
+    description: >
+      Write path for new reservation; requires OTP verification policy; not yet a declared Gemini tool.
+    mutation_level: write
+    required_anchors: [property_id, room_type_id]
+    optional_anchors: [guest_id]
+    required_inputs:
+      - name: startDate
+        type_ref: date_iso
+        source: body
+      - name: endDate
+        type_ref: date_iso
+        source: body
+      - name: guestFirstName
+        type_ref: string
+        source: body
+      - name: guestLastName
+        type_ref: string
+        source: body
+      - name: guestEmail
+        type_ref: string
+        source: body
+    optional_inputs: []
+    returns:
+      - name: reservationID
+        type_ref: string
+    endpoint_flow:
+      steps:
+        - endpoint_id: cb_v13_postReservation
+          purpose: create
+          on_failure: human_handoff
+      completion_predicate: POST returns reservation identifier or structured error.
+    side_effect_level: financial
+    tool_name: null
+    operational_mode_allowlist: [SALES, CASHIER]
+    confidence: medium
+    fallback:
+      mode: human_handoff
+      user_visible_message_ref: integration.fallback.booking_handoff
+      max_retries: 0

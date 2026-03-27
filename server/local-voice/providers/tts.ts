@@ -70,3 +70,47 @@ export async function streamKokoroTTS(ws: WebSocket, text: string): Promise<void
     clearTimeout(timeout);
   }
 }
+
+/**
+ * Streaming PCM chunk generator for the sovereign Twilio pipeline.
+ *
+ * Yields raw 16-bit PCM chunks at 24kHz as they stream from the Kokoro sidecar.
+ * The caller is responsible for resampling (24kHz → 8kHz) and μ-law encoding
+ * before forwarding each chunk to Twilio — enabling true TTFB streaming with
+ * zero buffering.
+ */
+export async function* streamKokoroPCMChunks(
+  text: string
+): AsyncGenerator<Buffer, void, unknown> {
+  const config = getLocalVoiceConfig();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+
+  try {
+    const response = await fetch(`${config.pythonSidecarBaseUrl}/synthesize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`TTS sidecar returned ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error("TTS sidecar returned no audio stream.");
+    }
+
+    const reader = response.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value?.length) {
+        yield Buffer.from(value);
+      }
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}

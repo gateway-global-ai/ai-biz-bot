@@ -2775,7 +2775,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
     };
   }
 
-  function resolvePublicVoiceStreamUrl(req: any): string {
+  function resolvePublicVoiceStreamUrl(req: any, siteConfigId?: string | null): string {
     const appUrl = process.env.APP_URL;
     const appHost = appUrl
       ? (() => {
@@ -2797,6 +2797,14 @@ Be friendly and make them feel welcome! This is their first experience with Gate
 
     if (!host || host.includes("localhost")) {
       throw new Error("Public voice stream host is not configured. Set APP_URL to your public HTTPS domain.");
+    }
+
+    // Feature flag: route to sovereign local pipeline instead of Gemini cloud
+    if (process.env.LOCAL_VOICE_TWILIO_STREAM === "true") {
+      const sovereignUrl = `wss://${host}/ws/twilio-sovereign`;
+      return siteConfigId
+        ? `${sovereignUrl}?siteConfigId=${encodeURIComponent(siteConfigId)}`
+        : sovereignUrl;
     }
 
     return `wss://${host}/ws/voice-stream`;
@@ -2862,7 +2870,7 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       }
       
       // Twilio must receive a public WSS endpoint (never localhost).
-      const streamUrl = resolvePublicVoiceStreamUrl(req);
+      const streamUrl = resolvePublicVoiceStreamUrl(req, siteConfigId);
       
       console.log(`[Voice] Stream URL: ${streamUrl}, siteConfigId: ${siteConfigId ?? 'none'}`);
       
@@ -2903,6 +2911,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       <Parameter name="agentName" value="${escapeXml(agentName)}"/>
       <Parameter name="systemPrompt" value="${escapeXml(effectiveVoicePrompt)}"/>
       ${siteConfigId ? `<Parameter name="siteConfigId" value="${escapeXml(siteConfigId)}"/>` : ''}
+      <Parameter name="callerId" value="${escapeXml(String(From ?? "Unknown"))}"/>
+      <Parameter name="callSid" value="${escapeXml(String(CallSid ?? ""))}"/>
+      <Parameter name="dialedNumber" value="${escapeXml(String(To ?? ""))}"/>
     </Stream>
   </Connect>
 </Response>`);
@@ -3093,7 +3104,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
         }
       }
 
-      const streamUrl = resolvePublicVoiceStreamUrl(req);
+      // Pass siteConfigId into the WSS URL so /ws/twilio-sovereign can resolve promptCompiler
+      // context (matches /webhook/voice/stream; Twilio <Parameter> alone is not read by sovereign).
+      const streamUrl = resolvePublicVoiceStreamUrl(req, siteConfigId);
 
       // Bail-specific system prompt injected via custom parameter so voiceStream.ts
       // can use it in the Gemini setup message.
@@ -3123,6 +3136,9 @@ Be friendly and make them feel welcome! This is their first experience with Gate
       <Parameter name="ptt"          value="1"/>
       ${siteConfigId ? `<Parameter name="siteConfigId" value="${escapeXml(siteConfigId)}"/>` : ""}
       <Parameter name="systemPrompt" value="${escapeXml(decodeURIComponent(jailPrompt))}"/>
+      <Parameter name="callerId" value="${escapeXml(String(From ?? "Unknown"))}"/>
+      <Parameter name="callSid" value="${escapeXml(String(CallSid ?? ""))}"/>
+      <Parameter name="dialedNumber" value="${escapeXml(String(To ?? ""))}"/>
     </Stream>
   </Connect>
   <Say>The call has ended. Goodbye.</Say>

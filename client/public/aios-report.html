@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Governed AI Operating Systems: Enterprise Architecture Report</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  body {
+    background-color: #0f172a;
+    color: #f8fafc;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  .glass-card {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+    border-radius: 0.75rem;
+  }
+  .chart-container {
+    position: relative;
+    width: 100%;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+    height: 40vh;
+    max-height: 400px;
+    min-height: 300px;
+  }
+  @media (max-width: 768px) {
+    .chart-container {
+      height: 35vh;
+      max-height: 300px;
+    }
+  }
+  .node-box {
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    text-align: center;
+    font-weight: bold;
+    color: white;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+  }
+  .arrow-down {
+    text-align: center;
+    font-size: 1.5rem;
+    color: #94a3b8;
+    margin: 0.5rem 0;
+  }
+  .gradient-text {
+    background: linear-gradient(to right, #22d3ee, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  /* Simple loading animation */
+  @keyframes pulse-opacity {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .animate-pulse-custom {
+    animation: pulse-opacity 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+</style>
+</head>
+<body class="antialiased p-4 md:p-8">
+
+<div class="max-w-7xl mx-auto space-y-12">
+
+  <header class="text-center space-y-4 py-12 border-b border-slate-700">
+    <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight gradient-text">The Governed AI OS</h1>
+    <p class="text-xl md:text-2xl text-slate-300 max-w-3xl mx-auto">Why Enterprise AI Fails at Scale, and the Architecture Required for Predictable, Governed Autonomy.</p>
+    <div class="inline-block mt-4 px-4 py-1 bg-slate-800 rounded-full text-cyan-400 font-mono text-sm border border-cyan-900">
+      SYSTEM DESIGN MANIFESTO v1.0
+    </div>
+  </header>
+
+  <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+    <div class="space-y-4">
+      <h2 class="text-3xl font-bold text-white">The Reality of Enterprise AI</h2>
+      <p class="text-slate-300 text-lg leading-relaxed">
+        The industry is experiencing a crisis of deployment. While prototype capabilities dazzle in sandbox environments, translating these into production-grade enterprise systems yields catastrophic failure rates. The data reveals a stark reality: the vast majority of GenAI initiatives yield zero measurable ROI. We are trapped in the "Pilot Phase," unable to scale due to fundamental architectural flaws, not model limitations.
+      </p>
+      <div class="grid grid-cols-2 gap-4 mt-6">
+        <div class="glass-card p-4 text-center">
+          <div class="text-3xl font-bold text-rose-500">~95%</div>
+          <div class="text-sm text-slate-400 mt-1">Enterprise GenAI ROI Failure</div>
+        </div>
+        <div class="glass-card p-4 text-center">
+          <div class="text-3xl font-bold text-cyan-400">10-15%</div>
+          <div class="text-sm text-slate-400 mt-1">Pilot-to-Production Conversion</div>
+        </div>
+      </div>
+    </div>
+    <div class="glass-card p-6">
+      <h3 class="text-xl font-semibold mb-4 text-center text-slate-200">Scale of AI Initiative Failures</h3>
+      <div class="chart-container">
+        <canvas id="failureRatesChart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <section class="space-y-8">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+      <div class="glass-card p-6 lg:order-2">
+        <div class="space-y-4">
+          <h2 class="text-3xl font-bold text-white">Taxonomy of System Failure</h2>
+          <p class="text-slate-300 text-lg leading-relaxed">
+            AI failures are rarely model failures. The root causes lie in governance, integration, and system design. "Invisible failures" occur when models silently degrade or produce incorrect outputs that go unflagged. When prompt engineering replaces true software architecture, systems succumb to "Agent Drift," losing scope and producing non-deterministic chaos across enterprise environments.
+          </p>
+          <ul class="space-y-2 mt-4 text-slate-300">
+            <li class="flex items-start"><span class="text-rose-500 mr-2">&#9632;</span> Governance Gaps: Lack of boundaries and auditability.</li>
+            <li class="flex items-start"><span class="text-purple-500 mr-2">&#9632;</span> System Integration: Workflow misalignment with legacy systems.</li>
+            <li class="flex items-start"><span class="text-cyan-500 mr-2">&#9632;</span> Orchestration: Failure to track and route agent tasks.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="glass-card p-6 lg:order-1">
+        <h3 class="text-xl font-semibold mb-4 text-center text-slate-200">Root Causes of Enterprise AI Failure</h3>
+        <div class="chart-container">
+          <canvas id="failureTaxonomyChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ✨ GEMINI INTEGRATION: RISK ANALYZER -->
+    <div class="glass-card p-6 border-t-4 border-t-rose-500 bg-slate-800/80">
+      <div class="flex flex-col md:flex-row gap-6 items-start">
+        <div class="flex-1 space-y-4 w-full">
+          <h3 class="text-2xl font-bold text-white">✨ AI Architecture Risk Analyzer</h3>
+          <p class="text-slate-300 text-sm">
+            Powered by Gemini LLM. Describe your current or planned AI architecture. The system will evaluate it against Governed OS principles and return a structured JSON risk assessment.
+          </p>
+          <textarea id="riskInput" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-200 focus:outline-none focus:border-rose-500 transition-colors placeholder-slate-500 resize-none" rows="3" placeholder="e.g., We use a central GPT-4 API endpoint with a large system prompt to dynamically route user queries to different internal SQL databases..."></textarea>
+          <button id="analyzeBtn" onclick="analyzeArchitectureRisk()" class="bg-rose-600 hover:bg-rose-500 text-white px-6 py-2 rounded-lg font-semibold transition-all shadow-lg hover:shadow-rose-500/25">
+            ✨ Analyze Governance Risk
+          </button>
+        </div>
+        
+        <div class="flex-1 w-full min-h-[150px] bg-slate-900 rounded-lg border border-slate-700 p-4 relative overflow-hidden">
+          <div id="riskLoading" class="hidden absolute inset-0 flex items-center justify-center bg-slate-900/90 z-10">
+            <div class="text-rose-400 font-mono animate-pulse-custom">Analyzing vulnerabilities...</div>
+          </div>
+          <div id="riskInitial" class="h-full flex items-center justify-center text-slate-500 font-mono text-sm text-center">
+            Awaiting architecture description...<br/>Results will be structured via schema enforcement.
+          </div>
+          <div id="riskResults" class="hidden space-y-3">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+              <span class="text-slate-300 font-semibold text-sm uppercase tracking-wider">Risk Score</span>
+              <span id="riskScoreVal" class="font-mono text-xl font-bold"></span>
+            </div>
+            <div>
+              <span class="text-slate-400 text-xs uppercase tracking-wider block mb-1">Vulnerabilities Detected</span>
+              <ul id="riskVulns" class="list-disc pl-4 text-sm text-slate-300 space-y-1"></ul>
+            </div>
+            <div class="pt-2">
+              <span class="text-slate-400 text-xs uppercase tracking-wider block mb-1">Architectural Recommendation</span>
+              <p id="riskRec" class="text-sm text-cyan-400 bg-slate-800 p-2 rounded border border-slate-700"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="glass-card p-8">
+    <div class="text-center max-w-3xl mx-auto mb-10">
+      <h2 class="text-3xl font-bold text-white mb-4">The "Cursor Problem" vs. Governed Architecture</h2>
+      <p class="text-slate-300 text-lg leading-relaxed">
+        Ungoverned agent systems rely on LLMs to infer their own scope. This results in mixed responsibilities and "puppet behavior" requiring constant human intervention. A Governed AI OS enforces jurisdiction, tracks execution, and validates outputs against strict schemas.
+      </p>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div>
+        <h3 class="text-xl font-semibold mb-4 text-center text-rose-400">Ungoverned Agents</h3>
+        <ul class="space-y-3 text-slate-300 bg-slate-800/50 p-6 rounded-lg border border-rose-900/50">
+          <li>&#10006; Agents infer scope dynamically</li>
+          <li>&#10006; No domain jurisdiction exists</li>
+          <li>&#10006; Prompts replace architecture</li>
+          <li>&#10006; Non-deterministic outputs</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="text-xl font-semibold mb-4 text-center text-cyan-400">Governed AI OS</h3>
+        <ul class="space-y-3 text-slate-300 bg-slate-800/50 p-6 rounded-lg border border-cyan-900/50">
+          <li>&#10004; Strict domain constraints</li>
+          <li>&#10004; Mandatory orchestration tracking</li>
+          <li>&#10004; Structured outputs (Schema enforced)</li>
+          <li>&#10004; Review gates prevent autonomous drift</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-8">
+      <div class="chart-container h-[50vh] max-h-[500px]">
+        <canvas id="architectureComparisonChart"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <section class="space-y-8">
+    <div class="text-center max-w-3xl mx-auto">
+      <h2 class="text-3xl font-bold text-white mb-4">Target Model: The Governed AI OS Architecture</h2>
+      <p class="text-slate-300 text-lg leading-relaxed">
+        We propose a strict Two-Plane Model separating the Customer-Facing Runtime from the Internal Worker Runtime. Execution follows a deterministic Node-Based Interaction Model, ensuring traceability and context compression at every step.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div class="glass-card p-8 flex flex-col justify-center">
+        <h3 class="text-2xl font-bold text-white mb-6 text-center">Node-Based Interaction Flow</h3>
+        
+        <div class="w-full max-w-sm mx-auto space-y-2">
+          <div class="node-box bg-slate-800 border-2 border-slate-600">User Input / Node</div>
+          <div class="arrow-down">&#8595;</div>
+          <div class="node-box" style="background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);">Router Matrix (Jurisdiction Check)</div>
+          <div class="arrow-down">&#8595;</div>
+          <div class="node-box" style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);">Orchestrator (Run Tracking)</div>
+          <div class="arrow-down">&#8595;</div>
+          <div class="node-box" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">Context Injection (RAG Compression)</div>
+          <div class="arrow-down">&#8595;</div>
+          <div class="node-box" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">Model Execution & Schema Validation</div>
+        </div>
+      </div>
+
+      <div class="space-y-6">
+        <div class="glass-card p-6 border-l-4 border-l-cyan-500">
+          <h4 class="text-xl font-bold text-cyan-400 mb-2">Plane 1: Customer-Facing</h4>
+          <p class="text-slate-300 text-sm">A strict, heavily guardrailed environment. Typically utilizes a highly aligned, generalized model. Operates under absolute review gates with zero autonomous execution capabilities beyond approved dialog trees.</p>
+        </div>
+        <div class="glass-card p-6 border-l-4 border-l-purple-500">
+          <h4 class="text-xl font-bold text-purple-400 mb-2">Plane 2: Internal Worker</h4>
+          <p class="text-slate-300 text-sm">The engine room. Utilizes specialized, localized models (e.g., Qwen) for discrete tasks. Local does not mean weaker; it means deterministic and controllable. These agents never face the user directly.</p>
+        </div>
+        <div class="glass-card p-6 border-l-4 border-l-amber-500">
+          <h4 class="text-xl font-bold text-amber-400 mb-2">Execution Principles</h4>
+          <p class="text-slate-300 text-sm">Every action requires domain authorization. Outputs are treated as contracts and must pass schema validation. Any non-compliant output is rejected by the orchestration layer before it impacts downstream systems.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="glass-card p-8">
+    <h2 class="text-3xl font-bold text-center text-white mb-10">The 4 Pillars of Governance Design</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      
+      <div class="bg-slate-800/50 p-6 rounded-xl border border-slate-700 hover:border-cyan-500 transition-colors">
+        <div class="text-cyan-400 text-3xl mb-4 font-mono">01</div>
+        <h3 class="text-lg font-bold text-white mb-2">Model Governance</h3>
+        <p class="text-sm text-slate-400">Prevent model sprawl across the enterprise. Enforce strict runtime separation and explicitly control inference paths based on task risk and data classification.</p>
+      </div>
+
+      <div class="bg-slate-800/50 p-6 rounded-xl border border-slate-700 hover:border-purple-500 transition-colors">
+        <div class="text-purple-400 text-3xl mb-4 font-mono">02</div>
+        <h3 class="text-lg font-bold text-white mb-2">Agent Governance</h3>
+        <p class="text-sm text-slate-400">Establish impenetrable domain boundaries. Agents execute under role-based access controls with hard stops preventing cross-domain semantic drift.</p>
+      </div>
+
+      <div class="bg-slate-800/50 p-6 rounded-xl border border-slate-700 hover:border-rose-500 transition-colors">
+        <div class="text-rose-400 text-3xl mb-4 font-mono">03</div>
+        <h3 class="text-lg font-bold text-white mb-2">Execution Governance</h3>
+        <p class="text-sm text-slate-400">Mandate orchestration tracking for every token generated. Deploy real-time violation detection systems linked to immutable audit logs allowing full replayability.</p>
+      </div>
+
+      <div class="bg-slate-800/50 p-6 rounded-xl border border-slate-700 hover:border-emerald-500 transition-colors">
+        <div class="text-emerald-400 text-3xl mb-4 font-mono">04</div>
+        <h3 class="text-lg font-bold text-white mb-2">Output Governance</h3>
+        <p class="text-sm text-slate-400">Treat outputs as APIs. Implement structured output contracts and rigorous schema validation. Treat malformed AI generation as a fatal system error.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+    <div class="glass-card p-6">
+      <h3 class="text-xl font-semibold mb-4 text-center text-slate-200">Local Plane vs Public Plane Efficacy</h3>
+      <div class="chart-container">
+        <canvas id="localPlaneChart"></canvas>
+      </div>
+    </div>
+    <div class="space-y-4">
+      <h2 class="text-3xl font-bold text-white">Strategic Value of Local Agent Planes</h2>
+      <p class="text-slate-300 text-lg leading-relaxed">
+        Deploying local models for internal orchestration tasks represents a massive strategic advantage. While massive public models offer broad reasoning, local models provide a deterministic, highly controllable execution layer. By insulating the core logic from external API latency and provider updates, enterprises significantly reduce operational risk and increase execution velocity. Internal agents must remain securely within the local plane, processing data without exposure.
+      </p>
+    </div>
+  </section>
+
+  <section class="glass-card p-8 bg-gradient-to-br from-slate-900 to-slate-800 border-t-4 border-t-emerald-500">
+    <div class="text-center max-w-3xl mx-auto mb-10">
+      <h2 class="text-3xl font-bold text-white mb-4">System Design Playbook</h2>
+      <p class="text-slate-300 text-lg">Transitioning from "Prompting" to "Programming AI Systems."</p>
+    </div>
+    
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <div>
+        <h3 class="text-xl font-bold text-white border-b border-slate-700 pb-2 mb-4">Mandatory Architecture Rules</h3>
+        <ul class="space-y-4">
+          <li class="flex items-start">
+            <span class="text-cyan-400 font-bold mr-3">1.</span>
+            <div>
+              <strong class="text-slate-200 block">YAML-Based Definitions</strong>
+              <span class="text-sm text-slate-400">System states, constraints, and tool access must be declaratively defined in code, not loosely requested in system prompts.</span>
+            </div>
+          </li>
+          <li class="flex items-start">
+            <span class="text-cyan-400 font-bold mr-3">2.</span>
+            <div>
+              <strong class="text-slate-200 block">API-First Architecture</strong>
+              <span class="text-sm text-slate-400">The AI OS must interface through established APIs. Direct database access by agent reasoning models is strictly prohibited.</span>
+            </div>
+          </li>
+          <li class="flex items-start">
+            <span class="text-cyan-400 font-bold mr-3">3.</span>
+            <div>
+              <strong class="text-slate-200 block">Prompt Compilation</strong>
+              <span class="text-sm text-slate-400">Raw prompts are deprecated. Use prompt compilers that dynamically assemble context, constraints, and jurisdiction headers securely.</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- ✨ GEMINI INTEGRATION: DYNAMIC YAML GENERATOR -->
+      <div class="bg-slate-950 p-6 rounded-lg border border-slate-800 flex flex-col relative h-full min-h-[350px]">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+           <div class="text-emerald-400 text-sm font-semibold">✨ Dynamic Governance Policy Generator</div>
+        </div>
+        <div class="flex gap-2 mb-4">
+          <input type="text" id="agentRoleInput" class="flex-1 bg-slate-900 border border-slate-700 rounded p-2 text-slate-200 focus:outline-none focus:border-emerald-500 text-sm placeholder-slate-600 font-sans" placeholder="e.g., Patient Medical Record Summarizer">
+          <button onclick="generatePolicy()" id="generatePolicyBtn" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded text-sm font-semibold transition-colors shadow-lg hover:shadow-emerald-500/25 whitespace-nowrap">Generate</button>
+        </div>
+        
+        <div class="flex-1 bg-slate-900 border border-slate-800 rounded p-4 overflow-auto relative font-mono text-sm text-blue-300">
+          <div id="policyLoading" class="hidden absolute inset-0 flex items-center justify-center bg-slate-900/90 z-10">
+            <div class="text-emerald-400 animate-pulse-custom">Compiling strict constraints...</div>
+          </div>
+          <pre id="policyOutput" class="whitespace-pre-wrap m-0"># Enter an agent role above to generate 
+# a strict YAML execution policy using
+# the Gemini Governance LLM.
+
+agent_execution_policy:
+  id: "awaiting_input"
+  domain: "unassigned"
+  allowed_tools: []
+  cross_domain_calls: false
+  output_format: "application/json"
+  schema_contract: "none"
+  on_schema_failure:
+    action: "halt_and_escalate"
+    log_level: "critical"</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="text-center py-8 text-slate-500 text-sm">
+    <p>Platform Economics of Governed AI Ecosystems: Governance is the ultimate enterprise moat.</p>
+  </footer>
+
+</div>
+
+<script>
+  // --- SERVER PROXY INTEGRATION ---
+  // API calls route through /api/report/* — GEMINI_API_KEY stays server-side.
+
+  // Feature 1: Architecture Risk Analyzer
+  async function analyzeArchitectureRisk() {
+    const input = document.getElementById('riskInput').value.trim();
+    if (!input) return;
+
+    const btn = document.getElementById('analyzeBtn');
+    const loading = document.getElementById('riskLoading');
+    const initial = document.getElementById('riskInitial');
+    const results = document.getElementById('riskResults');
+    
+    btn.disabled = true;
+    btn.classList.add('opacity-50');
+    initial.classList.add('hidden');
+    results.classList.add('hidden');
+    loading.classList.remove('hidden');
+
+    try {
+      const resp = await fetch('/api/report/analyze-risk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ architecture: input }),
+      });
+      if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+      const data = await resp.json();
+      
+      const scoreEl = document.getElementById('riskScoreVal');
+      scoreEl.textContent = data.score;
+      scoreEl.className = 'font-mono text-xl font-bold';
+      if(data.score === 'Critical' || data.score === 'High') scoreEl.classList.add('text-rose-500');
+      else if(data.score === 'Medium') scoreEl.classList.add('text-amber-500');
+      else scoreEl.classList.add('text-emerald-500');
+
+      const vulnsEl = document.getElementById('riskVulns');
+      vulnsEl.innerHTML = data.vulnerabilities.map(v => `<li>${v}</li>`).join('');
+      document.getElementById('riskRec').textContent = data.recommendation;
+      
+      loading.classList.add('hidden');
+      results.classList.remove('hidden');
+    } catch (e) {
+      alert("Analysis failed. Please try again.");
+      loading.classList.add('hidden');
+      initial.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('opacity-50');
+    }
+  }
+
+  // Feature 2: Dynamic Policy Generator
+  async function generatePolicy() {
+    const role = document.getElementById('agentRoleInput').value.trim();
+    if (!role) return;
+
+    const btn = document.getElementById('generatePolicyBtn');
+    const loading = document.getElementById('policyLoading');
+    const output = document.getElementById('policyOutput');
+
+    btn.disabled = true;
+    btn.classList.add('opacity-50');
+    loading.classList.remove('hidden');
+    output.style.opacity = '0.3';
+
+    try {
+      const resp = await fetch('/api/report/generate-policy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
+      if (!resp.ok) throw new Error(`Server error ${resp.status}`);
+      const data = await resp.json();
+      
+      output.textContent = data.yaml;
+      output.innerHTML = output.innerHTML
+        .replace(/(agent_execution_policy|on_schema_failure):/g, '<span class="text-purple-400">$1:</span>')
+        .replace(/([a-z_]+):/g, '<span class="text-slate-300">$1:</span>')
+        .replace(/(".*?")/g, '<span class="text-blue-300">$1</span>')
+        .replace(/(true|false|\[\])/g, '<span class="text-rose-400">$1</span>');
+    } catch (e) {
+      output.textContent = "# Error generating policy.\n# Please verify AI OS connection.";
+    } finally {
+      loading.classList.add('hidden');
+      output.style.opacity = '1';
+      btn.disabled = false;
+      btn.classList.remove('opacity-50');
+    }
+  }
+
+
+  // --- EXISTING CHART.JS LOGIC ---
+  function splitLabel(label) {
+    if (label.length <= 16) return label;
+    let words = label.split(' ');
+    let lines = [];
+    let currentLine = '';
+    for (let word of words) {
+      if ((currentLine + word).length > 16) {
+        if (currentLine) lines.push(currentLine.trim());
+        currentLine = word + ' ';
+      } else {
+        currentLine += word + ' ';
+      }
+    }
+    if (currentLine) lines.push(currentLine.trim());
+    return lines;
+  }
+
+  const tooltipCfg = {
+    callbacks: {
+      title: function(items) {
+        const item = items[0];
+        let lbl = item.chart.data.labels[item.dataIndex];
+        if (Array.isArray(lbl)) {
+          return lbl.join(' ');
+        }
+        return lbl;
+      }
+    }
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    color: '#cbd5e1',
+    plugins: {
+      legend: { labels: { color: '#cbd5e1' } },
+      tooltip: tooltipCfg
+    }
+  };
+
+  const scaleOptions = {
+    x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+    y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+  };
+
+  const fRatesCanvas = document.getElementById('failureRatesChart').getContext('2d');
+  new Chart(fRatesCanvas, {
+    type: 'bar',
+    data: {
+      labels: [
+        splitLabel("Enterprise GenAI ROI Failure"),
+        splitLabel("General AI Project Failure"),
+        splitLabel("Agentic System Failure"),
+        splitLabel("Pilot-to-Production Conversion")
+      ],
+      datasets: [{
+        label: 'Failure / Friction Rate (%)',
+        data: [95, 75, 45, 12],
+        backgroundColor: ['#f43f5e', '#ef4444', '#f97316', '#06b6d4'],
+        borderRadius: 6
+      }]
+    },
+    options: {
+      ...chartOptions,
+      scales: scaleOptions,
+      plugins: {
+        ...chartOptions.plugins,
+        legend: { display: false }
+      }
+    }
+  });
+
+  const fTaxCanvas = document.getElementById('failureTaxonomyChart').getContext('2d');
+  new Chart(fTaxCanvas, {
+    type: 'doughnut',
+    data: {
+      labels: [
+        splitLabel("Governance & Boundary Gaps"),
+        splitLabel("System Integration Flaws"),
+        splitLabel("Workflow Misalignment"),
+        splitLabel("Orchestration Routing Failures"),
+        splitLabel("Core Model Layer Failures")
+      ],
+      datasets: [{
+        data: [35, 25, 20, 15, 5],
+        backgroundColor: ['#f43f5e', '#8b5cf6', '#06b6d4', '#f59e0b', '#10b981'],
+        borderWidth: 0,
+        hoverOffset: 10
+      }]
+    },
+    options: {
+      ...chartOptions,
+      cutout: '65%'
+    }
+  });
+
+  const archCompCanvas = document.getElementById('architectureComparisonChart').getContext('2d');
+  new Chart(archCompCanvas, {
+    type: 'radar',
+    data: {
+      labels: [
+        splitLabel("Determinism & Predictability"),
+        splitLabel("Enterprise Scalability"),
+        splitLabel("Security & Access Control"),
+        splitLabel("Strict Scope Adherence"),
+        splitLabel("Auditability & Traceability")
+      ],
+      datasets: [
+        {
+          label: 'Governed AI OS',
+          data: [95, 90, 100, 100, 95],
+          backgroundColor: 'rgba(6, 182, 212, 0.3)',
+          borderColor: '#06b6d4',
+          pointBackgroundColor: '#06b6d4',
+          borderWidth: 3
+        },
+        {
+          label: 'Ungoverned Agents (Cursor-Style)',
+          data: [20, 30, 15, 10, 5],
+          backgroundColor: 'rgba(244, 63, 94, 0.3)',
+          borderColor: '#f43f5e',
+          pointBackgroundColor: '#f43f5e',
+          borderWidth: 3
+        }
+      ]
+    },
+    options: {
+      ...chartOptions,
+      scales: {
+        r: {
+          angleLines: { color: '#334155' },
+          grid: { color: '#334155' },
+          pointLabels: { color: '#cbd5e1', font: { size: 12 } },
+          ticks: { display: false, min: 0, max: 100 }
+        }
+      }
+    }
+  });
+
+  const lpCanvas = document.getElementById('localPlaneChart').getContext('2d');
+  new Chart(lpCanvas, {
+    type: 'polarArea',
+    data: {
+      labels: [
+        splitLabel("Data Privacy Guarantee"),
+        splitLabel("Execution Latency"),
+        splitLabel("Cost Predictability"),
+        splitLabel("Schema Enforcement"),
+        splitLabel("Broad Reasoning Capability")
+      ],
+      datasets: [{
+        label: 'Internal Local Plane Advantage',
+        data: [100, 85, 90, 95, 40],
+        backgroundColor: [
+          'rgba(16, 185, 129, 0.7)',
+          'rgba(139, 92, 246, 0.7)',
+          'rgba(6, 182, 212, 0.7)',
+          'rgba(245, 158, 11, 0.7)',
+          'rgba(244, 63, 94, 0.7)'
+        ],
+        borderWidth: 1,
+        borderColor: '#1e293b'
+      }]
+    },
+    options: {
+      ...chartOptions,
+      scales: {
+        r: {
+          grid: { color: '#334155' },
+          ticks: { display: false }
+        }
+      }
+    }
+  });
+
+</script>
+</body>
+</html>
