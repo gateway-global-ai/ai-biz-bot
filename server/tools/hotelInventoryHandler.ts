@@ -3,11 +3,13 @@
  * If the site has a Cloudbeds PMS integration, uses Cloudbeds; otherwise GRN for platform-linked hotels.
  */
 
+import { integrationBlockToSafeMessage } from "@shared/integrationExecution";
 import { db } from "../db";
 import { b2bHotels, platformBusinessMap, siteConfigs, sitePmsIntegrations } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
 import { fetchCloudbedsAvailability } from "../routes/cloudbedsRoutes";
 import { getGrnAvailability, toGrnApiCode } from "../mcp-hotels-logic";
+import { getExecutionContext } from "../services/integrationCredentialBroker";
 
 export async function handleGetHotelInventory(args: {
   platformId?: string;
@@ -33,13 +35,31 @@ export async function handleGetHotelInventory(args: {
         )
       );
     if (pmsRow) {
-      const result = await fetchCloudbedsAvailability(pmsRow, {
-        checkIn: args.checkIn,
-        checkOut: args.checkOut,
-        adults: args.guests ?? 2,
-        children: 0,
-        rooms: 1,
+      const exec = await getExecutionContext({
+        siteConfigId,
+        vendorId: "cloudbeds",
+        capabilityId: "cb_inventory_quote",
       });
+      if (!exec.ok) {
+        return {
+          success: false,
+          checkIn: args.checkIn,
+          checkOut: args.checkOut,
+          error: integrationBlockToSafeMessage(exec.block),
+          integrationBlockCode: exec.block.code,
+        };
+      }
+      const result = await fetchCloudbedsAvailability(
+        exec.pmsRow,
+        {
+          checkIn: args.checkIn,
+          checkOut: args.checkOut,
+          adults: args.guests ?? 2,
+          children: 0,
+          rooms: 1,
+        },
+        { authHeaders: exec.headers },
+      );
       if (result.success && result.rooms && args.roomFilter) {
         const roomFilterLower = args.roomFilter.toLowerCase();
         result.rooms = result.rooms.map((r) => ({

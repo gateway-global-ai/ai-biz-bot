@@ -17,6 +17,13 @@ env.local
 docs/knowledge-base/.env.local
 **/.env.local
 
+# Governance daily run outputs (npm run governance:daily); keep folder README only
+docs-governance/artifacts/daily/**
+!docs-governance/artifacts/daily/README.md
+
+# Generated shadcn.io catalog HTTP probe (npm run shadcn-io:health)
+docs-governance/artifacts/shadcn_io_catalog_health_report.json
+
 # Build artifacts
 *.log
 npm-debug.log*
@@ -55,3 +62,6 @@ reference/attached_assets/*.zip
 
 # Generated Nova RSA keys (dev only; add to Doppler, do not commit)
 .nova-keys-generated/
+
+# Runtime/generated uploads
+server/uploads/

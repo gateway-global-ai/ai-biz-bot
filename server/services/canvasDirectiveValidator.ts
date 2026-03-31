@@ -19,6 +19,8 @@ import { db } from '../db.js';
 import { visitorSessions } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
 import type {
+  CanvasActionPayload,
+  CanvasPatchPayload,
   CanvasSyscallEnvelope,
   CanvasSyscallError,
   CanvasSyscallErrorCode,
@@ -26,6 +28,8 @@ import type {
 } from '../../shared/canvasViewContract';
 import type { SiteRuntimeContext } from '../../shared/siteRuntimeContext';
 import { validateSyscallPayload } from './canvasPayloadSchemas';
+import type { IntentLoopDomainSnapshotV1 } from './intentLoopDomainSnapshot.js';
+import { parseIntentLoopDomainSnapshotFromBuyerJourney } from './intentLoopDomainSnapshot.js';
 
 // ── View registry — which views exist in the system ───────────────────────────
 
@@ -34,14 +38,85 @@ const REGISTERED_VIEW_IDS = new Set<CanvasViewId>([
   'support_home', 'disambiguation_menu', 'schedule', 'pricing_table', 'custom_card',
   'account_overview', 'identity_verify', 'phone_provisioning_form', 'agent_builder_form',
   'workspace_provisioning_form', 'agent_roster', 'knowledge_library_builder',
-  'aptitude_test_runner', 'dynamic',
+  'aptitude_test_runner', 'command_center', 'canvas_backgrounds', 'dynamic',
 ]);
+
+/** Palette ids for canvas.patch replace_component — must match GOVERNED_GENERATIVE_UI_SPEC.md */
+const ALLOWED_REPLACE_COMPONENT_TYPES = new Set([
+  'status_row',
+  'work_card',
+  'approval_chip',
+  'dynamic_frame',
+]);
+
+function validatePatchAllowlist(payload: unknown): string | null {
+  const p = payload as CanvasPatchPayload;
+  const ver = p.patchContractVersion ?? '1.0';
+  if (ver !== '1.0') {
+    return `Unsupported patchContractVersion: ${ver}`;
+  }
+  const ops = p.patchOps;
+  if (!Array.isArray(ops)) return null;
+  for (const op of ops) {
+    if (!op || typeof op !== 'object') continue;
+    if (op.op === 'replace_component') {
+      if (!ALLOWED_REPLACE_COMPONENT_TYPES.has(op.componentType)) {
+        return `replace_component.componentType '${op.componentType}' is not allowlisted`;
+      }
+    }
+  }
+  return null;
+}
+
+function validateActionContractVersion(payload: unknown): string | null {
+  const p = payload as CanvasActionPayload;
+  const ver = p.actionContractVersion ?? '1.0';
+  if (ver !== '1.0') {
+    return `Unsupported actionContractVersion: ${ver}`;
+  }
+  return null;
+}
 
 // ── Visitor security resolver ─────────────────────────────────────────────────
 
-interface ResolvedVisitorSecurity {
+export interface ResolvedVisitorSecurity {
   securityLevel: 'public' | 'verified' | 'staff' | 'admin';
   authState: 'anonymous' | 'identified' | 'authenticated';
+}
+
+/** Allowlisted buyer_journey.phase values (see shared/conversationGrounding.ts BuyerJourney). */
+const BUYER_JOURNEY_PHASES = new Set([
+  "awareness",
+  "consideration",
+  "demo",
+  "trial",
+  "activation",
+  "retention",
+]);
+
+function parseBuyerJourneyPhaseFromRow(buyerJourney: unknown): string | null {
+  if (!buyerJourney || typeof buyerJourney !== "object") return null;
+  const p = (buyerJourney as Record<string, unknown>).phase;
+  if (typeof p !== "string" || !BUYER_JOURNEY_PHASES.has(p)) return null;
+  return p;
+}
+
+/** Intent-loop / audit: raw DB value + whether a row was loaded (single query with resolution). */
+export interface VisitorSessionSecurityProbe {
+  sessionRowFound: boolean;
+  rawDbSecurityLevel: string | null;
+  /** Structured phase from visitor_sessions.buyer_journey when row loaded (observability only). */
+  buyerJourneyPhase?: string | null;
+  /**
+   * Phase B3 — allowlisted snapshot from buyer_journey JSON (`intent_loop_domain_v1`), same DB row as security.
+   * Absent unless server persisted PMS guest-journey classification on a trusted path.
+   */
+  intentLoopDomainSnapshot?: IntentLoopDomainSnapshotV1 | null;
+}
+
+interface VisitorSecurityResolution {
+  resolved: ResolvedVisitorSecurity;
+  probe: VisitorSessionSecurityProbe;
 }
 
 /**
@@ -51,9 +126,17 @@ interface ResolvedVisitorSecurity {
 async function resolveVisitorSecurity(
   visitorId: string | undefined,
   clientHint: CanvasSyscallEnvelope['security'],
-): Promise<ResolvedVisitorSecurity> {
+): Promise<VisitorSecurityResolution> {
+  const defaultProbe: VisitorSessionSecurityProbe = {
+    sessionRowFound: false,
+    rawDbSecurityLevel: null,
+  };
+
   if (!visitorId) {
-    return { securityLevel: 'public', authState: 'anonymous' };
+    return {
+      resolved: { securityLevel: 'public', authState: 'anonymous' },
+      probe: defaultProbe,
+    };
   }
 
   try {
@@ -61,13 +144,17 @@ async function resolveVisitorSecurity(
       .select({
         securityLevel: visitorSessions.securityLevel,
         verifiedPhone: visitorSessions.verifiedPhone,
+        buyerJourney: visitorSessions.buyerJourney,
       })
       .from(visitorSessions)
       .where(eq(visitorSessions.id, visitorId))
       .limit(1);
 
     if (rows.length === 0) {
-      return { securityLevel: 'public', authState: 'anonymous' };
+      return {
+        resolved: { securityLevel: 'public', authState: 'anonymous' },
+        probe: defaultProbe,
+      };
     }
 
     const raw = rows[0].securityLevel ?? 'anonymous';
@@ -76,7 +163,9 @@ async function resolveVisitorSecurity(
         ? 'verified'
         : raw === 'admin'
           ? 'admin'
-          : 'public';
+          : raw === 'staff'
+            ? 'staff'
+            : 'public';
     const verified = Boolean(rows[0].verifiedPhone);
     const authState: ResolvedVisitorSecurity['authState'] =
       securityLevel === 'admin' || securityLevel === 'verified' || verified
@@ -84,12 +173,23 @@ async function resolveVisitorSecurity(
         : 'anonymous';
 
     return {
-      securityLevel,
-      authState,
+      resolved: {
+        securityLevel,
+        authState,
+      },
+      probe: {
+        sessionRowFound: true,
+        rawDbSecurityLevel: raw,
+        buyerJourneyPhase: parseBuyerJourneyPhaseFromRow(rows[0].buyerJourney),
+        intentLoopDomainSnapshot: parseIntentLoopDomainSnapshotFromBuyerJourney(rows[0].buyerJourney),
+      },
     };
   } catch {
     // Fail safe — downgrade to public, never trust client hint on DB error
-    return { securityLevel: 'public', authState: 'anonymous' };
+    return {
+      resolved: { securityLevel: 'public', authState: 'anonymous' },
+      probe: defaultProbe,
+    };
   }
 }
 
@@ -134,6 +234,8 @@ export interface ValidationResult {
   error?: CanvasSyscallError;
   resolvedSecurity: ResolvedVisitorSecurity;
   allowedRuntimeActions: string[];
+  /** Populated after visitor security resolution (intent loop Phase B1 + audits). */
+  visitorSessionProbe: VisitorSessionSecurityProbe;
 }
 
 // ── Main validator ────────────────────────────────────────────────────────────
@@ -151,6 +253,7 @@ export async function validateCanvasSyscall(
       error: makeError('INVALID_SCHEMA', `Unsupported version: ${envelope.version}`, syscallId, false),
       resolvedSecurity: { securityLevel: 'public', authState: 'anonymous' },
       allowedRuntimeActions: [],
+      visitorSessionProbe: { sessionRowFound: false, rawDbSecurityLevel: null },
     };
   }
 
@@ -160,6 +263,7 @@ export async function validateCanvasSyscall(
       error: makeError('INVALID_SCHEMA', 'Missing required IDs (sessionId, siteConfigId, turnId)', syscallId, false),
       resolvedSecurity: { securityLevel: 'public', authState: 'anonymous' },
       allowedRuntimeActions: [],
+      visitorSessionProbe: { sessionRowFound: false, rawDbSecurityLevel: null },
     };
   }
 
@@ -170,11 +274,14 @@ export async function validateCanvasSyscall(
       error: makeError('INVALID_SCHEMA', `Unknown syscall type: ${syscall}`, syscallId, false),
       resolvedSecurity: { securityLevel: 'public', authState: 'anonymous' },
       allowedRuntimeActions: [],
+      visitorSessionProbe: { sessionRowFound: false, rawDbSecurityLevel: null },
     };
   }
 
   // ── Layer 4: Visitor security (must run before entitlement to use real level) ─
-  const resolvedSecurity = await resolveVisitorSecurity(visitorId, security);
+  const vsr = await resolveVisitorSecurity(visitorId, security);
+  const resolvedSecurity = vsr.resolved;
+  const visitorSessionProbe = vsr.probe;
   const allowedRuntimeActions = buildAllowedRuntimeActions(resolvedSecurity, siteRuntime);
 
   // ── Layer 2: Entitlement validation ─────────────────────────────────────────
@@ -196,6 +303,27 @@ export async function validateCanvasSyscall(
         ),
         resolvedSecurity,
         allowedRuntimeActions,
+        visitorSessionProbe,
+      };
+    }
+  }
+
+  if (syscall === 'canvas.patch') {
+    const pp = envelope.payload as { targetViewId?: string } | null;
+    const patchTarget = pp?.targetViewId;
+    if (patchTarget && !entitlements.allowedCanvasViews.includes(patchTarget)) {
+      return {
+        valid: false,
+        error: makeError(
+          'VIEW_NOT_ALLOWED',
+          `Patch target view '${patchTarget}' not allowed for plan '${entitlements.plan}'`,
+          syscallId,
+          true,
+          'welcome',
+        ),
+        resolvedSecurity,
+        allowedRuntimeActions,
+        visitorSessionProbe,
       };
     }
   }
@@ -215,6 +343,7 @@ export async function validateCanvasSyscall(
         ),
         resolvedSecurity,
         allowedRuntimeActions,
+        visitorSessionProbe,
       };
     }
   }
@@ -238,14 +367,16 @@ export async function validateCanvasSyscall(
         ),
         resolvedSecurity,
         allowedRuntimeActions,
+        visitorSessionProbe,
       };
     }
   }
 
   if (entitlements.restrictions?.provisioningLocked) {
     const provisioningViews = ['phone_provisioning_form', 'workspace_provisioning_form'];
-    const payload = envelope.payload as { viewId?: string } | null;
-    if (payload?.viewId && provisioningViews.includes(payload.viewId)) {
+    const pv = envelope.payload as { viewId?: string; targetViewId?: string } | null;
+    const affectedView = syscall === 'canvas.patch' ? pv?.targetViewId : pv?.viewId;
+    if (affectedView && provisioningViews.includes(affectedView)) {
       return {
         valid: false,
         error: makeError(
@@ -257,6 +388,7 @@ export async function validateCanvasSyscall(
         ),
         resolvedSecurity,
         allowedRuntimeActions,
+        visitorSessionProbe,
       };
     }
   }
@@ -264,12 +396,15 @@ export async function validateCanvasSyscall(
   // ── Layer 4 (continued): Visitor security per view ──────────────────────────
   const adminOnlyViews: CanvasViewId[] = [
     'agent_roster', 'knowledge_library_builder', 'aptitude_test_runner',
-    'workspace_provisioning_form', 'phone_provisioning_form',
+    'workspace_provisioning_form', 'phone_provisioning_form', 'command_center',
   ];
   const verifiedOnlyViews: CanvasViewId[] = ['account_overview', 'identity_verify', 'agent_builder_form'];
 
-  const payload = envelope.payload as { viewId?: CanvasViewId } | null;
-  const targetView = payload?.viewId;
+  const payloadForView = envelope.payload as { viewId?: CanvasViewId; targetViewId?: string } | null;
+  const targetView: CanvasViewId | undefined =
+    syscall === 'canvas.patch'
+      ? (payloadForView?.targetViewId as CanvasViewId | undefined)
+      : payloadForView?.viewId;
 
   if (targetView && adminOnlyViews.includes(targetView)) {
     if (resolvedSecurity.securityLevel !== 'admin' && resolvedSecurity.securityLevel !== 'staff') {
@@ -278,6 +413,7 @@ export async function validateCanvasSyscall(
         error: makeError('SECURITY_VIOLATION', `View '${targetView}' requires staff or admin access`, syscallId, true, 'identity_verify'),
         resolvedSecurity,
         allowedRuntimeActions,
+        visitorSessionProbe,
       };
     }
   }
@@ -289,6 +425,7 @@ export async function validateCanvasSyscall(
         error: makeError('SECURITY_VIOLATION', `View '${targetView}' requires verified access`, syscallId, true, 'identity_verify'),
         resolvedSecurity,
         allowedRuntimeActions,
+        visitorSessionProbe,
       };
     }
   }
@@ -300,6 +437,7 @@ export async function validateCanvasSyscall(
       error: makeError('VIEW_NOT_REGISTERED', `View '${targetView}' is not in the component registry`, syscallId, true, 'welcome'),
       resolvedSecurity,
       allowedRuntimeActions,
+      visitorSessionProbe,
     };
   }
 
@@ -320,8 +458,35 @@ export async function validateCanvasSyscall(
       ),
       resolvedSecurity,
       allowedRuntimeActions,
+      visitorSessionProbe,
     };
   }
 
-  return { valid: true, resolvedSecurity, allowedRuntimeActions };
+  if (syscall === 'canvas.patch') {
+    const patchErr = validatePatchAllowlist(envelope.payload);
+    if (patchErr) {
+      return {
+        valid: false,
+        error: makeError('PATCH_INVALID', patchErr, syscallId, true, 'welcome'),
+        resolvedSecurity,
+        allowedRuntimeActions,
+        visitorSessionProbe,
+      };
+    }
+  }
+
+  if (syscall === 'canvas.action') {
+    const actionVerErr = validateActionContractVersion(envelope.payload);
+    if (actionVerErr) {
+      return {
+        valid: false,
+        error: makeError('INVALID_SCHEMA', actionVerErr, syscallId, true),
+        resolvedSecurity,
+        allowedRuntimeActions,
+        visitorSessionProbe,
+      };
+    }
+  }
+
+  return { valid: true, resolvedSecurity, allowedRuntimeActions, visitorSessionProbe };
 }

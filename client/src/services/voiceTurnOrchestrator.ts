@@ -17,6 +17,11 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import {
+  BACKGROUND_SPEAKING_INSTRUCTIONS,
+  BACKGROUND_SPEECH_SUMMARY,
+  transcriptMatchesBackgroundPickerIntent,
+} from '../../../shared/backgroundPickerIntent';
 import type { VoiceTurnContext, PttSessionContext, PttRuntimeState } from '../../../shared/siteRuntimeContext';
 import type {
   CanvasSyscallEnvelope,
@@ -24,6 +29,10 @@ import type {
   CanvasRenderPayload,
   SpeechGroundingContext,
 } from '../../../shared/canvasViewContract';
+import type {
+  IntentLoopResolution,
+  IntentLoopResolveAuthorityTrace,
+} from '../../../shared/intentLoopContract';
 
 // ── Interruption signal ───────────────────────────────────────────────────────
 
@@ -55,6 +64,27 @@ type OrchestratorTurnState =
   | 'rendering_canvas'
   | 'planning_speech';
 
+/** Dev/demo: last canvas-control outcome for operator-visible mutation trace (see COMMAND_CENTER_SURFACE_SPEC_V1.md). */
+export interface CanvasSyscallTraceEntry {
+  at: number;
+  phase: 'canvas.resolve' | 'canvas.render_audit';
+  syscall: 'canvas.resolve' | 'canvas.render';
+  httpStatus: number;
+  ok: boolean;
+  syscallId?: string;
+  errorCode?: string;
+  message?: string;
+  latencyMs?: number;
+  resultSummary?: string;
+  /** Phase A: PII-free intent-loop line from server (`CanvasResolveResult.resolutionSummary`). */
+  resolutionSummary?: string;
+  /** Phase B: audit correlation id from server (`intentLoopResolution.resolutionId`). */
+  intentLoopResolutionId?: string;
+  /** Router vs merged authority (`intentLoopTrace` on `canvas.resolve`). */
+  routerSelectedViewId?: string;
+  finalSelectedViewId?: string;
+}
+
 // ── Main orchestrator ─────────────────────────────────────────────────────────
 
 export class VoiceTurnOrchestrator {
@@ -67,6 +97,8 @@ export class VoiceTurnOrchestrator {
 
   private turnState: OrchestratorTurnState = 'idle';
   private currentTurnId: string | null = null;
+
+  private canvasTraceListener: ((entry: CanvasSyscallTraceEntry) => void) | null = null;
 
   constructor() {
     this.runtimeState = {
@@ -91,6 +123,19 @@ export class VoiceTurnOrchestrator {
     this.turnState = 'idle';
     this.currentTurnId = null;
     this.recentTurns = [];
+  }
+
+  /** Optional listener for governed canvas syscall trace (dev / `?canvasTrace=1` only in UI). */
+  setCanvasTraceListener(cb: ((entry: CanvasSyscallTraceEntry) => void) | null): void {
+    this.canvasTraceListener = cb;
+  }
+
+  private emitCanvasTrace(entry: CanvasSyscallTraceEntry): void {
+    try {
+      this.canvasTraceListener?.(entry);
+    } catch (e) {
+      console.warn('[VoiceTurnOrchestrator] canvasTraceListener error', e);
+    }
   }
 
   // ── Barge-in (SOLE authority) ──────────────────────────────────────────────
@@ -119,10 +164,49 @@ export class VoiceTurnOrchestrator {
     try {
       // Step 1: canvas.resolve
       this.turnState = 'resolving_canvas';
-      const resolveResult = await this.dispatchCanvasResolve(turnContext);
+      const resolveFromServer = await this.dispatchCanvasResolve(turnContext);
+      let resolveResult = resolveFromServer;
+
+      // Voice fallback: if server returned no viewId but transcript matches shared appearance matcher.
+      // Telemetry distinguishes router-selected vs orchestrator-rescued opens (see INTENT_LOOP_GOVERNANCE).
+      if (
+        !resolveResult.selectedViewId &&
+        transcriptMatchesBackgroundPickerIntent(turnContext.transcript)
+      ) {
+        console.info(
+          JSON.stringify({
+            event: 'canvas_appearance.picker_fallback_injected',
+            background_picker_fallback_injected: true,
+            source: 'voice_turn_orchestrator',
+            turnId: turnContext.turnId,
+            sessionId: turnContext.sessionId,
+            siteConfigId: turnContext.siteRuntime.identity.siteConfigId,
+            transcript: turnContext.transcript.slice(0, 500),
+            originalSelectedViewId: resolveFromServer.selectedViewId ?? null,
+            originalRenderMode: resolveFromServer.renderMode,
+            originalReason: resolveFromServer.reason,
+            originalResolutionSummary: resolveFromServer.resolutionSummary ?? null,
+            injectedViewId: 'canvas_backgrounds',
+          }),
+        );
+        resolveResult = {
+          selectedViewId: 'canvas_backgrounds',
+          renderMode: 'replace',
+          intentRouterTier: 1,
+          reason: 'client_voice_fallback_canvas_appearance_intent',
+          resolutionSummary: 'fallback:canvas_backgrounds_voice',
+          speechContext: {
+            screenSummary: BACKGROUND_SPEECH_SUMMARY,
+            speakingInstructions: BACKGROUND_SPEAKING_INSTRUCTIONS,
+          },
+        };
+      }
 
       // Step 2: canvas.render (if view selected)
-      if (resolveResult.renderMode !== 'noop' && resolveResult.selectedViewId) {
+      // Server may return renderMode `noop` while still authorizing a view: experience continuity
+      // (same surface) or intent-loop prior-view pin. Skipping hydrate here leaves activeExperience
+      // empty while speech is grounded — must still dispatch when runtime never applied that viewId.
+      if (this.shouldDispatchCanvasRender(resolveResult)) {
         this.turnState = 'rendering_canvas';
         await this.dispatchCanvasRender(turnContext, resolveResult);
       }
@@ -152,6 +236,23 @@ export class VoiceTurnOrchestrator {
   }
 
   // ── Canvas syscall helpers ─────────────────────────────────────────────────
+
+  /**
+   * Hydrate canvas when resolve authorizes a viewId. Plain `noop` means "no transition" for
+   * continuity, but the client must still run the first hydrate if runtime state was never set
+   * (e.g. merge pinned prior view while router returned noop).
+   */
+  private shouldDispatchCanvasRender(resolveResult: CanvasResolveResult): boolean {
+    const sid = resolveResult.selectedViewId;
+    if (!sid) return false;
+    if (resolveResult.renderMode !== 'noop') return true;
+    return this.runtimeState.currentCanvasView !== sid;
+  }
+
+  /** Read-only: current in-orchestrator canvas view (for React/orchestrator desync recovery). */
+  getCurrentCanvasViewId(): string | null {
+    return this.runtimeState.currentCanvasView ?? null;
+  }
 
   private async dispatchCanvasResolve(turnCtx: VoiceTurnContext): Promise<CanvasResolveResult> {
     const envelope: CanvasSyscallEnvelope = {
@@ -184,18 +285,64 @@ export class VoiceTurnOrchestrator {
       body: JSON.stringify(envelope),
     });
 
+    let json: {
+      result?: CanvasResolveResult;
+      syscallId?: string;
+      latencyMs?: number;
+      intentLoopResolution?: IntentLoopResolution;
+      intentLoopTrace?: IntentLoopResolveAuthorityTrace;
+      error?: string;
+      message?: string;
+    } = {};
+    try {
+      json = (await response.json()) as typeof json;
+    } catch {
+      /* non-JSON body */
+    }
+
+    const sid = json.syscallId ?? envelope.syscallId;
+    const result = json.result;
+    const resultSummary =
+      response.ok && result
+        ? `view=${result.selectedViewId ?? 'none'} mode=${result.renderMode}`
+        : undefined;
+    const resolutionSummary =
+      response.ok && result?.resolutionSummary ? result.resolutionSummary : undefined;
+    const intentLoopResolutionId =
+      response.ok && json.intentLoopResolution?.resolutionId
+        ? json.intentLoopResolution.resolutionId
+        : undefined;
+    const tr = response.ok ? json.intentLoopTrace : undefined;
+
+    this.emitCanvasTrace({
+      at: Date.now(),
+      phase: 'canvas.resolve',
+      syscall: 'canvas.resolve',
+      httpStatus: response.status,
+      ok: response.ok,
+      syscallId: sid,
+      errorCode: response.ok ? undefined : String(json.error ?? 'HTTP_ERROR'),
+      message: response.ok ? undefined : String(json.message ?? response.statusText),
+      latencyMs: typeof json.latencyMs === 'number' ? json.latencyMs : undefined,
+      resultSummary,
+      resolutionSummary,
+      intentLoopResolutionId,
+      routerSelectedViewId: tr?.routerSelectedViewId,
+      finalSelectedViewId: tr?.finalSelectedViewId,
+    });
+
     if (!response.ok) {
       return { renderMode: 'noop', reason: 'canvas.resolve HTTP error' };
     }
 
-    const json = await response.json() as { result: CanvasResolveResult };
-    return json.result ?? { renderMode: 'noop', reason: 'empty resolve result' };
+    return result ?? { renderMode: 'noop', reason: 'empty resolve result' };
   }
 
   private async dispatchCanvasRender(
     turnCtx: VoiceTurnContext,
     resolveResult: CanvasResolveResult,
   ): Promise<void> {
+    // Missing selectedViewId: server noop/deny after merge — do not hydrate or invent a view client-side.
     if (!this.canvasController || !resolveResult.selectedViewId) return;
 
     const siteRuntime = turnCtx.siteRuntime;
@@ -237,12 +384,38 @@ export class VoiceTurnOrchestrator {
       payload: hydratedPayload,
     };
 
-    // Fire-and-forget audit confirmation
+    // Fire-and-forget audit confirmation (+ optional trace)
     fetch('/api/canvas-control', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(renderEnvelope),
-    }).catch(err => console.warn('[VoiceTurnOrchestrator] canvas.render audit failed:', err));
+    })
+      .then(async (res) => {
+        let body: {
+          syscallId?: string;
+          latencyMs?: number;
+          error?: string;
+          message?: string;
+        } = {};
+        try {
+          body = (await res.json()) as typeof body;
+        } catch {
+          /* ignore */
+        }
+        this.emitCanvasTrace({
+          at: Date.now(),
+          phase: 'canvas.render_audit',
+          syscall: 'canvas.render',
+          httpStatus: res.status,
+          ok: res.ok,
+          syscallId: body.syscallId ?? renderEnvelope.syscallId,
+          errorCode: res.ok ? undefined : String(body.error ?? 'HTTP_ERROR'),
+          message: res.ok ? undefined : String(body.message ?? res.statusText),
+          latencyMs: typeof body.latencyMs === 'number' ? body.latencyMs : undefined,
+          resultSummary: res.ok ? `viewId=${viewId}` : undefined,
+        });
+      })
+      .catch(err => console.warn('[VoiceTurnOrchestrator] canvas.render audit failed:', err));
   }
 
   // ── View hydration from SiteRuntimeContext ─────────────────────────────────
@@ -302,6 +475,53 @@ export class VoiceTurnOrchestrator {
               { label: 'General Help', description: 'Common questions and answers', action: 'open_faq' },
               { label: 'Contact Us', description: 'Reach a team member', action: 'escalate' },
             ],
+          },
+        };
+      case 'canvas_backgrounds':
+        return {
+          viewId: 'canvas_backgrounds',
+          renderMode: 'replace',
+          title: 'Canvas appearance',
+          data: {
+            helperText:
+              'Background: pick a catalog effect (full strength — use tint only if you need contrast). Surface: tune the card, text, and optional scrim in Canvas & layout.',
+          },
+        };
+      case 'command_center':
+        return {
+          viewId: 'command_center',
+          renderMode: 'replace',
+          title: `${business.name} — Command Center`,
+          data: {
+            headline: `Operations overview — ${business.name}`,
+            contextSummary: `Plan tier: ${siteRuntime.entitlements.plan}`,
+            statusItems: [
+              {
+                id: 'voice',
+                label: 'Voice package',
+                value: siteRuntime.entitlements.voicePlanActive ? 'Active' : 'Not subscribed',
+                tone: siteRuntime.entitlements.voicePlanActive ? 'success' : 'warning',
+              },
+              {
+                id: 'canvas',
+                label: 'Canvas syscall plane',
+                value: 'Ready',
+                tone: 'success',
+              },
+            ],
+            workItems: [
+              {
+                id: 'w1',
+                title: 'Guest-facing views',
+                subtitle: 'Services, FAQ, schedule, and support home resolve via canvas intents.',
+              },
+              {
+                id: 'w2',
+                title: 'Staff & admin tools',
+                subtitle: 'Agent roster, knowledge builder, and provisioning require elevated access.',
+              },
+            ],
+            approvals: [],
           },
         };
       default:

@@ -31,14 +31,16 @@ const DEMO_BUSINESS = {
 };
 
 const DEMO_AGENT = {
-  role: 'Platform Demo Agent',
-  personality: 'Energetic, informative, and helpful — lead with front-desk outcomes',
+  role: 'Canvas & platform guide',
+  personality: 'Calm and helpful — canvas-first, no hard sell',
   objectives: [
-    'Show AI Front Desk: voice + QR + less chaos for staff',
-    'Explain how to get started with a business account',
-    'Answer questions about pricing, features, and setup',
+    'Help with voice, canvas, and appearance first; match what they are trying on screen',
+    'If they want business or signup, explain next steps briefly — otherwise stay passive',
   ],
-  constraints: ['Keep demo under 3 minutes', 'Always invite them to create an account'],
+  constraints: [
+    'Keep demo under 3 minutes',
+    'Do not push account creation until they show interest',
+  ],
 };
 
 type View = 'landing' | 'demo';
@@ -76,12 +78,14 @@ export default function AgentsLandingPage() {
           business={DEMO_BUSINESS}
           agent={DEMO_AGENT}
           voiceConfig={VoiceClientFactory.getDefaultConfig('premium')}
+          siteConfigId="platform_landing"
           isOpen={true}
           layoutMode="fullscreen"
           variant="sovereign"
           showOwnerControls={false}
           onClose={() => setView('landing')}
           onCycleLayout={() => {}}
+          onNavigate={setLocation}
           zIndex={100}
           transferTitle="Share This Demo"
           transferDescription="Send this AI experience to another device."

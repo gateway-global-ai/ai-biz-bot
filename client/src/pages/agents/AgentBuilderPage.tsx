@@ -116,6 +116,7 @@ interface ProvisionResponse {
   orchestrationRunId: string;
   orchestrationFinalStatus: string;
   agentsCreated: number;
+  agentsSkipped?: number;
   agentIds: string[];
   industryGroup: string;
   archetypesProvisioned: string[];
@@ -203,7 +204,9 @@ export default function AgentBuilderPage() {
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Swarm Deployed</h2>
           <p className="text-slate-400 text-sm mb-5">
-            {result.agentsCreated} agents provisioned for <span className="text-white font-medium">{values.businessName}</span>
+            {result.agentsCreated} new
+            {(result.agentsSkipped ?? 0) > 0 ? ` · ${result.agentsSkipped} existing reused` : ""} for{" "}
+            <span className="text-white font-medium">{values.businessName}</span>
           </p>
 
           <div className="grid grid-cols-2 gap-3 mb-6 text-left">

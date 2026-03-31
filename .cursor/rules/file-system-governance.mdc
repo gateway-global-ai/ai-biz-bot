@@ -6,6 +6,7 @@ alwaysApply: true
 # File System Governance
 
 - Read `docs-governance/canonical/FILE_SYSTEM_GOVERNANCE.md` before restructuring or adding new OS-core files.
+- Do not import from `client/legacy-ui-reference/` — deprecated UI quarantine; see `INTENT_GENERATED_SURFACE_GOVERNANCE_V1.md`.
 - Organize files by system responsibility, not temporary feature convenience.
 - Do not turn `App.tsx`, route adapters, schema files, or storage files into multi-deployment containers.
 - If a file becomes a cross-domain dumping ground, split it before adding more features.

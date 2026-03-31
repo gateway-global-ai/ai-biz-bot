@@ -1,0 +1,129 @@
+{
+  "spec": "shadcn_io_blocks_index_v1",
+  "version": "1.0.0",
+  "source": "https://www.shadcn.io/blocks — generated hero grid; extend scripts for more sections",
+  "disclaimer": "Recipe URLs are conventional (…/r/hero-NN.json). Verify on each doc page. shadcn.io is not affiliated with official shadcn/ui.",
+  "entryCount": 12,
+  "entries": [
+    {
+      "id": "blocks:hero:hero-01",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-01",
+      "title": "Hero 01",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-01",
+      "recipeUrl": "https://www.shadcn.io/r/hero-01.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-01.json"
+    },
+    {
+      "id": "blocks:hero:hero-02",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-02",
+      "title": "Hero 02",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-02",
+      "recipeUrl": "https://www.shadcn.io/r/hero-02.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-02.json"
+    },
+    {
+      "id": "blocks:hero:hero-03",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-03",
+      "title": "Hero 03",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-03",
+      "recipeUrl": "https://www.shadcn.io/r/hero-03.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-03.json"
+    },
+    {
+      "id": "blocks:hero:hero-04",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-04",
+      "title": "Hero 04",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-04",
+      "recipeUrl": "https://www.shadcn.io/r/hero-04.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-04.json"
+    },
+    {
+      "id": "blocks:hero:hero-05",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-05",
+      "title": "Hero 05",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-05",
+      "recipeUrl": "https://www.shadcn.io/r/hero-05.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-05.json"
+    },
+    {
+      "id": "blocks:hero:hero-06",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-06",
+      "title": "Hero 06",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-06",
+      "recipeUrl": "https://www.shadcn.io/r/hero-06.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-06.json"
+    },
+    {
+      "id": "blocks:hero:hero-07",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-07",
+      "title": "Hero 07",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-07",
+      "recipeUrl": "https://www.shadcn.io/r/hero-07.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-07.json"
+    },
+    {
+      "id": "blocks:hero:hero-08",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-08",
+      "title": "Hero 08",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-08",
+      "recipeUrl": "https://www.shadcn.io/r/hero-08.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-08.json"
+    },
+    {
+      "id": "blocks:hero:hero-09",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-09",
+      "title": "Hero 09",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-09",
+      "recipeUrl": "https://www.shadcn.io/r/hero-09.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-09.json"
+    },
+    {
+      "id": "blocks:hero:hero-10",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-10",
+      "title": "Hero 10",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-10",
+      "recipeUrl": "https://www.shadcn.io/r/hero-10.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-10.json"
+    },
+    {
+      "id": "blocks:hero:hero-11",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-11",
+      "title": "Hero 11",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-11",
+      "recipeUrl": "https://www.shadcn.io/r/hero-11.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-11.json"
+    },
+    {
+      "id": "blocks:hero:hero-12",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-12",
+      "title": "Hero 12",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-12",
+      "recipeUrl": "https://www.shadcn.io/r/hero-12.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-12.json"
+    }
+  ]
+}

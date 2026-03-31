@@ -117,6 +117,11 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRes
 }
 
 function globalApiKey(): string | undefined {
+  return readGlobalCloudbedsApiKey();
+}
+
+/** Env fallback API key (single-tenant / dev); broker uses same rule as resolvePmsAuthHeaders. */
+export function readGlobalCloudbedsApiKey(): string | undefined {
   return process.env.CLOUDBEDS_CLIENT_API_KEY || process.env.CLOUDBEDS_API_KEY;
 }
 
@@ -212,8 +217,15 @@ export async function cloudbedsGetJson(
   pmsRow: SitePmsIntegration,
   methodPath: string,
   query: Record<string, string | number | boolean | undefined>,
+  options?: { capabilityId?: string },
 ): Promise<{ ok: boolean; status: number; json: unknown }> {
-  const { headers } = await resolvePmsAuthHeaders(pmsRow);
+  let headers: Record<string, string>;
+  if (options?.capabilityId) {
+    const { cloudbedsHeadersForCapability } = await import("./cloudbedsBrokerHeaders.js");
+    headers = await cloudbedsHeadersForCapability(pmsRow.siteConfigId, options.capabilityId);
+  } else {
+    ({ headers } = await resolvePmsAuthHeaders(pmsRow));
+  }
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) {
     if (v === undefined || v === null) continue;

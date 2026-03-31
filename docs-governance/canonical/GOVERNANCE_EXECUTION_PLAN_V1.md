@@ -6,7 +6,7 @@ backed_by:
   schema: false
   service: false
   route: false
-last_verified: 2026-03-28
+last_verified: 2026-03-29
 ---
 
 # Governance Execution Plan v1 (Source of Truth)
@@ -39,6 +39,11 @@ last_verified: 2026-03-28
 11. **Sovereign distribution (pre-launch):** `SOVEREIGN_OS_DISTRIBUTION_BACKLOG.md` — 1-click VPS / Docker topology + Hostinger-style phases tracked before broad go-live (⏳ implementation).
 12. **Runtime Trust Parity** milestone (§ below): Phase 3 human voice QA + PSTN tool path uses same bound-identity resolver as Live + Twilio Debugger webhook (**10a**) live — then Phase 4 / Phase 11 on stable ground.
 13. **Agent deployment contract:** `AGENT_DEPLOYMENT_CONTRACT_V1.md` canonical (✅); Phase **5** implements **validation + CI** hooks (⏳).
+14. **Execution mutation gate:** `EXECUTION_MUTATION_GATE_SPEC_V1.md` + `VOICE_EXECUTION_ARCHITECTURE_V1.md` canonical; `executeContract` + **`geminiVoice.ts` browser Live tool path bridged** (unified WSS: `/ws/gemini-live`, `/ws/os-live`, `/ws/browser-voice`); next: PSTN parity, skill dispatch, `toolHandler` hardening (`npm run test:execution-mutation-gate`).
+15. **System / test readiness:** `SYSTEM_READINESS_CHECK_V1.md` — run **`npm run system:check`** before batch tests or voice QA; use **`npm run system:check -- --json`** or **`GET /api/platform/readiness`** (auth) for CI/agents/operators. **`npm run governance:test-readiness`** remains a text alias. Catalog: `server/services/systemReadinessCore.ts` (`TEST_CATALOG`). Policy text: `GOVERNANCE_TEST_READINESS_V1.md`.
+16. **Behavioral & character governance (v1):** `AGENT_BEHAVIOR_SPEC_V1.md` — four layers + **classification → domain → tenant** hierarchy: default cognition on **`agent_templates`** / swarm classification, **not** hospitality role names; hospitality as first proving ground; compiler **merge order** (capability → authority → classification defaults → domain → ARCH → memory → free text); no prompt-only “character.”
+17. **Classification governance (v1):** `CLASSIFICATION_GOVERNANCE_SPEC_V1.md` — classifications promoted via **registry + acceptance + vertical proof**; not persona agents; **materialized merged cognition** at provisioning; versioning and deprecation.
+18. **Intent loop (control plane):** `INTENT_LOOP_GOVERNANCE_V1.md` — intent as **stateful loop** (actor × lifecycle × domain × role × entitlements; utterance refines only); merge order aligned with GGUI / `AGENT_BEHAVIOR_SPEC_V1`; tiered resolver + `shared/intentLoopContract.ts` (`intent_loop.v1`); phased checklist Phases A–D in that doc; **policy prevails over uncertainty**. Cursor: `.cursor/skills/intent-loop-governance/SKILL.md`, `.cursor/rules/intent-loop-governance.mdc`.
 
 ## Phase map
 
@@ -55,6 +60,10 @@ last_verified: 2026-03-28
 | 9 | Command & test alignment | Yes | Slash commands + npm scripts → one health story. |
 | 10 | **Twilio reliability plane** | Phased (see § below) | Observer → normalize → **policy** → fallback + audit; Monitor / Debugger / Alarms — platform-owned. |
 | 11 | **Sovereign OS distribution** | Pre-launch gate | 1-click VPS Docker Compose (gateway + voice sidecar + Ollama + TLS proxy); cloud-first vs sovereign RAM SKUs. |
+
+### Control-plane track: intent loop
+
+**Canonical:** [`INTENT_LOOP_GOVERNANCE_V1.md`](./INTENT_LOOP_GOVERNANCE_V1.md). Implements **alongside** Phase **4** (structural alignment: views, canvas syscall, site runtime) and Phase **5** (enforcement: validators, CI), not as a replacement for them. Phase **A** (observe/trace) may land during Phase 4; **resolver + surface derivation** (B–C) require stable validators and registries first.
 
 ## Phase 3 — Status
 

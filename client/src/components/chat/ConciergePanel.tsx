@@ -8,7 +8,7 @@
  *
  * REDESIGNED LAYOUT (15-20-40-25):
  * 15% - Top Header (Logo, Status, Title, Settings/Admin/Layout/Close)
- * 20% - Visualizer (Wave visualization, status text)
+ * 20% - Visualizer (wave bars only — no caption)
  * 40% - Content Window (Transcribed conversation, multimodal tools)
  * 25% - Bottom Footer (PTT button 50% width, optional side buttons)
  *
@@ -19,8 +19,9 @@
  * - Auto-restart on settings change
  */
 
-import React, { useState, useEffect, useRef, useCallback, startTransition } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
 import { motion } from 'framer-motion';
+import { useLocation } from 'wouter';
 import { useOSMenu } from '@/hooks/useOSMenu';
 import AgentManager from '@/pages/agents/AgentManager';
 import { 
@@ -35,9 +36,15 @@ import { VoiceClientFactory } from '../../services/voice/VoiceClientFactory';
 import { IVoiceClient } from '../../services/voice/IVoiceClient';
 import { VoiceConfig, BusinessContext, AgentConfig } from '../../types/voice';
 import { voiceTurnOrchestrator } from '../../services/voiceTurnOrchestrator';
-import type { GeminiSpeechInterface, CanvasController } from '../../services/voiceTurnOrchestrator';
+import type {
+  GeminiSpeechInterface,
+  CanvasController,
+  CanvasSyscallTraceEntry,
+} from '../../services/voiceTurnOrchestrator';
 import type { PttSessionContext, SiteRuntimeContext } from '../../../../shared/siteRuntimeContext';
 import type { CanvasRenderPayload } from '../../../../shared/canvasViewContract';
+import type { ActiveExperienceState } from '@shared/activeExperience';
+import { buildActiveExperienceFromCanvasPayload } from '@shared/activeExperience';
 import { VoiceSettings } from '../voice/VoiceSettings';
 import { ToolRouter } from '../voice/tools/ToolRouter';
 import { SharedCanvasPanel } from '../voice/tools/SharedCanvasPanel';
@@ -54,9 +61,52 @@ import ShareButton from '@/components/ShareButton';
 import AIOSMark from '@/components/public/AIOSMark';
 import { OSMenuList } from '@/components/os/OSMenuList';
 import { fetchOrchestrationRunForAgentCreate } from '@/lib/agentOrchestrationClient';
-import { IntentFirstIdleChrome, isPlatformMarketingLanding } from '@/components/os/IntentFirstIdleChrome';
+import {
+  IntentFirstIdleChrome,
+  isPlatformMarketingLanding,
+  PlatformIdleGlassPanel,
+} from '@/components/os/IntentFirstIdleChrome';
+import { ShellIntentChips, PLATFORM_SHELL_CHIPS } from '@/components/os/ShellIntentChips';
+import { canvasBackgroundPickerShellPayload } from '@/lib/canvasShellExperiences';
+import { CanvasBackgroundLayer } from '@/components/canvas/CanvasBackgroundLayer';
+import { CanvasBackgroundLibrarySection } from '@/components/canvas/CanvasBackgroundLibrarySection';
+import { CanvasChromeControls } from '@/components/canvas/CanvasChromeControls';
+import {
+  loadCanvasChromeSettings,
+  saveCanvasChromeSettings,
+  type CanvasChromeSettings,
+} from '@/lib/canvasChromeSettings';
 import type { OSMenuItem } from '@/hooks/useOSMenu';
-import { BRAND } from '@/config/brand';
+import { BRAND, CANVAS_BG_CLASSNAME } from '@/config/brand';
+import { KnowledgeManager } from '../voice/tools/KnowledgeManager';
+import { TaskOrderEditor } from '../voice/tools/TaskOrderEditor';
+import { QRRoutesManager } from '../account/QRRoutesManager';
+import TelephonyPanelFull from '../../pages/developer/TelephonyPanel';
+import { DiscRadar, ArchBreakdown } from '@/ui/charts';
+import VoiceSelector from '../voice/VoiceSelector';
+import { NovaGate } from '../nova/NovaGate';
+import { SalesFunnelsEditor } from '@/components/os/SalesFunnelsEditor';
+import { loadFunnelContextKeys, mergeFunnelContextFromBusiness, saveFunnelContextKeys, getOrCreateVisitorId, loadBuyerJourneyFromServer, persistBuyerJourneySignal } from '@/lib/funnelContext';
+import { postDesignStudioHandoff } from '@/lib/designStudioHandoff';
+import { DesignStudioPlaceholder } from '@/components/os/DesignStudioPlaceholder';
+import { VoiceVisualizerBars } from '@/components/chat/VoiceVisualizerBars';
+import { AiOsIdleCanvas } from '@/components/os/AiOsIdleCanvas';
+
+/**
+ * Public `/` passes `platform_landing` — not a DB row id. Voice + `canvas.resolve` require the
+ * real `site_configs.id` from `/api/site-configs/by-slug/ai-biz-bots`.
+ */
+function isPlatformSiteConfigPlaceholder(id: string | undefined | null): boolean {
+  if (id == null) return false;
+  const s = String(id).trim();
+  if (s === '') return false;
+  return (
+    s === 'platform_landing' ||
+    s === 'platform-landing' ||
+    s === 'platform' ||
+    s === 'undefined'
+  );
+}
 
 // ── Governed helper: build SiteRuntimeContext from BusinessContext ─────────────
 // Used by VoiceTurnOrchestrator.init() to populate session context at connect time.
@@ -99,7 +149,16 @@ function buildSiteRuntimeFromBusiness(
       plan,
       voicePlanActive: plan === 'voice' || plan === 'enterprise',
       enabledSkills: ['canvas_control'],
-      allowedCanvasViews: ['welcome', 'service_menu', 'faq_list', 'support_home', 'disambiguation_menu'],
+      // Keep aligned with server `siteRuntimeResolver` defaults (client hint only; server is authoritative).
+      allowedCanvasViews: [
+        'welcome',
+        'service_menu',
+        'faq_list',
+        'support_home',
+        'disambiguation_menu',
+        'command_center',
+        'canvas_backgrounds',
+      ],
       allowedCanvasActions: ['open_support', 'open_service_menu', 'open_faq'],
       allowedRuntimeActions: [],
     },
@@ -107,21 +166,26 @@ function buildSiteRuntimeFromBusiness(
 }
 
 // Thin wrapper: renders OSMenuList inside the idle canvas without triggering hook violations
-function OSMenuListIdle({ role, isAuthenticated, capabilities, onSelect }: { role: any; isAuthenticated: boolean; capabilities?: import('@/hooks/useOSMenu').OSCapabilities; onSelect: (item: OSMenuItem) => void }) {
-  const items = useOSMenu(role, isAuthenticated, capabilities);
-  return <OSMenuList items={items} onSelect={onSelect} />;
+function OSMenuListIdle({
+  role,
+  isAuthenticated,
+  capabilities,
+  platformEntry,
+  onSelect,
+  listClassName,
+}: {
+  role: import('@/hooks/useOSMenu').OSRole;
+  isAuthenticated: boolean;
+  capabilities?: import('@/hooks/useOSMenu').OSCapabilities;
+  /** Public `/` — intent-first platform menu (no business OS views until chosen). */
+  platformEntry?: boolean;
+  onSelect: (item: OSMenuItem) => void;
+  /** Optional tighter padding when embedded in the platform conversation strip. */
+  listClassName?: string;
+}) {
+  const items = useOSMenu(role, isAuthenticated, capabilities, { platformEntry: !!platformEntry });
+  return <OSMenuList items={items} onSelect={onSelect} className={listClassName} />;
 }
-import { KnowledgeManager } from '../voice/tools/KnowledgeManager';
-import { TaskOrderEditor } from '../voice/tools/TaskOrderEditor';
-import { QRRoutesManager } from '../account/QRRoutesManager';
-import TelephonyPanelFull from '../../pages/developer/TelephonyPanel';
-import { DiscRadar, ArchBreakdown } from '@/ui/charts';
-import VoiceSelector from '../voice/VoiceSelector';
-import { NovaGate } from '../nova/NovaGate';
-import { SalesFunnelsEditor } from '@/components/os/SalesFunnelsEditor';
-import { loadFunnelContextKeys, mergeFunnelContextFromBusiness, saveFunnelContextKeys, getOrCreateVisitorId, loadBuyerJourneyFromServer, persistBuyerJourneySignal } from '@/lib/funnelContext';
-import { postDesignStudioHandoff } from '@/lib/designStudioHandoff';
-import { DesignStudioPlaceholder } from '@/components/os/DesignStudioPlaceholder';
 
 interface ConciergePanelProps {
   business: BusinessContext;
@@ -178,12 +242,21 @@ interface ConciergePanelProps {
   initialMessages?: ChatMessage[];
   /** Optional: called when the voice connection status changes */
   onConnectionStatusChange?: (status: 'disconnected' | 'connecting' | 'connected') => void;
+  /** Platform home (`/`) only: hostname label from external referrer for idle canvas copy. See `usePlatformEntryReferrer`. */
+  platformIdleReferrerDisplay?: string | null;
   /** Optional: custom content to render in the canvas when there are no messages yet. Replaces the default idle state. */
   idleContent?: React.ReactNode;
   /** Optional: called once after siteCapabilities are derived from the DB site config. Lets parent components mirror the capabilities without a second fetch. */
   onCapabilitiesReady?: (caps: import('@/hooks/useOSMenu').OSCapabilities) => void;
   /** Optional: external trigger to open a specific embedded view by viewId. Used by idleContent (e.g. BusinessHeroIdle menu drawer) to activate a view inside the panel. */
   onMenuActionRef?: React.MutableRefObject<((viewId: string) => void) | null>;
+  /** When set, renders over the message canvas (e.g. platform `/` OTP sign-in without full-page navigation). */
+  signInCanvasOverlay?: React.ReactNode;
+  /**
+   * Optional minimal “AI OS” chrome: splash logo, compact header (waveform + menu), idle logo + search, green PTT.
+   * Same voice stack and PTT contract as standard shell.
+   */
+  shellPresentation?: 'standard' | 'ai_os_simple';
 }
 
 interface ChatMessage {
@@ -679,6 +752,16 @@ function agentConfigStableKey(a: AgentConfig): string {
   });
 }
 
+/** Serialize voice settings that require reconnecting the Live session when changed. */
+function voiceConfigReconnectKey(v: VoiceConfig): string {
+  return JSON.stringify({
+    mode: v.mode,
+    model: (v.model || '').replace(/^models\//, ''),
+    voiceName: v.voiceName ?? '',
+    enableAnalysis: v.enableAnalysis ?? null,
+  });
+}
+
 export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   business,
   agent,
@@ -713,13 +796,63 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   className = '',
   zIndex = 50,
   initialMessages = [],
+  platformIdleReferrerDisplay,
   idleContent,
   onCapabilitiesReady,
   onMenuActionRef,
-  onConnectionStatusChange
+  onConnectionStatusChange,
+  signInCanvasOverlay,
+  shellPresentation = 'standard',
 }) => {
+  const [, setLocation] = useLocation();
   const siteConfigId = siteConfigIdProp ?? business.id;
+
+  const [resolvedPlatformSiteUuid, setResolvedPlatformSiteUuid] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isPlatformSiteConfigPlaceholder(siteConfigId)) {
+      setResolvedPlatformSiteUuid(null);
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/site-configs/by-slug/ai-biz-bots')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('resolve platform site'))))
+      .then((site: { id: string }) => {
+        if (!cancelled) setResolvedPlatformSiteUuid(site.id);
+      })
+      .catch((e) => {
+        console.warn(
+          '[ConciergePanel] Could not resolve platform site UUID — canvas.resolve will fail until this succeeds.',
+          e,
+        );
+        if (!cancelled) setResolvedPlatformSiteUuid(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [siteConfigId]);
+
+  const effectiveSiteConfigId = useMemo(() => {
+    if (isPlatformSiteConfigPlaceholder(siteConfigId)) {
+      return resolvedPlatformSiteUuid ?? '';
+    }
+    return siteConfigId || '';
+  }, [siteConfigId, resolvedPlatformSiteUuid]);
+
   const isSovereign = variant === 'sovereign';
+  const isAiOsShell = shellPresentation === 'ai_os_simple';
+  /** Prefer parent-handled sign-in (in-canvas overlay or SPA nav); avoid hard navigation to another host. */
+  const goToUnifiedLogin = () => {
+    if (onOpenSettings) {
+      onOpenSettings();
+      return;
+    }
+    if (onNavigate) {
+      onNavigate('/login');
+      return;
+    }
+    window.location.href = '/login';
+  };
   const shareUrl =
     publicSlug && typeof window !== 'undefined'
       ? `${window.location.origin}/biz/${publicSlug}`
@@ -733,11 +866,11 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     : transferQrDataUrl;
   const canShowTransferQr = Boolean(qrTargetUrl && qrImageSrc);
   const isPlatformMarketingDemo = business.platformMarketingDemo === true;
-  /** Customer-entry intent framing above OSMenuList — not used on platform marketing or custom idleContent. */
+  /** Customer-entry intent framing above OSMenuList — not used with custom idleContent or marketing demo variant. Platform `/` uses this + platformEntry menu (intent before content). */
   const showIntentFirstIdleChrome =
+    !isAiOsShell &&
     !idleContent &&
     Boolean(business?.id?.trim()) &&
-    !isPlatformMarketingLanding(business.id) &&
     !isPlatformMarketingDemo;
 
   // --- State ---
@@ -761,6 +894,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [successMessageId, setSuccessMessageId] = useState<string | null>(null);
   const [isTransferPromoVisible, setIsTransferPromoVisible] = useState(false);
+  /** AI OS shell: full-screen logo splash on first paint (tap or timeout dismisses). */
+  const [aiOsSplashVisible, setAiOsSplashVisible] = useState(true);
   /** Single Menu icon opens overlay; first screen = Admin | User | Public Agents only. */
   const [showMenuOverlay, setShowMenuOverlay] = useState(false);
   /** Share overlay: menu of options (Facebook, Email, Text, etc.) + QR code. */
@@ -803,10 +938,39 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   type EmbeddedViewId = 'profile' | 'billing' | 'my-businesses' | 'reseller' | 'operations' | 'agent-manager' | 'financials' | 'team' | 'front-desk' | 'internal-agents' | 'public-agents' | 'booking-view' | 'reschedule-view' | 'profile-view' | 'insurance-view' | 'concierge-view' | 'employee-dashboard-view' | 'live-queue-view' | 'session-monitor-view' | 'calendar-view' | 'customer-list-view' | 'verification-view' | 'intake-view' | 'communications-view' | 'manager-dashboard-view' | 'operations-view' | 'customer-db-view' | 'schedule-rules-view' | 'staff-view' | 'comms-config-view' | 'reports-view' | 'system-health-view' | 'locations-view' | 'billing-view' | 'identity-view' | 'behavior-view' | 'guardrails-view' | 'audit-view' | 'welcome-view' | 'login-view' | 'getting-started-view' | 'brand-profile-view' | 'offer-stack-view' | 'market-strategy-view' | 'sales-funnels-view' | 'preflight-view' | 'design_studio_landing' | 'design_studio_learn' | 'design_studio_path' | 'design_studio_step';
   const [embeddedView, setEmbeddedView] = useState<EmbeddedViewId | null>(null);
 
-  /** Agent-controlled canvas: set when voice agent calls show_canvas; renders pinned above message scroll. */
-  const [pinnedCanvas, setPinnedCanvas] = useState<Record<string, unknown> | null>(null);
+  /** In-shell active experience (intent-bound canvas + metadata) — not website “pinned nav”. See SHELL_CONTAINMENT_RULE_V1. */
+  const [activeExperience, setActiveExperience] = useState<ActiveExperienceState | null>(null);
+  /** shadcn.io-style canvas background effect (governed picker → CanvasBackgroundLayer). */
+  const [canvasBackgroundId, setCanvasBackgroundId] = useState<string | null>(null);
+  /** Persisted tint / card / text tuning over the library background (localStorage). */
+  const [canvasChrome, setCanvasChrome] = useState<CanvasChromeSettings>(() => loadCanvasChromeSettings());
+  const updateCanvasChrome = useCallback((next: CanvasChromeSettings) => {
+    setCanvasChrome(next);
+    saveCanvasChromeSettings(next);
+  }, []);
+  /** Dev / `?canvasTrace=1` — last governed canvas syscall outcome (COMMAND_CENTER_SURFACE_SPEC_V1 § operator trace). */
+  const [canvasSyscallTrace, setCanvasSyscallTrace] = useState<CanvasSyscallTraceEntry | null>(null);
+  const canvasTracePanelEnabled =
+    import.meta.env.DEV ||
+    (typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('canvasTrace') === '1');
 
   const osMenuItems = useOSMenu((showOwnerControls || localAdminMode || ownerMode) ? 'manager' : isAuthenticated ? 'employee' : 'customer', isAuthenticated, siteCapabilities);
+
+  useEffect(() => {
+    if (!canvasTracePanelEnabled) {
+      voiceTurnOrchestrator.setCanvasTraceListener(null);
+      return () => {
+        voiceTurnOrchestrator.setCanvasTraceListener(null);
+      };
+    }
+    voiceTurnOrchestrator.setCanvasTraceListener(entry => {
+      setCanvasSyscallTrace(entry);
+    });
+    return () => {
+      voiceTurnOrchestrator.setCanvasTraceListener(null);
+    };
+  }, [canvasTracePanelEnabled]);
 
   // Helper: build fetch headers with auth token from localStorage
   const authHeaders = (): HeadersInit => {
@@ -1000,6 +1164,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     );
   }, [agent]);
 
+  /** Reconnect voice only when these materially change — avoids disconnect loops from new object identity. */
+  const voiceReconnectKey = useMemo(() => voiceConfigReconnectKey(currentVoiceConfig), [currentVoiceConfig]);
+  const agentReconnectKey = useMemo(() => agentConfigStableKey(currentAgent), [currentAgent]);
+
   // Fetch available agents when owner mode or owner controls are active
   useEffect(() => {
     if ((!ownerMode && !showOwnerControls) || !siteConfigId) return;
@@ -1189,6 +1357,35 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     setShowMenuOverlay(false);
   };
 
+  /** Idle OS menu: embedded view via viewId, or SPA routes on non-platform sites only. */
+  const handleIdleOsMenuSelect = (item: OSMenuItem) => {
+    // Public platform home (`/`) — chat surface only; do not route the shell away from voice/canvas.
+    if (isPlatformMarketingLanding(business.id)) {
+      if (item.navigateTo || item.externalHref) {
+        addMessage(
+          'system',
+          'Use voice or type in chat — we stay in this window. Account access is from the header menu when available.',
+        );
+        return;
+      }
+      if (item.viewId) {
+        handleMenuAction(item.viewId);
+      }
+      return;
+    }
+    if (item.navigateTo) {
+      setLocation(item.navigateTo);
+      return;
+    }
+    if (item.externalHref) {
+      window.location.assign(item.externalHref);
+      return;
+    }
+    if (item.viewId) {
+      handleMenuAction(item.viewId);
+    }
+  };
+
   if (onMenuActionRef) onMenuActionRef.current = handleMenuAction;
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1315,20 +1512,25 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       return;
     }
 
+    let cancelled = false;
+
+    /** Wait for real DB UUID before voice + canvas (platform placeholder → slug resolve). */
+    if (isPlatformSiteConfigPlaceholder(siteConfigId) && !resolvedPlatformSiteUuid) {
+      setConnectionStatus('connecting');
+      return;
+    }
+
     const initEngine = async () => {
       setConnectionStatus('connecting');
       onConnectionStatusChange?.('connecting');
+      const sid = effectiveSiteConfigId || siteConfigId || business.id || '';
       try {
         // --- HANDOVER SERVICE LOGIC ---
         // Guard: only call the Handover Service when we have a real DB UUID.
         // WebsitePreview (demo/preview mode) passes business.id = '' — in that
         // case we skip the fetch and initialise directly from the props config.
-        const hasValidId = Boolean(siteConfigId) && 
-          siteConfigId !== 'undefined' && 
-          siteConfigId !== '' &&
-          siteConfigId !== 'platform_landing' &&
-          siteConfigId !== 'platform-landing' &&
-          siteConfigId !== 'platform';
+        const hasValidId =
+          Boolean(sid) && sid !== 'undefined' && sid !== '';
 
         // Resolved DB record (only populated when hasValidId === true)
         let dbSiteConfig: Record<string, any> | null = null;
@@ -1336,15 +1538,15 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
         if (hasValidId) {
           // Prevent loop: if we already tried to init for this ID and failed, don't retry immediately unless config changed
-          if (initAttemptedForIdRef.current === siteConfigId && connectionStatus === 'disconnected') {
+          if (initAttemptedForIdRef.current === sid && connectionStatus === 'disconnected') {
              // allow retry if user changed config (currentVoiceConfig changed)
           }
-          initAttemptedForIdRef.current = siteConfigId;
+          initAttemptedForIdRef.current = sid;
 
           // 1. Fetch the pre-validated configuration from the Handover Service.
-          const response = await fetch(`/api/site-configs/${siteConfigId}`);
+          const response = await fetch(`/api/site-configs/${encodeURIComponent(sid)}`);
           if (!response.ok) {
-            throw new Error(`Failed to fetch site configuration for ID: ${siteConfigId}`);
+            throw new Error(`Failed to fetch site configuration for ID: ${sid}`);
           }
           dbSiteConfig = await response.json();
 
@@ -1506,6 +1708,9 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                 // Tool result without text (e.g. map, business intelligence)
                 addMessage('assistant', undefined, msg.metadata);
               }
+            } else {
+              // Audio-first native response with no text payload — still log a turn so the transcript area is not empty.
+              addMessage('assistant', undefined, { ...msg.metadata, voiceAudioOnly: true });
             }
           } else if (msg.type === 'error') {
             setProcessingOff();
@@ -1535,9 +1740,9 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           if (!connected) {
             setIsAISpeaking(false);
             // Persist session-end signal to buyer journey payload node
-            const vid = siteConfigId ? getOrCreateVisitorId(siteConfigId) : null;
-            if (vid && siteConfigId) {
-              persistBuyerJourneySignal(vid, siteConfigId, { type: 'phaseTransition', agentId: undefined });
+            const vid = sid ? getOrCreateVisitorId(sid) : null;
+            if (vid && sid) {
+              persistBuyerJourneySignal(vid, sid, { type: 'phaseTransition', agentId: undefined });
             }
           }
         });
@@ -1546,21 +1751,21 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         //    Handover Service ran; in preview mode use business as-is.
         //    CRITICAL: Always pass the resolved siteConfigId (UUID) into sessionContext so
         //    the voice proxy and MCP tools receive the Business UUID, not place_id or empty string.
-        const storedFunnel = loadFunnelContextKeys(siteConfigId);
+        const storedFunnel = loadFunnelContextKeys(sid);
         const mergedFunnel = mergeFunnelContextFromBusiness(business, storedFunnel);
         if (JSON.stringify(mergedFunnel) !== JSON.stringify(storedFunnel)) {
-          saveFunnelContextKeys(siteConfigId, mergedFunnel);
+          saveFunnelContextKeys(sid, mergedFunnel);
         }
 
         // Load persistent buyer journey from server (non-blocking — warms up context silently)
-        const visitorId = siteConfigId ? getOrCreateVisitorId(siteConfigId) : null;
-        if (visitorId && siteConfigId) {
-          loadBuyerJourneyFromServer(visitorId, siteConfigId).catch(() => {/* fire-and-forget */});
+        const visitorId = sid ? getOrCreateVisitorId(sid) : null;
+        if (visitorId && sid) {
+          loadBuyerJourneyFromServer(visitorId, sid).catch(() => {/* fire-and-forget */});
         }
         const handoverBusinessContext = dbSiteConfig
           ? {
               ...business,
-              id: siteConfigId,
+              id: sid,
               systemPromptOverride: dbSiteConfig.systemPromptOverride,
               ownerAgentRole: effectiveOwnerControls ? ownerAgentRole : undefined,
               funnelContextKeys: mergedFunnel,
@@ -1573,54 +1778,64 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               ...(sessionEntryPointAgentId ? { entryPointAgentId: sessionEntryPointAgentId } : {}),
             };
 
-        await newClient.connect(handoverBusinessContext, activeAgent, validatedVoiceConfig);
-        clientRef.current = newClient;
-
-        // ── GOVERNED ORCHESTRATOR INIT (canvas_control.md §12) ─────────────────
-        // Wire VoiceTurnOrchestrator ONCE per connection.
-        // This is the bridge that activates the governed chain:
-        //   transcript.final → canvas.resolve → canvas.render → grounded speech
-        // Without this call the orchestrator is instantiated but silent (a no-op).
-        const visitorIdForInit = siteConfigId ? getOrCreateVisitorId(siteConfigId) : undefined;
+        // ── GOVERNED ORCHESTRATOR INIT (canvas_control.md §12) — BEFORE connect ──
+        // Must run before `await connect` so the first transcript.final can resolve/render
+        // in-shell canvas. Active experience is React state only (no sessionStorage “pinned nav”).
+        const effectivePinViewId =
+          activeExperience?.meta.canvasViewId ??
+          (activeExperience?.payload && 'viewId' in activeExperience.payload
+            ? String((activeExperience.payload as { viewId: string }).viewId)
+            : null);
+        const visitorIdForInit = sid ? getOrCreateVisitorId(sid) : undefined;
         const sessionContextForInit: PttSessionContext = {
           sessionId: `session-${Date.now()}`,
-          siteRuntime: buildSiteRuntimeFromBusiness(business, siteConfigId ?? business.id),
+          siteRuntime: buildSiteRuntimeFromBusiness(business, sid),
           visitor: {
             visitorId: visitorIdForInit ?? undefined,
             securityLevel: 'public',
             authState: 'anonymous',
           },
           currentCanvas: {
-            currentViewId: pinnedCanvas
-              ? ((pinnedCanvas as Record<string, unknown>).viewId as string | undefined)
-              : undefined,
+            currentViewId: effectivePinViewId ?? undefined,
           },
           activeAgent: {
             agentId: (activeAgent as unknown as Record<string, unknown>)?.id as string | undefined,
           },
         };
         const runtimeStateForInit = {
-          currentCanvasView: pinnedCanvas
-            ? ((pinnedCanvas as Record<string, unknown>).viewId as string | null) ?? null
-            : null,
+          currentCanvasView: effectivePinViewId,
           currentCanvasSummary: '',
           lastTurnId: null,
         };
-        // Adapter: GeminiStreamingClient exposes interruptSpeech + sendGroundedSpeechContext
-        // but IVoiceClient doesn't — safe cast because factory returns GeminiStreamingClient
-        // for all live voice modes.
         const geminiAdapter: GeminiSpeechInterface = newClient as unknown as GeminiSpeechInterface;
-        // Adapter: canvasController.apply() → setPinnedCanvas (single governed mutation path)
         const canvasAdapter: CanvasController = {
           apply: (payload: CanvasRenderPayload) => {
-            setPinnedCanvas(payload as unknown as Record<string, unknown>);
+            setActiveExperience({
+              meta: buildActiveExperienceFromCanvasPayload(payload),
+              payload,
+            });
           },
           clear: (_reason: string) => {
-            setPinnedCanvas(null);
+            setActiveExperience(null);
           },
         };
         voiceTurnOrchestrator.init(sessionContextForInit, runtimeStateForInit, geminiAdapter, canvasAdapter);
         console.log('[ConciergePanel] VoiceTurnOrchestrator initialized — governed canvas chain active');
+
+        if (cancelled) return;
+
+        await newClient.connect(handoverBusinessContext, activeAgent, validatedVoiceConfig);
+
+        if (cancelled) {
+          try {
+            newClient.disconnect();
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
+
+        clientRef.current = newClient;
 
         console.log('[ConciergePanel] Voice engine connected successfully');
 
@@ -1637,6 +1852,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     initEngine();
 
     return () => {
+      cancelled = true;
       if (processingTimeoutRef.current) {
         clearTimeout(processingTimeoutRef.current);
         processingTimeoutRef.current = null;
@@ -1646,18 +1862,40 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         clientRef.current = null;
       }
     };
-  // Deps: `siteConfigId` (primitive) replaces the full `business` object reference
-  // so that inline object literals in calling components (e.g. WebsitePreview) do
-  // not create new references on every render and trigger an infinite re-connect.
-  // `currentAgent` is only updated when `agentConfigStableKey` changes (see sync effect above).
-  // `currentVoiceConfig` is React state so its identity is already stable.
+  // Deps: use `voiceReconnectKey` / `agentReconnectKey` so new object identity from parents
+  // does not thrash the WebSocket (was causing "refresh" and dropping in-shell experience).
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, siteConfigId, currentVoiceConfig, currentAgent, funnelContextRevision, sessionEntryPointAgentId, effectiveOwnerControls]);
+  }, [
+    isOpen,
+    siteConfigId,
+    resolvedPlatformSiteUuid,
+    effectiveSiteConfigId,
+    voiceReconnectKey,
+    agentReconnectKey,
+    funnelContextRevision,
+    sessionEntryPointAgentId,
+    effectiveOwnerControls,
+  ]);
 
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  /** If orchestrator still tracks canvas_backgrounds but React cleared activeExperience (desync), re-apply shell payload. */
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return;
+    if (activeExperience) return;
+    if (voiceTurnOrchestrator.getCurrentCanvasViewId() === 'canvas_backgrounds') {
+      voiceTurnOrchestrator.applyCanvasPayload(canvasBackgroundPickerShellPayload());
+    }
+  }, [connectionStatus, activeExperience]);
+
+  useEffect(() => {
+    if (!isAiOsShell || !aiOsSplashVisible) return;
+    const t = window.setTimeout(() => setAiOsSplashVisible(false), 2400);
+    return () => window.clearTimeout(t);
+  }, [isAiOsShell, aiOsSplashVisible]);
 
   // --- Message Management ---
   const addMessage = (role: 'user' | 'assistant' | 'system', text?: string, metadata?: any) => {
@@ -1669,6 +1907,44 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       timestamp: Date.now()
     }]);
   };
+
+  const handleShellIntentPhrase = (phrase: string) => {
+    addMessage('user', phrase);
+    if (clientRef.current?.isConnected()) {
+      clientRef.current.sendText(phrase);
+    }
+  };
+
+  const handleOpenBackgroundFromChip = () => {
+    voiceTurnOrchestrator.applyCanvasPayload(canvasBackgroundPickerShellPayload());
+  };
+
+  const handleIdleCanvasAppearanceAction = useCallback(
+    async (action: string, data?: Record<string, unknown>) => {
+      if (action === 'canvas_bg_select' && data && typeof (data as { backgroundId?: string }).backgroundId === 'string') {
+        setCanvasBackgroundId((data as { backgroundId: string }).backgroundId);
+        if (clientRef.current?.isConnected()) {
+          clientRef.current.sendText(`[Canvas] Applied background: ${(data as { backgroundId: string }).backgroundId}.`);
+        }
+        return;
+      }
+      if (action === 'canvas_bg_default') {
+        setCanvasBackgroundId(null);
+        if (clientRef.current?.isConnected()) {
+          clientRef.current.sendText('[Canvas] Background reset to default.');
+        }
+        return;
+      }
+      if (action === 'canvas_bg_favorite_saved') {
+        if (clientRef.current?.isConnected()) {
+          clientRef.current.sendText(
+            `[Canvas] Saved to favorites: ${(data as { backgroundId?: string })?.backgroundId ?? 'unknown'}.`,
+          );
+        }
+      }
+    },
+    [],
+  );
 
   // --- Tool Handlers ---
   const handleToolSubmit = (messageId: string, value: string) => {
@@ -1821,7 +2097,85 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
       className={`${getContainerClasses()} ${className}`}
       style={{ zIndex }}
     >
-      {/* 1. TOP HEADER (always visible; in fullscreen fixed flex basis so it never disappears) */}
+      {isAiOsShell && aiOsSplashVisible && (
+        <motion.button
+          type="button"
+          aria-label="Continue to AI OS"
+          initial={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setAiOsSplashVisible(false)}
+          className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-white px-6 cursor-pointer border-0"
+        >
+          <img
+            src="/branding/ai-os-logo.png"
+            alt="AI OS"
+            className="max-w-[min(88vw,300px)] w-full h-auto object-contain pointer-events-none"
+          />
+          <p className="mt-6 text-xs text-slate-500">Tap to continue</p>
+        </motion.button>
+      )}
+
+      {/* 1. TOP HEADER — standard: ClearVoice + controls; AI OS: waveform center + menu (vision layout) */}
+      {isAiOsShell ? (
+        <div
+          style={headerStyle}
+          className="flex items-center justify-between px-4 flex-shrink-0 min-h-[56px] max-h-[56px] bg-[#0F172A] border-b border-slate-700/80"
+        >
+          <div className="w-10 shrink-0 flex items-center justify-start">
+            <div
+              className={`w-2 h-2 rounded-full shrink-0 ${
+                connectionStatus === 'connected'
+                  ? 'bg-emerald-400 animate-pulse shadow-lg shadow-emerald-400/50'
+                  : connectionStatus === 'connecting'
+                  ? 'bg-yellow-400 animate-pulse'
+                  : 'bg-red-400'
+              }`}
+              title={connectionStatus}
+            />
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center min-w-0 py-1">
+            <VoiceVisualizerBars
+              isAISpeaking={isAISpeaking}
+              isRecording={isRecording}
+              isProcessing={isProcessing}
+              animationTick={animationTick}
+              volumeLevel={volumeLevel}
+              aiOutputVolume={aiOutputVolume}
+            />
+          </div>
+          <div className="w-10 flex justify-end shrink-0">
+            {ownerMode && onExitOwnerMode ? (
+              <button
+                onClick={onExitOwnerMode}
+                className="p-2 hover:bg-white/10 rounded-xl text-white transition-colors"
+                title="Back to conversation"
+                type="button"
+              >
+                <ArrowLeft size={20} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if (shellMode === 'locked') {
+                    goToUnifiedLogin();
+                  } else {
+                    setShowMenuOverlay((v) => !v);
+                  }
+                }}
+                className="p-2 hover:bg-white/10 rounded-xl text-white transition-colors"
+                title={shellMode === 'locked' ? 'Sign In' : 'Menu'}
+                data-concierge-menu="overlay"
+                aria-expanded={showMenuOverlay}
+                aria-haspopup="dialog"
+                aria-controls="concierge-menu-overlay"
+              >
+                {shellMode === 'locked' ? <Lock size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
       <div
         style={headerStyle}
         className={`flex items-center justify-between px-4 py-3 flex-shrink-0 min-h-[56px] ${
@@ -1846,8 +2200,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               type="button"
               onClick={() => {
                 if (shellMode === 'locked') {
-                  // Not authenticated — redirect to unified OTP login
-                  window.location.href = '/login';
+                  goToUnifiedLogin();
                 } else {
                   setShowMenuOverlay((v) => !v);
                 }
@@ -1891,8 +2244,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   setLocalAdminMode(false);
                   setShowMenuOverlay(false);
                 } else if (shellMode === 'locked' || isSovereign) {
-                  // Claimed/active site OR sovereign panel — redirect to unified OTP login
-                  window.location.href = '/login';
+                  goToUnifiedLogin();
                 } else {
                   // Demo/unclaimed customer site — enter admin preview directly
                   setLocalAdminMode(true);
@@ -1931,47 +2283,24 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           </button>
         </div>
       </div>
+      )}
 
-      {/* 2. VISUALIZER (always dark shell zone) */}
+      {/* 2. VISUALIZER (standard shell only — AI OS merges bars into header) */}
+      {!isAiOsShell && (
       <div
         style={visualizerStyle}
         className="flex flex-col items-center justify-center flex-shrink-0 relative overflow-hidden isolate bg-[#0f172a] border-b border-slate-700/60"
       >
-        {/* Voice Wave Visualization — brand green always, per brand-tokens.mdc */}
-        <div className="flex items-center gap-0.5 h-8">
-          {[...Array(32)].map((_, i) => {
-            // Bar color: brand green when active, muted when idle
-            // AI speaking uses greenLight, recording uses green, processing pulses green, idle is slate
-            const barColor = isAISpeaking
-              ? BRAND.greenLight   // #10b981 — emerald for AI output
-              : isRecording
-              ? BRAND.green        // #008a3e — brand green for mic input
-              : isProcessing
-              ? BRAND.greenLight   // #10b981 — emerald pulse while thinking
-              : '#475569';         // slate-600 — idle/rest state
-            return (
-              <div
-                key={i}
-                className="w-0.5 rounded-full transition-all duration-100"
-                style={{
-                  backgroundColor: barColor,
-                  height: isAISpeaking
-                    ? `${Math.min(28, Math.max(2, aiOutputVolume * 60 * (1 + Math.sin((i + animationTick * 1.2) / 1.8))))}px`
-                    : isRecording
-                    ? `${Math.min(28, Math.max(2, volumeLevel * 150 * (1 + Math.sin((i + animationTick) / 2))))}px`
-                    : isProcessing
-                    ? `${10 + Math.sin((i + animationTick * 0.5) * 0.5) * 8}px`
-                    : '3px',
-                  opacity: isAISpeaking || isRecording || isProcessing ? 0.9 : 0.35
-                }}
-              />
-            );
-          })}
-        </div>
-        <p className="text-[9px] font-semibold tracking-widest uppercase mt-1" style={{ color: isAISpeaking || isRecording || isProcessing ? BRAND.greenLight : '#475569' }}>
-          {isAISpeaking ? 'AI Speaking' : isRecording ? 'Listening…' : isProcessing ? 'Processing…' : connectionStatus === 'connecting' ? 'Connecting…' : connectionStatus === 'connected' ? 'Ready' : 'Initializing'}
-        </p>
+        <VoiceVisualizerBars
+          isAISpeaking={isAISpeaking}
+          isRecording={isRecording}
+          isProcessing={isProcessing}
+          animationTick={animationTick}
+          volumeLevel={volumeLevel}
+          aiOutputVolume={aiOutputVolume}
+        />
       </div>
+      )}
 
       {/* Demo "Is this your business?" claim banner — only for demo/provisioned sites when not dismissed */}
       {(shellMode === 'demo_claimable') && !claimBannerDismissed && (
@@ -2006,6 +2335,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         className={`flex-1 min-h-0 flex flex-col border-t overflow-hidden relative border-slate-200 ${idleContent ? 'bg-transparent' : 'bg-white'}`}
         style={{ minHeight: 0 }}
       >
+        <CanvasBackgroundLayer backgroundId={canvasBackgroundId} chrome={canvasChrome} />
         {/* ── Persistent OS Index Bar — always visible, never scrolls away ── */}
         {effectiveOwnerControls && (
           <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b overflow-x-auto scrollbar-hide bg-slate-50 border-slate-200">
@@ -2033,12 +2363,30 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           </div>
         )}
 
-        {/* PINNED CANVAS — agent-controlled visual zone; renders above message scroll while voice continues */}
-        {pinnedCanvas && (
-          <div className="flex-shrink-0 px-4 pt-3 pb-2 border-b border-slate-200 bg-white">
-            {'viewId' in (pinnedCanvas as Record<string, unknown>) ? (
+        {canvasTracePanelEnabled && canvasSyscallTrace && (
+          <div
+            className={`flex-shrink-0 px-3 py-1.5 border-b border-slate-200 text-[10px] font-mono text-slate-600 overflow-x-auto whitespace-nowrap ${CANVAS_BG_CLASSNAME}`}
+          >
+            <span className="text-slate-400">canvas syscall</span>{' '}
+            {canvasSyscallTrace.syscall} {canvasSyscallTrace.ok ? 'ok' : 'fail'} {canvasSyscallTrace.httpStatus}
+            {canvasSyscallTrace.syscallId
+              ? ` id=${canvasSyscallTrace.syscallId.slice(0, 8)}…`
+              : ''}
+            {canvasSyscallTrace.resultSummary ? ` ${canvasSyscallTrace.resultSummary}` : ''}
+            {canvasSyscallTrace.resolutionSummary
+              ? ` │ loop=${canvasSyscallTrace.resolutionSummary}`
+              : ''}
+            {canvasSyscallTrace.errorCode ? ` err=${canvasSyscallTrace.errorCode}` : ''}
+            {canvasSyscallTrace.latencyMs != null ? ` ${canvasSyscallTrace.latencyMs}ms` : ''}
+          </div>
+        )}
+
+        {/* ACTIVE EXPERIENCE — in-shell canvas (subordinate to chat); temporary, not persistent website nav */}
+        {activeExperience && (
+          <div className="relative z-10 flex-shrink-0 px-4 pt-3 pb-2 border-b border-slate-200 bg-white">
+            {'viewId' in (activeExperience.payload as Record<string, unknown>) ? (
               <TypedCanvasView
-                payload={pinnedCanvas as any}
+                payload={activeExperience.payload as any}
                 onTriggerSpeech={(text) => {
                   if (clientRef.current && clientRef.current.isConnected()) {
                     clientRef.current.sendText(text);
@@ -2050,21 +2398,39 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   }
                 }}
                 onAction={async (action, data) => {
+                  if (action === 'canvas_bg_select' && data && typeof (data as { backgroundId?: string }).backgroundId === 'string') {
+                    setCanvasBackgroundId((data as { backgroundId: string }).backgroundId);
+                    if (clientRef.current && clientRef.current.isConnected()) {
+                      clientRef.current.sendText(`[Canvas] Applied background: ${(data as { backgroundId: string }).backgroundId}.`);
+                    }
+                    return;
+                  }
+                  if (action === 'canvas_bg_default') {
+                    setCanvasBackgroundId(null);
+                    if (clientRef.current && clientRef.current.isConnected()) {
+                      clientRef.current.sendText('[Canvas] Background reset to default.');
+                    }
+                    return;
+                  }
+                  if (action === 'canvas_bg_favorite_saved') {
+                    if (clientRef.current && clientRef.current.isConnected()) {
+                      clientRef.current.sendText(`[Canvas] Saved to favorites: ${(data as { backgroundId?: string })?.backgroundId ?? 'unknown'}.`);
+                    }
+                    return;
+                  }
                   try {
                     const res = await fetch('/api/skills/dispatch', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        skillId: (pinnedCanvas as any)?.sourceSkillId ?? 'render_component',
+                        skillId: (activeExperience.payload as any)?.sourceSkillId ?? 'render_component',
                         action,
-                        siteConfigId: (pinnedCanvas as any)?.siteConfigId,
+                        siteConfigId: (activeExperience.payload as any)?.siteConfigId,
                         data,
                       }),
                     });
                     const result = await res.json();
                     if (result.canvasPayload) {
-                      // Route through orchestrator — single governed mutation path.
-                      // Server-originated payload from /api/skills/dispatch.
                       voiceTurnOrchestrator.applyCanvasPayload(result.canvasPayload as CanvasRenderPayload);
                     }
                     if (clientRef.current && clientRef.current.isConnected()) {
@@ -2077,10 +2443,13 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   }
                 }}
                 onCancel={() => voiceTurnOrchestrator.clearCanvas('dismiss')}
+                canvasChrome={canvasChrome}
+                onCanvasChromeChange={updateCanvasChrome}
+                canvasBackgroundId={canvasBackgroundId}
               />
             ) : (
               <SharedCanvasPanel
-                metadata={pinnedCanvas as any}
+                metadata={activeExperience.payload as any}
                 onTriggerSpeech={(text) => {
                   if (clientRef.current && clientRef.current.isConnected()) {
                     clientRef.current.sendText(text);
@@ -2131,6 +2500,20 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               onVerified={handleNovaVerified}
               onCancel={() => setShowNovaGate(false)}
             />
+          </motion.div>
+        )}
+
+        {/* Platform home: phone OTP inside canvas (governed shell — no full-page /login hop). */}
+        {signInCanvasOverlay && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+            className={`absolute inset-0 z-[48] flex flex-col overflow-hidden ${CANVAS_BG_CLASSNAME}`}
+            role="dialog"
+            aria-label="Sign in"
+          >
+            {signInCanvasOverlay}
           </motion.div>
         )}
 
@@ -3302,45 +3685,181 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           </div>
           )
         ) : messages.length === 0 ? (
-          <div className={idleContent ? "h-full flex flex-col" : "min-h-full flex flex-col text-slate-600"}>
+          <div className={idleContent ? 'h-full flex flex-col' : 'flex flex-1 flex-col min-h-0 w-full text-slate-600'}>
             {idleContent ? (
               idleContent
+            ) : isAiOsShell ? (
+              <div className="flex flex-1 min-h-0 w-full flex-col items-center justify-center px-4 py-6">
+                <AiOsIdleCanvas
+                  businessName={business.name ?? ''}
+                  onSubmitLine={handleShellIntentPhrase}
+                  connectionStatus={connectionStatus}
+                />
+              </div>
             ) : canShowTransferQr && isTransferPromoVisible ? (
-              <>
-                <a
-                  href={qrTargetUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block rounded-2xl overflow-hidden border border-slate-200 bg-white p-2 shadow-sm w-40 h-40"
-                  aria-label={transferTitle}
-                >
-                  <img
-                    src={qrImageSrc}
-                    alt={transferTitle}
-                    className="w-full h-full object-contain"
-                  />
-                </a>
-                <p className={isSovereign ? 'mt-4 text-sm font-medium text-slate-700' : 'mt-4 text-sm font-medium text-slate-600'}>
-                  {transferTitle}
-                </p>
-                <p className="text-xs mt-2 text-slate-500 max-w-xs">
-                  {transferDescription}
-                </p>
-                <div className="w-full mt-4">
-                  {showIntentFirstIdleChrome && <IntentFirstIdleChrome businessName={business.name} />}
-                  <OSMenuListIdle role={effectiveOwnerControls ? 'manager' : 'customer'} isAuthenticated={isAuthenticated} capabilities={siteCapabilities} onSelect={(item) => item.viewId && handleMenuAction(item.viewId)} />
+              <div className="flex flex-1 flex-col items-center justify-center w-full min-h-[min(520px,65vh)] px-4 py-8">
+                <div className="flex flex-col items-center w-full max-w-2xl gap-6">
+                  <a
+                    href={qrTargetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block rounded-2xl overflow-hidden border border-slate-200 bg-white p-2 shadow-sm w-40 h-40"
+                    aria-label={transferTitle}
+                  >
+                    <img
+                      src={qrImageSrc}
+                      alt={transferTitle}
+                      className="w-full h-full object-contain"
+                    />
+                  </a>
+                  <p className={isSovereign ? 'text-sm font-medium text-slate-700 text-center' : 'text-sm font-medium text-slate-600 text-center'}>
+                    {transferTitle}
+                  </p>
+                  <p className="text-xs text-slate-500 max-w-xs text-center">{transferDescription}</p>
+                  <div className="w-full flex flex-col items-center gap-6">
+                    {isPlatformMarketingLanding(business.id) ? (
+                      <>
+                        <PlatformIdleGlassPanel chrome={canvasChrome}>
+                          {showIntentFirstIdleChrome && (
+                            <IntentFirstIdleChrome
+                              businessName={business.name}
+                              platformReferrerDisplay={platformIdleReferrerDisplay ?? null}
+                              chrome={canvasChrome}
+                            />
+                          )}
+                          <ShellIntentChips
+                            chips={PLATFORM_SHELL_CHIPS}
+                            onPhrase={handleShellIntentPhrase}
+                            onOpenBackgroundPicker={handleOpenBackgroundFromChip}
+                            onNavigate={onNavigate}
+                            chrome={canvasChrome}
+                          />
+                        </PlatformIdleGlassPanel>
+                        <details
+                          className="w-full max-w-2xl rounded-sui border border-slate-200/70 bg-white/60 backdrop-blur-md [&_summary::-webkit-details-marker]:hidden shadow-sm"
+                        >
+                          <summary className="cursor-pointer select-none px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-800 hover:bg-white/40 rounded-sui">
+                            Canvas appearance
+                          </summary>
+                          <div className="px-3 pb-4 pt-2 space-y-4 max-h-[min(70vh,640px)] overflow-y-auto">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 mb-2 px-0.5">
+                                1 · Background library
+                              </p>
+                              <CanvasBackgroundLibrarySection
+                                onAction={handleIdleCanvasAppearanceAction}
+                                selectedBackgroundId={canvasBackgroundId}
+                                compact
+                              />
+                            </div>
+                            <div className="border-t border-slate-200/80 pt-3">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 mb-2 px-0.5">
+                                {'2 · Theme & readability'}
+                              </p>
+                              <CanvasChromeControls value={canvasChrome} onChange={updateCanvasChrome} />
+                            </div>
+                          </div>
+                        </details>
+                      </>
+                    ) : (
+                      <>
+                        {showIntentFirstIdleChrome && (
+                          <IntentFirstIdleChrome
+                            businessName={business.name}
+                            platformReferrerDisplay={undefined}
+                          />
+                        )}
+                        <OSMenuListIdle
+                          role={effectiveOwnerControls ? 'manager' : 'customer'}
+                          isAuthenticated={isAuthenticated}
+                          capabilities={siteCapabilities}
+                          platformEntry={false}
+                          onSelect={handleIdleOsMenuSelect}
+                          listClassName="max-w-2xl mx-auto w-full"
+                        />
+                      </>
+                    )}
+                  </div>
                 </div>
-              </>
+              </div>
             ) : (
-              <>
-                {showIntentFirstIdleChrome && <IntentFirstIdleChrome businessName={business.name} />}
-                <OSMenuListIdle role={effectiveOwnerControls ? 'manager' : 'customer'} isAuthenticated={isAuthenticated} capabilities={siteCapabilities} onSelect={(item) => item.viewId && handleMenuAction(item.viewId)} />
-              </>
+              <div className="flex flex-1 flex-col items-center justify-center w-full min-h-[min(520px,65vh)] px-4 py-8">
+                <div className="w-full max-w-2xl flex flex-col items-center gap-8">
+                  {isPlatformMarketingLanding(business.id) ? (
+                    <>
+                      <PlatformIdleGlassPanel chrome={canvasChrome}>
+                        {showIntentFirstIdleChrome && (
+                          <IntentFirstIdleChrome
+                            businessName={business.name}
+                            platformReferrerDisplay={platformIdleReferrerDisplay ?? null}
+                            chrome={canvasChrome}
+                          />
+                        )}
+                          <ShellIntentChips
+                            chips={PLATFORM_SHELL_CHIPS}
+                            onPhrase={handleShellIntentPhrase}
+                            onOpenBackgroundPicker={handleOpenBackgroundFromChip}
+                            onNavigate={onNavigate}
+                            chrome={canvasChrome}
+                          />
+                        </PlatformIdleGlassPanel>
+                        <details
+                          className="w-full max-w-2xl rounded-sui border border-slate-200/70 bg-white/60 backdrop-blur-md [&_summary::-webkit-details-marker]:hidden shadow-sm"
+                        >
+                          <summary className="cursor-pointer select-none px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-800 hover:bg-white/40 rounded-sui">
+                            Canvas appearance
+                          </summary>
+                          <div className="px-3 pb-4 pt-2 space-y-4 max-h-[min(70vh,640px)] overflow-y-auto">
+                            <div>
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 mb-2 px-0.5">
+                                1 · Background library
+                              </p>
+                              <CanvasBackgroundLibrarySection
+                                onAction={handleIdleCanvasAppearanceAction}
+                                selectedBackgroundId={canvasBackgroundId}
+                                compact
+                            />
+                          </div>
+                          <div className="border-t border-slate-200/80 pt-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 mb-2 px-0.5">
+                              {'2 · Theme & readability'}
+                            </p>
+                            <CanvasChromeControls value={canvasChrome} onChange={updateCanvasChrome} />
+                          </div>
+                        </div>
+                      </details>
+                    </>
+                  ) : (
+                    <>
+                      {showIntentFirstIdleChrome && (
+                        <IntentFirstIdleChrome
+                          businessName={business.name}
+                          platformReferrerDisplay={undefined}
+                        />
+                      )}
+                      <OSMenuListIdle
+                        role={effectiveOwnerControls ? 'manager' : 'customer'}
+                        isAuthenticated={isAuthenticated}
+                        capabilities={siteCapabilities}
+                        platformEntry={false}
+                        onSelect={handleIdleOsMenuSelect}
+                        listClassName="max-w-2xl mx-auto w-full"
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
             )}
           </div>
-        ) : (
-          <div className="space-y-3 p-4">
-            {messages.map((msg) => {
+        ) : (() => {
+          /** UX: keep OS menu visible during conversation on business sites — not on public platform `/` (voice-first shell). */
+          const showPersistentOsMenuStrip =
+            messages.length > 0 && !idleContent && !isPlatformMarketingLanding(business.id) && !isAiOsShell;
+          const persistentStripHeading = isPlatformMarketingLanding(business.id)
+            ? 'Quick actions'
+            : 'Next actions';
+
+          const messageRows = messages.map((msg) => {
               const hasTool = msg.metadata?.tool_type;
               const userBubble = isSovereign
                 ? 'bg-indigo-500 text-white shadow-sm'
@@ -3366,7 +3885,31 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                     {msg.text && (
                       <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                     )}
-                    
+                    {msg.role === 'assistant' && !msg.text && hasTool && (
+                      <p className="text-sm text-slate-700 mb-2">Assistant step — use the panel below.</p>
+                    )}
+                    {msg.role === 'assistant' && !msg.text && !hasTool && (
+                      <p className="text-sm text-slate-700 leading-relaxed">
+                        {(() => {
+                          const vid =
+                            activeExperience?.payload &&
+                            typeof activeExperience.payload === 'object' &&
+                            'viewId' in activeExperience.payload &&
+                            typeof (activeExperience.payload as { viewId?: string }).viewId === 'string'
+                              ? (activeExperience.payload as { viewId: string }).viewId
+                              : null;
+                          if (vid) {
+                            return isPlatformMarketingLanding(business.id)
+                              ? `Voice reply. Canvas is showing “${vid.replace(/_/g, ' ')}” — keep talking to steer.`
+                              : `Voice reply. Governed canvas is showing “${vid.replace(/_/g, ' ')}” — use Next actions below or keep talking.`;
+                          }
+                          return isPlatformMarketingLanding(business.id)
+                            ? 'Voice reply (no text for this turn). Keep talking — the assistant responded in audio.'
+                            : 'Voice reply (no text for this turn). Use Next actions below or ask again — the assistant still responded in audio.';
+                        })()}
+                      </p>
+                    )}
+
                     {/* MULTIMODAL TOOL RENDERING — shared_canvas/show_canvas render inline only (no metadata→pinned bypass; GOVERNANCE_EXECUTION_PLAN_V1 Phase 3) */}
                     {hasTool && !msg.metadata.completed && (
                       <div className="mt-3 relative">
@@ -3431,10 +3974,41 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   </div>
                 </div>
               );
-            })}
-            <div ref={messagesEndRef} />
-          </div>
-        )}
+            });
+
+          if (showPersistentOsMenuStrip) {
+            return (
+              <div className="flex flex-col flex-1 min-h-0 h-full">
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-3 p-4">
+                  {messageRows}
+                  <div ref={messagesEndRef} />
+                </div>
+                <div
+                  className={`flex-shrink-0 border-t border-slate-200 ${CANVAS_BG_CLASSNAME}`}
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-4 pt-3 pb-1">
+                    {persistentStripHeading}
+                  </p>
+                  <OSMenuListIdle
+                    role={effectiveOwnerControls ? 'manager' : 'customer'}
+                    isAuthenticated={isAuthenticated}
+                    capabilities={siteCapabilities}
+                    platformEntry={isPlatformMarketingLanding(business.id)}
+                    onSelect={handleIdleOsMenuSelect}
+                    listClassName="p-2 pt-0 gap-1.5"
+                  />
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="flex flex-col flex-1 min-h-0 space-y-3 p-4 overflow-y-auto">
+              {messageRows}
+              <div ref={messagesEndRef} />
+            </div>
+          );
+        })()}
         </div>
       </div>
 
@@ -3483,13 +4057,15 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         </div>
       )}
 
-      {/* 4. BOTTOM FOOTER — always dark shell zone, carbon texture overlay */}
+      {/* 4. BOTTOM FOOTER — always dark shell zone; AI OS uses subtle hex grid (vision layout) */}
       <div
         style={{
           ...footerStyle,
           backgroundColor: '#0f172a',
-          backgroundImage: `linear-gradient(to bottom, rgba(15,23,42,0.85) 0%, rgba(15,23,42,0.92) 100%), url(${chatFooterCarbon})`,
-          backgroundSize: 'cover',
+          backgroundImage: isAiOsShell
+            ? `linear-gradient(to bottom, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.97) 100%), repeating-linear-gradient(60deg, transparent 0px, transparent 10px, rgba(51,65,85,0.14) 10px, rgba(51,65,85,0.14) 11px), repeating-linear-gradient(-60deg, transparent 0px, transparent 10px, rgba(51,65,85,0.1) 10px, rgba(51,65,85,0.1) 11px)`
+            : `linear-gradient(to bottom, rgba(15,23,42,0.85) 0%, rgba(15,23,42,0.92) 100%), url(${chatFooterCarbon})`,
+          backgroundSize: isAiOsShell ? 'auto, 22px 22px, 22px 22px' : 'cover',
           backgroundPosition: 'center',
         }}
         className="flex flex-col items-center justify-center gap-3 px-4 py-3 flex-shrink-0 border-t border-slate-700/50"
@@ -3536,8 +4112,19 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             onTouchStart={(e) => { e.preventDefault(); startPTT(); }}
             onTouchEnd={(e) => { e.preventDefault(); stopPTT(); }}
             disabled={connectionStatus !== 'connected'}
+            style={
+              isAiOsShell && !isRecording && !isProcessing
+                ? { backgroundColor: BRAND.green }
+                : undefined
+            }
             className={`relative w-[50%] min-w-[140px] max-w-[220px] h-14 rounded-2xl font-semibold text-sm transition-all duration-200 transform active:scale-[0.98] active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed select-none overflow-hidden ${
-              isRecording
+              isAiOsShell
+                ? isRecording
+                  ? 'bg-indigo-500 text-white shadow-[0_0_24px_rgba(99,102,241,0.5),0_4px_0_rgba(0,0,0,0.5)] ring-2 ring-indigo-400/50'
+                  : isProcessing
+                  ? 'bg-indigo-500/90 text-white shadow-[0_0_20px_rgba(99,102,241,0.35),0_4px_0_rgba(0,0,0,0.4)]'
+                  : 'text-white border border-emerald-700/40 shadow-[0_4px_0_rgba(0,0,0,0.45)] hover:brightness-110'
+                : isRecording
                 ? 'bg-indigo-500 text-white shadow-[0_0_24px_rgba(99,102,241,0.5),0_4px_0_rgba(0,0,0,0.5)] ring-2 ring-indigo-400/50'
                 : isProcessing
                 ? 'bg-indigo-500/90 text-white shadow-[0_0_20px_rgba(99,102,241,0.35),0_4px_0_rgba(0,0,0,0.4)]'
@@ -3546,8 +4133,14 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           >
             <span className="flex items-center justify-center gap-2">
               <Mic size={20} className={isRecording ? 'animate-pulse' : ''} />
-              <span className="hidden min-[380px]:inline">
-                {isRecording ? 'Listening…' : isProcessing ? 'Processing…' : 'Hold to speak'}
+              <span className={`hidden min-[380px]:inline ${isAiOsShell ? 'uppercase tracking-wide text-xs' : ''}`}>
+                {isRecording
+                  ? 'Listening…'
+                  : isProcessing
+                  ? 'Processing…'
+                  : isAiOsShell
+                  ? 'Push to talk'
+                  : 'Hold to speak'}
               </span>
             </span>
           </button>

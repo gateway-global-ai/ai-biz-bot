@@ -1,5 +1,13 @@
 /**
  * toolHandler.ts — Server-side tool execution for Gemini Multimodal Live (`server/services/toolHandler.ts`).
+ *
+ * **Operational frame (readiness):** Before dispatch, `getSystemReadinessReportForExecutionGate()` enforces the
+ * **execution plane** only (`executionReadiness`: DB + Gemini env + local `/api/health`). If that status is
+ * `blocked`, tools return `system_readiness_blocked` — the environment cannot safely run side-effecting work.
+ * `overallStatus` / npm `tests.catalog` tri-state is **orthogonal** (ops/CI); see `SYSTEM_READINESS_CHECK_V1.md`.
+ *
+ * When reviewing this file, ask: given current `executionReadiness`, which tools are actually reachable and
+ * what side effects (DB, email, Stripe, PMS, etc.) remain possible?
  */
 import { getBusinessDetails, getBusinessReviews } from "./mapsService";
 import { generateBusinessIntelligence } from "./intelligenceService";
@@ -27,6 +35,7 @@ import {
   pmsLookupGuestJourneyModelSchema,
   resolveBoundPhoneForGuestTools,
 } from "./guestToolPhoneBinding";
+import { getSystemReadinessReportForExecutionGate } from "./systemReadinessCore";
 
 /**
  * Interface for the tool call structure received from the Gemini v1beta protocol
@@ -438,6 +447,17 @@ export async function handleToolCall(toolCall: ToolCall, context?: ToolCallConte
         error: "knowledge_certification",
         message: gate.message,
         knowledge_certification_blocked: true,
+      };
+    }
+
+    const readiness = await getSystemReadinessReportForExecutionGate();
+    if (readiness.executionReadiness.status === "blocked") {
+      return {
+        error: "system_readiness_blocked",
+        message:
+          "Execution halted: core platform readiness is BLOCKED (database or Gemini configuration). See GET /api/platform/readiness or npm run system:check -- --json.",
+        critical_blockers: readiness.executionReadiness.blockers,
+        schema_version: readiness.schemaVersion,
       };
     }
 

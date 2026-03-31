@@ -15,6 +15,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, MapPin, Loader2, Save, ExternalLink } from "lucide-react";
 import { PlatformGovernanceHealthCard } from "@/components/admin/PlatformGovernanceHealthCard";
+import { IntegrationOnboardingSmsCard } from "@/components/admin/IntegrationOnboardingSmsCard";
 import { VoiceActivationPulse } from "@/components/admin/VoiceActivationPulse";
 
 const PLAN_OPTIONS = ["free", "pro", "voice", "enterprise"].map((p) => ({
@@ -201,6 +202,8 @@ export function PlatformBusinessOverviewPanel({ site, onSave, token }: Props) {
           slug={site.slug ?? null}
           siteName={site.name}
         />
+
+        <IntegrationOnboardingSmsCard siteConfigId={site.id} token={token} />
 
         <VoiceActivationPulse siteConfigId={site.id} days={14} />
       </div>

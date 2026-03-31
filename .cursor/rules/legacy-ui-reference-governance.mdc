@@ -1,0 +1,11 @@
+---
+description: Deprecated client UI quarantine — reference only, no production imports
+alwaysApply: true
+---
+
+# Legacy UI Reference Governance
+
+- `client/legacy-ui-reference/` holds **deprecated** hand-built layouts for **human reference** when migrating to intent-generated, registry-driven surfaces.
+- **Never import** from `client/legacy-ui-reference/` into production code under `client/src/` (routes, components in active use).
+- New canvas and customer-facing UX must follow `docs-governance/canonical/INTENT_GENERATED_SURFACE_GOVERNANCE_V1.md`, `VIEW_REGISTRY.md`, and `ACTION_REGISTRY.md`.
+- This folder is distinct from `_legacy_archive/` (backend/archaeology). Do not merge the two concepts.

@@ -6,7 +6,7 @@ backed_by:
   schema: false
   service: false
   route: false
-last_verified: 2026-03-28
+last_verified: 2026-03-30
 ---
 # Cursor Rules Index — Tiered Governance Map
 
@@ -14,11 +14,11 @@ last_verified: 2026-03-28
 
 This document maps **Tier 2** Cursor rules ([`.cursor/rules/*.mdc`](../.cursor/rules)) to **governance pillars** so agents resolve "rule fragmentation" without merging everything into one file. **Tier 1** is the root [`.cursorrules`](../.cursorrules) (Sovereign Core). **Tier 3** is [`docs-governance/`](./) (policy source of truth).
 
-**Count:** 36 `.mdc` files (plus [`SKILL.md`](../.cursor/rules/SKILL.md) permit helper in the rules folder).
+**Count:** 41 `.mdc` files (plus [`SKILL.md`](../.cursor/rules/SKILL.md) permit helper in the rules folder).
 
 | Pillar | Role |
 |--------|------|
-| **Core OS** | Mission, control plane, review gates, filesystem, imports, legacy archive |
+| **Core OS** | Mission, control plane, review gates, filesystem, imports, legacy archive, legacy UI reference |
 | **Registry & Routing** | Logical routes, views/actions, schema anchors, modular routes, QR |
 | **Agent & Runtime** | Policies, provisioning, execution plane, prompts, handover, protected chat internals |
 | **Voice & Audio** | Voice lockdown, Clear Voice audio ops, PTT/chat physical contract |
@@ -38,15 +38,20 @@ This document maps **Tier 2** Cursor rules ([`.cursor/rules/*.mdc`](../.cursor/r
 | `file-system-governance.mdc` | yes | — | Core OS | `FILE_SYSTEM_GOVERNANCE.md` |
 | `import-discipline.mdc` | yes | — | Core OS | `IMPORT_DISCIPLINE_MATRIX.md` |
 | `legacy-archive-governance.mdc` | yes | — | Core OS | `SCHEMA_ARCHAEOLOGY.md` (archive ref) |
+| `legacy-ui-reference-governance.mdc` | yes | — | Core OS | `INTENT_GENERATED_SURFACE_GOVERNANCE_V1.md` |
+| `canvas-os-tool-mandate.mdc` | yes | Concierge canvas, voice tools, canvas contracts, `client/src/components/auth/**` | UI & Brand / Canvas | `CANVAS_OS_TOOL_MANDATE_V1.md`, `VISUAL_INTEGRITY_GOVERNANCE_V1.md`, `GOVERNED_GENERATIVE_UI_SPEC.md`, `AI_DESIGN_STUDIO_GOVERNED_SPEC_V1.md`, `SHADCN_MCP_PLANE_BOUNDARY_V1.md`, `WORKSPACE_MCP_PLANE_BOUNDARY_V1.md` |
+| `governed-ui-sdk.mdc` | no | Platform home, Concierge, `@gateway/canvas-sdk`, `@gateway/design-tokens` | UI & Brand / SDK | `VOICE_FIRST_INTERFACE_PIPELINE_V1.md`, `SHADCN_MCP_PLANE_BOUNDARY_V1.md`, `WORKSPACE_MCP_PLANE_BOUNDARY_V1.md`, `UI_COMPONENT_APPROVAL_REGISTRY_V1.md`, `STYLE_APPROVAL_POLICY_V1.md`, `registry-yaml/ui-components/` |
 | `logical-route-registry.mdc` | yes | — | Registry & Routing | `LOGICAL_ROUTE_REGISTRY.md` |
-| `view-and-action-registry.mdc` | yes | — | Registry & Routing | `VIEW_REGISTRY.md`, `ACTION_REGISTRY.md` |
+| `view-and-action-registry.mdc` | yes | — | Registry & Routing | `VIEW_REGISTRY.md`, `ACTION_REGISTRY.md`, `GOVERNED_GENERATIVE_UI_SPEC.md`, `COMMAND_CENTER_SURFACE_SPEC_V1.md` |
+| `intent-loop-governance.mdc` | no | canvas intent, site runtime, voice turn orchestrator, `intentLoopContract`, GGUI / Command Center specs | Agent & Runtime / Canvas | `INTENT_LOOP_GOVERNANCE_V1.md`, `GOVERNED_GENERATIVE_UI_SPEC.md`, `local-agent-governance.mdc` (coding delegation) |
 | `schema-anchor-registry.mdc` | yes | — | Registry & Routing | `SCHEMA_ANCHOR_REGISTRY.md` |
-| `integration-graph-discipline.mdc` | yes | — | Registry & Routing | `INTEGRATION_GRAPH_DISCIPLINE.md`, `INTEGRATION_CAPABILITY_GRAPH_SPEC_V1.md` |
+| `site-identity-external-reference.mdc` | no | `server/routes/**`, `server/**/*.ts`, `scripts/**/*.ts`, `shared/schema.ts`, `shared/siteIdentity.ts` | Registry & Routing / Identity | `SITE_IDENTITY_AND_EXTERNAL_REFERENCE_V1.md` |
+| `integration-graph-discipline.mdc` | yes | — | Registry & Routing | `INTEGRATION_GRAPH_DISCIPLINE.md`, `INTEGRATION_CAPABILITY_GRAPH_SPEC_V1.md`, `CLOUDBEDS_GRAPHQL_DISCOVERY_GOVERNANCE_V1.md` |
 | `modular-routing.mdc` | yes | `server/routes.ts`, `server/routes/**` | Registry & Routing | Monolith ban in `.cursorrules` |
 | `qr-system.mdc` | no | QR routes/services + public/admin pages | Registry & Routing | QR / site_configs |
-| `agent-policy-registry.mdc` | yes | — | Agent & Runtime | `AGENT_POLICY_REGISTRY.md`, `SAFE_MODE_CONTRACT.md` |
+| `agent-policy-registry.mdc` | yes | — | Agent & Runtime | `AGENT_POLICY_REGISTRY.md`, `AGENT_BEHAVIOR_SPEC_V1.md`, `CLASSIFICATION_GOVERNANCE_SPEC_V1.md`, `SAFE_MODE_CONTRACT.md` |
 | `teams-agents-provisioning-matrix.mdc` | yes | — | Agent & Runtime | Provisioning / agents |
-| `execution-plane-boundary.mdc` | yes | — | Agent & Runtime | `EXECUTION_PLANE_BOUNDARY_SPEC.md` |
+| `execution-plane-boundary.mdc` | yes | — | Agent & Runtime | `EXECUTION_PLANE_BOUNDARY_SPEC.md`, `VOICE_EXECUTION_ARCHITECTURE_V1.md`, `PTT_SESSION_NODE_V1.md`, `EXECUTION_MUTATION_GATE_SPEC_V1.md`, `SYSTEM_READINESS_CHECK_V1.md`, `GOVERNANCE_TEST_READINESS_V1.md` |
 | `prompt-runtime-governance.mdc` | yes | — | Agent & Runtime | `PROMPT_RUNTIME_GOVERNANCE.md` |
 | `handover-protocol.mdc` | yes | site config routes, storage, Concierge | Agent & Runtime | Handover / UPA |
 | `architect.mdc` | yes | `geminiService`, `agentConfig` (paths in file) | Agent & Runtime | Integrity guardian |
@@ -87,12 +92,27 @@ High-level entry points under [`.cursor/skills/`](../.cursor/skills/) link here;
 | Governance linter | Alignment / drift vs plans, rules, skills, docs; emits `docs/governance/` alignment artifacts | `governance-linter/SKILL.md` |
 | Governance review | GOVERNANCE_REVIEW_AGENT: Phase 1 artifact preflight (PF-*); Phase 2 approve / conditional / reject / escalate | `governance-review/SKILL.md` |
 | Archive governance | Post-review unmount, `quarantine/`, deprecation notes, registry updates | `archive-governance/SKILL.md` |
+| Intent loop governance | Stateful intent resolution, merge order, phased resolver; split governance review vs local-LLM coding | `intent-loop-governance/SKILL.md` |
+
+---
+
+## Governance review cluster (canonical reading path)
+
+Pre-implementation review and **post-hoc operational truth** audits are complementary. Use this cluster when analyzing repo status, backlog honesty, or shipped-vs-planned gaps.
+
+| Artifact | Role |
+|----------|------|
+| [`GOVERNANCE_REVIEW_ENGINE.md`](./GOVERNANCE_REVIEW_ENGINE.md) | Pre-implementation review before architecture-affecting work |
+| [`../artifacts/QUEUE_REVIEW_TEMPLATE_V1.md`](../artifacts/QUEUE_REVIEW_TEMPLATE_V1.md) | **Standard output frame** for queue reviews, readiness reviews, implementation status audits, shipped-vs-planned assessments, and false-confidence checks across docs, registry YAML, runtime, routes, and **operator usability** |
+
+[`QUEUE_REVIEW_TEMPLATE_V1.md`](../artifacts/QUEUE_REVIEW_TEMPLATE_V1.md) requires each work item to declare: `current_truth`, `runtime_status`, `operator_usable_today` (`yes` \| `admin-only` \| `dev/test-only` \| `no`), `next_concrete_step`, `blocking_dependency`.
 
 ---
 
 ## Related
 
-- [`GOVERNANCE_EXECUTION_PLAN_V1.md`](./GOVERNANCE_EXECUTION_PLAN_V1.md) — **Phased governance execution (source of truth)**; **Runtime Trust Parity** milestone (Phase 3 QA + PSTN binding + Twilio 10a); **Phase 10** reliability plane
+- [`SHELL_CONTAINMENT_RULE_V1.md`](./SHELL_CONTAINMENT_RULE_V1.md) — **Concierge = chat-native shell**; in-shell intent experiences vs multipage website navigation; exceptions list (external handoff, admin, etc.)
+- [`GOVERNANCE_EXECUTION_PLAN_V1.md`](./GOVERNANCE_EXECUTION_PLAN_V1.md) — **Phased governance execution (source of truth)**; **Runtime Trust Parity** milestone (Phase 3 QA + PSTN binding + Twilio 10a); **Phase 10** reliability plane; **Intent loop** control-plane track → [`INTENT_LOOP_GOVERNANCE_V1.md`](./INTENT_LOOP_GOVERNANCE_V1.md)
 - [`TWILIO_RELIABILITY_ARCHITECTURE.md`](./TWILIO_RELIABILITY_ARCHITECTURE.md) — Telecom-grade Twilio subsystem + **vendor telemetry discovery** rule for skills/integrations
 - [`TWILIO_ERROR_NORMALIZATION_SPEC.md`](./TWILIO_ERROR_NORMALIZATION_SPEC.md) / [`registry-yaml/twilio-platform-failure-classes.v0.yaml`](../../registry-yaml/twilio-platform-failure-classes.v0.yaml) — platform failure `class_id` vocabulary
 - [`TWILIO_FALLBACK_POLICY_REGISTRY.md`](./TWILIO_FALLBACK_POLICY_REGISTRY.md) — policy dimensions and fallback actions

@@ -49,3 +49,5 @@ Protect the Gemini Live voice runtime as a latency-sensitive execution plane.
 
 ## Related contract
 - `EXECUTION_PLANE_BRIDGE_GOVERNANCE.md` defines how the control plane is allowed to hand payloads into this execution layer.
+- [`VOICE_EXECUTION_ARCHITECTURE_V1.md`](./VOICE_EXECUTION_ARCHITECTURE_V1.md) — transport vs orchestration vs model layers.
+- [`EXECUTION_MUTATION_GATE_SPEC_V1.md`](./EXECUTION_MUTATION_GATE_SPEC_V1.md) — mutations must pass governed gates (tools, canvas, integrations).

@@ -15,6 +15,10 @@
  */
 
 import type { Agent } from '@shared/schema';
+import {
+  buildCognitionContractPromptFragment,
+  type MergedCognitionContractV1,
+} from '@shared/cognitionContract';
 import { getOperationalMode, getModeInstruction, getModeArchOverride } from '../config/operationalModes';
 import { buildDisclosureFragment } from './disclosurePolicy';
 import {
@@ -447,6 +451,14 @@ export function buildBehavioralPrompt(
         `This lock exists to protect ${modeDef.id === 'EMERGENCY' ? 'life safety and triage efficiency' : 'focused, on-task customer resolution'}. It is non-negotiable.`
       );
     }
+  }
+
+  // ── Governed cognition contract (classification defaults; before domain memory / prose) ──
+  const mergedCognition = (agent as { mergedCognitionContract?: MergedCognitionContractV1 | null })
+    .mergedCognitionContract;
+  const cognitionFrag = buildCognitionContractPromptFragment(mergedCognition ?? null);
+  if (cognitionFrag) {
+    sections.push(cognitionFrag);
   }
 
   // ── Communication Plane: progressive disclosure + stability dials + principal-of-record ──

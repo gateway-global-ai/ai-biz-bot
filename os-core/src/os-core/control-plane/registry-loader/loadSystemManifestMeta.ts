@@ -1,4 +1,4 @@
-import manifestRaw from "../../../../../docs-governance/SYSTEM_MANIFEST.md?raw";
+import manifestRaw from "../../../../../docs-governance/canonical/SYSTEM_MANIFEST.md?raw";
 
 export interface SystemManifestMeta {
   architectureVersion: string;

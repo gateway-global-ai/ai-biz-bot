@@ -1,0 +1,36 @@
+# Global swarm and per-property agent caps + write-capable limits
+spec: agent_classification_swarm_limits_v1
+version: "1.0.0"
+
+swarm:
+  min_agents: 1
+  default_agents: 4
+  recommended_max_agents: 12
+  hard_max_agents: 24
+
+per_actor_class_max_in_swarm:
+  customer: 6
+  employee: 6
+  vendor: 4
+  management: 4
+
+per_property:
+  min_active_deployable_agents: 1
+  recommended_active_agents_min: 4
+  recommended_active_agents_max: 8
+  hard_max_active_deployable_agents: 16
+  beyond_hard_max_status: disabled_overflow
+
+# Per-agent / swarm validation (structural)
+lists:
+  max_capability_set_ids_per_agent: 8
+  max_skill_ids_per_agent: 12
+  max_required_probe_ids_per_agent: 20
+  max_write_capable_capability_sets_per_agent: 3
+  max_write_capable_agents_per_swarm_v1: 4
+
+# Write-capable: derived from integration capability mutation_level / side_effect_level (see spec doc)
+write_capable_mutation_levels:
+  - write
+write_capable_side_effect_levels:
+  - financial

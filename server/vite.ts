@@ -1,5 +1,5 @@
 import { type Express } from "express";
-import { createServer as createViteServer, createLogger } from "vite";
+import { createServer as createViteServer, createLogger, type UserConfig } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import fs from "fs";
@@ -29,8 +29,12 @@ export async function setupVite(server: Server, app: Express) {
         })
       : viteConfig;
 
+  const base = resolvedConfig as UserConfig;
+  // Must merge server options: replacing `server` entirely drops `fs.allow` from vite.config.ts.
+  // With root=client and fs.strict, omitting allow breaks resolution of `@gateway/canvas-sdk`
+  // (packages/ outside client/) and other monorepo aliases.
   const vite = await createViteServer({
-    ...resolvedConfig,
+    ...base,
     configFile: false,
     customLogger: {
       ...viteLogger,
@@ -38,7 +42,10 @@ export async function setupVite(server: Server, app: Express) {
         viteLogger.error(msg, options);
       },
     },
-    server: serverOptions,
+    server: {
+      ...(base.server ?? {}),
+      ...serverOptions,
+    },
     appType: "custom",
   });
 

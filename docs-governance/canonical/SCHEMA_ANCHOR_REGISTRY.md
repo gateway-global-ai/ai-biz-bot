@@ -6,7 +6,7 @@ backed_by:
   schema: true
   service: false
   route: false
-last_verified: 2026-03-25
+last_verified: 2026-03-28
 ---
 # Schema Anchor Registry
 
@@ -23,7 +23,7 @@ Define the real source-of-truth entities the OS is allowed to reason about befor
   - carries account type, onboarding, compliance, activation state
 
 ### `siteConfigs`
-- Primary key: `siteConfigId`
+- Primary key: `siteConfigId` (Gateway UUID) — **sole authoritative internal business/site identity**; external IDs (`place_id`, vendor property ids, etc.) are reference metadata only — see [`SITE_IDENTITY_AND_EXTERNAL_REFERENCE_V1.md`](./SITE_IDENTITY_AND_EXTERNAL_REFERENCE_V1.md)
 - Role: business / workspace anchor
 - Key relationships:
   - parent: `customerAccounts`
@@ -33,6 +33,25 @@ Define the real source-of-truth entities the OS is allowed to reason about befor
 - Primary key: `agentId`
 - Parent key: `siteConfigId`
 - Role: runtime persona and behavior anchor
+- Behavioral & character state: DISC axes (`dominance`, `influence`, `steadiness`, `conscientiousness`) as **judgment weighting inputs**; `arch_profile`, `structured_controls`, `operational_mode`; `short_term_memory` / `long_term_memory` narrative identity — target structured **`character_profile`** (value order, refusal ethics) per [`AGENT_BEHAVIOR_SPEC_V1.md`](./AGENT_BEHAVIOR_SPEC_V1.md)
+- Classification v1 (optional FKs): `agent_template_id` → `agent_templates`, `swarm_schematic_member_id` → `swarm_schematic_members`; `primary_actor_class`, `primary_stage_class`, secondary class JSON arrays; `deployment_status` (`legacy` until populated)
+
+### `agent_templates`
+- Primary key: `id` (uuid)
+- Role: reusable platform agent blueprint (`template_key`, default actor/stage/mode, default capability set ids); **target home for classification-level default cognition** (character priors, conversational power defaults, refusal ethics, ARCH defaults) per [`AGENT_BEHAVIOR_SPEC_V1.md`](./AGENT_BEHAVIOR_SPEC_V1.md)
+- Table: `agent_templates`
+- See: [`AGENT_CLASSIFICATION_AND_SWARM_LIMITS_V1.md`](./AGENT_CLASSIFICATION_AND_SWARM_LIMITS_V1.md)
+
+### `swarm_schematics`
+- Primary key: `id` (uuid)
+- Role: bounded swarm definition per industry/schematic key (min/default/max/hard max agent counts)
+- Table: `swarm_schematics`
+
+### `swarm_schematic_members`
+- Primary key: `id` (uuid)
+- Parent key: `swarm_schematic_id` → `swarm_schematics`
+- Role: one row per role in a schematic; FK to `agent_templates`; effective capability set / probe ids for that role; **inherits** template cognition defaults with **domain-level** optional overrides
+- Table: `swarm_schematic_members`
 
 ### `customers`
 - Primary key: `customerId`
@@ -66,6 +85,12 @@ Define the real source-of-truth entities the OS is allowed to reason about befor
 - Role: append-only **transparency** log for verification **HTTP** routes (all status codes) and async **`voice_session_connect`** events (`passage_kind` discriminator); `client_fingerprint_hash`, `auth_state`, optional `installation_key_id`, `rate_limited`
 - Table: `verification_gate_passage_events`
 - See: [`VERIFICATION_GATE_TRANSPARENCY.md`](VERIFICATION_GATE_TRANSPARENCY.md), [`VOICE_SESSION_TRANSPARENCY.md`](VOICE_SESSION_TRANSPARENCY.md)
+
+### `integrationConnectTokens`
+- Primary key: `id` (uuid)
+- Parent key: `siteConfigId` → `siteConfigs`
+- Role: short-lived **operator** SMS deep-link tokens for integration connect (`vendor_id`, `connect_lane`, `token_hash` only — no plaintext); not general login — see [`INTEGRATION_OPERATOR_CONNECT_FLOW_V1.md`](./INTEGRATION_OPERATOR_CONNECT_FLOW_V1.md)
+- Table: `integration_connect_tokens`
 
 ## Rules
 - New architecture work must map to these anchors first.

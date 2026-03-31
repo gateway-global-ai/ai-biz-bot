@@ -1,0 +1,23 @@
+---
+description: Canvas is an OS tool — not a generative artboard. Agent-authored canvas UI uses Shadcn MCP + design tokens; no presentation inline style on canvas paths.
+globs: client/src/components/chat/**,client/src/components/voice/**,client/src/components/auth/**,shared/canvas*.ts,shared/canvasViewContract.ts
+alwaysApply: true
+---
+
+# Canvas OS Tool Mandate
+
+Read **`docs-governance/canonical/CANVAS_OS_TOOL_MANDATE_V1.md`** and **`docs-governance/canonical/VISUAL_INTEGRITY_GOVERNANCE_V1.md`** before adding or changing UI in the **Concierge canvas zone**, pinned canvas, or **canvas component palette**. **Non-UI MCPs** (e.g. Google Workspace API tools) are a different plane — **`WORKSPACE_MCP_PLANE_BOUNDARY_V1.md`** — not a substitute for registry-backed surfaces.
+
+## Non-negotiable
+
+1. **The canvas is not an artboard** for models/agents to invent arbitrary layouts. It is an **OS instrument**: registry views, validated `canvas.*` syscalls, finite renderers (`GOVERNED_GENERATIVE_UI_SPEC.md`).
+
+2. **Agent-authored canvas UI** (new/changed UI that ships in the white canvas or expands palette primitives) **MUST** use the **Shadcn MCP** discovery/promotion path (`AI_DESIGN_STUDIO_GOVERNED_SPEC_V1.md`, `shadcn-ui-agent` skill) — not hand-rolled one-off trees as the delivery pattern.
+
+3. **No presentation `style={{ ... }}`** on canvas-hosted surfaces or new palette components for color, spacing, typography, or layout. Use **`brand.ts` tokens**, `client/src/ui-core/**`, or **token-derived Tailwind** (e.g. `className={\`bg-[${CANVAS.bg}]\`}` with imported `CANVAS`). Ad hoc hex in feature JSX is forbidden for zone styling.
+
+4. **Reviews must use three axes** (do not collapse into one “MCP yes/no”): **surface type** (canvas vs route vs experiment) · **styling mode** (token class vs inline) · **governance doc** (this mandate vs GGUI vs Design Studio).
+
+## Waivers
+
+Exceptions belong in **`CANVAS_OS_TOOL_MANDATE_V1.md` § Waivers** — not in silent one-offs.

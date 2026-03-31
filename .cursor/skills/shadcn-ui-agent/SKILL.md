@@ -1,5 +1,7 @@
 # SHADCN_UI_AGENT_SKILL
 
+**Runtime boundary:** Shadcn MCP is **design-time / Cursor / local ui_agent** only — not called by Gemini voice, swarm provisioning, or skill deployment at live runtime. Canonical: [`docs-governance/canonical/SHADCN_MCP_PLANE_BOUNDARY_V1.md`](../../docs-governance/canonical/SHADCN_MCP_PLANE_BOUNDARY_V1.md).
+
 ## Identity
 **Skill ID:** `shadcn-ui-agent`
 **Agent:** `ui_agent` (local_agent_plane, qwen2.5-coder:7b, operationalMode: UI_BUILDER)
@@ -45,8 +47,11 @@ These rules are sourced directly from `docs-governance/canonical/AI_DESIGN_STUDI
 
 ```
 1. DISCOVER
-   Use shadcn MCP server (registered in .cursor/mcp.json) to browse components.
-   Search: "shadcn search <component-name>"
+   Prefer the repo **shadcn.io catalog MCP** (stdio): `scripts/shadcn-io-catalog-mcp.ts` → tools
+   `shadcn_io_search`, `shadcn_io_list`, `shadcn_io_get`, `shadcn_io_about` (index from
+   [shadcnio/react-shadcn-components](https://github.com/shadcnio/react-shadcn-components) README + ai/panel, ai/canvas).
+   The remote `https://www.shadcn.io/api/mcp` URL often returns **405** with Cursor SSE — do not rely on it.
+   Optional second server: official ui.shadcn.com MCP (`npx shadcn@latest mcp`) under a different server name if needed.
    This is READ-ONLY discovery. No output from discovery goes directly to product code.
 
 2. EVALUATE

@@ -14,18 +14,20 @@ import { eq, and } from 'drizzle-orm';
 import {
   industryAgentTemplates,
   agents,
+  agentTemplates,
   siteConfigs,
   PLACES_TYPE_TO_INDUSTRY,
   type IndustryGroup,
   type IndustryAgentTemplate,
+  type Agent,
 } from '@shared/schema';
+import { buildMergedCognitionContract, type MergedCognitionContractV1 } from '@shared/cognitionContract';
 import { generateQrForRoute } from './qrRoutingService.js';
 import { buildBehavioralPrompt } from './promptCompiler.js';
 import type { StructuredControls } from '@shared/schema';
-import {
-  loadHospitalityCloudbedsSchematic,
-  getHospitalitySchematicMember,
-} from '../config/loadHospitalitySwarmSchematic.js';
+import { getHospitalitySchematicMember } from '../config/loadHospitalitySwarmSchematic.js';
+import { getArchetypeCharacterProfile } from '../config/archetypeCharacterDefaults.js';
+import { ensureHospitalityCloudbedsDbProjection } from './hospitalitySwarmDbProjection.js';
 
 
 // ── Industry Detection ─────────────────────────────────────────────────────────
@@ -91,7 +93,10 @@ function buildSystemPromptFromTemplate(template: IndustryAgentTemplate): string 
 
 export interface ProvisioningResult {
   industryGroup: IndustryGroup;
+  /** New rows inserted this run. */
   agentsCreated: number;
+  /** Existing agents reused (same site + roleType); no duplicate create. */
+  agentsSkipped: number;
   agentIds: string[];
   archetypesProvisioned: string[];
 }
@@ -133,29 +138,51 @@ export async function provisionAgentsForBusiness(
 
   if (templates.length === 0) {
     console.warn(`[Provisioning] No templates found for industry: ${industryGroup}`);
-    return { industryGroup, agentsCreated: 0, agentIds: [], archetypesProvisioned: [] };
+    return { industryGroup, agentsCreated: 0, agentsSkipped: 0, agentIds: [], archetypesProvisioned: [] };
+  }
+
+  let hospitalityProjection:
+    | Awaited<ReturnType<typeof ensureHospitalityCloudbedsDbProjection>>
+    | null = null;
+  if (industryGroup === 'hospitality_travel') {
+    try {
+      hospitalityProjection = await ensureHospitalityCloudbedsDbProjection();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[Provisioning] Hospitality DB projection failed: ${msg}`);
+      return { industryGroup, agentsCreated: 0, agentsSkipped: 0, agentIds: [], archetypesProvisioned: [] };
+    }
+  }
+
+  const existingRoster = await storage.getAgentsBySiteConfigId(siteConfigId);
+  const existingByRole = new Map<string, Agent>();
+  for (const a of existingRoster) {
+    if (a.roleType && !existingByRole.has(a.roleType)) {
+      existingByRole.set(a.roleType, a);
+    }
   }
 
   const agentIds: string[] = [];
   const archetypesProvisioned: string[] = [];
+  let agentsCreated = 0;
+  let agentsSkipped = 0;
 
   for (const template of templates) {
     try {
-      const systemPrompt = buildSystemPromptFromTemplate(template);
-
       let hospitalityOperationalMode: string | undefined;
       let hospitalityStructuredControls: StructuredControls | undefined;
-      if (industryGroup === 'hospitality_travel') {
-        const schDoc = loadHospitalityCloudbedsSchematic();
-        if (!schDoc) {
-          throw new Error(
-            '[Provisioning] hospitality_travel requires registry-yaml/swarm-schematics/hospitality_cloudbeds.v1.yaml',
-          );
-        }
+      const classificationLink = hospitalityProjection?.linkByRoleType.get(template.roleType);
+      if (industryGroup === 'hospitality_travel' && hospitalityProjection) {
+        const schDoc = hospitalityProjection.doc;
         const sm = getHospitalitySchematicMember(schDoc, template.roleType);
         if (!sm) {
           throw new Error(
             `[Provisioning] swarm schematic has no member for role_type=${template.roleType}`,
+          );
+        }
+        if (!classificationLink) {
+          throw new Error(
+            `[Provisioning] classification projection missing link for role_type=${template.roleType}`,
           );
         }
         hospitalityOperationalMode = sm.default_operational_mode;
@@ -169,6 +196,110 @@ export async function provisionAgentsForBusiness(
             api_version_lane: sm.api_version_lane,
           },
         };
+      }
+
+      const existing = template.roleType ? existingByRole.get(template.roleType) : undefined;
+      if (existing) {
+        if (industryGroup === 'hospitality_travel' && hospitalityProjection) {
+          const existingSc = (existing.structuredControls ?? {}) as StructuredControls;
+          const needsClassification =
+            !!classificationLink &&
+            (!existing.agentTemplateId ||
+              !existing.swarmSchematicMemberId ||
+              existing.deploymentStatus === 'legacy');
+          const needsSwarmContract =
+            !!hospitalityStructuredControls && !existingSc.swarm_role_contract?.schematic_id;
+
+          let mergedForUpdate: MergedCognitionContractV1 | undefined;
+          if (classificationLink && hospitalityProjection && (needsClassification || needsSwarmContract)) {
+            const [tplRow] = await db
+              .select()
+              .from(agentTemplates)
+              .where(eq(agentTemplates.id, classificationLink.agentTemplateId))
+              .limit(1);
+            mergedForUpdate = buildMergedCognitionContract({
+              templateCharacter: tplRow?.characterProfile ?? undefined,
+              provenance: {
+                agent_template_id: classificationLink.agentTemplateId,
+                swarm_schematic_member_id: classificationLink.swarmSchematicMemberId,
+                schematic_id: hospitalityProjection.doc.schematic_id,
+                schematic_version: hospitalityProjection.doc.version,
+              },
+              schematicVersion: hospitalityProjection.doc.version,
+            });
+          }
+
+          if ((needsClassification && classificationLink) || needsSwarmContract) {
+            await storage.updateAgent(existing.id, {
+              ...(needsClassification && classificationLink
+                ? {
+                    agentTemplateId: classificationLink.agentTemplateId,
+                    swarmSchematicMemberId: classificationLink.swarmSchematicMemberId,
+                    primaryActorClass: classificationLink.primaryActorClass,
+                    secondaryActorClasses: [...classificationLink.secondaryActorClasses],
+                    primaryStageClass: classificationLink.primaryStageClass,
+                    secondaryStageClasses: [...classificationLink.secondaryStageClasses],
+                    deploymentStatus: 'active_deployable',
+                  }
+                : {}),
+              ...(mergedForUpdate ? { mergedCognitionContract: mergedForUpdate } : {}),
+              ...(needsSwarmContract && hospitalityStructuredControls
+                ? {
+                    structuredControls: {
+                      ...existingSc,
+                      ...hospitalityStructuredControls,
+                    },
+                    ...(hospitalityOperationalMode ? { operationalMode: hospitalityOperationalMode } : {}),
+                  }
+                : {}),
+            } as any);
+          }
+        } else if (!existing.mergedCognitionContract) {
+          const mergedIndustry = buildMergedCognitionContract({
+            templateCharacter: getArchetypeCharacterProfile(template.roleType),
+            provenance: {
+              agent_template_id: template.id,
+              swarm_schematic_member_id: null,
+            },
+          });
+          await storage.updateAgent(existing.id, {
+            mergedCognitionContract: mergedIndustry,
+          } as any);
+        }
+        agentIds.push(existing.id);
+        archetypesProvisioned.push(template.roleType);
+        agentsSkipped += 1;
+        console.log(`[Provisioning] Skipped existing agent: ${template.defaultName} (${template.roleType})`);
+        continue;
+      }
+
+      const systemPrompt = buildSystemPromptFromTemplate(template);
+
+      let mergedCognitionContract: MergedCognitionContractV1 | undefined;
+      if (industryGroup === 'hospitality_travel' && hospitalityProjection && classificationLink) {
+        const [tplRow] = await db
+          .select()
+          .from(agentTemplates)
+          .where(eq(agentTemplates.id, classificationLink.agentTemplateId))
+          .limit(1);
+        mergedCognitionContract = buildMergedCognitionContract({
+          templateCharacter: tplRow?.characterProfile ?? undefined,
+          provenance: {
+            agent_template_id: classificationLink.agentTemplateId,
+            swarm_schematic_member_id: classificationLink.swarmSchematicMemberId,
+            schematic_id: hospitalityProjection.doc.schematic_id,
+            schematic_version: hospitalityProjection.doc.version,
+          },
+          schematicVersion: hospitalityProjection.doc.version,
+        });
+      } else {
+        mergedCognitionContract = buildMergedCognitionContract({
+          templateCharacter: getArchetypeCharacterProfile(template.roleType),
+          provenance: {
+            agent_template_id: template.id,
+            swarm_schematic_member_id: null,
+          },
+        });
       }
 
       const agent = await storage.createAgent({
@@ -224,10 +355,26 @@ export async function provisionAgentsForBusiness(
         startupStatus: 'pending',
         ...(hospitalityOperationalMode ? { operationalMode: hospitalityOperationalMode } : {}),
         ...(hospitalityStructuredControls ? { structuredControls: hospitalityStructuredControls } : {}),
+        ...(classificationLink
+          ? {
+              agentTemplateId: classificationLink.agentTemplateId,
+              swarmSchematicMemberId: classificationLink.swarmSchematicMemberId,
+              primaryActorClass: classificationLink.primaryActorClass,
+              secondaryActorClasses: [...classificationLink.secondaryActorClasses],
+              primaryStageClass: classificationLink.primaryStageClass,
+              secondaryStageClasses: [...classificationLink.secondaryStageClasses],
+              deploymentStatus: 'active_deployable',
+            }
+          : {}),
+        ...(mergedCognitionContract ? { mergedCognitionContract } : {}),
       });
 
       agentIds.push(agent.id);
       archetypesProvisioned.push(template.roleType);
+      agentsCreated += 1;
+      if (template.roleType) {
+        existingByRole.set(template.roleType, agent);
+      }
 
       // ── Create QR route for this agent (destination: /agent/{site-slug}) ───
       if (siteSlug) {
@@ -260,7 +407,13 @@ export async function provisionAgentsForBusiness(
     try {
       const conciergeIdx = archetypesProvisioned.indexOf('concierge');
       const primaryAgentId = conciergeIdx >= 0 ? agentIds[conciergeIdx] : agentIds[0];
-      await storage.updateSiteConfig(siteConfigId, { assignedAgentId: primaryAgentId } as any);
+      const siteRow = await storage.getSiteConfig(siteConfigId);
+      const ws = siteRow?.workspaceState ?? 'demo';
+      const shouldMarkProvisioned = ws === 'demo' || ws === 'provisioned';
+      await storage.updateSiteConfig(siteConfigId, {
+        assignedAgentId: primaryAgentId,
+        ...(shouldMarkProvisioned ? { workspaceState: 'provisioned' as const } : {}),
+      } as any);
       console.log(`[Provisioning] Assigned primary agent (concierge) to siteConfigId=${siteConfigId}`);
     } catch (err: any) {
       console.warn('[Provisioning] Failed to assign primary agent:', err.message);
@@ -269,7 +422,8 @@ export async function provisionAgentsForBusiness(
 
   return {
     industryGroup,
-    agentsCreated: agentIds.length,
+    agentsCreated,
+    agentsSkipped,
     agentIds,
     archetypesProvisioned,
   };

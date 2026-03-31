@@ -7,6 +7,8 @@ import knowledgeRoutes from "./routes/knowledge-routes";
 import businessRoutes from "./routes/businessRoutes";
 import siteConfigRoutes from "./routes/siteConfigRoutes";
 import cloudbedsRoutes from "./routes/cloudbedsRoutes";
+import integrationConnectRoutes from "./routes/integrationConnectRoutes";
+import integrationOnboardingRoutes from "./routes/integrationOnboardingRoutes";
 import { claimRoutes, handleClaimCheckoutCompleted } from "./routes/claimRoutes";
 import ingestPlanRoutes from "./routes/ingestPlanRoutes";
 import bailRescueRoutes from "./routes/bailRescueRoutes";
@@ -62,6 +64,7 @@ import businessTelephonyRoutes from "./routes/businessTelephonyRoutes"; // Per-b
 import skillDispatchRoutes from "./routes/skillDispatchRoutes"; // PTT Canvas OS — unified skill dispatch
 import canvasControlRoutes from "./routes/canvasControlRoutes"; // Canvas Control Syscall Layer — governed canvas mutations
 import platformProductRoutes from "./routes/platformProductRoutes"; // Platform products/services catalog with Stripe sync
+import platformReadinessRoutes from "./routes/platformReadinessRoutes"; // Auth-gated system readiness JSON (same as system:check --json)
 import reportProxyRoutes from "./routes/reportProxyRoutes"; // AIOS Report interactive features proxy (Gemini server-side)
 import twilio from "twilio";
 import { 
@@ -113,8 +116,9 @@ const SOCIAL_CRAWLER_UA = /facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Wh
 function getDefaultOg(): Record<string, string> {
   const baseUrl = process.env.APP_URL || "https://aibizbot-dev.gatewayglobal.ai";
   return {
-    ogTitle: "CLAIM YOUR BUSINESS PROFILE — GET ACCESS TO YOUR AI AGENTS AND WEBSITE",
-    ogDescription: "AI-powered business websites with voice concierge and chat. Free 30 day trial, instant delivery.",
+    ogTitle: "Sovereign AI OS — Voice-first, governed, deterministic agents",
+    ogDescription:
+      "Gateway Global AI is the AI Business Router: Clear Voice PTT, registry-backed tools, execution-plane integrity, and operator-grade governance for mid-market operators.",
     ogUrl: baseUrl,
     ogImage: `${baseUrl}/og-preview.png`,
     ogType: "website",
@@ -205,6 +209,7 @@ export async function registerRoutes(
   app.use("/api/telephony/business", businessTelephonyRoutes);
   app.use("/api/skills", skillDispatchRoutes);
   app.use("/api/platform-products", platformProductRoutes);
+  app.use("/api/platform", platformReadinessRoutes);
   app.use("/api/report", reportProxyRoutes); // AIOS Report interactive features
 
   // Agent System: DISC, Agents, Organizations, Projects, BotTemplates
@@ -678,10 +683,20 @@ export async function registerRoutes(
       }
 
       const defaultPlaceId = "ChIJB4qU6oXvJIgR_2p602OaK_U";
-      const placeId =
+      let placeId =
         (typeof req.query.placeId === "string" && req.query.placeId) ||
         process.env.TEST_PLACE_ID ||
         defaultPlaceId;
+      const healthSiteConfigId =
+        typeof req.query.siteConfigId === "string" && req.query.siteConfigId.trim()
+          ? req.query.siteConfigId.trim()
+          : undefined;
+      if (healthSiteConfigId) {
+        const siteRow = await storage.getSiteConfigById(healthSiteConfigId);
+        if (siteRow?.placeId?.trim()) {
+          placeId = siteRow.placeId.trim();
+        }
+      }
       const businessName =
         (typeof req.query.businessName === "string" && req.query.businessName) ||
         process.env.TEST_BUSINESS_NAME ||
@@ -2076,6 +2091,8 @@ ${businessContext}`;
   app.use("/api/site-configs", siteConfigRoutes);
   app.use("/api/share", shareRoutes);
   app.use("/api/cloudbeds", cloudbedsRoutes);
+  app.use("/api/integration/connect", integrationConnectRoutes);
+  app.use("/api/integration-onboarding", integrationOnboardingRoutes);
   app.use("/api/onboarding", onboardingRoutes);
   app.use("/api/customer/onboarding", customerOnboardingRoutes);
 

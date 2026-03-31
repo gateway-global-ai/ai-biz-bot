@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, index, pgEnum, uuid, serial, bigserial, doublePrecision, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import type { CharacterProfileV1, MergedCognitionContractV1 } from "./cognitionContract.js";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -350,6 +351,73 @@ export type StructuredGuardrails = {
   believe?: string[];
 };
 
+// ── Agent classification v1 — blueprints & swarm schematics (see AGENT_CLASSIFICATION_AND_SWARM_LIMITS_V1.md)
+export const agentTemplates = pgTable("agent_templates", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  templateKey: text("template_key").notNull().unique(),
+  name: text("name").notNull(),
+  primaryActorClass: text("primary_actor_class").notNull(),
+  secondaryActorClasses: jsonb("secondary_actor_classes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  primaryStageClass: text("primary_stage_class").notNull(),
+  secondaryStageClasses: jsonb("secondary_stage_classes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  defaultOperationalMode: text("default_operational_mode").notNull(),
+  defaultCapabilitySetIds: jsonb("default_capability_set_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  defaultSkillIds: jsonb("default_skill_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  resourceProfileId: text("resource_profile_id"),
+  deploymentContractId: text("deployment_contract_id"),
+  /** Classification-level cognition defaults (AGENT_BEHAVIOR_SPEC_V1). */
+  characterProfile: jsonb("character_profile").$type<CharacterProfileV1 | null>(),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const swarmSchematics = pgTable("swarm_schematics", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  schematicKey: text("schematic_key").notNull().unique(),
+  name: text("name").notNull(),
+  industryGroup: text("industry_group").notNull(),
+  minAgents: integer("min_agents").notNull().default(1),
+  defaultAgents: integer("default_agents").notNull().default(4),
+  maxAgents: integer("max_agents").notNull().default(12),
+  hardMaxAgents: integer("hard_max_agents").notNull().default(24),
+  status: text("status").notNull().default("draft"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const swarmSchematicMembers = pgTable(
+  "swarm_schematic_members",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    swarmSchematicId: uuid("swarm_schematic_id")
+      .references(() => swarmSchematics.id, { onDelete: "cascade" })
+      .notNull(),
+    roleKey: text("role_key").notNull(),
+    name: text("name").notNull(),
+    agentTemplateId: uuid("agent_template_id")
+      .references(() => agentTemplates.id, { onDelete: "restrict" })
+      .notNull(),
+    primaryActorClass: text("primary_actor_class").notNull(),
+    secondaryActorClasses: jsonb("secondary_actor_classes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    primaryStageClass: text("primary_stage_class").notNull(),
+    secondaryStageClasses: jsonb("secondary_stage_classes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    defaultOperationalMode: text("default_operational_mode").notNull(),
+    capabilitySetIds: jsonb("capability_set_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    skillIds: jsonb("skill_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    requiredProbeIds: jsonb("required_probe_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    deployPosture: text("deploy_posture").notNull().default("draft"),
+    positionIndex: integer("position_index").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("swarm_schematic_members_schematic_role").on(t.swarmSchematicId, t.roleKey)],
+);
+
+export type AgentTemplateRow = typeof agentTemplates.$inferSelect;
+export type SwarmSchematicRow = typeof swarmSchematics.$inferSelect;
+export type SwarmSchematicMemberRow = typeof swarmSchematicMembers.$inferSelect;
+
 // AI Agents table
 export const agents = pgTable("agents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -395,6 +463,8 @@ export const agents = pgTable("agents", {
   archProfile: jsonb("arch_profile"),          // { acknowledge, reflect, context, handoff } — 0-100 each
   /** Structured controls: mirroring (enabled, intensity 0–100) and guardrails (always, never, believe). */
   structuredControls: jsonb("structured_controls").$type<StructuredControls>().default({}),
+  /** Materialized merged cognition + provenance after provisioning (CLASSIFICATION_GOVERNANCE_SPEC_V1). */
+  mergedCognitionContract: jsonb("merged_cognition_contract").$type<MergedCognitionContractV1 | null>(),
   /** Operational mode: SAFE | CONCIERGE | RECEPTIONIST | SALES | CASHIER | CUSTOMER_SUPPORT | MANAGER | RESEARCH | CODING | REVIEW | EMERGENCY | CUSTOMER_SERVICE. Drives prompt directive and tool allowlist. */
   operationalMode: text("operational_mode").default("SAFE"),
   /** For CUSTOMER_SUPPORT mode: required verification level (e.g. OTP, magic_link). */
@@ -408,6 +478,20 @@ export const agents = pgTable("agents", {
   startupStatus: text("startup_status").default("pending"), // pending, running, completed, failed
   startupResultSummary: text("startup_result_summary"),
   startupLastRunAt: timestamp("startup_last_run_at"),
+  /** Platform blueprint (agent classification v1). */
+  agentTemplateId: uuid("agent_template_id").references(() => agentTemplates.id, { onDelete: "set null" }),
+  swarmSchematicMemberId: uuid("swarm_schematic_member_id").references(() => swarmSchematicMembers.id, {
+    onDelete: "set null",
+  }),
+  primaryActorClass: text("primary_actor_class"),
+  secondaryActorClasses: jsonb("secondary_actor_classes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  primaryStageClass: text("primary_stage_class"),
+  secondaryStageClasses: jsonb("secondary_stage_classes").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  /**
+   * Classification deployment gate: legacy = pre-classification rows;
+   * active_deployable | draft | simulation_only | disabled_overflow per AGENT_CLASSIFICATION_AND_SWARM_LIMITS_V1.
+   */
+  deploymentStatus: text("deployment_status").notNull().default("legacy"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1534,6 +1618,18 @@ export const sitePmsIntegrations = pgTable("site_pms_integrations", {
   bookingEngineUrl: text("booking_engine_url"),
   config: jsonb("config").$type<Record<string, unknown>>().default({}).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  /** api_key_property | api_key_partner_delivery | oauth2 — null = inferred from tokens/key */
+  authLane: text("auth_lane"),
+  /** Logical scope IDs; ["*"] = operator-attested wildcard (lane A) */
+  scopesGranted: jsonb("scopes_granted").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  /** e.g. cloudbeds_v1_3 — null = infer from CLOUDBEDS_API_BASE_URL */
+  apiVersionLane: text("api_version_lane"),
+  /** draft | connected | degraded | revoked */
+  installPosture: text("install_posture").notNull().default("connected"),
+  connectionHealth: jsonb("connection_health").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
+  lastRefreshAt: timestamp("last_refresh_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1546,6 +1642,66 @@ export const insertSitePmsIntegrationSchema = createInsertSchema(sitePmsIntegrat
 
 export type InsertSitePmsIntegration = z.infer<typeof insertSitePmsIntegrationSchema>;
 export type SitePmsIntegration = typeof sitePmsIntegrations.$inferSelect;
+
+/** Operator SMS deep-link — narrow integration-connect authority only (see INTEGRATION_OPERATOR_CONNECT_FLOW_V1) */
+export const integrationConnectTokens = pgTable(
+  "integration_connect_tokens",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    siteConfigId: varchar("site_config_id")
+      .references(() => siteConfigs.id, { onDelete: "cascade" })
+      .notNull(),
+    vendorId: text("vendor_id").notNull(),
+    connectLane: text("connect_lane").notNull(),
+    phoneE164: text("phone_e164"),
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    createdBy: text("created_by"),
+  },
+  (t) => [
+    uniqueIndex("integration_connect_tokens_token_hash_uidx").on(t.tokenHash),
+    index("integration_connect_tokens_site_created_idx").on(t.siteConfigId, t.createdAt),
+  ],
+);
+
+export type IntegrationConnectToken = typeof integrationConnectTokens.$inferSelect;
+
+/** Append-only audit for integration onboarding SMS attempts (governed lanes). */
+export const integrationOnboardingSmsAudit = pgTable(
+  "integration_onboarding_sms_audit",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    actorAdminUserId: varchar("actor_admin_user_id")
+      .references(() => adminUsers.id, { onDelete: "restrict" })
+      .notNull(),
+    siteConfigId: varchar("site_config_id")
+      .references(() => siteConfigs.id, { onDelete: "cascade" })
+      .notNull(),
+    integrationKey: text("integration_key").notNull().default("cloudbeds_graphql_discovery"),
+    requestedVariant: text("requested_variant").notNull(),
+    providedToE164: text("provided_to_e164"),
+    recipientResolutionSource: text("recipient_resolution_source"),
+    finalRecipientE164: text("final_recipient_e164"),
+    eligibilityMode: text("eligibility_mode").notNull(),
+    outcomeCode: text("outcome_code").notNull(),
+    suppressionReason: text("suppression_reason"),
+    connectTokenId: uuid("connect_token_id").references(() => integrationConnectTokens.id, {
+      onDelete: "set null",
+    }),
+    twilioMessageSid: text("twilio_message_sid"),
+    dispatchOk: boolean("dispatch_ok"),
+    dryRun: boolean("dry_run").notNull().default(false),
+  },
+  (t) => [
+    index("integration_onboarding_sms_audit_site_created_idx").on(t.siteConfigId, t.createdAt),
+    index("integration_onboarding_sms_audit_actor_created_idx").on(t.actorAdminUserId, t.createdAt),
+  ],
+);
+
+export type IntegrationOnboardingSmsAuditRow = typeof integrationOnboardingSmsAudit.$inferSelect;
 
 /** Guest OTP verification (per site + phone) — NOVA platform plane; Twilio behind server service */
 export const guestVerificationSessions = pgTable("guest_verification_sessions", {

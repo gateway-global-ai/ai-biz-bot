@@ -201,7 +201,8 @@ router.post("/dispatch", async (req, res) => {
     }).then((result) => {
       console.log(
         `[skillDispatch] build_agent pipeline completed for site=${siteConfigId} ` +
-        `runId=${result.runId} status=${result.finalStatus} agents=${result.provisionResult.agentsCreated}`
+        `runId=${result.runId} status=${result.finalStatus} ` +
+        `agents=${result.provisionResult.agentsCreated} skipped=${result.provisionResult.agentsSkipped}`
       );
     }).catch((err: unknown) => {
       console.error(`[skillDispatch] build_agent pipeline failed for site=${siteConfigId}:`, err);

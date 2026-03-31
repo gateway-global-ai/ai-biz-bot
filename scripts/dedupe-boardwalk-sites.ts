@@ -1,6 +1,7 @@
 /**
- * Dedupe Boardwalk Suites Lafayette site_configs so only one row exists per place.
- * Keeps the site that has Cloudbeds integration (or the most complete one) and deletes the rest.
+ * Dedupe Boardwalk Suites Lafayette site_configs when duplicate rows exist.
+ * Canonical business identity is **`site_configs.id` (UUID)**; this script may match legacy Google
+ * `place_id` and name as a migration aid — do not treat `place_id` as stable platform truth.
  *
  * Run: npx tsx scripts/dedupe-boardwalk-sites.ts [--apply]
  * Without --apply: dry run only (reports what would be kept/deleted).
@@ -9,8 +10,7 @@
 import { db } from '../server/db.js';
 import { siteConfigs, sitePmsIntegrations, agents } from '../shared/schema.js';
 import { eq, sql } from 'drizzle-orm';
-
-const BOARDWALK_PLACE_ID = 'ChIJB4qU6oXvJIgR_2p602OaK_U';
+import { BOARDWALK_GOOGLE_PLACE_ID_LEGACY } from './lib/boardwalkSiteIdentity.js';
 const APPLY = process.argv.includes('--apply');
 
 async function main() {
@@ -19,7 +19,7 @@ async function main() {
   const byPlaceId = await db
     .select()
     .from(siteConfigs)
-    .where(eq(siteConfigs.placeId, BOARDWALK_PLACE_ID));
+    .where(eq(siteConfigs.placeId, BOARDWALK_GOOGLE_PLACE_ID_LEGACY));
 
   const byName = await db
     .select()

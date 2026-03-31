@@ -1,0 +1,90 @@
+# Fresh-site hospitality admission + contract_hash (self-contained Postgres).
+# Does not use Doppler; set DATABASE_URL to the service below.
+
+name: Onboarding admission CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tests/onboarding-e2e**.ts"
+      - "shared/onboardingPhase1AdmissionContract.ts"
+      - "shared/systemContractEnvelopeV0.ts"
+      - "scripts/validate-onboarding-contract-hash.ts"
+      - "server/services/agentProvisioning.ts"
+      - "server/services/admissionContractGate.ts"
+      - "server/services/executionContractEngine.ts"
+      - "server/config/executionContractKindRegistry.ts"
+      - "server/config/sitePlaceTypesForContract.ts"
+      - "server/routes/intelligenceRoutes.ts"
+      - "server/services/hospitalityProjectionVerify.ts"
+      - "shared/agentBuilderSchema.ts"
+      - "shared/onboardingPhase1ContractDefinition.ts"
+      - "shared/onboardingPhase1AdmissionContract.ts"
+      - "tests/test-admission-contract-gate.ts"
+      - "tests/test-execution-contract-registry.ts"
+      - "tests/test-intelligence-provision-contract-http.ts"
+      - "migrations/**"
+      - ".github/workflows/onboarding-admission-ci.yml"
+
+jobs:
+  onboarding-admission:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ci_onboarding
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci_onboarding
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migrations
+        run: |
+          set -e
+          for f in migrations/*.sql; do
+            npx tsx scripts/run-migration.ts "$f"
+          done
+
+      - name: Seed industry templates
+        run: npx tsx scripts/seed-industry-templates.ts
+
+      - name: Validate onboarding contract hash
+        run: npm run validate:onboarding-contract-hash
+
+      - name: Admission contract gate (unit)
+        run: npm run test:admission-contract-gate
+
+      - name: Execution contract kind registry (unit)
+        run: npm run test:execution-contract-registry
+
+      - name: Intelligence provision contract (HTTP integration)
+        run: npm run test:intelligence-provision-contract-http
+
+      - name: Guardrails (DB)
+        run: npx tsx tests/test-guardrails.ts
+
+      - name: Onboarding E2E (hospitality fresh site)
+        run: npx tsx tests/onboarding-e2e-new-business-hospitality.ts
+
+      - name: Onboarding negative paths
+        run: npx tsx tests/onboarding-e2e-hospitality-negative.ts

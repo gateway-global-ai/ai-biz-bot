@@ -1,0 +1,14 @@
+# Cloudbeds GraphQL — discovery schema authority index (Phase B)
+#
+# Machine authority: vendor-introspection.json (JSON result of introspection query; not committed until
+# operators run scripts/fetch-cloudbeds-graphql-introspection.ts — see SCHEMA_INGEST.md).
+#
+# Human illustration (types for mapping review until introspection lands):
+#   discovery-schema.illustrative.graphql
+#
+# Registry checksum (integration-vendor-metadata/cloudbeds_graphql.v1.yaml) applies to THIS file until
+# vendor-introspection.json is promoted as the single checksum target (see SCHEMA_DRIFT.md).
+
+type Query {
+  _discoveryAuthorityIndex: Boolean
+}

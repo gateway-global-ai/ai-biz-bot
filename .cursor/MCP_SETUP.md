@@ -146,7 +146,54 @@ cp .cursor/mcp.example.json .cursor/mcp.json
 
 **Never commit the edited `mcp.json`** — it is gitignored for this reason.
 
+## 4.1 — Shadcn MCP (component registries — **use stdio in Cursor**)
+
+**Governance:** Design-time / operator / `ui_agent` only — not the Gemini voice hot path or customer runtime. See [`docs-governance/canonical/SHADCN_MCP_PLANE_BOUNDARY_V1.md`](../docs-governance/canonical/SHADCN_MCP_PLANE_BOUNDARY_V1.md). Runtime canvas uses registered views and `@/ui-core` promotion per `.cursor/skills/shadcn-ui-agent/SKILL.md`.
+
+### Why not the `https://www.shadcn.io/api/mcp` URL?
+
+[shadcn.io’s Cursor guide](https://www.shadcn.io/mcp/cursor) shows an HTTP `url` entry. **Cursor connects to URL-based MCPs with SSE.** That endpoint often responds with **HTTP 405 (Method Not Allowed)** during the SSE handshake, which shows in logs as:
+
+`SSE error: Non-200 status code (405)`
+
+So the remote URL is **not a reliable Cursor transport** today, even though it is documented on shadcn.io. shadcn.io also notes it is **not** affiliated with official [shadcn/ui](https://ui.shadcn.com/).
+
+**Artifact:** scope + npm commands — [`SHADCN_IO_COMMUNITY_MIRROR_V1.md`](../docs-governance/artifacts/SHADCN_IO_COMMUNITY_MIRROR_V1.md). **Point Cursor at the local server:** `npm run cursor:mcp:shadcn-io` (merges the `shadcn-io` stdio block into `.cursor/mcp.json`; requires `jq`) or copy the `shadcn-io` entry from [`mcp.example.json`](mcp.example.json).
+
+### Recommended for **shadcn.io** (this repo): local catalog MCP over **stdio**
+
+The [react-shadcn-components](https://github.com/shadcnio/react-shadcn-components) README is an index of **www.shadcn.io** docs. This repo vendors that index as JSON and exposes it via a **small stdio MCP** (no remote SSE, no ui.shadcn.com dependency).
+
+| Artifact | Purpose |
+|----------|---------|
+| [`registry-yaml/shadcn-io-catalog/component_index.v1.json`](../registry-yaml/shadcn-io-catalog/component_index.v1.json) | Frozen paths + install hints |
+| [`scripts/shadcn-io-catalog-mcp.ts`](../scripts/shadcn-io-catalog-mcp.ts) | MCP server (`shadcn_io_list`, `shadcn_io_search`, `shadcn_io_get`, `shadcn_io_about`) |
+| [`scripts/generate-shadcn-io-component-index.mjs`](../scripts/generate-shadcn-io-component-index.mjs) | Regenerate JSON when the upstream README changes |
+
+Add under `mcpServers` (project `.cursor/mcp.json` or global `~/.cursor/mcp.json`):
+
+```json
+"shadcn-io": {
+  "command": "npx",
+  "args": ["tsx", "scripts/shadcn-io-catalog-mcp.ts"]
+}
+```
+
+**cwd** must be the **repository root** (Cursor default when the MCP is project-scoped). Reload the window; enable **shadcn-io** under **Settings → MCP**.
+
+**Tools:** ask the agent to call `shadcn_io_search` (e.g. query `panel`, `tool`, `conversation`) or `shadcn_io_get` with id `ai:panel`. Each entry includes a conventional `npx shadcn@latest add https://www.shadcn.io/r/<slug>.json` line — **confirm the recipe URL on the doc page** before installing.
+
+### Optional: official [shadcn/ui MCP](https://ui.shadcn.com/docs/mcp) (`npx shadcn@latest mcp`)
+
+Use a **separate** server name (e.g. `"shadcn-ui-official"`) if you also want the default **ui.shadcn.com** registry browser. That path is unrelated to the shadcn.io catalog above.
+
+### If you still have a global `user-shadcn-io` using the HTTP URL
+
+Remove `"url": "https://www.shadcn.io/api/mcp"` (405 / SSE) and use the **tsx** `shadcn-io-catalog-mcp.ts` block above; keep your preferred server name. Reload the window.
+
 ## 5. Other MCP servers (Google Workspace, Maps, etc.)
+
+**Governance:** Google Workspace MCP is **operator/dev Google API access**, not product canvas or UI generation — see [`docs-governance/canonical/WORKSPACE_MCP_PLANE_BOUNDARY_V1.md`](../docs-governance/canonical/WORKSPACE_MCP_PLANE_BOUNDARY_V1.md). Do not route it into voice or customer runtime without a separate governed proxy and policy.
 
 If you use more MCPs (e.g. Google Workspace, Maps), add them under `mcpServers` in the same `.cursor/mcp.json`:
 
@@ -178,6 +225,9 @@ If a server still shows “No server info found,” check:
 
 ## 7. References
 
+- [shadcnio/react-shadcn-components](https://github.com/shadcnio/react-shadcn-components) — README index mirrored in `registry-yaml/shadcn-io-catalog/`
+- [shadcn.io MCP for Cursor (HTTP URL)](https://www.shadcn.io/mcp/cursor) — often **405** with Cursor SSE; use §4.1 catalog MCP instead
+- [shadcn/ui MCP (official, stdio)](https://ui.shadcn.com/docs/mcp) — optional second server for ui.shadcn.com registry
 - [Cursor MCP docs](https://docs.cursor.com/context/mcp)
 - [Twilio Alpha MCP](https://github.com/twilio-labs/mcp) — use `@twilio-alpha/mcp` and the credential format above
 - [Twilio API keys](https://www.twilio.com/docs/iam/api-keys)

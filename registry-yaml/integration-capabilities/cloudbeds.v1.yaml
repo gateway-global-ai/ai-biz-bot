@@ -18,6 +18,9 @@ capabilities:
       Read-only availability and rates for date range; surfaces HOTEL_INVENTORY_GRID.
     mutation_level: read
     required_anchors: [property_id]
+    credential_anchor_ref: site_pms_integrations:cloudbeds
+    required_scope_ids: []
+    allowed_version_lanes: [cloudbeds_v1_3]
     optional_anchors: []
     required_inputs:
       - name: checkIn
@@ -58,6 +61,9 @@ capabilities:
       Classify guest journey using reservation search and phone digit match; OTP gate may apply.
     mutation_level: read
     required_anchors: [property_id]
+    credential_anchor_ref: site_pms_integrations:cloudbeds
+    required_scope_ids: []
+    allowed_version_lanes: [cloudbeds_v1_3]
     optional_anchors: [reservation_id]
     required_inputs:
       - name: phone
@@ -91,6 +97,9 @@ capabilities:
     description: Read housekeeping grid for property; manager mode only at tool layer.
     mutation_level: read
     required_anchors: [property_id]
+    credential_anchor_ref: site_pms_integrations:cloudbeds
+    required_scope_ids: []
+    allowed_version_lanes: [cloudbeds_v1_3]
     optional_anchors: []
     required_inputs: []
     optional_inputs:
@@ -122,6 +131,9 @@ capabilities:
     description: Occupancy and arrivals/departures for a date; manager mode only at tool layer.
     mutation_level: read
     required_anchors: [property_id]
+    credential_anchor_ref: site_pms_integrations:cloudbeds
+    required_scope_ids: []
+    allowed_version_lanes: [cloudbeds_v1_3]
     optional_anchors: []
     required_inputs: []
     optional_inputs:
@@ -154,6 +166,9 @@ capabilities:
       Write path for new reservation; requires OTP verification policy; not yet a declared Gemini tool.
     mutation_level: write
     required_anchors: [property_id, room_type_id]
+    credential_anchor_ref: site_pms_integrations:cloudbeds
+    required_scope_ids: []
+    allowed_version_lanes: [cloudbeds_v1_3]
     optional_anchors: [guest_id]
     required_inputs:
       - name: startDate

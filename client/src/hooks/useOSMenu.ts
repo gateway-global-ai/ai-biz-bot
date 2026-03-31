@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Calendar, MessageSquare,
   Shield, FileText, BarChart3, Settings,
   CreditCard, Briefcase, User, Phone,
-  Bot, Activity, Search, Globe,
+  Bot, Activity, Search, Globe, Mic,
   Sparkles, Palette, Gift, Target, TrendingUp, CheckSquare,
   Rocket, Building2, Fingerprint, Lock, RefreshCw, Eye,
   Wand2
@@ -17,6 +17,10 @@ export type OSMenuItem = {
   action?: string;
   viewId?: string;
   children?: OSMenuItem[];
+  /** Internal app path — Concierge idle menu navigates via wouter (governed adapter routes). */
+  navigateTo?: string;
+  /** Same-origin static or full URL — use when not a SPA route (e.g. `/aios-report.html`). */
+  externalHref?: string;
 };
 
 export type OSRole = 'customer' | 'employee' | 'manager' | 'admin';
@@ -40,8 +44,24 @@ export type OSCapabilities = {
   loyalty?: boolean;
 };
 
-export function useOSMenu(role: OSRole = 'customer', isAuthenticated: boolean = false, capabilities: OSCapabilities = {}) {
+export type UseOSMenuOptions = {
+  /** Public platform home (`platform_landing`) — intent chips for entry, not embedded OS views. */
+  platformEntry?: boolean;
+};
+
+export function useOSMenu(
+  role: OSRole = 'customer',
+  isAuthenticated: boolean = false,
+  capabilities: OSCapabilities = {},
+  options: UseOSMenuOptions = {},
+) {
   return useMemo(() => {
+    // 0. Platform marketing entry (/) — voice-first shell only: no card grid that SPA-hops away
+    // (see ConciergePanel: idle menu not rendered for platform_landing; intent drives canvas in-chat).
+    if (options.platformEntry && role === 'customer') {
+      return [];
+    }
+
     // 1. Customer (External User)
     const customerMenu: OSMenuItem[] = [
       // Appointments: only shown when booking integration is configured
@@ -304,6 +324,15 @@ export function useOSMenu(role: OSRole = 'customer', isAuthenticated: boolean = 
           ...customerMenu
         ];
     }
-  }, [role, isAuthenticated, capabilities.booking, capabilities.account,
-      capabilities.sms, capabilities.payments, capabilities.reviews, capabilities.loyalty]);
+  }, [
+    role,
+    isAuthenticated,
+    options.platformEntry,
+    capabilities.booking,
+    capabilities.account,
+    capabilities.sms,
+    capabilities.payments,
+    capabilities.reviews,
+    capabilities.loyalty,
+  ]);
 }

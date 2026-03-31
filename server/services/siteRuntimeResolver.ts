@@ -87,7 +87,15 @@ function buildEntitlements(
     'welcome', 'service_menu', 'faq_list', 'intake_checklist',
     'business_summary', 'support_home', 'disambiguation_menu',
     'schedule', 'pricing_table', 'custom_card',
+    'command_center', 'canvas_backgrounds',
   ];
+
+  const dynamicCanvasEnabled =
+    process.env.CANVAS_DYNAMIC_VIEW_ENABLED === 'true' ||
+    process.env.CANVAS_DYNAMIC_VIEW_ENABLED === '1';
+  if (dynamicCanvasEnabled) {
+    allowedCanvasViews.push('dynamic');
+  }
 
   if (!isArchived) {
     allowedCanvasViews.push('identity_verify', 'account_overview');

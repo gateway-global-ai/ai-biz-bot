@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Agent Policy Registry
 
-- Read `docs-governance/canonical/AGENT_POLICY_REGISTRY.md` and `docs-governance/canonical/SAFE_MODE_CONTRACT.md` before changing agent behavior architecture.
+- Read `docs-governance/canonical/AGENT_POLICY_REGISTRY.md`, `docs-governance/canonical/AGENT_BEHAVIOR_SPEC_V1.md`, `docs-governance/canonical/CLASSIFICATION_GOVERNANCE_SPEC_V1.md`, and `docs-governance/canonical/SAFE_MODE_CONTRACT.md` before changing agent behavior architecture.
 - Every agent change must declare jurisdiction, allowed entities, allowed actions, and escalation/refusal behavior.
 - Safe Mode is a runtime contract, not a soft prompt instruction.
 - No agent may be treated as universally capable by default.

@@ -13,6 +13,7 @@ import { db } from "../server/db.js";
 import { siteConfigs, sitePmsIntegrations } from "../shared/schema.js";
 import { fetchCloudbedsAvailability } from "../server/routes/cloudbedsRoutes.js";
 import { BOARDWALK_SUITES } from "./setup-boardwalk-suites.js";
+import { boardwalkSiteConfigIdFromEnv, resolveBoardwalkSiteConfigId } from "./lib/boardwalkSiteIdentity.js";
 
 const BASE_URL = process.env.CLOUDBEDS_API_BASE_URL || "https://api.cloudbeds.com/api/v1.3";
 
@@ -76,13 +77,24 @@ async function testDbPmsRow(): Promise<boolean> {
     console.error("FAIL: DATABASE_URL not set (cannot test PMS row).");
     return false;
   }
-  const [site] = await db
-    .select()
-    .from(siteConfigs)
-    .where(eq(siteConfigs.placeId, BOARDWALK_SUITES.placeId))
-    .limit(1);
+  let site: (typeof siteConfigs.$inferSelect) | undefined;
+
+  const envId = boardwalkSiteConfigIdFromEnv();
+  if (envId) {
+    const [byId] = await db.select().from(siteConfigs).where(eq(siteConfigs.id, envId)).limit(1);
+    site = byId;
+  }
   if (!site) {
-    console.error("FAIL: No site_configs row for Boardwalk placeId. Run: npm run setup:boardwalk");
+    const resolved = await resolveBoardwalkSiteConfigId();
+    if (resolved) {
+      const [byId] = await db.select().from(siteConfigs).where(eq(siteConfigs.id, resolved.siteConfigId)).limit(1);
+      site = byId;
+    }
+  }
+  if (!site) {
+    console.error(
+      "FAIL: No site_configs row for Boardwalk. Run: npm run setup:boardwalk or set BOARDWALK_SITE_CONFIG_ID. Dev-only migration: GOVERNANCE_LEGACY_GOOGLE_PLACE_ID_LOOKUP=1 (see SITE_IDENTITY_AND_EXTERNAL_REFERENCE_V1.md).",
+    );
     return false;
   }
   console.log(`OK: site_config id=${site.id}`);

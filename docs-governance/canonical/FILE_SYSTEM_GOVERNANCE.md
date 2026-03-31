@@ -39,5 +39,8 @@ Files are organized by system responsibility, not by convenience or temporary de
 - prompt strings scattered across UI or routes
 - treating `client/src/components/chat/gemini_2_5_flash_react_instructions/*.md` as production prompt sources (see [CLIENT_SPEC_TREE_REGISTRY.md](./CLIENT_SPEC_TREE_REGISTRY.md))
 
+## Client legacy UI reference
+- `client/legacy-ui-reference/` — **reference-only** quarantine for deprecated hand-built layouts (see [`INTENT_GENERATED_SURFACE_GOVERNANCE_V1.md`](./INTENT_GENERATED_SURFACE_GOVERNANCE_V1.md)). Production code under `client/src/` must not import from it.
+
 ## Extraction rule
 If a file becomes a cross-domain dumping ground, it must be split before new feature growth continues in that file.

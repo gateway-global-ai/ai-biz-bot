@@ -1,0 +1,29 @@
+---
+description: Intent-as-loop control plane — stateful resolution, merge order, policy over utterance; read INTENT_LOOP_GOVERNANCE_V1 before changing canvas intent, swarm pairing, or surface derivation.
+globs: server/services/canvasIntentRouter.ts, server/services/canvasDirectiveValidator.ts, server/services/siteRuntimeResolver.ts, server/services/intentLoopObservation.ts, server/services/intentLoopActorObservation.ts, server/services/intentLoopLifecycleObservation.ts, server/services/intentLoopDomainObservation.ts, server/services/intentLoopDomainSnapshot.ts, server/routes/canvasControlRoutes.ts, client/src/services/voiceTurnOrchestrator.ts, shared/intentLoopContract.ts, shared/canvas*.ts, docs-governance/canonical/INTENT_LOOP*.md, docs-governance/canonical/GOVERNED_GENERATIVE_UI_SPEC.md, docs-governance/canonical/COMMAND_CENTER_SURFACE_SPEC_V1.md
+alwaysApply: false
+---
+
+# Intent Loop Governance
+
+## Authority
+
+Canonical spec: [`docs-governance/canonical/INTENT_LOOP_GOVERNANCE_V1.md`](../../docs-governance/canonical/INTENT_LOOP_GOVERNANCE_V1.md). **Forward-only product doctrine** (voice-first; govern the interface pipeline, not legacy dashboards): [`docs-governance/canonical/VOICE_FIRST_INTERFACE_PIPELINE_V1.md`](../../docs-governance/canonical/VOICE_FIRST_INTERFACE_PIPELINE_V1.md). Typed contract: [`shared/intentLoopContract.ts`](../../shared/intentLoopContract.ts) (`intent_loop.v1`).
+
+## Principles
+
+1. **Intent is a loop** — state vector (**A** actor, **L** relationship/buyer phase, **D** vertical domain journey, identity, entitlements, role, turn evidence). **Do not conflate** A/L/D — see canonical **§ Semantic separation** (`INTENT_LOOP_GOVERNANCE_V1.md`).
+2. **Policy prevails over uncertainty** — gates and registries win; inference assists are untrusted until validated.
+3. **Merge order** — classification → domain → role → tenant → turn (aligned with GOVERNED_GENERATIVE_UI_SPEC and AGENT_BEHAVIOR_SPEC_V1).
+4. **Tiered engine** — Tier-0 gates, Tier-1 deterministic rules, Tier-2 structured inference (validated), Tier-3 clarify / safe fallback.
+
+## Implementation constraints
+
+- **Central resolver** pattern: one authority for constraints; no second router that bypasses `canvasDirectiveValidator` / entitlements.
+- **New HTTP routes** — only under `server/routes/` modules; never bulk-add to `server/routes.ts`.
+- **Voice lockdown** — do not modify protected voice files for intent-loop features; see sovereign-voice-lockdown.
+- **Local LLM** — coding_agent / internal workers only per local-agent-governance; not on customer-facing or voice hot paths.
+
+## Cursor skill
+
+Use [`.cursor/skills/intent-loop-governance/SKILL.md`](../skills/intent-loop-governance/SKILL.md) for workflow, sub-agent splits, and verification checklist.

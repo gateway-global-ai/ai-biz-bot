@@ -1,4 +1,10 @@
 /**
+ * LEGACY FIXTURE HELPER — NOT onboarding authority, NOT production provisioning truth.
+ *
+ * Boardwalk Suites Lafayette is a **regression / migration sample** only. Canonical business identity is **`site_configs.id` (UUID)**; Google `place_id` may drift and is not platform truth.
+ * Prefer **`tests/onboarding-e2e-new-business-hospitality.ts`** (`onboarding-e2e:new-business-hospitality`)
+ * for fresh-site governed outcomes. Do not extend product onboarding assumptions from this file.
+ *
  * Boardwalk Suites Lafayette — Agent Swarm Provisioning + Knowledge Seed
  *
  * This script EXTENDS scripts/setup-boardwalk-suites.ts (which handles the
@@ -297,7 +303,9 @@ async function provisionHospitalitySwarm(siteConfigId: string): Promise<void> {
   console.log(`  ✅  Swarm provisioned:`);
   console.log(`       - Orchestration run: ${runId} (${finalStatus})`);
   console.log(`       - Industry group: ${provisionResult.industryGroup}`);
-  console.log(`       - Agents created: ${provisionResult.agentsCreated}`);
+  console.log(
+    `       - Agents created: ${provisionResult.agentsCreated} (skipped existing: ${provisionResult.agentsSkipped})`,
+  );
   console.log(`       - Archetypes: ${provisionResult.archetypesProvisioned.join(", ")}`);
   console.log(`       - Agent IDs: ${provisionResult.agentIds.join(", ")}`);
 }

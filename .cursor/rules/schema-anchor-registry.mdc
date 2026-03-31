@@ -9,3 +9,4 @@ alwaysApply: true
 - Approved anchors currently include: `customerAccounts`, `siteConfigs`, `agents`, `customers`, `novaIdvSessions`, `orders`, `inquiries`, and `chatLogs`.
 - Do not invent canonical entities in routes, views, YAML registries, or policies unless the schema and registry are updated deliberately.
 - Use context keys from `docs-governance/canonical/CONTEXT_KEYS.md` to constrain routes and actions.
+- **Site identity:** `site_configs.id` is the sole internal business/site anchor; external IDs (`place_id`, vendor ids) are reference metadata only — `docs-governance/canonical/SITE_IDENTITY_AND_EXTERNAL_REFERENCE_V1.md`.

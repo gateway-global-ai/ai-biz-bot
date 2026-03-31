@@ -17,6 +17,9 @@
  *   4. Route by syscall type
  *   5. Write CanvasSyscallAuditRecord (fire-and-forget)
  *
+ * `canvas.resolve` success only: `intentLoopResolution`, `intentLoopTrace`, `surfaceDerivation`
+ * (Phase D — registered surface plan; not a second policy engine). Governed control-plane fields.
+ *
  * Security note: client-sent securityLevel and authState are HINTS only.
  * The validator resolves authoritative values from visitor_sessions DB.
  */
@@ -28,9 +31,32 @@ import { resolveSiteRuntime } from '../services/siteRuntimeResolver';
 import { validateCanvasSyscall } from '../services/canvasDirectiveValidator';
 import { routeCanvasIntent } from '../services/canvasIntentRouter';
 import { writeCanvasAuditRecord, buildAuditRecord } from '../services/canvasAuditLog';
+import {
+  buildIntentLoopPhaseAObservation,
+  logIntentLoopPhaseA,
+  logIntentLoopResolveAuthority,
+  withIntentLoopResolutionSummary,
+} from '../services/intentLoopObservation';
+import {
+  mergeCanvasResolveWithIntentLoopResolution,
+  resolveIntentLoopState,
+} from '../services/intentLoopResolver';
+import { deriveSurfacesFromResolution } from '../services/surfaceDerivationService';
 import type { CanvasSyscallEnvelope } from '../../shared/canvasViewContract';
+import type {
+  IntentLoopResolution,
+  IntentLoopResolveAuthorityTrace,
+} from '../../shared/intentLoopContract';
+import type { SurfaceDerivationResult } from '../../shared/surfaceDerivationContract';
 
 const router = Router();
+
+/** One-line JSON for production debugging (`CANVAS_RESOLVE_SUMMARY_LOG=1`). */
+function logCanvasResolveSummaryLine(payload: Record<string, unknown>): void {
+  const v = process.env.CANVAS_RESOLVE_SUMMARY_LOG;
+  if (v !== "1" && v !== "true") return;
+  console.info(JSON.stringify({ event: "canvas.resolve.summary", ts: new Date().toISOString(), ...payload }));
+}
 
 // ── Structural Zod schema ─────────────────────────────────────────────────────
 
@@ -55,6 +81,7 @@ const EnvelopeSchema = z.object({
       confidence: z.number(),
       requiresDisambiguation: z.boolean().optional(),
     }).optional(),
+    intentLoopActorChannel: z.enum(['public', 'operator']).optional(),
   }),
   payload: z.unknown(),
   trace: z.object({
@@ -131,17 +158,74 @@ router.post('/', async (req, res) => {
     // 4. Route by syscall type
     let result: unknown;
     let nextViewId: string | undefined;
+    /** Phase B — server authority; client cannot override `allowedCanvasViewIds`. */
+    let intentLoopResolution: IntentLoopResolution | undefined;
+    /** Router vs merged view — only `canvas.resolve`. */
+    let intentLoopTrace: IntentLoopResolveAuthorityTrace | undefined;
+    /** Phase D — `deriveSurfacesFromResolution` (registered surfaces only). */
+    let surfaceDerivation: SurfaceDerivationResult | undefined;
 
     switch (envelope.syscall) {
       case 'canvas.resolve': {
         const payload = envelope.payload as { transcript: string; recentTurns?: Array<{ transcript: string; selectedIntent?: string; currentViewId?: string }>; currentCanvasSummary?: string };
+        const priorView = envelope.context?.currentViewId;
         const resolveResult = await routeCanvasIntent(
           payload,
           siteRuntime,
           validation.resolvedSecurity.securityLevel,
+          priorView,
         );
-        nextViewId = resolveResult.selectedViewId;
-        result = resolveResult;
+        const phaseAObs = buildIntentLoopPhaseAObservation({
+          envelope,
+          siteRuntime,
+          resolvedSecurity: validation.resolvedSecurity,
+          visitorSessionProbe: validation.visitorSessionProbe,
+          resolveResult,
+          visitorIdPresent: Boolean(envelope.visitorId),
+        });
+        logIntentLoopPhaseA(phaseAObs);
+        const loopResolution = resolveIntentLoopState({
+          siteConfigId: envelope.siteConfigId,
+          siteRuntime,
+          resolveResult,
+          phaseAObservation: phaseAObs,
+          priorActiveViewId: priorView ?? null,
+        });
+        intentLoopResolution = loopResolution;
+        const mergedResolve = mergeCanvasResolveWithIntentLoopResolution(resolveResult, loopResolution);
+        intentLoopTrace = {
+          routerSelectedViewId: resolveResult.selectedViewId,
+          finalSelectedViewId: mergedResolve.selectedViewId,
+          routerRenderMode: resolveResult.renderMode,
+          finalRenderMode: mergedResolve.renderMode,
+        };
+        logIntentLoopResolveAuthority({
+          siteConfigId: envelope.siteConfigId,
+          syscallId: envelope.syscallId,
+          turnId: envelope.turnId,
+          trace: intentLoopTrace,
+        });
+        const preservedPrior =
+          Boolean(priorView) &&
+          loopResolution.auditNotes?.some((n) => String(n).startsWith("continuity:prior_view_preserved")) === true;
+        logCanvasResolveSummaryLine({
+          transcript: typeof payload.transcript === "string" ? payload.transcript.slice(0, 500) : "",
+          routerTier: resolveResult.intentRouterTier,
+          routerSelectedViewId: resolveResult.selectedViewId,
+          routerReason: resolveResult.reason,
+          finalSelectedViewId: mergedResolve.selectedViewId,
+          activeExperienceBeforeTurn: priorView,
+          allowedCanvasViewIds: loopResolution.allowedCanvasViewIds,
+          mergeMode: mergedResolve.renderMode,
+          preservedPriorView: preservedPrior,
+          resolutionSummary: mergedResolve.resolutionSummary,
+        });
+        nextViewId = mergedResolve.selectedViewId;
+        surfaceDerivation = deriveSurfacesFromResolution({
+          resolution: loopResolution,
+          finalSelectedViewId: mergedResolve.selectedViewId,
+        });
+        result = withIntentLoopResolutionSummary(mergedResolve, phaseAObs);
         break;
       }
 
@@ -193,7 +277,14 @@ router.post('/', async (req, res) => {
       startMs,
     }));
 
-    return res.json({ syscallId, result, latencyMs: Date.now() - startMs });
+    return res.json({
+      syscallId,
+      result,
+      ...(intentLoopResolution !== undefined ? { intentLoopResolution } : {}),
+      ...(intentLoopTrace !== undefined ? { intentLoopTrace } : {}),
+      ...(surfaceDerivation !== undefined ? { surfaceDerivation } : {}),
+      latencyMs: Date.now() - startMs,
+    });
 
   } catch (err) {
     console.error('[canvasControlRoutes] Unhandled error', err);

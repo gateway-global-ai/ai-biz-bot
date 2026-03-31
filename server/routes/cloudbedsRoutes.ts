@@ -4,11 +4,18 @@
  * Credentials are per-site via site_pms_integrations; optional global CLOUDBEDS_CLIENT_* for OAuth + API key fallback.
  */
 
-import { Router, type Request, type Response } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { eq } from 'drizzle-orm';
 import type { SitePmsIntegration } from '@shared/schema';
 import { sitePmsIntegrations } from '@shared/schema';
 import { requireCustomerAuth } from '../customerAuth';
+import {
+  appendSetCookie,
+  clearCookieByName,
+  getCookieFromRequest,
+  INTEGRATION_CONNECT_SESSION_COOKIE,
+  verifyIntegrationConnectSession,
+} from '../services/integrationConnectSession';
 import { db } from '../db';
 import { storage } from '../storage';
 import {
@@ -18,13 +25,32 @@ import {
   flattenPostReservationForm,
   loadCloudbedsPmsRow,
   oauthAuthorizeUrl,
-  resolvePmsAuthHeaders,
   signOAuthState,
   verifyOAuthState,
 } from '../services/cloudbedsApi';
+import { cloudbedsHeadersForCapability } from '../services/cloudbedsBrokerHeaders.js';
 
 const router = Router();
+
+/** Aligned with registry-yaml/integration-capabilities/cloudbeds.v1.yaml */
+const CB_CAPABILITY_INVENTORY = 'cb_inventory_quote';
+const CB_CAPABILITY_GUEST_JOURNEY = 'cb_guest_journey_lookup';
+const CB_CAPABILITY_POST_RESERVATION = 'cb_post_reservation';
+
 const BASE_URL = CLOUDBEDS_BASE;
+
+/** APP_URL in env must be the public origin (https://host) only. If a path was stored by mistake, URL.origin strips it for redirects. */
+function resolvePublicAppOrigin(fromEnv: string | undefined, req: Request): string {
+  const trimmed = fromEnv?.trim();
+  if (trimmed) {
+    try {
+      return new URL(trimmed).origin;
+    } catch {
+      return trimmed.replace(/\/$/, '');
+    }
+  }
+  return `${req.protocol}://${req.get('host') || 'localhost'}`.replace(/\/$/, '');
+}
 
 export type CloudbedsAvailabilityArgs = {
   checkIn: string;
@@ -40,7 +66,8 @@ export type CloudbedsAvailabilityArgs = {
  */
 export async function fetchCloudbedsAvailability(
   pmsRow: SitePmsIntegration,
-  args: CloudbedsAvailabilityArgs
+  args: CloudbedsAvailabilityArgs,
+  options?: { authHeaders?: Record<string, string> },
 ): Promise<{
   success: boolean;
   hotelName?: string;
@@ -93,11 +120,15 @@ export async function fetchCloudbedsAvailability(
   });
   const url = `${BASE_URL}/getAvailableRoomTypes?${params}`;
   let headers: Record<string, string>;
-  try {
-    ({ headers } = await resolvePmsAuthHeaders(pmsRow));
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Cloudbeds auth failed.';
-    return { success: false, checkIn, checkOut, error: msg };
+  if (options?.authHeaders) {
+    headers = options.authHeaders;
+  } else {
+    try {
+      headers = await cloudbedsHeadersForCapability(pmsRow.siteConfigId, CB_CAPABILITY_INVENTORY);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Cloudbeds auth failed.';
+      return { success: false, checkIn, checkOut, error: msg };
+    }
   }
   const response = await fetch(url, {
     method: 'GET',
@@ -255,16 +286,54 @@ function forwardCloudbedsQuery(req: Request, exclude: Set<string>): URLSearchPar
 
 /**
  * GET /api/cloudbeds/oauth/start?siteConfigId=
- * Customer session — redirects to Cloudbeds authorize (state is signed).
+ * Customer Bearer session (owner) **or** signed integration-connect session (operator SMS link) → Cloudbeds authorize.
  */
-router.get('/oauth/start', requireCustomerAuth, async (req: Request, res: Response) => {
+async function cloudbedsOAuthStartAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const siteConfigId = typeof req.query.siteConfigId === 'string' ? req.query.siteConfigId : '';
+    if (!siteConfigId) {
+      res.status(400).json({ error: 'siteConfigId is required.' });
+      return;
+    }
+
+    const rawSess = getCookieFromRequest(req, INTEGRATION_CONNECT_SESSION_COOKIE);
+    const connectSess = verifyIntegrationConnectSession(rawSess);
+    if (connectSess && connectSess.siteConfigId === siteConfigId && connectSess.vendorId === 'cloudbeds') {
+      appendSetCookie(res, 'cb_oauth_browser', '1', { maxAgeSec: 600, httpOnly: true });
+      next();
+      return;
+    }
+
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    const session = await storage.getValidCustomerSession(token);
+    if (!session) {
+      res.status(401).json({ error: 'Invalid or expired session' });
+      return;
+    }
+    (req as Request & { customerSession?: typeof session }).customerSession = session;
+    const ok = await assertCustomerOwnsSite(req, siteConfigId);
+    if (!ok) {
+      res.status(403).json({ error: 'You do not have access to this site.' });
+      return;
+    }
+    next();
+  } catch (e: unknown) {
+    console.error('[Cloudbeds] oauth/start auth:', e);
+    res.status(500).json({ error: e instanceof Error ? e.message : 'OAuth start auth failed.' });
+  }
+}
+
+router.get('/oauth/start', cloudbedsOAuthStartAuth, async (req: Request, res: Response) => {
   try {
     const siteConfigId = typeof req.query.siteConfigId === 'string' ? req.query.siteConfigId : '';
     if (!siteConfigId) {
       return res.status(400).json({ error: 'siteConfigId is required.' });
     }
-    const ok = await assertCustomerOwnsSite(req, siteConfigId);
-    if (!ok) return res.status(403).json({ error: 'You do not have access to this site.' });
 
     const clientId = process.env.CLOUDBEDS_CLIENT_ID;
     const redirectUri = process.env.CLOUDBEDS_CLIENT_CALLBACK_URL;
@@ -314,20 +383,31 @@ router.get('/oauth/callback', async (req: Request, res: Response) => {
           accessToken: tokens.access_token,
           refreshToken: tokens.refresh_token ?? existing.refreshToken,
           tokenExpiresAt: expiresAt,
+          authLane: "oauth2",
+          installPosture: "connected",
           updatedAt: new Date(),
         })
         .where(eq(sitePmsIntegrations.id, existing.id));
     } else {
       await db.insert(sitePmsIntegrations).values({
         siteConfigId,
-        pmsType: 'cloudbeds',
+        pmsType: "cloudbeds",
         propertyId: null,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token ?? null,
         tokenExpiresAt: expiresAt,
+        authLane: "oauth2",
+        installPosture: "connected",
         isActive: true,
         config: {},
       });
+    }
+
+    const browserFlag = getCookieFromRequest(req, 'cb_oauth_browser');
+    if (browserFlag === '1') {
+      clearCookieByName(res, 'cb_oauth_browser');
+      const appUrl = resolvePublicAppOrigin(process.env.APP_URL, req);
+      return res.redirect(302, `${appUrl}/connect/cloudbeds?status=oauth_success`);
     }
 
     return res.status(200).json({
@@ -358,7 +438,7 @@ router.get('/reservations', requireCustomerAuth, async (req: Request, res: Respo
     const pms = await loadCloudbedsPmsRow(siteConfigId);
     if (!pms) return res.status(404).json({ error: 'No Cloudbeds integration for this site.' });
 
-    const { headers } = await resolvePmsAuthHeaders(pms);
+    const headers = await cloudbedsHeadersForCapability(siteConfigId, CB_CAPABILITY_GUEST_JOURNEY);
     const params = forwardCloudbedsQuery(req, new Set(['siteConfigId']));
     const prop = effectivePropertyId(pms);
     if (!params.has('propertyID') && prop) {
@@ -393,7 +473,7 @@ router.get('/reservation', requireCustomerAuth, async (req: Request, res: Respon
     const pms = await loadCloudbedsPmsRow(siteConfigId);
     if (!pms) return res.status(404).json({ error: 'No Cloudbeds integration for this site.' });
 
-    const { headers } = await resolvePmsAuthHeaders(pms);
+    const headers = await cloudbedsHeadersForCapability(siteConfigId, CB_CAPABILITY_GUEST_JOURNEY);
     const params = forwardCloudbedsQuery(req, new Set(['siteConfigId']));
     const prop = effectivePropertyId(pms);
     if (!params.has('propertyID') && prop) {
@@ -432,7 +512,7 @@ router.post('/reservations', requireCustomerAuth, async (req: Request, res: Resp
     const pms = await loadCloudbedsPmsRow(siteConfigId);
     if (!pms) return res.status(404).json({ error: 'No Cloudbeds integration for this site.' });
 
-    const { headers } = await resolvePmsAuthHeaders(pms);
+    const headers = await cloudbedsHeadersForCapability(siteConfigId, CB_CAPABILITY_POST_RESERVATION);
     const payload: Record<string, unknown> = { ...body };
     delete payload.siteConfigId;
     const prop = effectivePropertyId(pms);

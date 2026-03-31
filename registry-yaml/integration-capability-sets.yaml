@@ -11,7 +11,7 @@
 # - Swarm binding: agents.structuredControls.swarm_role_contract (see HOSPITALITY_SWARM_SCHEMATIC_V1.md).
 
 spec: integration_capability_sets_v1
-version: "1.1.0"
+version: "1.2.0"
 
 authority:
   source_of_truth: registry-yaml/integration-capability-sets.yaml
@@ -78,4 +78,18 @@ sets:
     vendor_id: cloudbeds
     member_capabilities:
       - cb_post_reservation
+    resolved_tool_names: []
+
+  - set_id: cloudbeds_graphql_discovery_registry
+    exposure_type: non_model_facing
+    requires_tool_resolution: false
+    description: >
+      Discovery-only GraphQL registry capabilities (schema/type/field/relationship inspect).
+      No Gemini tools; no runtime adapter; no mixed-source fulfillment with REST.
+    vendor_id: cloudbeds_graphql
+    member_capabilities:
+      - cb_gql_schema_inspect
+      - cb_gql_type_inspect
+      - cb_gql_field_inspect
+      - cb_gql_relationship_inspect
     resolved_tool_names: []

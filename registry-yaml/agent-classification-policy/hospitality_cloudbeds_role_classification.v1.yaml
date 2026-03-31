@@ -1,0 +1,53 @@
+# Actor / stage classification for hospitality_cloudbeds swarm members (DB projection + agents.* columns).
+# Enum vocabulary: registry-yaml/agent-classification-policy/enums.v1.yaml
+# Pairs with: registry-yaml/swarm-schematics/hospitality_cloudbeds.v1.yaml
+spec: swarm_schematic_role_classification_v1
+version: "1.0.0"
+schematic_id: hospitality_cloudbeds
+
+authority:
+  source_of_truth: registry-yaml/agent-classification-policy/hospitality_cloudbeds_role_classification.v1.yaml
+  enum_anchor: registry-yaml/agent-classification-policy/enums.v1.yaml
+
+defaults:
+  primary_actor_class: customer
+  secondary_actor_classes: []
+  primary_stage_class: operations
+  secondary_stage_classes: []
+
+roles:
+  concierge:
+    primary_actor_class: customer
+    secondary_actor_classes: []
+    primary_stage_class: operations
+    secondary_stage_classes: []
+  booking_coordinator:
+    primary_actor_class: customer
+    secondary_actor_classes: []
+    primary_stage_class: operations
+    secondary_stage_classes:
+      - onboarding
+  lead_qualifier:
+    primary_actor_class: employee
+    secondary_actor_classes: []
+    primary_stage_class: operations
+    secondary_stage_classes:
+      - tracking
+  retention_empath:
+    primary_actor_class: customer
+    secondary_actor_classes: []
+    primary_stage_class: retention
+    secondary_stage_classes: []
+  billing_analyst:
+    primary_actor_class: employee
+    secondary_actor_classes:
+      - management
+    primary_stage_class: operations
+    secondary_stage_classes:
+      - reporting
+  gatekeeper:
+    primary_actor_class: customer
+    secondary_actor_classes: []
+    primary_stage_class: operations
+    secondary_stage_classes:
+      - onboarding

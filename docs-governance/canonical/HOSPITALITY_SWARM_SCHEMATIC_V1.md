@@ -17,8 +17,10 @@ last_verified: 2026-03-28
 authority:
   source_of_truth: docs-governance/canonical/HOSPITALITY_SWARM_SCHEMATIC_V1.md
   machine_readable: registry-yaml/swarm-schematics/hospitality_cloudbeds.v1.yaml
+  role_actor_stage: registry-yaml/agent-classification-policy/hospitality_cloudbeds_role_classification.v1.yaml
   proficiency_catalog: registry-yaml/swarm-schematics/hospitality_proficiency_probes.v1.yaml
   validator: npm run validate:swarm-schematic
+  classification_validator: npm run validate:agent-classification
 ```
 
 Normative language: **MUST** / **MUST NOT** (RFC 2119).

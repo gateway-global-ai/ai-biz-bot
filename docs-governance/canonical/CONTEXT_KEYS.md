@@ -6,7 +6,7 @@ backed_by:
   schema: true
   service: false
   route: false
-last_verified: 2026-03-25
+last_verified: 2026-03-30
 ---
 # Context Keys
 
@@ -15,7 +15,7 @@ Context keys define the currently active scope for routing, view selection, poli
 
 ## Core context keys
 - `customerAccountId`
-- `siteConfigId`
+- `siteConfigId` — **sole authoritative internal scope** for a business/site (`site_configs.id`, UUID). Full contract: [`SITE_IDENTITY_AND_EXTERNAL_REFERENCE_V1.md`](./SITE_IDENTITY_AND_EXTERNAL_REFERENCE_V1.md). Google `place_id`, vendor property IDs, and other foreign keys are **reference attributes only** — never substitutes for `siteConfigId` in routing, auth, joins, or runbooks.
 - `agentId`
 - `customerId`
 - `sessionId`
@@ -51,3 +51,6 @@ Resolved server-side with `resolveCurrentPhase` — see [PHASED_INDUSTRY_FUNNEL_
 - Editing behavior for an agent requires at minimum: `siteConfigId`, `agentId`
 - Reviewing a verification session requires at minimum: `sessionId`
 - Rendering a business workspace requires at minimum: `siteConfigId`
+
+## Related
+- [`SITE_IDENTITY_AND_EXTERNAL_REFERENCE_V1.md`](./SITE_IDENTITY_AND_EXTERNAL_REFERENCE_V1.md) — canonical identity vs external references; forbidden patterns; migration shim rules; repo checks

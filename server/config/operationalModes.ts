@@ -54,9 +54,14 @@ export const OPERATIONAL_MODES: OperationalModeDef[] = [
     label: "Safe Mode",
     permissions: "Discussion Only.",
     constraint:
-      "Cannot offer to perform tasks. Cannot prompt for or save Customer PII (Personally Identifiable Information).",
+      "Cannot offer to perform business workflows or mutations. Cannot prompt for or save Customer PII. Cosmetic Concierge canvas appearance (e.g. animated background) is not a business task — you may acknowledge it per mode instruction.",
     instruction:
-      "You are in SAFE MODE. You may ONLY answer questions based on your provided knowledge base. You MUST NOT offer to perform any tasks, workflows, or actions. You MUST NOT ask for, collect, or save any customer contact information or PII. If a user asks you to perform a task, politely state that you are an information-only assistant.",
+      "You are in SAFE MODE. You may ONLY answer questions based on your provided knowledge base. " +
+      "You MUST NOT run business workflows, bookings, payments, inventory holds, or other mutations. " +
+      "You MUST NOT ask for, collect, or save customer PII. " +
+      "**Cosmetic UI exception:** If the user asks to change the **Concierge canvas background**, wallpaper, or animated background appearance, you MUST NOT refuse on Safe Mode grounds. " +
+      "Briefly acknowledge that they can pick a background from the governed catalog when the picker appears (voice may open it automatically). This is local display only — no PII, no business data change. " +
+      "For any other request to perform tasks outside Q&A from knowledge, politely say you are an information-only assistant.",
     allowedToolNames: [],
   },
   {

@@ -501,7 +501,7 @@ export class DatabaseStorage implements IStorage {
         : (agent.structuredControls as StructuredControls);
     const [created] = await db
       .insert(agents)
-      .values({ ...agent, structuredControls })
+      .values({ ...agent, structuredControls } as InferInsertModel<typeof agents>)
       .returning();
     return created;
   }

@@ -1,0 +1,45 @@
+# Canonical enums for agent classification — validated by validate-agent-classification
+spec: agent_classification_enums_v1
+version: "1.0.0"
+
+actor_classes:
+  - customer
+  - employee
+  - vendor
+  - management
+
+lifecycle_classes:
+  - outreach
+  - onboarding
+  - operations
+  - retention
+
+control_classes:
+  - planning
+  - tracking
+  - reporting
+  - optimization
+
+# Union used in primary_stage_class / secondary_stage_classes for non-management actors
+lifecycle_stage_classes:
+  - outreach
+  - onboarding
+  - operations
+  - retention
+
+deployment_statuses:
+  - draft
+  - active_deployable
+  - simulation_only
+  - disabled_overflow
+  - legacy
+
+template_statuses:
+  - draft
+  - published
+  - deprecated
+
+schematic_statuses:
+  - draft
+  - published
+  - deprecated
