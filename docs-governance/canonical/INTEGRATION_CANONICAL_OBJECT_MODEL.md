@@ -64,7 +64,7 @@ entities:
     confidence_aggregate: high
 ```
 
-Vendor-specific mappings for Cloudbeds live in [`registry-yaml/integration-entities/cloudbeds_hospitality.v1.yaml`](../../registry-yaml/integration-entities/cloudbeds_hospitality.v1.yaml).
+Vendor-specific mappings for Cloudbeds REST live in [`registry-yaml/integration-entities/cloudbeds_hospitality.v1.yaml`](../../registry-yaml/integration-entities/cloudbeds_hospitality.v1.yaml). GraphQL type alignment (discovery-only, `vendor_id: cloudbeds_graphql`) lives in [`registry-yaml/integration-entities/cloudbeds_hospitality_graphql.v1.yaml`](../../registry-yaml/integration-entities/cloudbeds_hospitality_graphql.v1.yaml); see [`CLOUDBEDS_GRAPHQL_DISCOVERY_GOVERNANCE_V1.md`](./CLOUDBEDS_GRAPHQL_DISCOVERY_GOVERNANCE_V1.md).
 
 ## Related
 

@@ -36,6 +36,10 @@ export type CanvasViewId =
   | 'agent_roster' | 'knowledge_library_builder' | 'aptitude_test_runner'
   // Disambiguation
   | 'disambiguation_menu'
+  // Zoned ops / hospitality-style dashboard (palette-only renderer)
+  | 'command_center'
+  /** Categorized animated background picker (shadcn.io catalog — governed runtime renderer) */
+  | 'canvas_backgrounds'
   // Dynamic (ShadCN MCP generated)
   | 'dynamic';
 
@@ -82,6 +86,11 @@ export interface CanvasSyscallEnvelope {
       confidence: number;
       requiresDisambiguation?: boolean;
     };
+    /**
+     * Observe-only hint for intent-loop actor telemetry (Phase B1).
+     * **Non-authoritative** — never overrides visitor_session security resolution.
+     */
+    intentLoopActorChannel?: 'public' | 'operator';
   };
 
   /** Typed by the discriminated payload contracts below */
@@ -117,6 +126,13 @@ export interface CanvasResolveResult {
   renderMode: 'replace' | 'patch' | 'noop' | 'disambiguate';
   reason: string;
   hydrationKey?: string;
+  /** Phase A: which canvas intent tier produced this result (instrumentation). */
+  intentRouterTier?: 1 | 2 | 3;
+  /**
+   * Phase A: PII-free one-liner for operator trace (`?canvasTrace=1`).
+   * See `INTENT_LOOP_GOVERNANCE_V1.md` Phase A.
+   */
+  resolutionSummary?: string;
   speechContext?: {
     screenSummary: string;
     speakingInstructions?: string;
@@ -184,6 +200,26 @@ export interface DisambiguationMenuViewModel {
   options: Array<{ label: string; intent: string; viewId: CanvasViewId }>;
 }
 
+/** Zoned command surface — renderer must use palette primitives only (see GOVERNED_GENERATIVE_UI_SPEC.md). */
+/** Mirrors shadcn.io /backgrounds categories; full list lives in client catalog module. */
+export interface BackgroundPickerViewModel {
+  /** Optional subtitle under the panel title */
+  helperText?: string;
+}
+
+export interface CommandCenterViewModel {
+  headline: string;
+  contextSummary?: string;
+  statusItems: Array<{
+    id: string;
+    label: string;
+    value: string;
+    tone?: 'neutral' | 'success' | 'warning' | 'danger';
+  }>;
+  workItems: Array<{ id: string; title: string; subtitle?: string }>;
+  approvals?: Array<{ id: string; label: string; actionId: string }>;
+}
+
 export interface AccountOverviewViewModel {
   plan: string;
   businesses: Array<{ id: string; name: string; slug: string; businessAddress?: string }>;
@@ -223,6 +259,8 @@ export type CanvasRenderPayload =
   | { viewId: 'aptitude_test_runner';       renderMode: 'replace'; title: string; data: AptitudeTestRunnerViewModel }
   | { viewId: 'support_home';               renderMode: 'replace'; title: string; data: SupportHomeViewModel }
   | { viewId: 'disambiguation_menu';        renderMode: 'replace'; title: string; data: DisambiguationMenuViewModel }
+  | { viewId: 'command_center';            renderMode: 'replace'; title: string; data: CommandCenterViewModel }
+  | { viewId: 'canvas_backgrounds';        renderMode: 'replace'; title: string; data: BackgroundPickerViewModel }
   | { viewId: 'account_overview';           renderMode: 'replace'; title: string; data: AccountOverviewViewModel }
   | { viewId: 'identity_verify';            renderMode: 'replace'; title: string; data: IdentityVerifyViewModel }
   | { viewId: 'phone_provisioning_form';    renderMode: 'replace'; title: string; data: PhoneProvisioningViewModel }
@@ -236,14 +274,22 @@ export type CanvasRenderPayload =
   | { viewId: 'custom_card';    renderMode: 'replace'; title: string; data: DynamicViewModel };
 
 // §8.3 — canvas.patch — typed ops only, no arbitrary JSON patch
+/** Bumped when patch op vocabulary or semantics change incompatibly. */
+export type CanvasPatchContractVersion = '1.0';
+
 export type CanvasPatchOp =
   | { op: 'replace_field'; path: string; value: unknown }
   | { op: 'append_items'; path: string; items: unknown[] }
   | { op: 'remove_item'; path: string; key: string }
   | { op: 'set_loading'; path: string; value: boolean }
-  | { op: 'set_error'; path: string; message: string };
+  | { op: 'set_error'; path: string; message: string }
+  | { op: 'reorder_slots'; path: string; orderedKeys: string[] }
+  | { op: 'replace_component'; slotId: string; componentType: string; props?: Record<string, unknown> }
+  | { op: 'patch_props'; path: string; props: Record<string, unknown> };
 
 export interface CanvasPatchPayload {
+  /** Defaults to 1.0 when omitted (backward compatible). */
+  patchContractVersion?: CanvasPatchContractVersion;
   targetViewId: string;
   patchOps: CanvasPatchOp[];
 }
@@ -255,7 +301,11 @@ export interface CanvasClearPayload {
 }
 
 // §8.5 — canvas.action — actionId MUST map to server-owned registry entry
+export type CanvasActionContractVersion = '1.0';
+
 export interface CanvasActionPayload {
+  /** Defaults to 1.0 when omitted (backward compatible). */
+  actionContractVersion?: CanvasActionContractVersion;
   actionId: string;
   actionType:
     | 'open_view' | 'submit_form' | 'trigger_skill' | 'escalate'

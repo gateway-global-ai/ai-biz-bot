@@ -6,7 +6,7 @@ You are an architect of the **Gateway Global AI OS**. You do not build undiffere
 
 ## CORE PHYSICS
 
-1. **GOVERNANCE FIRST** — Before material architecture, routing, views, or prompt behavior changes, consult [`docs-governance/`](docs-governance/). Anchor documents include [`SAFE_MODE_CONTRACT.md`](docs-governance/canonical/SAFE_MODE_CONTRACT.md), [`KNOWLEDGE_PLAN_ORCHESTRATOR.md`](docs-governance/canonical/KNOWLEDGE_PLAN_ORCHESTRATOR.md), [`EXECUTION_PLANE_BOUNDARY_SPEC.md`](docs-governance/canonical/EXECUTION_PLANE_BOUNDARY_SPEC.md), [`PROMPT_RUNTIME_GOVERNANCE.md`](docs-governance/canonical/PROMPT_RUNTIME_GOVERNANCE.md). For core platform structure, read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+1. **GOVERNANCE FIRST** — Before material architecture, routing, views, or prompt behavior changes, consult [`docs-governance/`](docs-governance/). Anchor documents include [`SAFE_MODE_CONTRACT.md`](docs-governance/canonical/SAFE_MODE_CONTRACT.md), [`KNOWLEDGE_PLAN_ORCHESTRATOR.md`](docs-governance/canonical/KNOWLEDGE_PLAN_ORCHESTRATOR.md), [`EXECUTION_PLANE_BOUNDARY_SPEC.md`](docs-governance/canonical/EXECUTION_PLANE_BOUNDARY_SPEC.md), [`PROMPT_RUNTIME_GOVERNANCE.md`](docs-governance/canonical/PROMPT_RUNTIME_GOVERNANCE.md), [`INTENT_LOOP_GOVERNANCE_V1.md`](docs-governance/canonical/INTENT_LOOP_GOVERNANCE_V1.md) (intent-as-loop / canvas control plane), [`VOICE_FIRST_INTERFACE_PIPELINE_V1.md`](docs-governance/canonical/VOICE_FIRST_INTERFACE_PIPELINE_V1.md) (voice-first; govern the **pipeline** that creates future UI — legacy dashboards are not the product target). For core platform structure, read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 2. **THE AUDIT PLANE** — Knowledge certification is **structured** (gap analysis, [`server/services/knowledgeCertificationContext.ts`](server/services/knowledgeCertificationContext.ts), tool gates). Do not use prompt-only tuning as a substitute for certification, policy, or missing data.
 
@@ -19,6 +19,10 @@ You are an architect of the **Gateway Global AI OS**. You do not build undiffere
 6. **TIERED RULES** — The root file is **Tier 1**. Scoped rules live in [`.cursor/rules/*.mdc`](.cursor/rules). The map is [`docs-governance/canonical/CURSOR_RULES_INDEX.md`](docs-governance/canonical/CURSOR_RULES_INDEX.md). Do not assume one file replaces path-scoped `.mdc` rules.
 
 7. **CANONICAL PHASE ORDER** — Platform hardening and registry work follow [`docs-governance/canonical/GOVERNANCE_EXECUTION_PLAN_V1.md`](docs-governance/canonical/GOVERNANCE_EXECUTION_PLAN_V1.md). Do not skip **integrity (Phase 3)** before claiming registry authority (Phase 4+).
+
+8. **CANVAS = OS TOOL** — The Concierge canvas is **not** a generative artboard. Agent-authored canvas UI follows [`CANVAS_OS_TOOL_MANDATE_V1.md`](docs-governance/canonical/CANVAS_OS_TOOL_MANDATE_V1.md) and **platform Visual Integrity** [`VISUAL_INTEGRITY_GOVERNANCE_V1.md`](docs-governance/canonical/VISUAL_INTEGRITY_GOVERNANCE_V1.md): **Shadcn MCP** discovery/promotion + **design tokens** (`brand.ts`, `ui-core`, CSS variables); **no** presentation `style={{}}` / ad-hoc hex on canvas paths without a listed waiver. Audit: `npm run governance:visual-integrity`. See [`.cursor/rules/canvas-os-tool-mandate.mdc`](.cursor/rules/canvas-os-tool-mandate.mdc).
+
+9. **GOVERNED UI SDK** — New canvas/auth building blocks ship through **`@gateway/canvas-sdk`** and tokens through **`@gateway/design-tokens`** only after [`UI_COMPONENT_APPROVAL_REGISTRY_V1.md`](docs-governance/canonical/UI_COMPONENT_APPROVAL_REGISTRY_V1.md) + `registry-yaml/ui-components/`. See [`.cursor/rules/governed-ui-sdk.mdc`](.cursor/rules/governed-ui-sdk.mdc).
 
 ---
 

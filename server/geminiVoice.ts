@@ -5,7 +5,8 @@ import { IncomingMessage } from "http";
 import { registerWebSocketRoute } from "./websocketRouter";
 import { TOOL_DECLARATIONS } from "./config/geminiToolDeclarations";
 import { getToolsAllowedForMode } from "./config/operationalModes";
-import { handleToolCall } from "./services/toolHandler";
+import type { ExecutionMutationTransport } from "@shared/executionMutationGate";
+import { executeContract } from "./services/executionMutationGate";
 import { broadcastLiveEvent } from "./services/eventBridge";
 import { storage } from "./storage";
 import { FREE_TIER_SYSTEM_INSTRUCTION } from "./prompts/freeTierPrompt";
@@ -25,12 +26,40 @@ interface McpToolResult {
   [key: string]: unknown;
 }
 
+function transportForVoiceWsPath(path: string): ExecutionMutationTransport {
+  if (path === "/ws/os-live") return "internal";
+  return "browser_live";
+}
+
 /** Marketing / platform home ids: may exist in DB for visitor_sessions FK; voice stays on public Nova + minimal tools. */
 function isPlatformMarketingSiteConfigId(id: string | null | undefined): boolean {
   if (id == null || !String(id).trim()) return false;
   const s = String(id).trim();
   return s === "platform_landing" || s === "platform-landing" || s === "platform";
 }
+
+/** Public marketing voice (`!siteConfigResolved`) — canvas-first, passive sales; minimal tools (see EXECUTION_MUTATION_GATE). */
+const PUBLIC_PLATFORM_VOICE_INSTRUCTION = `You are Nova on the public Gateway Global AI shell. Your job is to help people use the voice canvas calmly — not to sell aggressively.
+
+TONE: Friendly, brief, passive. Do NOT open with a long company pitch. Do NOT ask what their business is or what they need to buy unless they clearly steer toward business signup or demo. If they are exploring backgrounds, themes, chips, or the canvas, stay on that topic only.
+
+VOICE & CANVAS (know this cold):
+- Push-to-talk (PTT) sends their voice to you; responses play back as audio.
+- The large white area is the canvas / content window: it can show cards, pickers, and tool output.
+- "Canvas appearance" (and the background picker) lets them choose animated backgrounds and adjust theme/readability (scrim, contrast). Help them pick categories and effects in plain language.
+- Intent chips under the headline send short phrases; they may open the background picker or ask for explanations — honor that intent.
+
+WHEN THEY ASK "WHAT IS VOICE AI" OR SIMILAR: Explain Clear Voice / PTT and the canvas in one or two short sentences. Optionally mention that businesses use the same stack for a front desk — one sentence max unless they ask to go deeper.
+
+WHEN THEY WANT BUSINESS / DEMO: Only then invite them gently — e.g. they can use "Find my business" (opens business lookup) to try a demo flow, or ask you for a high-level overview. Never interrogate (no rapid-fire "what industry are you in" unless they asked for onboarding help).
+
+--- CONTENT WINDOW ---
+When the user asks what is on screen or to show something there, use tools or describe what could appear — do not say you do not know what a canvas is. If you use show_canvas, briefly say what you are placing while it appears.
+
+--- BACKGROUND PICKER (when [Canvas context] mentions canvas_backgrounds or background picker) ---
+Speak ONLY about choosing categories and effects — no platform sales pitch, referrals, or pricing. Follow any "Instructions" line in the canvas context exactly.
+
+FIRST GREETING (keep under two sentences): "Hi, I'm Nova. Ask me anything about the canvas, voice controls, or backgrounds — or tap a chip below. If you want the full platform story or a business demo, just say so." Never output markdown, bullets, or headings — you are speaking aloud.`;
 
 /**
  * Gemini Multimodal Live API Proxy
@@ -39,6 +68,9 @@ function isPlatformMarketingSiteConfigId(id: string | null | undefined): boolean
  * It hides the GOOGLE_API_KEY from the client and handles the "Double Socket" pipeline.
  *
  * Flow: Browser <-> Node.js Server (Proxy) <-> Google Gemini API
+ *
+ * Tool execution: model `functionCall` proposals are normalized into `executeContract` (mutation gate)
+ * before `handleToolCall` — see EXECUTION_MUTATION_GATE_SPEC_V1.md.
  */
 
 export function setupGeminiLiveWebSocket(server: Server): void {
@@ -56,6 +88,7 @@ export function setupGeminiLiveWebSocket(server: Server): void {
   console.log('[OSLive] Route unified under Gemini Native Audio (Governance Enabled)');
 
   wss.on("connection", (clientWs: WebSocket, request: IncomingMessage) => {
+    const voiceWsPath = (request.url || "/ws/gemini-live").split("?")[0] || "/ws/gemini-live";
     console.log(`[GeminiVoice] New client connected to Gemini Proxy from ${request.socket.remoteAddress}`);
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -336,11 +369,15 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           // Prevents context bloat from injecting all 31 declarations into a public/landing session.
           if (!siteConfigResolved) {
             message.setup.system_instruction = {
-              parts: [{
-                text: "You are Nova, the AI concierge for Gateway Global AI. Greet the user warmly in one sentence. Help them understand the platform: AI front desk, voice agents, QR-to-voice, and Google Workspace integration. Keep responses under 3 sentences. Never output markdown, bullet points, or headings — you are speaking aloud. Opening line: \"Hi, I'm Nova from Gateway Global AI. We give businesses an AI front desk that works on voice, QR codes, and Google Workspace — deployed in minutes. How can I help you today?\""
-              }]
+              parts: [{ text: PUBLIC_PLATFORM_VOICE_INSTRUCTION }],
             };
-            const PUBLIC_TOOLS = ['search_local_business', 'get_business_details', 'request_manual_input'];
+            // Narrow allowlist: maps + manual input + structured canvas cards (server acknowledges; client renders).
+            const PUBLIC_TOOLS = [
+              'search_local_business',
+              'get_business_details',
+              'request_manual_input',
+              'show_canvas',
+            ] as const;
             const publicDeclarations = PUBLIC_TOOLS
               .map(name => TOOL_DECLARATIONS[name as keyof typeof TOOL_DECLARATIONS])
               .filter(Boolean)
@@ -518,20 +555,87 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                       callSid: sessionVoiceCallSid ?? undefined,
                     }
                   : undefined;
+
+              const correlationId =
+                typeof (functionCall as { id?: string }).id === "string" &&
+                (functionCall as { id: string }).id.trim().length > 0
+                  ? (functionCall as { id: string }).id.trim()
+                  : randomUUID();
+
+              const payloadForGate =
+                typeof functionCall.args === "object" &&
+                functionCall.args !== null &&
+                !Array.isArray(functionCall.args)
+                  ? { ...(functionCall.args as Record<string, unknown>) }
+                  : {};
+
               try {
                 toolCallPending = true;
-                // OOM Guard: if handleToolCall hangs (DB timeout, third-party freeze),
+                // OOM Guard: if executeContract/handleToolCall hangs (DB timeout, third-party freeze),
                 // toolCallPending never clears and clientContentQueue grows unboundedly.
                 // Promise.race() forces a 10s ceiling — simulated error flushes the queue.
                 const TOOL_TIMEOUT_MS = 10_000;
                 const timeoutPromise = new Promise<never>((_, reject) =>
                   setTimeout(() => reject(new Error(`Tool timeout after ${TOOL_TIMEOUT_MS}ms`)), TOOL_TIMEOUT_MS)
                 );
-                const result = await Promise.race([
-                  handleToolCall(functionCall, toolCallContext),
+                const gateResult = await Promise.race([
+                  executeContract(
+                    {
+                      mutationKind: "gemini_tool_invocation",
+                      capability: functionCall.name,
+                      payload: payloadForGate,
+                      context: {
+                        routeOrSource: voiceWsPath,
+                        transport: transportForVoiceWsPath(voiceWsPath),
+                        siteConfigId: sessionSiteConfigId ?? undefined,
+                      },
+                      caller: {
+                        actor: "model_proposal",
+                        correlationId,
+                      },
+                    },
+                    {
+                      toolCallContext,
+                      mutationGateLogContext: {
+                        voiceSessionId: sessionId,
+                        siteConfigId: sessionSiteConfigId,
+                        routeOrSource: voiceWsPath,
+                        transport: transportForVoiceWsPath(voiceWsPath),
+                        proposedCapability: functionCall.name,
+                      },
+                    },
+                  ),
                   timeoutPromise,
                 ]);
-                const fcArgs = (functionCall.args as any) ?? {};
+
+                if (!gateResult.ok) {
+                  const errMsg =
+                    gateResult.code === "INVALID_ENVELOPE"
+                      ? `mutation_gate_invalid_envelope: ${gateResult.reason}`
+                      : gateResult.reason;
+                  const errorResult = {
+                    serverContent: {
+                      modelTurn: {
+                        parts: [
+                          {
+                            functionResponse: {
+                              name: functionCall.name,
+                              response: { error: errMsg },
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  };
+                  googleWs.send(JSON.stringify(errorResult));
+                  toolCallPending = false;
+                  flushClientContentQueue();
+                  continue;
+                }
+
+                const result = gateResult.result;
+                /** Tool args post site-anchor injection; loose shape for legacy tool_metadata branches. */
+                const fcArgs = payloadForGate as Record<string, any>;
 
                 const functionResult = {
                   serverContent: {

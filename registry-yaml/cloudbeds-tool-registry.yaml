@@ -211,6 +211,7 @@ booking_fallback:
 # ── Boardwalk Suites Lafayette — property constants ───────────────────────────
 boardwalk_suites_lafayette:
   property_id: "315701"
+  # Google Places id — optional metadata only. Canonical platform business scope is site_configs.id (UUID), not place_id.
   place_id: "ChIJB4qU6oXvJIgR_2p602OaK_U"
   address: "1605 N University Ave, Lafayette, LA 70506"
   currency: "USD"

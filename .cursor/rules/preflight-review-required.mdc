@@ -9,3 +9,13 @@ alwaysApply: true
 - Plans, specs, route changes, view changes, policy changes, YAML registry changes, and execution-plane changes should go through governance review first.
 - Do not treat code review after implementation as sufficient for AI OS governance.
 - If a proposal introduces new entities, routes, views, actions, or prompt/runtime patterns, review it against the System Manifest before coding.
+
+## Queue / readiness / shipped-vs-planned audits (narrow)
+
+When the user asks for a **queue review**, **readiness review**, **implementation status review**, **shipped vs planned audit**, or similar **repo truth** assessment:
+
+- Structure findings using `docs-governance/artifacts/QUEUE_REVIEW_TEMPLATE_V1.md` as the output frame.
+- For **each work item**, explicitly declare: `current_truth`, `runtime_status`, `operator_usable_today`, `next_concrete_step`, `blocking_dependency` (see template for `operator_usable_today` enum).
+- Do not treat canonical docs, registry YAML, validators, or types as runtime completion unless evidence shows executable behavior and operator usability per the template.
+
+This does **not** apply to general coding tasks; it applies when the task is audit or status-review shaped.

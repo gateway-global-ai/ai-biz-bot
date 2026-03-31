@@ -1,7 +1,7 @@
 # Control plane unification plan (v1)
 
 **Status:** Design / sequencing document (peer synthesis + Gateway OS alignment).  
-**Related:** [ONBOARDING_CONTRACT_HOSPITALITY_PHASE1_V1.md](./ONBOARDING_CONTRACT_HOSPITALITY_PHASE1_V1.md) (first executable admission contract), [REGISTRY_AUTHORITY_CHARTER.md](./REGISTRY_AUTHORITY_CHARTER.md), [GOVERNANCE_EXECUTION_PLAN_V1.md](./GOVERNANCE_EXECUTION_PLAN_V1.md).  
+**Related:** [ONBOARDING_CONTRACT_HOSPITALITY_PHASE1_V1.md](./ONBOARDING_CONTRACT_HOSPITALITY_PHASE1_V1.md) (first executable admission contract), [REGISTRY_AUTHORITY_CHARTER.md](./REGISTRY_AUTHORITY_CHARTER.md), [GOVERNANCE_EXECUTION_PLAN_V1.md](./GOVERNANCE_EXECUTION_PLAN_V1.md), [EXECUTION_MUTATION_GATE_SPEC_V1.md](./EXECUTION_MUTATION_GATE_SPEC_V1.md), [VOICE_EXECUTION_ARCHITECTURE_V1.md](./VOICE_EXECUTION_ARCHITECTURE_V1.md).  
 **Discovery inputs:** `user_uploads/governane_plan3_26/` (cartography, implicit capabilities, breach audit, registry migration planner).  
 **Next execution (precedent #1 — validate before provision):** [`.cursor/plans/router_contract_refusal_minimal.plan.md`](../../.cursor/plans/router_contract_refusal_minimal.plan.md) (implemented).  
 **Next execution (precedent #2 — engine expansion):** [`.cursor/plans/execution_contract_engine_v1_expansion.plan.md`](../../.cursor/plans/execution_contract_engine_v1_expansion.plan.md)

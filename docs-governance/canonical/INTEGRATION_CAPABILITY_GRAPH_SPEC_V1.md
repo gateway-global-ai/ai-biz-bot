@@ -6,7 +6,7 @@ backed_by:
   schema: partial
   service: partial
   route: false
-last_verified: 2026-03-27
+last_verified: 2026-03-30
 spec_id: integration_capability_graph
 spec_version: "1.0.0"
 ---
@@ -186,6 +186,26 @@ Every vendor HTTP operation MUST be normalized to an **endpoint record** with ex
 
 A **capability** is the smallest unit of integration exposed to orchestration and (when allowed) to customer-facing tools.
 
+### 5.0 Primary execution surface, discovery, and multi-API vendors
+
+Three concepts MUST stay distinct:
+
+| Concept | Meaning | Typical artifacts |
+|--------|---------|-------------------|
+| **Discovery authority** | What helps engineers understand the vendor’s object model and fields | Vendor OpenAPI, **GraphQL schema / introspection**, portal “try it” consoles |
+| **Execution authority** | What contract backs a **shipped** runtime capability | Normalized **endpoint** rows (`source_tier`, e.g. `openapi` or `graphql`) + adapter manifests tied to `endpoint_flow` |
+| **Canonical truth** | What the platform means operationally | Canonical entities, anchors, and capability rows in `registry-yaml/integration-*` — **not** the vendor surface itself |
+
+**GraphQL vs REST:** GraphQL is a **discovery-rich** and optionally **execution** surface (nested queries, introspection). REST/OpenAPI is usually a **contract-stable operation** surface for path-oriented calls. The same vendor MAY offer both; they MUST be governed as **separate source tiers** per [`INTEGRATION_GRAPH_DISCIPLINE.md`](./INTEGRATION_GRAPH_DISCIPLINE.md) **D4**.
+
+**Primary-source discipline (normative):**
+
+1. Each capability MUST have **one primary** fulfillment API style in practice (the adapter and `endpoint_flow` MUST reflect it). Documentation in `description` / adapter manifest MUST state the primary `source_tier` until first-class registry fields subsume it.
+2. **Do not** mix REST and GraphQL in one capability unless **INTEGRATION_GRAPH_DISCIPLINE D4** mixed-source exception criteria are met and documented.
+3. GraphQL-specific controls (query depth, field allowlists, persisted-query or allowlisted operation shapes, rate policy) MUST be defined **before** production execution—discovery-only ingestion of a GraphQL schema does not imply runtime approval.
+
+**Modeling preference:** Prefer **separate integration entity bundles** (e.g. distinct YAML namespaces or entity bundles per surface) when a vendor ships both REST and GraphQL, rather than implicit dual-home in one bundle—unless the graph explicitly maps both under reviewed `vendor_mappings`.
+
 ### 5.1 Capability record (required fields)
 
 | Field | Type | Constraints |
@@ -350,7 +370,7 @@ If any gate fails, `adapter_status` MUST remain `draft` or `validated` (never `d
 
 ## Related
 
-- [`INTEGRATION_GRAPH_DISCIPLINE.md`](./INTEGRATION_GRAPH_DISCIPLINE.md) — runtime vs graph, docs vs YAML, set/mode anti-drift.
+- [`INTEGRATION_GRAPH_DISCIPLINE.md`](./INTEGRATION_GRAPH_DISCIPLINE.md) — runtime vs graph, docs vs YAML, set/mode anti-drift; **D4** REST vs GraphQL source tiers.
 - [`REGISTRY_AUTHORITY_CHARTER.md`](./REGISTRY_AUTHORITY_CHARTER.md) — charter rows for tool and skill authority.
 - [`AGENT_DEPLOYMENT_CONTRACT_V1.md`](./AGENT_DEPLOYMENT_CONTRACT_V1.md) — deployed agent tool allowlists.
 - [`EXECUTION_PLANE_BOUNDARY_SPEC.md`](./EXECUTION_PLANE_BOUNDARY_SPEC.md) — heavy work off hot paths.

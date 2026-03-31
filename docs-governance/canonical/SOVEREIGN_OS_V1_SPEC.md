@@ -73,7 +73,7 @@ Operational **break_glass** (if ever required) still emits a **violation** recor
 ## What survives failure
 
 - **Failed provision** — Run row `status=failed`, `blockers` and `failure_refs` populated; site row may still exist (create-before-provision). Operators replay via `POST /api/intelligence/provision` or backfill scripts.
-- **Idempotency** — `provisionAgentsForBusiness` remains the template loop; duplicate runs create duplicate agents unless a future idempotency key is added (work log).
+- **Idempotency** — `provisionAgentsForBusiness` skips create when an agent already exists for the same `site_config_id` + `role_type` (re-runs return `agentsSkipped`); hospitality rows missing classification may be backfilled on skip.
 
 ## What passes orchestration
 

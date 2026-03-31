@@ -12,9 +12,9 @@ export type SocialOgIssue = {
 function getPlatformDefaultOg(): { ogTitle: string; ogImage: string; ogDescription: string; ogSiteName: string } {
   const baseUrl = (process.env.APP_URL || "https://aibizbot-dev.gatewayglobal.ai").replace(/\/$/, "");
   return {
-    ogTitle: "CLAIM YOUR BUSINESS PROFILE — GET ACCESS TO YOUR AI AGENTS AND WEBSITE",
+    ogTitle: "Sovereign AI OS — Voice-first, governed, deterministic agents",
     ogDescription:
-      "AI-powered business websites with voice concierge and chat. Free 30 day trial, instant delivery.",
+      "Gateway Global AI is the AI Business Router: Clear Voice PTT, registry-backed tools, execution-plane integrity, and operator-grade governance for mid-market operators.",
     ogImage: `${baseUrl}/og-preview.png`,
     ogSiteName: "Gateway Global AI",
   };
@@ -77,7 +77,9 @@ export function assessBizPageOgReadiness(site: SiteForOgReadiness, baseUrl: stri
 
   const ogTitle = stored.ogTitle ?? site.name ?? platform.ogTitle;
   const ogDescription =
-    stored.ogDescription ?? summary ?? (site.name ? `Visit ${site.name} — AI-powered voice and chat.` : platform.ogDescription);
+    stored.ogDescription ??
+    summary ??
+    (site.name ? `Visit ${site.name} — voice-first concierge on the Sovereign AI OS.` : platform.ogDescription);
   const ogUrl = stored.ogUrl ?? (slug ? `${baseUrl}/biz/${slug}` : baseUrl);
   const ogImage = stored.ogImage
     ? imageAbs(baseUrl, stored.ogImage)

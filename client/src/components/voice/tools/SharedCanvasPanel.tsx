@@ -4,9 +4,13 @@ import { X, ChevronDown, ChevronUp, Clock, DollarSign, Phone, Calendar, FileText
 import type {
   CanvasViewId,
   CanvasViewPayload,
+  CanvasRenderPayload,
+  CommandCenterViewModel,
   PhoneProvisioningPayload,
   AccountOverviewPayload,
 } from '@shared/canvasViewContract';
+import { ShadcnBackgroundPickerView } from '@/components/canvas/ShadcnBackgroundPickerView';
+import type { CanvasChromeSettings } from '@/lib/canvasChromeSettings';
 
 // ── Skill-driven view renderers ───────────────────────────────────────────────
 
@@ -129,18 +133,152 @@ function AccountOverviewView({
   );
 }
 
+function toneClasses(tone: CommandCenterViewModel['statusItems'][number]['tone']): string {
+  switch (tone) {
+    case 'success':
+      return 'text-emerald-400 border-emerald-500/25 bg-emerald-500/10';
+    case 'warning':
+      return 'text-amber-300 border-amber-500/25 bg-amber-500/10';
+    case 'danger':
+      return 'text-rose-300 border-rose-500/25 bg-rose-500/10';
+    default:
+      return 'text-slate-300 border-slate-600/50 bg-slate-800/40';
+  }
+}
+
+function CommandCenterCanvas({
+  title,
+  data,
+  onAction,
+  onCancel,
+}: {
+  title: string;
+  data: CommandCenterViewModel;
+  onAction?: (action: string, data?: Record<string, unknown>) => void;
+  onCancel?: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      className="rounded-sui bg-slate-900/40 border border-indigo-500/20 backdrop-blur-xl shadow-2xl overflow-hidden"
+    >
+      <div className="px-4 pt-4 pb-3 border-b border-slate-700/50 flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-white font-semibold text-sm">{title}</h3>
+          <p className="text-slate-400 text-xs mt-0.5 font-mono">{data.headline}</p>
+          {data.contextSummary && (
+            <p className="text-slate-500 text-[11px] mt-1">{data.contextSummary}</p>
+          )}
+        </div>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/10"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      <div className="p-4 space-y-4 max-h-[min(70vh,520px)] overflow-y-auto">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Status lane</p>
+          <div className="flex flex-wrap gap-2">
+            {data.statusItems.map(row => (
+              <div
+                key={row.id}
+                className={`flex-1 min-w-[140px] px-3 py-2 rounded-xl border text-xs ${toneClasses(row.tone)}`}
+              >
+                <p className="text-slate-500 text-[10px] uppercase tracking-wide">{row.label}</p>
+                <p className="text-white font-medium mt-0.5">{row.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Main work</p>
+          <div className="space-y-2">
+            {data.workItems.map(w => (
+              <div
+                key={w.id}
+                className="px-3 py-2.5 rounded-xl bg-slate-800/60 border border-slate-700/60"
+              >
+                <p className="text-white text-sm font-medium">{w.title}</p>
+                {w.subtitle && <p className="text-slate-400 text-xs mt-1 leading-relaxed">{w.subtitle}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+        {data.approvals && data.approvals.length > 0 && (
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Approvals</p>
+            <div className="flex flex-wrap gap-2">
+              {data.approvals.map(a => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => onAction?.(a.actionId, { approvalId: a.id })}
+                  className="px-3 py-2 rounded-xl bg-indigo-500/20 border border-indigo-500/30 text-indigo-200 text-xs font-medium hover:bg-indigo-500/30 transition-colors"
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 // ── Typed canvas dispatcher ───────────────────────────────────────────────────
 // Renders the correct view based on viewId, falls through to legacy renderer.
 
 interface TypedCanvasProps {
-  payload: CanvasViewPayload;
+  payload: CanvasViewPayload | CanvasRenderPayload;
   onTriggerSpeech?: (text: string) => void;
   onContextUpdate?: (context: string) => void;
   onAction?: (action: string, data?: Record<string, unknown>) => void;
   onCancel?: () => void;
+  canvasChrome?: CanvasChromeSettings;
+  onCanvasChromeChange?: (next: CanvasChromeSettings) => void;
+  /** Highlights current effect in background library (Concierge canvas state). */
+  canvasBackgroundId?: string | null;
 }
 
-export const TypedCanvasView: React.FC<TypedCanvasProps> = ({ payload, onTriggerSpeech, onContextUpdate, onAction, onCancel }) => {
+export const TypedCanvasView: React.FC<TypedCanvasProps> = ({
+  payload,
+  onTriggerSpeech,
+  onContextUpdate,
+  onAction,
+  onCancel,
+  canvasChrome,
+  onCanvasChromeChange,
+  canvasBackgroundId,
+}) => {
+  if ('viewId' in payload && payload.viewId === 'canvas_backgrounds') {
+    const p = payload as Extract<CanvasRenderPayload, { viewId: 'canvas_backgrounds' }>;
+    const data = 'data' in p && p.data != null ? p.data : {};
+    return (
+      <ShadcnBackgroundPickerView
+        title={p.title ?? 'Canvas appearance'}
+        data={data}
+        onAction={onAction}
+        onCancel={onCancel}
+        canvasChrome={canvasChrome}
+        onCanvasChromeChange={onCanvasChromeChange}
+        selectedBackgroundId={canvasBackgroundId ?? null}
+      />
+    );
+  }
+  if ('viewId' in payload && payload.viewId === 'command_center' && 'data' in payload) {
+    const p = payload as Extract<CanvasRenderPayload, { viewId: 'command_center' }>;
+    return (
+      <CommandCenterCanvas title={p.title} data={p.data} onAction={onAction} onCancel={onCancel} />
+    );
+  }
   if (payload.viewId === 'phone_provisioning_form') {
     return <PhoneProvisioningView payload={payload as PhoneProvisioningPayload} onAction={onAction} onCancel={onCancel} />;
   }

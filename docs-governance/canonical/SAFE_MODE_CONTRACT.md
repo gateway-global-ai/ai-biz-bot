@@ -33,6 +33,10 @@ Define Safe Mode as an enforceable runtime policy, not a conversational style.
 - menu-first
 - transition to `view` only when the route/view policy declares it valid
 
+### Cosmetic canvas personalization (appearance only)
+- **Allowed:** User-driven **appearance-only** changes to the Concierge canvas zone that are implemented via **registered** `CanvasViewId`s and validated canvas-control paths (e.g. `canvas_backgrounds` + governed background layer). No PII collection, no business entity writes, no payments, bookings, or inventory mutations.
+- **Operational Mode SAFE:** This is **not** treated as a disallowed “task” in [`server/config/operationalModes.ts`](../server/config/operationalModes.ts) SAFE instructions — the model may acknowledge without refusing Safe Mode solely for this cosmetic request. Runtime enforcement remains syscall + registry, not prompt-only.
+
 ### Mutation
 - disabled or tightly limited
 - high-risk actions require confirmation or promotion

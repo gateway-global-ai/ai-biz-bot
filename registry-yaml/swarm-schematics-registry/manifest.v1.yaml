@@ -1,0 +1,16 @@
+# Index of machine-readable swarm schematics (YAML SOT until DB projection is populated)
+spec: swarm_schematics_registry_manifest_v1
+version: "1.0.0"
+
+authority:
+  note: >
+    Hospitality Cloudbeds schematic remains authoritative in
+    registry-yaml/swarm-schematics/hospitality_cloudbeds.v1.yaml
+    (validate-swarm-schematic). This manifest is for classification limits + future DB sync.
+
+schematics:
+  - schematic_id: hospitality_cloudbeds
+    industry_group: hospitality_travel
+    yaml_path: registry-yaml/swarm-schematics/hospitality_cloudbeds.v1.yaml
+    member_count_expected: 6
+    role_classification_yaml_path: registry-yaml/agent-classification-policy/hospitality_cloudbeds_role_classification.v1.yaml

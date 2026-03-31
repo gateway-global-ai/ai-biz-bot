@@ -10,7 +10,7 @@ import { execSync } from "child_process";
 import { and, eq } from "drizzle-orm";
 import { db } from "../server/db.js";
 import { siteConfigs, sitePmsIntegrations } from "../shared/schema.js";
-import { BOARDWALK_SUITES } from "./setup-boardwalk-suites.js";
+import { boardwalkSiteConfigIdFromEnv, resolveBoardwalkSiteConfigId } from "./lib/boardwalkSiteIdentity.js";
 
 function maskLen(name: string): string {
   const n = process.env[name]?.length ?? 0;
@@ -40,13 +40,24 @@ async function boardwalkPmsSummary(): Promise<void> {
     return;
   }
   try {
-    const [site] = await db
-      .select()
-      .from(siteConfigs)
-      .where(eq(siteConfigs.placeId, BOARDWALK_SUITES.placeId))
-      .limit(1);
+    let site: (typeof siteConfigs.$inferSelect) | undefined;
+
+    const envId = boardwalkSiteConfigIdFromEnv();
+    if (envId) {
+      const [byId] = await db.select().from(siteConfigs).where(eq(siteConfigs.id, envId)).limit(1);
+      site = byId;
+    }
     if (!site) {
-      console.log(`  Boardwalk site (placeId): no site_configs row — run setup:boardwalk`);
+      const resolved = await resolveBoardwalkSiteConfigId();
+      if (resolved) {
+        const [byId] = await db.select().from(siteConfigs).where(eq(siteConfigs.id, resolved.siteConfigId)).limit(1);
+        site = byId;
+      }
+    }
+    if (!site) {
+      console.log(
+        "  Boardwalk site: no site_configs row — run setup:boardwalk, set BOARDWALK_SITE_CONFIG_ID, or (dev only) GOVERNANCE_LEGACY_GOOGLE_PLACE_ID_LOOKUP=1 for migration shim",
+      );
       return;
     }
     const [pms] = await db

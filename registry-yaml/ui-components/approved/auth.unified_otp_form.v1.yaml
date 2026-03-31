@@ -1,0 +1,29 @@
+# UI component approval — auth.unified_otp_form
+# See docs-governance/canonical/UI_COMPONENT_APPROVAL_REGISTRY_V1.md
+
+component_id: auth.unified_otp_form
+status: approved
+source: hand_authored_exception
+source_note: "Promoted from client/src/components/auth/UnifiedOtpForm.tsx; token-bound; Shadcn MCP refactor planned"
+
+allowed_surfaces:
+  - auth
+  - public
+
+allowed_variants:
+  - fullPage
+  - canvas
+
+tokens:
+  required:
+    - CANVAS.bg
+    - brand.indigo primary actions
+
+inline_css: forbidden
+custom_tailwind: restricted
+
+sdk_export: UnifiedOtpForm
+package: "@gateway/canvas-sdk"
+
+owner: platform-governance
+last_reviewed: "2026-03-30"

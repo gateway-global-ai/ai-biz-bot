@@ -1,0 +1,825 @@
+{
+  "spec": "shadcn_io_merged_catalog_v1",
+  "version": "1.0.0",
+  "generatedAt": "2026-03-30T09:25:58.762Z",
+  "disclaimer": "shadcn.io is not affiliated with official shadcn/ui. Recipe URLs are conventional; confirm on each doc page.",
+  "blocksDisclaimer": "Recipe URLs are conventional (…/r/hero-NN.json). Verify on each doc page. shadcn.io is not affiliated with official shadcn/ui.",
+  "sourceReadme": "https://github.com/shadcnio/react-shadcn-components/blob/main/README.md",
+  "blocksSource": "https://www.shadcn.io/blocks — generated hero grid; extend scripts for more sections",
+  "entryCount": 89,
+  "entries": [
+    {
+      "id": "ai:actions",
+      "category": "ai",
+      "slug": "actions",
+      "title": "Actions",
+      "docUrl": "https://www.shadcn.io/ai/actions",
+      "recipeUrl": "https://www.shadcn.io/r/actions.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/actions.json"
+    },
+    {
+      "id": "ai:branch",
+      "category": "ai",
+      "slug": "branch",
+      "title": "Branch",
+      "docUrl": "https://www.shadcn.io/ai/branch",
+      "recipeUrl": "https://www.shadcn.io/r/branch.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/branch.json"
+    },
+    {
+      "id": "ai:canvas",
+      "category": "ai",
+      "slug": "canvas",
+      "title": "Canvas",
+      "docUrl": "https://www.shadcn.io/ai/canvas",
+      "recipeUrl": "https://www.shadcn.io/r/canvas.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/canvas.json"
+    },
+    {
+      "id": "ai:code-block",
+      "category": "ai",
+      "slug": "code-block",
+      "title": "Code Block",
+      "docUrl": "https://www.shadcn.io/ai/code-block",
+      "recipeUrl": "https://www.shadcn.io/r/code-block.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/code-block.json"
+    },
+    {
+      "id": "ai:conversation",
+      "category": "ai",
+      "slug": "conversation",
+      "title": "Conversation",
+      "docUrl": "https://www.shadcn.io/ai/conversation",
+      "recipeUrl": "https://www.shadcn.io/r/conversation.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/conversation.json"
+    },
+    {
+      "id": "ai:image",
+      "category": "ai",
+      "slug": "image",
+      "title": "Image",
+      "docUrl": "https://www.shadcn.io/ai/image",
+      "recipeUrl": "https://www.shadcn.io/r/image.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/image.json"
+    },
+    {
+      "id": "ai:inline-citation",
+      "category": "ai",
+      "slug": "inline-citation",
+      "title": "Inline Citation",
+      "docUrl": "https://www.shadcn.io/ai/inline-citation",
+      "recipeUrl": "https://www.shadcn.io/r/inline-citation.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/inline-citation.json"
+    },
+    {
+      "id": "ai:loader",
+      "category": "ai",
+      "slug": "loader",
+      "title": "Loader",
+      "docUrl": "https://www.shadcn.io/ai/loader",
+      "recipeUrl": "https://www.shadcn.io/r/loader.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/loader.json"
+    },
+    {
+      "id": "ai:message",
+      "category": "ai",
+      "slug": "message",
+      "title": "Message",
+      "docUrl": "https://www.shadcn.io/ai/message",
+      "recipeUrl": "https://www.shadcn.io/r/message.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/message.json"
+    },
+    {
+      "id": "ai:panel",
+      "category": "ai",
+      "slug": "panel",
+      "title": "Panel",
+      "docUrl": "https://www.shadcn.io/ai/panel",
+      "recipeUrl": "https://www.shadcn.io/r/panel.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/panel.json"
+    },
+    {
+      "id": "ai:prompt-input",
+      "category": "ai",
+      "slug": "prompt-input",
+      "title": "Prompt Input",
+      "docUrl": "https://www.shadcn.io/ai/prompt-input",
+      "recipeUrl": "https://www.shadcn.io/r/prompt-input.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/prompt-input.json"
+    },
+    {
+      "id": "ai:reasoning",
+      "category": "ai",
+      "slug": "reasoning",
+      "title": "Reasoning",
+      "docUrl": "https://www.shadcn.io/ai/reasoning",
+      "recipeUrl": "https://www.shadcn.io/r/reasoning.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/reasoning.json"
+    },
+    {
+      "id": "ai:response",
+      "category": "ai",
+      "slug": "response",
+      "title": "Response",
+      "docUrl": "https://www.shadcn.io/ai/response",
+      "recipeUrl": "https://www.shadcn.io/r/response.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/response.json"
+    },
+    {
+      "id": "ai:sources",
+      "category": "ai",
+      "slug": "sources",
+      "title": "Sources",
+      "docUrl": "https://www.shadcn.io/ai/sources",
+      "recipeUrl": "https://www.shadcn.io/r/sources.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/sources.json"
+    },
+    {
+      "id": "ai:suggestion",
+      "category": "ai",
+      "slug": "suggestion",
+      "title": "Suggestion",
+      "docUrl": "https://www.shadcn.io/ai/suggestion",
+      "recipeUrl": "https://www.shadcn.io/r/suggestion.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/suggestion.json"
+    },
+    {
+      "id": "ai:task",
+      "category": "ai",
+      "slug": "task",
+      "title": "Task",
+      "docUrl": "https://www.shadcn.io/ai/task",
+      "recipeUrl": "https://www.shadcn.io/r/task.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/task.json"
+    },
+    {
+      "id": "ai:tool",
+      "category": "ai",
+      "slug": "tool",
+      "title": "Tool",
+      "docUrl": "https://www.shadcn.io/ai/tool",
+      "recipeUrl": "https://www.shadcn.io/r/tool.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/tool.json"
+    },
+    {
+      "id": "ai:web-preview",
+      "category": "ai",
+      "slug": "web-preview",
+      "title": "Web Preview",
+      "docUrl": "https://www.shadcn.io/ai/web-preview",
+      "recipeUrl": "https://www.shadcn.io/r/web-preview.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/web-preview.json"
+    },
+    {
+      "id": "button:animated-modal",
+      "category": "button",
+      "slug": "animated-modal",
+      "title": "Animated Modal",
+      "docUrl": "https://www.shadcn.io/button/animated-modal",
+      "recipeUrl": "https://www.shadcn.io/r/animated-modal.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/animated-modal.json"
+    },
+    {
+      "id": "button:copy",
+      "category": "button",
+      "slug": "copy",
+      "title": "Copy",
+      "docUrl": "https://www.shadcn.io/button/copy",
+      "recipeUrl": "https://www.shadcn.io/r/copy.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/copy.json"
+    },
+    {
+      "id": "button:corner-accent-button",
+      "category": "button",
+      "slug": "corner-accent-button",
+      "title": "Corner Accent",
+      "docUrl": "https://www.shadcn.io/button/corner-accent-button",
+      "recipeUrl": "https://www.shadcn.io/r/corner-accent-button.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/corner-accent-button.json"
+    },
+    {
+      "id": "button:counter",
+      "category": "button",
+      "slug": "counter",
+      "title": "Counter",
+      "docUrl": "https://www.shadcn.io/button/counter",
+      "recipeUrl": "https://www.shadcn.io/r/counter.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/counter.json"
+    },
+    {
+      "id": "button:flip",
+      "category": "button",
+      "slug": "flip",
+      "title": "Flip",
+      "docUrl": "https://www.shadcn.io/button/flip",
+      "recipeUrl": "https://www.shadcn.io/r/flip.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/flip.json"
+    },
+    {
+      "id": "button:github-stars",
+      "category": "button",
+      "slug": "github-stars",
+      "title": "GitHub Stars",
+      "docUrl": "https://www.shadcn.io/button/github-stars",
+      "recipeUrl": "https://www.shadcn.io/r/github-stars.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/github-stars.json"
+    },
+    {
+      "id": "button:icon",
+      "category": "button",
+      "slug": "icon",
+      "title": "Icon",
+      "docUrl": "https://www.shadcn.io/button/icon",
+      "recipeUrl": "https://www.shadcn.io/r/icon.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/icon.json"
+    },
+    {
+      "id": "button:input",
+      "category": "button",
+      "slug": "input",
+      "title": "Input",
+      "docUrl": "https://www.shadcn.io/button/input",
+      "recipeUrl": "https://www.shadcn.io/r/input.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/input.json"
+    },
+    {
+      "id": "button:liquid",
+      "category": "button",
+      "slug": "liquid",
+      "title": "Liquid",
+      "docUrl": "https://www.shadcn.io/button/liquid",
+      "recipeUrl": "https://www.shadcn.io/r/liquid.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/liquid.json"
+    },
+    {
+      "id": "button:magnetic-button",
+      "category": "button",
+      "slug": "magnetic-button",
+      "title": "Magnetic",
+      "docUrl": "https://www.shadcn.io/button/magnetic-button",
+      "recipeUrl": "https://www.shadcn.io/r/magnetic-button.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/magnetic-button.json"
+    },
+    {
+      "id": "button:rating",
+      "category": "button",
+      "slug": "rating",
+      "title": "Rating",
+      "docUrl": "https://www.shadcn.io/button/rating",
+      "recipeUrl": "https://www.shadcn.io/r/rating.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/rating.json"
+    },
+    {
+      "id": "button:ripple",
+      "category": "button",
+      "slug": "ripple",
+      "title": "Ripple",
+      "docUrl": "https://www.shadcn.io/button/ripple",
+      "recipeUrl": "https://www.shadcn.io/r/ripple.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/ripple.json"
+    },
+    {
+      "id": "button:text-reveal",
+      "category": "button",
+      "slug": "text-reveal",
+      "title": "Text Reveal",
+      "docUrl": "https://www.shadcn.io/button/text-reveal",
+      "recipeUrl": "https://www.shadcn.io/r/text-reveal.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/text-reveal.json"
+    },
+    {
+      "id": "button:theme-switcher",
+      "category": "button",
+      "slug": "theme-switcher",
+      "title": "Theme Switcher",
+      "docUrl": "https://www.shadcn.io/button/theme-switcher",
+      "recipeUrl": "https://www.shadcn.io/r/theme-switcher.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/theme-switcher.json"
+    },
+    {
+      "id": "button:theme-toggle",
+      "category": "button",
+      "slug": "theme-toggle",
+      "title": "Theme Toggle",
+      "docUrl": "https://www.shadcn.io/button/theme-toggle",
+      "recipeUrl": "https://www.shadcn.io/r/theme-toggle.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/theme-toggle.json"
+    },
+    {
+      "id": "hooks:use-boolean",
+      "category": "hooks",
+      "slug": "use-boolean",
+      "title": "useBoolean",
+      "docUrl": "https://www.shadcn.io/hooks/use-boolean",
+      "recipeUrl": "https://www.shadcn.io/r/use-boolean.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-boolean.json"
+    },
+    {
+      "id": "hooks:use-click-anywhere",
+      "category": "hooks",
+      "slug": "use-click-anywhere",
+      "title": "useClickAnyWhere",
+      "docUrl": "https://www.shadcn.io/hooks/use-click-anywhere",
+      "recipeUrl": "https://www.shadcn.io/r/use-click-anywhere.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-click-anywhere.json"
+    },
+    {
+      "id": "hooks:use-copy-to-clipboard",
+      "category": "hooks",
+      "slug": "use-copy-to-clipboard",
+      "title": "useCopyToClipboard",
+      "docUrl": "https://www.shadcn.io/hooks/use-copy-to-clipboard",
+      "recipeUrl": "https://www.shadcn.io/r/use-copy-to-clipboard.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-copy-to-clipboard.json"
+    },
+    {
+      "id": "hooks:use-countdown",
+      "category": "hooks",
+      "slug": "use-countdown",
+      "title": "useCountdown",
+      "docUrl": "https://www.shadcn.io/hooks/use-countdown",
+      "recipeUrl": "https://www.shadcn.io/r/use-countdown.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-countdown.json"
+    },
+    {
+      "id": "hooks:use-counter",
+      "category": "hooks",
+      "slug": "use-counter",
+      "title": "useCounter",
+      "docUrl": "https://www.shadcn.io/hooks/use-counter",
+      "recipeUrl": "https://www.shadcn.io/r/use-counter.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-counter.json"
+    },
+    {
+      "id": "hooks:use-dark-mode",
+      "category": "hooks",
+      "slug": "use-dark-mode",
+      "title": "useDarkMode",
+      "docUrl": "https://www.shadcn.io/hooks/use-dark-mode",
+      "recipeUrl": "https://www.shadcn.io/r/use-dark-mode.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-dark-mode.json"
+    },
+    {
+      "id": "hooks:use-debounce-callback",
+      "category": "hooks",
+      "slug": "use-debounce-callback",
+      "title": "useDebounceCallback",
+      "docUrl": "https://www.shadcn.io/hooks/use-debounce-callback",
+      "recipeUrl": "https://www.shadcn.io/r/use-debounce-callback.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-debounce-callback.json"
+    },
+    {
+      "id": "hooks:use-debounce-value",
+      "category": "hooks",
+      "slug": "use-debounce-value",
+      "title": "useDebounceValue",
+      "docUrl": "https://www.shadcn.io/hooks/use-debounce-value",
+      "recipeUrl": "https://www.shadcn.io/r/use-debounce-value.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-debounce-value.json"
+    },
+    {
+      "id": "hooks:use-document-title",
+      "category": "hooks",
+      "slug": "use-document-title",
+      "title": "useDocumentTitle",
+      "docUrl": "https://www.shadcn.io/hooks/use-document-title",
+      "recipeUrl": "https://www.shadcn.io/r/use-document-title.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-document-title.json"
+    },
+    {
+      "id": "hooks:use-event-callback",
+      "category": "hooks",
+      "slug": "use-event-callback",
+      "title": "useEventCallback",
+      "docUrl": "https://www.shadcn.io/hooks/use-event-callback",
+      "recipeUrl": "https://www.shadcn.io/r/use-event-callback.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-event-callback.json"
+    },
+    {
+      "id": "hooks:use-event-listener",
+      "category": "hooks",
+      "slug": "use-event-listener",
+      "title": "useEventListener",
+      "docUrl": "https://www.shadcn.io/hooks/use-event-listener",
+      "recipeUrl": "https://www.shadcn.io/r/use-event-listener.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-event-listener.json"
+    },
+    {
+      "id": "hooks:use-hover",
+      "category": "hooks",
+      "slug": "use-hover",
+      "title": "useHover",
+      "docUrl": "https://www.shadcn.io/hooks/use-hover",
+      "recipeUrl": "https://www.shadcn.io/r/use-hover.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-hover.json"
+    },
+    {
+      "id": "hooks:use-intersection-observer",
+      "category": "hooks",
+      "slug": "use-intersection-observer",
+      "title": "useIntersectionObserver",
+      "docUrl": "https://www.shadcn.io/hooks/use-intersection-observer",
+      "recipeUrl": "https://www.shadcn.io/r/use-intersection-observer.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-intersection-observer.json"
+    },
+    {
+      "id": "hooks:use-interval",
+      "category": "hooks",
+      "slug": "use-interval",
+      "title": "useInterval",
+      "docUrl": "https://www.shadcn.io/hooks/use-interval",
+      "recipeUrl": "https://www.shadcn.io/r/use-interval.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-interval.json"
+    },
+    {
+      "id": "hooks:use-is-client",
+      "category": "hooks",
+      "slug": "use-is-client",
+      "title": "useIsClient",
+      "docUrl": "https://www.shadcn.io/hooks/use-is-client",
+      "recipeUrl": "https://www.shadcn.io/r/use-is-client.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-is-client.json"
+    },
+    {
+      "id": "hooks:use-is-mounted",
+      "category": "hooks",
+      "slug": "use-is-mounted",
+      "title": "useIsMounted",
+      "docUrl": "https://www.shadcn.io/hooks/use-is-mounted",
+      "recipeUrl": "https://www.shadcn.io/r/use-is-mounted.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-is-mounted.json"
+    },
+    {
+      "id": "hooks:use-isomorphic-layout-effect",
+      "category": "hooks",
+      "slug": "use-isomorphic-layout-effect",
+      "title": "useIsomorphicLayoutEffect",
+      "docUrl": "https://www.shadcn.io/hooks/use-isomorphic-layout-effect",
+      "recipeUrl": "https://www.shadcn.io/r/use-isomorphic-layout-effect.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-isomorphic-layout-effect.json"
+    },
+    {
+      "id": "hooks:use-local-storage",
+      "category": "hooks",
+      "slug": "use-local-storage",
+      "title": "useLocalStorage",
+      "docUrl": "https://www.shadcn.io/hooks/use-local-storage",
+      "recipeUrl": "https://www.shadcn.io/r/use-local-storage.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-local-storage.json"
+    },
+    {
+      "id": "hooks:use-map",
+      "category": "hooks",
+      "slug": "use-map",
+      "title": "useMap",
+      "docUrl": "https://www.shadcn.io/hooks/use-map",
+      "recipeUrl": "https://www.shadcn.io/r/use-map.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-map.json"
+    },
+    {
+      "id": "hooks:use-media-query",
+      "category": "hooks",
+      "slug": "use-media-query",
+      "title": "useMediaQuery",
+      "docUrl": "https://www.shadcn.io/hooks/use-media-query",
+      "recipeUrl": "https://www.shadcn.io/r/use-media-query.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-media-query.json"
+    },
+    {
+      "id": "hooks:use-mouse-position",
+      "category": "hooks",
+      "slug": "use-mouse-position",
+      "title": "useMousePosition",
+      "docUrl": "https://www.shadcn.io/hooks/use-mouse-position",
+      "recipeUrl": "https://www.shadcn.io/r/use-mouse-position.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-mouse-position.json"
+    },
+    {
+      "id": "hooks:use-on-click-outside",
+      "category": "hooks",
+      "slug": "use-on-click-outside",
+      "title": "useOnClickOutside",
+      "docUrl": "https://www.shadcn.io/hooks/use-on-click-outside",
+      "recipeUrl": "https://www.shadcn.io/r/use-on-click-outside.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-on-click-outside.json"
+    },
+    {
+      "id": "hooks:use-read-local-storage",
+      "category": "hooks",
+      "slug": "use-read-local-storage",
+      "title": "useReadLocalStorage",
+      "docUrl": "https://www.shadcn.io/hooks/use-read-local-storage",
+      "recipeUrl": "https://www.shadcn.io/r/use-read-local-storage.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-read-local-storage.json"
+    },
+    {
+      "id": "hooks:use-resize-observer",
+      "category": "hooks",
+      "slug": "use-resize-observer",
+      "title": "useResizeObserver",
+      "docUrl": "https://www.shadcn.io/hooks/use-resize-observer",
+      "recipeUrl": "https://www.shadcn.io/r/use-resize-observer.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-resize-observer.json"
+    },
+    {
+      "id": "hooks:use-screen",
+      "category": "hooks",
+      "slug": "use-screen",
+      "title": "useScreen",
+      "docUrl": "https://www.shadcn.io/hooks/use-screen",
+      "recipeUrl": "https://www.shadcn.io/r/use-screen.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-screen.json"
+    },
+    {
+      "id": "hooks:use-script",
+      "category": "hooks",
+      "slug": "use-script",
+      "title": "useScript",
+      "docUrl": "https://www.shadcn.io/hooks/use-script",
+      "recipeUrl": "https://www.shadcn.io/r/use-script.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-script.json"
+    },
+    {
+      "id": "hooks:use-scroll-lock",
+      "category": "hooks",
+      "slug": "use-scroll-lock",
+      "title": "useScrollLock",
+      "docUrl": "https://www.shadcn.io/hooks/use-scroll-lock",
+      "recipeUrl": "https://www.shadcn.io/r/use-scroll-lock.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-scroll-lock.json"
+    },
+    {
+      "id": "hooks:use-session-storage",
+      "category": "hooks",
+      "slug": "use-session-storage",
+      "title": "useSessionStorage",
+      "docUrl": "https://www.shadcn.io/hooks/use-session-storage",
+      "recipeUrl": "https://www.shadcn.io/r/use-session-storage.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-session-storage.json"
+    },
+    {
+      "id": "hooks:use-step",
+      "category": "hooks",
+      "slug": "use-step",
+      "title": "useStep",
+      "docUrl": "https://www.shadcn.io/hooks/use-step",
+      "recipeUrl": "https://www.shadcn.io/r/use-step.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-step.json"
+    },
+    {
+      "id": "hooks:use-ternary-dark-mode",
+      "category": "hooks",
+      "slug": "use-ternary-dark-mode",
+      "title": "useTernaryDarkMode",
+      "docUrl": "https://www.shadcn.io/hooks/use-ternary-dark-mode",
+      "recipeUrl": "https://www.shadcn.io/r/use-ternary-dark-mode.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-ternary-dark-mode.json"
+    },
+    {
+      "id": "hooks:use-timeout",
+      "category": "hooks",
+      "slug": "use-timeout",
+      "title": "useTimeout",
+      "docUrl": "https://www.shadcn.io/hooks/use-timeout",
+      "recipeUrl": "https://www.shadcn.io/r/use-timeout.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-timeout.json"
+    },
+    {
+      "id": "hooks:use-toggle",
+      "category": "hooks",
+      "slug": "use-toggle",
+      "title": "useToggle",
+      "docUrl": "https://www.shadcn.io/hooks/use-toggle",
+      "recipeUrl": "https://www.shadcn.io/r/use-toggle.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-toggle.json"
+    },
+    {
+      "id": "hooks:use-unmount",
+      "category": "hooks",
+      "slug": "use-unmount",
+      "title": "useUnmount",
+      "docUrl": "https://www.shadcn.io/hooks/use-unmount",
+      "recipeUrl": "https://www.shadcn.io/r/use-unmount.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-unmount.json"
+    },
+    {
+      "id": "hooks:use-window-size",
+      "category": "hooks",
+      "slug": "use-window-size",
+      "title": "useWindowSize",
+      "docUrl": "https://www.shadcn.io/hooks/use-window-size",
+      "recipeUrl": "https://www.shadcn.io/r/use-window-size.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/use-window-size.json"
+    },
+    {
+      "id": "text:counting-number",
+      "category": "text",
+      "slug": "counting-number",
+      "title": "Counting Number",
+      "docUrl": "https://www.shadcn.io/text/counting-number",
+      "recipeUrl": "https://www.shadcn.io/r/counting-number.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/counting-number.json"
+    },
+    {
+      "id": "text:gradient-text",
+      "category": "text",
+      "slug": "gradient-text",
+      "title": "Gradient Text",
+      "docUrl": "https://www.shadcn.io/text/gradient-text",
+      "recipeUrl": "https://www.shadcn.io/r/gradient-text.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/gradient-text.json"
+    },
+    {
+      "id": "text:highlight-text",
+      "category": "text",
+      "slug": "highlight-text",
+      "title": "Highlight Text",
+      "docUrl": "https://www.shadcn.io/text/highlight-text",
+      "recipeUrl": "https://www.shadcn.io/r/highlight-text.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/highlight-text.json"
+    },
+    {
+      "id": "text:rolling-text",
+      "category": "text",
+      "slug": "rolling-text",
+      "title": "Rolling Text",
+      "docUrl": "https://www.shadcn.io/text/rolling-text",
+      "recipeUrl": "https://www.shadcn.io/r/rolling-text.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/rolling-text.json"
+    },
+    {
+      "id": "text:rotating-text",
+      "category": "text",
+      "slug": "rotating-text",
+      "title": "Rotating Text",
+      "docUrl": "https://www.shadcn.io/text/rotating-text",
+      "recipeUrl": "https://www.shadcn.io/r/rotating-text.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/rotating-text.json"
+    },
+    {
+      "id": "text:shimmering-text",
+      "category": "text",
+      "slug": "shimmering-text",
+      "title": "Shimmering Text",
+      "docUrl": "https://www.shadcn.io/text/shimmering-text",
+      "recipeUrl": "https://www.shadcn.io/r/shimmering-text.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/shimmering-text.json"
+    },
+    {
+      "id": "text:sliding-number",
+      "category": "text",
+      "slug": "sliding-number",
+      "title": "Sliding Number",
+      "docUrl": "https://www.shadcn.io/text/sliding-number",
+      "recipeUrl": "https://www.shadcn.io/r/sliding-number.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/sliding-number.json"
+    },
+    {
+      "id": "text:splitting-text",
+      "category": "text",
+      "slug": "splitting-text",
+      "title": "Splitting Text",
+      "docUrl": "https://www.shadcn.io/text/splitting-text",
+      "recipeUrl": "https://www.shadcn.io/r/splitting-text.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/splitting-text.json"
+    },
+    {
+      "id": "text:typing-text",
+      "category": "text",
+      "slug": "typing-text",
+      "title": "Typing Text",
+      "docUrl": "https://www.shadcn.io/text/typing-text",
+      "recipeUrl": "https://www.shadcn.io/r/typing-text.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/typing-text.json"
+    },
+    {
+      "id": "text:writing-text",
+      "category": "text",
+      "slug": "writing-text",
+      "title": "Writing Text",
+      "docUrl": "https://www.shadcn.io/text/writing-text",
+      "recipeUrl": "https://www.shadcn.io/r/writing-text.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/writing-text.json"
+    },
+    {
+      "id": "blocks:hero:hero-01",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-01",
+      "title": "Hero 01",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-01",
+      "recipeUrl": "https://www.shadcn.io/r/hero-01.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-01.json"
+    },
+    {
+      "id": "blocks:hero:hero-02",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-02",
+      "title": "Hero 02",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-02",
+      "recipeUrl": "https://www.shadcn.io/r/hero-02.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-02.json"
+    },
+    {
+      "id": "blocks:hero:hero-03",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-03",
+      "title": "Hero 03",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-03",
+      "recipeUrl": "https://www.shadcn.io/r/hero-03.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-03.json"
+    },
+    {
+      "id": "blocks:hero:hero-04",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-04",
+      "title": "Hero 04",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-04",
+      "recipeUrl": "https://www.shadcn.io/r/hero-04.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-04.json"
+    },
+    {
+      "id": "blocks:hero:hero-05",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-05",
+      "title": "Hero 05",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-05",
+      "recipeUrl": "https://www.shadcn.io/r/hero-05.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-05.json"
+    },
+    {
+      "id": "blocks:hero:hero-06",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-06",
+      "title": "Hero 06",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-06",
+      "recipeUrl": "https://www.shadcn.io/r/hero-06.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-06.json"
+    },
+    {
+      "id": "blocks:hero:hero-07",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-07",
+      "title": "Hero 07",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-07",
+      "recipeUrl": "https://www.shadcn.io/r/hero-07.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-07.json"
+    },
+    {
+      "id": "blocks:hero:hero-08",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-08",
+      "title": "Hero 08",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-08",
+      "recipeUrl": "https://www.shadcn.io/r/hero-08.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-08.json"
+    },
+    {
+      "id": "blocks:hero:hero-09",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-09",
+      "title": "Hero 09",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-09",
+      "recipeUrl": "https://www.shadcn.io/r/hero-09.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-09.json"
+    },
+    {
+      "id": "blocks:hero:hero-10",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-10",
+      "title": "Hero 10",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-10",
+      "recipeUrl": "https://www.shadcn.io/r/hero-10.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-10.json"
+    },
+    {
+      "id": "blocks:hero:hero-11",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-11",
+      "title": "Hero 11",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-11",
+      "recipeUrl": "https://www.shadcn.io/r/hero-11.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-11.json"
+    },
+    {
+      "id": "blocks:hero:hero-12",
+      "category": "blocks",
+      "subcategory": "hero",
+      "slug": "hero-12",
+      "title": "Hero 12",
+      "docUrl": "https://www.shadcn.io/blocks/hero/hero-12",
+      "recipeUrl": "https://www.shadcn.io/r/hero-12.json",
+      "installCommand": "npx shadcn@latest add https://www.shadcn.io/r/hero-12.json"
+    }
+  ]
+}

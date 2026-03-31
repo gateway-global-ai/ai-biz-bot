@@ -19,6 +19,7 @@ Use this skill when adding **routes**, **browser adapters**, **views**, **action
 | [`logical-route-design`](../logical-route-design/SKILL.md) | Route ids, context keys, policy gates |
 | [`view-registry-design`](../view-registry-design/SKILL.md) | View contracts, server-driven UI |
 | [`schema-anchor-mapping`](../schema-anchor-mapping/SKILL.md) | Anchors vs invented entities |
+| [`intent-loop-governance`](../intent-loop-governance/SKILL.md) | Intent-as-loop control plane, merge order, phased resolver vs GGUI / views |
 
 ## Cursor rules
 
@@ -27,6 +28,7 @@ Use this skill when adding **routes**, **browser adapters**, **views**, **action
 - [`.cursor/rules/schema-anchor-registry.mdc`](../../rules/schema-anchor-registry.mdc)
 - [`.cursor/rules/modular-routing.mdc`](../../rules/modular-routing.mdc) — **never** add routes to `server/routes.ts` monolith.
 - [`.cursor/rules/qr-system.mdc`](../../rules/qr-system.mdc) — QR / shadow telecom.
+- [`.cursor/rules/intent-loop-governance.mdc`](../../rules/intent-loop-governance.mdc) — canvas intent / surface derivation boundaries.
 
 ## Governance docs
 

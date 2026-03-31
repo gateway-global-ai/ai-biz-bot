@@ -1,0 +1,13 @@
+{
+  "name": "@gateway/design-tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Gateway OS design tokens — re-exports canonical brand.ts for governed imports",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "MIT"
+}

@@ -203,6 +203,47 @@ export const canvasRenderPayloadSchema = z.discriminatedUnion('viewId', [
     }),
   }),
   z.object({
+    viewId: z.literal('command_center'),
+    renderMode: renderModeSchema,
+    title: z.string(),
+    data: z.object({
+      headline: z.string(),
+      contextSummary: z.string().optional(),
+      statusItems: z.array(
+        z.object({
+          id: z.string(),
+          label: z.string(),
+          value: z.string(),
+          tone: z.enum(['neutral', 'success', 'warning', 'danger']).optional(),
+        }),
+      ),
+      workItems: z.array(
+        z.object({
+          id: z.string(),
+          title: z.string(),
+          subtitle: z.string().optional(),
+        }),
+      ),
+      approvals: z
+        .array(
+          z.object({
+            id: z.string(),
+            label: z.string(),
+            actionId: z.string(),
+          }),
+        )
+        .optional(),
+    }),
+  }),
+  z.object({
+    viewId: z.literal('canvas_backgrounds'),
+    renderMode: renderModeSchema,
+    title: z.string(),
+    data: z.object({
+      helperText: z.string().optional(),
+    }),
+  }),
+  z.object({
     viewId: z.literal('account_overview'),
     renderMode: renderModeSchema,
     title: z.string(),
@@ -271,13 +312,30 @@ export const canvasRenderPayloadSchema = z.discriminatedUnion('viewId', [
 
 const canvasPatchOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('replace_field'), path: z.string(), value: z.unknown() }),
-  z.object({ op: z.literal('append_items'),  path: z.string(), items: z.array(z.unknown()) }),
-  z.object({ op: z.literal('remove_item'),   path: z.string(), key: z.string() }),
-  z.object({ op: z.literal('set_loading'),   path: z.string(), value: z.boolean() }),
-  z.object({ op: z.literal('set_error'),     path: z.string(), message: z.string() }),
+  z.object({ op: z.literal('append_items'), path: z.string(), items: z.array(z.unknown()) }),
+  z.object({ op: z.literal('remove_item'), path: z.string(), key: z.string() }),
+  z.object({ op: z.literal('set_loading'), path: z.string(), value: z.boolean() }),
+  z.object({ op: z.literal('set_error'), path: z.string(), message: z.string() }),
+  z.object({
+    op: z.literal('reorder_slots'),
+    path: z.string(),
+    orderedKeys: z.array(z.string().min(1).max(128)).min(1).max(64),
+  }),
+  z.object({
+    op: z.literal('replace_component'),
+    slotId: z.string().min(1).max(128),
+    componentType: z.string().min(1).max(128),
+    props: z.record(z.unknown()).optional(),
+  }),
+  z.object({
+    op: z.literal('patch_props'),
+    path: z.string(),
+    props: z.record(z.unknown()),
+  }),
 ]);
 
 export const canvasPatchPayloadSchema = z.object({
+  patchContractVersion: z.literal('1.0').optional(),
   targetViewId: z.string(),
   patchOps: z.array(canvasPatchOpSchema).min(1).max(20),
 });
@@ -292,6 +350,7 @@ export const canvasClearPayloadSchema = z.object({
 // ── §8.5 canvas.action payload ────────────────────────────────────────────────
 
 export const canvasActionPayloadSchema = z.object({
+  actionContractVersion: z.literal('1.0').optional(),
   actionId: z.string().min(1),
   actionType: z.enum([
     'open_view', 'submit_form', 'trigger_skill', 'escalate',

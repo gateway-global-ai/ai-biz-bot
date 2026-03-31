@@ -14,6 +14,12 @@
 
 import type { CanvasResolvePayload, CanvasResolveResult, CanvasViewId } from '../../shared/canvasViewContract';
 import type { SiteRuntimeContext } from '../../shared/siteRuntimeContext';
+import {
+  BACKGROUND_SPEAKING_INSTRUCTIONS,
+  BACKGROUND_SPEECH_SUMMARY,
+  transcriptMatchesBackgroundPickerIntent,
+} from '../../shared/backgroundPickerIntent.js';
+import { tryActiveExperienceContinuity } from './experienceContinuity';
 
 const LLAMA_TIMEOUT_MS = 5000;
 
@@ -105,6 +111,23 @@ const TIER1_RULES: IntentRule[] = [
     minSecurityLevel: 'public',
     confidence: 0.85,
   },
+  {
+    patterns: [
+      'command center',
+      'control center',
+      'ops board',
+      'operations board',
+      'operations dashboard',
+      'show dashboard',
+      'open dashboard',
+    ],
+    intent: 'open_command_center',
+    viewId: 'command_center',
+    minSecurityLevel: 'staff',
+    confidence: 0.86,
+  },
+  // canvas_backgrounds / appearance — canonical matcher only: `transcriptMatchesBackgroundPickerIntent`
+  // (shared/backgroundPickerIntent.ts). Tier 0 runs before Tier 1; do not duplicate patterns here.
 ];
 
 // ── Security level ordering ───────────────────────────────────────────────────
@@ -147,13 +170,21 @@ function tier1Route(
 
   if (!best) return null;
 
+  const screenSummary =
+    best.viewId === 'command_center'
+      ? 'Command center: status lane, work queue, and pending approvals.'
+      : `Showing ${best.viewId.replace(/_/g, ' ')}.`;
+
+  const speakingInstructions = `Describe what is shown. Guide the user through the options.`;
+
   return {
     selectedViewId: best.viewId,
     renderMode: 'replace',
+    intentRouterTier: 1,
     reason: `Tier 1 matched intent '${best.intent}' via pattern`,
     speechContext: {
-      screenSummary: `Showing ${best.viewId.replace(/_/g, ' ')}.`,
-      speakingInstructions: `Describe what is shown. Guide the user through the options.`,
+      screenSummary,
+      speakingInstructions,
     },
   };
 }
@@ -239,6 +270,7 @@ async function tier2Route(
     return {
       selectedViewId: selectedViewId ?? undefined,
       renderMode,
+      intentRouterTier: 2,
       reason: `Tier 2 Llama: ${parsed.reason ?? 'intent classified'}`,
       speechContext: {
         screenSummary: selectedViewId
@@ -259,12 +291,37 @@ async function tier2Route(
   }
 }
 
+// ── Tier 0: Canvas appearance (shared matcher only — before Tier 1) ─────────────────
+// Single source: `transcriptMatchesBackgroundPickerIntent` in shared/backgroundPickerIntent.ts
+
+function tier0BackgroundVisualIntent(
+  transcript: string,
+  visitorSecurityLevel: string,
+  allowedViews: string[],
+): CanvasResolveResult | null {
+  if (!allowedViews.includes('canvas_backgrounds')) return null;
+  if (!meetsSecurityLevel(visitorSecurityLevel, 'public')) return null;
+  if (!transcriptMatchesBackgroundPickerIntent(transcript)) return null;
+
+  return {
+    selectedViewId: 'canvas_backgrounds',
+    renderMode: 'replace',
+    intentRouterTier: 1,
+    reason: 'Tier 0 — shared transcriptMatchesBackgroundPickerIntent (canvas appearance)',
+    speechContext: {
+      screenSummary: BACKGROUND_SPEECH_SUMMARY,
+      speakingInstructions: BACKGROUND_SPEAKING_INSTRUCTIONS,
+    },
+  };
+}
+
 // ── Tier 3: No change / noop fallback ────────────────────────────────────────
 
 function tier3Noop(): CanvasResolveResult {
   return {
     selectedViewId: undefined,
     renderMode: 'noop',
+    intentRouterTier: 3,
     reason: 'Tier 3 fallback — no intent matched',
     speechContext: {
       screenSummary: 'Canvas unchanged.',
@@ -279,8 +336,23 @@ export async function routeCanvasIntent(
   payload: CanvasResolvePayload,
   siteRuntime: SiteRuntimeContext,
   visitorSecurityLevel: string,
+  /** `envelope.context.currentViewId` — active canvas before this turn (voice / UI). */
+  activeCanvasViewId?: string | null,
 ): Promise<CanvasResolveResult> {
   const allowedViews = siteRuntime.entitlements.allowedCanvasViews;
+
+  // Experience-first — follow-ups inside an intent-bound surface before global re-routing
+  const continuity = tryActiveExperienceContinuity(
+    payload.transcript,
+    activeCanvasViewId,
+    allowedViews,
+    visitorSecurityLevel,
+  );
+  if (continuity) return continuity;
+
+  // Tier 0 — background / visual intent (before generic Tier 1 so “categories” does not lose to noop)
+  const t0 = tier0BackgroundVisualIntent(payload.transcript, visitorSecurityLevel, allowedViews);
+  if (t0) return t0;
 
   // Tier 1 — deterministic
   const t1 = tier1Route(payload.transcript, visitorSecurityLevel, allowedViews);

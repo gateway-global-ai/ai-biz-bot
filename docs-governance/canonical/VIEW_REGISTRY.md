@@ -6,7 +6,7 @@ backed_by:
   schema: false
   service: false
   route: false
-last_verified: 2026-03-25
+last_verified: 2026-03-29
 ---
 # View Registry
 
@@ -42,7 +42,7 @@ Each view definition should declare:
 - **category**: `menu`
 - **requiredContextKeys**: `businessName` (or `siteConfigId` resolving to business), `surface` ∈ `customer_entry`
 - **allowedActions**: `show_os_menu`, `start_voice`, `open_chat` (via existing shell; no new routes required)
-- **renderHints**: Short welcome + intent prompt **above** `OSMenuList`; see [INTENT_DRIVEN_CANVAS_SPEC.md](./INTENT_DRIVEN_CANVAS_SPEC.md).
+- **renderHints**: Short welcome + intent prompt **above** `OSMenuList`; see [INTENT_DRIVEN_CANVAS_SPEC.md](../archive/INTENT_DRIVEN_CANVAS_SPEC.md) (archived — reference only).
 
 ### shared_form_canvas
 
@@ -52,6 +52,50 @@ Each view definition should declare:
 - **allowedActions**: `submit_tool_result`, `cancel_tool`
 - **renderHints**: `SharedCanvasPanel` / `ManualDataInput` with optional `prefill` / `initialValue` from `metadata` — ask only missing fields.
 - **policyGate**: Intake / verification policy when PII is collected
+
+### integration_connect_surface
+
+Operator-only narrow surface for PMS vendor connect (SMS deep-link → HttpOnly session → OAuth/API proof). The browser path is **not** authority — it is an adapter for logical route `operator.integration.connect`.
+
+- **viewId**: `integration_connect_surface`
+- **category**: `form` (credential / OAuth handoff; no arbitrary data entry beyond token paste recovery)
+- **requiredContextKeys**: Resolved via `GET /api/integration/connect/governance-context` (canonical `logicalRouteId`, `viewId`, optional `session`); then `POST /api/integration/connect/exchange` with `token` when session is absent
+- **allowedActions**: Typed to `POST /api/integration/connect/exchange` and server-provided OAuth start path from `/cloudbeds/surface` — register discrete `actionId`s in ACTION_REGISTRY when the action plane wires this view.
+- **dataContract**: `{ siteConfigId?, vendorId, oauthStartPath?, pmsProjection?: … }` from `/cloudbeds/surface`; hotel proof from `/cloudbeds/hotel-details` (sanitized)
+- **renderHints**: Load **governance-context first**; render only after `viewId === integration_connect_surface` matches server response. Shell: `SovereignPageShell` + canvas tokens from `@/config/brand`.
+- **policyGate**: Single-use token exchange; short-lived signed session cookie; vendor match (`cloudbeds`)
+
+### Canvas syscall views (Demo 0 — governed canvas proof)
+
+These views are selected only via **`POST /api/canvas-control`** with `syscall: canvas.resolve` (deterministic Tier-1 rules in `canvasIntentRouter`) or validated `canvas.render` — not by browser routes or raw Gemini tool metadata. Pinned rendering: [`ConciergePanel`](../../client/src/components/chat/ConciergePanel.tsx) + [`VoiceTurnOrchestrator`](../../client/src/services/voiceTurnOrchestrator.ts). See [`DEMO0_GOVERNED_CANVAS_PROOF.md`](./DEMO0_GOVERNED_CANVAS_PROOF.md). **Normative composition model:** [`GOVERNED_GENERATIVE_UI_SPEC.md`](./GOVERNED_GENERATIVE_UI_SPEC.md).
+
+#### service_menu
+
+- **viewId**: `service_menu`
+- **category**: `menu`
+- **requiredContextKeys**: `siteConfigId` (via syscall envelope); hydration from `SiteRuntimeContext.business.serviceMenu`
+- **allowedActions**: `open_service_menu` (declared in site entitlements); navigation originates from syscall plane only
+- **dataContract**: `ServiceMenuViewModel` in [`canvasViewContract.ts`](../../shared/canvasViewContract.ts)
+- **policyGate**: `allowedCanvasViews` + plan/workspace gates in `canvasDirectiveValidator`
+
+#### faq_list
+
+- **viewId**: `faq_list`
+- **category**: `menu`
+- **requiredContextKeys**: `siteConfigId`; hydration from `business.faqs`
+- **allowedActions**: `open_faq`
+- **dataContract**: `FAQListViewModel` in [`canvasViewContract.ts`](../../shared/canvasViewContract.ts)
+- **policyGate**: same as `service_menu`
+
+#### command_center
+
+- **viewId**: `command_center`
+- **category**: `inspector`
+- **requiredContextKeys**: `siteConfigId` (syscall envelope); optional `SiteRuntimeContext.entitlements` for status lane copy
+- **allowedActions**: Approval rows dispatch `actionId` through existing skill/onAction paths when populated
+- **dataContract**: `CommandCenterViewModel` in [`canvasViewContract.ts`](../../shared/canvasViewContract.ts)
+- **renderHints**: Zoned layout (status lane, main work list, optional approvals) — renderer uses palette primitives only; see [`GOVERNED_GENERATIVE_UI_SPEC.md`](./GOVERNED_GENERATIVE_UI_SPEC.md) and [`COMMAND_CENTER_SURFACE_SPEC_V1.md`](./COMMAND_CENTER_SURFACE_SPEC_V1.md) (slots, allowed patch/action, narration, demo loop).
+- **policyGate**: `allowedCanvasViews` + **staff/admin** in `canvasDirectiveValidator`; Tier-1 phrases in `canvasIntentRouter`
 
 ## Rules
 - Views are loaded through the registry only.

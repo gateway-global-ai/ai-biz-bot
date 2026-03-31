@@ -1,0 +1,29 @@
+# Who may use which stage namespace + cardinality caps
+spec: agent_classification_composition_rules_v1
+version: "1.0.0"
+
+rules:
+  # customer, employee, vendor: primary + secondary stages MUST be from lifecycle_stage_classes
+  lifecycle_actors:
+    primary_actor_classes: [customer, employee, vendor]
+    allowed_primary_stage_namespace: lifecycle
+    max_secondary_actor_classes: 2
+    max_secondary_stage_classes: 3
+
+  # management: primary + secondary stages MUST be from control_classes
+  management_actor:
+    primary_actor_classes: [management]
+    allowed_primary_stage_namespace: control
+    max_secondary_actor_classes: 2
+    max_secondary_stage_classes: 3
+
+# Forbidden primary-stage pairs (exact primary actor + primary stage semantics)
+forbidden_primary_pairs:
+  - primary_actor_class: customer
+    primary_stage_class: planning
+    reason: customer-facing agents must not use control-only stage as primary
+  - primary_actor_class: customer
+    primary_stage_class: optimization
+    reason: optimization is management control class
+
+# Note: additional pair rules live in restricted_combinations.v1.yaml

@@ -73,8 +73,9 @@ Canonical spec: `registry-yaml/cloudbeds-tool-registry.yaml`
 
 ## Boardwalk Suites Lafayette (Demo Property)
 
-**property_id:** `315701`  
-**place_id:** `ChIJB4qU6oXvJIgR_2p602OaK_U`  
+**property_id (Cloudbeds):** `315701`  
+**site_config_id (platform UUID — stable business scope):** set per environment (`BOARDWALK_SITE_CONFIG_ID` / output of `npm run setup:boardwalk`). Do **not** use Google `place_id` as the canonical business identifier; it may drift.  
+**place_id (Google metadata only):** `ChIJB4qU6oXvJIgR_2p602OaK_U`  
 **address:** 1605 N University Ave, Lafayette, LA 70506  
 **owner:** Jason Trindade — `lafayette@boardwalksuites.com`  
 **booking engine:** `https://hotels.cloudbeds.com/reservation/YCNwpF`

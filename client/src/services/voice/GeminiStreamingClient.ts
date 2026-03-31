@@ -65,6 +65,10 @@ export class GeminiStreamingClient implements IVoiceClient {
   
   private nextStartTime = 0;
   private activeSources = new Set<AudioBufferSourceNode>();
+  /** Meters model TTS for Concierge visualizer (`onOutputVolumeChange`). */
+  private outputAnalyser: AnalyserNode | null = null;
+  private outputVolumeRafId: number | null = null;
+  private outputLevelCallback: (volume: number) => void = () => {};
   private currentInputText = '';
   /** Site config id from last `connect()` — used for verification passage heartbeat (not on VoiceConfig). */
   private sessionSiteConfigId: string | null = null;
@@ -375,6 +379,7 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
     console.log('[GeminiStreamingClient] Disconnecting...');
 
     if (this.stopTimeout) window.clearTimeout(this.stopTimeout);
+    this.stopOutputVolumeMeter();
 
     if (this.socket) { 
       try { this.socket.close(); } catch(e) {}
@@ -414,6 +419,7 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
     }
 
     this.inputAudioContext = null;
+    this.outputAnalyser = null;
     this.outputAudioContext = null;
     this.socket = null;
     this.connected = false;
@@ -552,6 +558,7 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
    * VoiceTurnOrchestrator is the SOLE caller — never call this directly from components.
    */
   interruptSpeech(): void {
+    this.stopOutputVolumeMeter();
     this.activeSources.forEach(source => { try { source.stop(); } catch (e) {} });
     this.activeSources.clear();
     if (this.outputAudioContext) {
@@ -583,6 +590,10 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
 
   onVolumeChange(callback: (volume: number) => void): void {
     this.volumeCallback = callback;
+  }
+
+  onOutputVolumeChange(callback: (volume: number) => void): void {
+    this.outputLevelCallback = callback;
   }
 
   onConnectionChange(callback: (connected: boolean) => void): void {
@@ -823,8 +834,55 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
     }
   }
 
+  private ensureOutputAnalyser(): AnalyserNode | null {
+    const ctx = this.outputAudioContext;
+    if (!ctx) return null;
+    if (!this.outputAnalyser) {
+      const a = ctx.createAnalyser();
+      a.fftSize = 512;
+      a.smoothingTimeConstant = 0.35;
+      a.connect(ctx.destination);
+      this.outputAnalyser = a;
+    }
+    return this.outputAnalyser;
+  }
+
+  /** Drive Concierge AI speech bars while TTS buffers play. */
+  private startOutputVolumeMeter(): void {
+    if (this.outputVolumeRafId != null) return;
+    const tick = () => {
+      if (!this.outputAnalyser) {
+        this.outputVolumeRafId = null;
+        return;
+      }
+      if (this.activeSources.size === 0) {
+        this.outputLevelCallback(0);
+        this.outputVolumeRafId = null;
+        return;
+      }
+      const buffer = new Float32Array(this.outputAnalyser.fftSize);
+      this.outputAnalyser.getFloatTimeDomainData(buffer);
+      let sum = 0;
+      for (let i = 0; i < buffer.length; i++) sum += buffer[i] * buffer[i];
+      const rms = Math.sqrt(sum / buffer.length);
+      const scaled = Math.min(1, rms * 12);
+      this.outputLevelCallback(scaled);
+      this.outputVolumeRafId = requestAnimationFrame(tick);
+    };
+    this.outputVolumeRafId = requestAnimationFrame(tick);
+  }
+
+  private stopOutputVolumeMeter(): void {
+    if (this.outputVolumeRafId != null) {
+      cancelAnimationFrame(this.outputVolumeRafId);
+      this.outputVolumeRafId = null;
+    }
+    this.outputLevelCallback(0);
+  }
+
   private playAudio(base64Data: string) {
     if (!this.outputAudioContext) return;
+    const analyser = this.ensureOutputAnalyser();
     const bytes = decode(base64Data);
     const dataView = new DataView(bytes.buffer);
     const frameCount = bytes.length / 2;
@@ -838,12 +896,22 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
 
     const source = this.outputAudioContext.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(this.outputAudioContext.destination);
+    if (analyser) {
+      source.connect(analyser);
+    } else {
+      source.connect(this.outputAudioContext.destination);
+    }
     const startTime = Math.max(this.nextStartTime, this.outputAudioContext.currentTime);
     source.start(startTime);
     this.nextStartTime = startTime + audioBuffer.duration;
     this.activeSources.add(source);
-    source.onended = () => this.activeSources.delete(source);
+    source.onended = () => {
+      this.activeSources.delete(source);
+      if (this.activeSources.size === 0) {
+        this.stopOutputVolumeMeter();
+      }
+    };
+    this.startOutputVolumeMeter();
   }
 
   private createPcmBlob(data: Float32Array) {

@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "scopedRoots": [
+    "client/src/components/chat",
+    "client/src/components/voice",
+    "client/src/components/auth",
+    "client/src/components/public"
+  ],
+  "grandfatheredMaxStyleOpens": {
+    "client/src/components/chat/ConciergePanel.tsx": 12,
+    "client/src/components/voice/animations/MapSkeleton.tsx": 1,
+    "client/src/components/voice/maps/PlaceChangeListener.tsx": 1,
+    "client/src/components/voice/maps/PlacePickerComponent.tsx": 1
+  },
+  "note": "Strict gate: only these files may contain style={{; counts must not exceed caps. New files in scoped trees must have 0. Removal allowed anytime; lower caps in a ratchet PR."
+}

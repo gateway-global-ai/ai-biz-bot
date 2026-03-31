@@ -1,0 +1,30 @@
+# Pairs/tuples requiring approval or management review (machine-readable)
+spec: agent_classification_restricted_combinations_v1
+version: "1.0.0"
+
+combinations:
+  - rule_id: outreach_plus_retention_secondaries
+    description: Outreach primary with retention-heavy secondaries needs explicit approval
+    when:
+      primary_stage_class: outreach
+      secondary_stage_classes_contains_any: [retention]
+    action: approval_required
+
+  - rule_id: operations_plus_optimization_secondaries
+    description: Operations + optimization overlap requires management review
+    when:
+      primary_stage_class: operations
+      secondary_stage_classes_contains_any: [optimization]
+    action: management_review
+
+  - rule_id: management_actor_deploy
+    description: Any agent with management as primary or secondary in active prod
+    when:
+      primary_actor_class: management
+    action: review_required
+
+  - rule_id: outreach_and_reporting_primary_conflict
+    description: Single agent cannot be outreach-primary and reporting-primary
+    when:
+      primary_stage_class: outreach
+    conflicts_with_primary_stage: reporting

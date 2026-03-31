@@ -13,6 +13,8 @@ last_verified: 2026-03-25
 ## Purpose
 Define the jurisdiction, boundaries, and execution posture of each major agent class in the OS.
 
+**Behavioral & character layer (DISC as judgment weight, value order, refusal ethics, ARCH, conversational power):** [`AGENT_BEHAVIOR_SPEC_V1.md`](./AGENT_BEHAVIOR_SPEC_V1.md) — separates capability, authority, behavior, and **character** (what to honor first under tension); compiled via `promptCompiler`, not vibe prompts.
+
 ## Policy fields
 Each agent policy should define:
 - `agentClass`

@@ -189,6 +189,15 @@ export default function DeveloperPage() {
                 Developer UI Kit
               </Button>
             </Link>
+            <Link href="/dev/shadcn-io-catalog">
+              <Button
+                variant="outline"
+                className="border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/10"
+                data-testid="link-shadcn-io-catalog"
+              >
+                shadcn.io directory
+              </Button>
+            </Link>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto mt-12">

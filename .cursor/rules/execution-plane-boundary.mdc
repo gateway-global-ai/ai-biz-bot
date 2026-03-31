@@ -5,7 +5,8 @@ alwaysApply: true
 
 # Execution Plane Boundary
 
-- Read `docs-governance/canonical/EXECUTION_PLANE_BOUNDARY_SPEC.md` before editing voice runtime or session machinery.
+- Read `docs-governance/canonical/EXECUTION_PLANE_BOUNDARY_SPEC.md` before editing voice runtime or session machinery. For conversational authority / DISC / ARCH as **data** (not hot-path logic), see `docs-governance/canonical/AGENT_BEHAVIOR_SPEC_V1.md` and `docs-governance/canonical/VOICE_EXECUTION_ARCHITECTURE_V1.md`.
+- Before changing **Concierge session wiring**, `voiceTurnOrchestrator` session bridges, or how `siteConfigId` / business context binds to the live shell, read `docs-governance/canonical/PTT_SESSION_NODE_V1.md` (session node vs site-mounted chassis; invariants).
 - Do not place heavy DB queries, prompt compilation, direct domain workflow logic, or UI rendering inside execution-plane files.
 - Execution-plane code may dispatch typed actions, but it must remain blind to business semantics beyond that boundary.
 - Treat the voice runtime as a latency-sensitive hot path.

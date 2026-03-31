@@ -59,3 +59,7 @@ When a proposal echoes **external** "full platform" narratives (certification pi
 - never approve execution-plane contamination
 - never approve hidden side-effect UI behavior
 - flag missing contracts before implementation begins
+
+## Related
+
+- **Queue / backlog truth audits (post-plan, operational):** [`QUEUE_REVIEW_TEMPLATE_V1.md`](../artifacts/QUEUE_REVIEW_TEMPLATE_V1.md) — separates repo truth from governance ambition; mandatory `operator_usable_today` per work item.

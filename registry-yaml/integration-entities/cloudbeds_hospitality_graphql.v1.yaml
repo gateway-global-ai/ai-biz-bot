@@ -1,0 +1,161 @@
+# GraphQL type alignment — discovery bundle (vendor_id cloudbeds_graphql).
+# Canonical business meaning remains registry-yaml/integration-entities/cloudbeds_hospitality.v1.yaml (REST).
+# Rows here map GraphQL object types to review surfaces; nuance_notes cite canonical_entity_id targets.
+
+spec: integration_entities_bundle_v1
+version: "1.0.0"
+vendor_id: cloudbeds_graphql
+
+authority:
+  source_of_truth: registry-yaml/integration-entities/cloudbeds_hospitality_graphql.v1.yaml
+  openapi_reference: docs/knowledge-base/cloudbeds/graphql/discovery-schema.graphql
+
+entities:
+  - canonical_entity_id: cb_gql_property
+    spec_version: "1.0.0"
+    display_name: GraphQL Property (discovery)
+    description: GraphQL Property type; aligns canonical entity `property` (REST bundle).
+    parent_entity_id: null
+    identity_anchors: [property_id]
+    unsupported_claims: []
+    confidence_aggregate: low
+    vendor_mappings:
+      - vendor_id: cloudbeds_graphql
+        vendor_object_name: Property
+        equivalence: unknown
+        nuance_notes: >
+          Discovery placeholder SDL; confirm fields against vendor schema export. Canonical target: property.
+        field_mappings:
+          - canonical_field_id: external_id
+            vendor_field_path: id
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: low
+
+  - canonical_entity_id: cb_gql_room_type
+    spec_version: "1.0.0"
+    display_name: GraphQL RoomType (discovery)
+    description: GraphQL RoomType; aligns canonical `room_type`.
+    parent_entity_id: cb_gql_property
+    identity_anchors: [room_type_id]
+    unsupported_claims: []
+    confidence_aggregate: low
+    vendor_mappings:
+      - vendor_id: cloudbeds_graphql
+        vendor_object_name: RoomType
+        equivalence: unknown
+        nuance_notes: Canonical target room_type.
+        field_mappings:
+          - canonical_field_id: external_id
+            vendor_field_path: id
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: low
+
+  - canonical_entity_id: cb_gql_reservation
+    spec_version: "1.0.0"
+    display_name: GraphQL Reservation (discovery)
+    description: GraphQL Reservation; aligns canonical `reservation`.
+    parent_entity_id: cb_gql_property
+    identity_anchors: [reservation_id]
+    unsupported_claims: []
+    confidence_aggregate: low
+    vendor_mappings:
+      - vendor_id: cloudbeds_graphql
+        vendor_object_name: Reservation
+        equivalence: unknown
+        nuance_notes: Canonical target reservation; verify nested guest linkage vs REST.
+        field_mappings:
+          - canonical_field_id: external_id
+            vendor_field_path: id
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: low
+
+  - canonical_entity_id: cb_gql_guest
+    spec_version: "1.0.0"
+    display_name: GraphQL Guest (discovery)
+    description: GraphQL Guest; aligns canonical `guest` (PII review required before execution).
+    parent_entity_id: null
+    identity_anchors: [guest_id]
+    unsupported_claims: [pci_card_data]
+    confidence_aggregate: low
+    vendor_mappings:
+      - vendor_id: cloudbeds_graphql
+        vendor_object_name: Guest
+        equivalence: unknown
+        nuance_notes: Canonical target guest; classify phone/email fields before any GraphQL execution lane.
+        field_mappings:
+          - canonical_field_id: phone
+            vendor_field_path: phone
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: low
+
+  - canonical_entity_id: cb_gql_housekeeping_room
+    spec_version: "1.0.0"
+    display_name: GraphQL HousekeepingRoom (discovery)
+    description: GraphQL housekeeping room; aligns canonical `housekeeping_room`.
+    parent_entity_id: cb_gql_property
+    identity_anchors: [room_id]
+    unsupported_claims: []
+    confidence_aggregate: low
+    vendor_mappings:
+      - vendor_id: cloudbeds_graphql
+        vendor_object_name: HousekeepingRoom
+        equivalence: unknown
+        nuance_notes: Canonical target housekeeping_room.
+        field_mappings:
+          - canonical_field_id: status
+            vendor_field_path: roomCondition
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: low
+
+  - canonical_entity_id: cb_gql_operations_dashboard
+    spec_version: "1.0.0"
+    display_name: GraphQL Dashboard (discovery)
+    description: GraphQL operational snapshot; aligns canonical `operations_dashboard`.
+    parent_entity_id: cb_gql_property
+    identity_anchors: [property_id]
+    unsupported_claims: []
+    confidence_aggregate: low
+    vendor_mappings:
+      - vendor_id: cloudbeds_graphql
+        vendor_object_name: Dashboard
+        equivalence: unknown
+        nuance_notes: Canonical target operations_dashboard.
+        field_mappings:
+          - canonical_field_id: snapshot_date
+            vendor_field_path: date
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: low
+
+  - canonical_entity_id: cb_gql_folio
+    spec_version: "1.0.0"
+    display_name: GraphQL Folio (discovery)
+    description: Financial / folio-adjacent GraphQL surface; not yet a first-class canonical entity.
+    parent_entity_id: cb_gql_property
+    identity_anchors: [reservation_id]
+    unsupported_claims: [pci_card_data, full_folio_without_otp]
+    confidence_aggregate: low
+    vendor_mappings:
+      - vendor_id: cloudbeds_graphql
+        vendor_object_name: Folio
+        equivalence: unknown
+        nuance_notes: >
+          Discovery-only; do not expose to customer runtime until canonical folio entity + scope review.
+        field_mappings:
+          - canonical_field_id: external_id
+            vendor_field_path: id
+            direction: read
+            transform: identity
+            transform_ref: null
+            confidence: low

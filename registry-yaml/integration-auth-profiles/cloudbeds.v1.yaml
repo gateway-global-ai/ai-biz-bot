@@ -1,0 +1,24 @@
+# Vendor auth profile — Cloudbeds (integration credential broker)
+# Validated manually with integration registry; extend validate-integration-registry later.
+
+spec: integration_auth_profile_v1
+version: "1.0.0"
+vendor_id: cloudbeds
+
+supported_auth_modes:
+  - api_key_property
+  - api_key_partner_delivery
+  - oauth2
+
+version_lanes:
+  - cloudbeds_v1_2
+  - cloudbeds_v1_3
+
+# Logical scope IDs for broker checks; map to Cloudbeds dashboard scopes in normative doc.
+scope_catalog:
+  - scope_id: inventory_read
+    description: Read availability and room types
+  - scope_id: reservations_read
+    description: List and read reservations
+  - scope_id: guest_journey_read
+    description: Guest lookup / journey classification inputs

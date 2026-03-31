@@ -1,0 +1,30 @@
+# Vendor metadata — human docs, ingest provenance, canonical OpenAPI copy location.
+# NOT runtime authority: internal integration graph + capabilities remain authoritative (INTEGRATION_GRAPH_DISCIPLINE D2).
+
+spec: integration_vendor_metadata_v1
+version: "1.0.0"
+vendor_id: cloudbeds
+
+developer_portal_url: https://developers.cloudbeds.com/
+# REST PMS API — execution authority for capabilities normalized against reference_openapi_path.
+reference_openapi_path: docs/knowledge-base/cloudbeds/api/pms-v1.3-openapi.yaml
+# Separate discovery / optional future execution surface — do not merge with REST without D4 review.
+graphql_developer_portal_url: https://developers.cloudbeds.com/graphql
+api_version_label: v1.3
+
+# Ingest: manual_promote = committed copy only; url_fetch = npm run ingest:integration-vendor-specs fetches source_url → reference_openapi_path (atomic write), then commit expected_sha256.
+spec_ingest:
+  mode: manual_promote
+  source_url: null
+  checksum_required: true
+  # SHA256 of committed reference_openapi_path; update when file is intentionally replaced
+  expected_sha256: d0bb29fc21558d865159a57c27f67c14e6d028c590831b523e17f8572007644c
+
+authority_note: >
+  Vendor portal and any downloaded OpenAPI are inputs to normalization only.
+  Promotion into registry-yaml/integration-* and docs/knowledge-base is human-governed.
+  Cloudbeds REST PMS OpenAPI remains the execution anchor for capabilities already modeled against
+  reference_openapi_path. GraphQL (graphql_developer_portal_url) is a separate source tier: strong for
+  schema discovery and object-model review; any production GraphQL execution requires its own governed
+  lane, auth/rate/cache/PII rules, and explicit capability mapping — no silent dual-home with REST (see
+  INTEGRATION_GRAPH_DISCIPLINE D4).

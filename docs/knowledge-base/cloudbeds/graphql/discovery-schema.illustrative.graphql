@@ -1,0 +1,56 @@
+# Cloudbeds GraphQL — illustrative SDL (non-checksum) for human mapping.
+#
+# Registry checksum applies to discovery-schema.graphql (authority index). Machine authority:
+# vendor-introspection.json — see SCHEMA_INGEST.md. Not used for runtime execution.
+#
+# Canonical alignment (see registry-yaml/integration-entities/cloudbeds_hospitality_graphql.v1.yaml):
+#   Property, RoomType, Reservation, Guest → core hospitality canonical entities.
+#   Folio / charge surfaces → review PII and financial scope before any execution lane.
+
+"""Lodging property (maps to canonical entity `property`)."""
+type Property {
+  id: ID
+  name: String
+}
+
+"""Sellable room category (maps to canonical `room_type`)."""
+type RoomType {
+  id: ID
+  name: String
+}
+
+"""Stay / booking record (maps to canonical `reservation`)."""
+type Reservation {
+  id: ID
+  status: String
+  startDate: String
+  endDate: String
+}
+
+"""Guest profile (maps to canonical `guest`)."""
+type Guest {
+  id: ID
+  phone: String
+  email: String
+}
+
+"""Housekeeping unit state (maps to canonical `housekeeping_room`)."""
+type HousekeepingRoom {
+  id: ID
+  roomCondition: String
+}
+
+"""Operational snapshot (maps to canonical `operations_dashboard`)."""
+type Dashboard {
+  date: String
+}
+
+"""Financial / folio-adjacent — high sensitivity; discovery review only."""
+type Folio {
+  id: ID
+}
+
+type Query {
+  """Placeholder root — real Cloudbeds GraphQL root fields replace on vendor export."""
+  _discoveryPlaceholder: Boolean
+}

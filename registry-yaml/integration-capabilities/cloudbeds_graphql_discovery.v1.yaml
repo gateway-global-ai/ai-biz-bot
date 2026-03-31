@@ -1,0 +1,126 @@
+# Discovery-only capabilities — Cloudbeds GraphQL (no runtime HTTP, no Gemini tools).
+# Registry rows for governance, review queues, and future codegen; not adapter-bound.
+
+spec: integration_capabilities_bundle_v1
+version: "1.0.0"
+vendor_id: cloudbeds_graphql
+
+authority:
+  source_of_truth: registry-yaml/integration-capabilities/cloudbeds_graphql_discovery.v1.yaml
+
+capabilities:
+  - capability_id: cb_gql_schema_inspect
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds_graphql
+    title: GraphQL schema inventory (discovery)
+    description: >
+      Review SDL/instrospection artifact for types and roots; no production execution.
+    mutation_level: read
+    required_anchors: []
+    credential_anchor_ref: site_pms_integrations:cloudbeds
+    required_scope_ids: []
+    allowed_version_lanes: [cloudbeds_gql_discovery_v1]
+    optional_anchors: []
+    required_inputs: []
+    optional_inputs: []
+    returns:
+      - name: notes
+        type_ref: string
+    endpoint_flow:
+      steps: []
+      completion_predicate: No HTTP; registry and human review only until execution promotion.
+    side_effect_level: none
+    tool_name: null
+    operational_mode_allowlist: null
+    confidence: low
+    fallback:
+      mode: refuse
+      user_visible_message_ref: integration.fallback.not_applicable_discovery
+      max_retries: 0
+
+  - capability_id: cb_gql_type_inspect
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds_graphql
+    title: GraphQL type alignment (discovery)
+    description: >
+      Map GraphQL object types to canonical entities (see cloudbeds_hospitality_graphql entity bundle).
+    mutation_level: read
+    required_anchors: []
+    credential_anchor_ref: site_pms_integrations:cloudbeds
+    required_scope_ids: []
+    allowed_version_lanes: [cloudbeds_gql_discovery_v1]
+    optional_anchors: []
+    required_inputs: []
+    optional_inputs: []
+    returns:
+      - name: mapping_notes
+        type_ref: string
+    endpoint_flow:
+      steps: []
+      completion_predicate: No HTTP; alignment review only.
+    side_effect_level: none
+    tool_name: null
+    operational_mode_allowlist: null
+    confidence: low
+    fallback:
+      mode: refuse
+      user_visible_message_ref: integration.fallback.not_applicable_discovery
+      max_retries: 0
+
+  - capability_id: cb_gql_field_inspect
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds_graphql
+    title: GraphQL field classification (discovery)
+    description: >
+      Classify PII-bearing, financially sensitive, and high-cardinality fields before any execution lane.
+    mutation_level: read
+    required_anchors: []
+    credential_anchor_ref: site_pms_integrations:cloudbeds
+    required_scope_ids: []
+    allowed_version_lanes: [cloudbeds_gql_discovery_v1]
+    optional_anchors: []
+    required_inputs: []
+    optional_inputs: []
+    returns:
+      - name: classification_notes
+        type_ref: string
+    endpoint_flow:
+      steps: []
+      completion_predicate: No HTTP; governance artifact only.
+    side_effect_level: none
+    tool_name: null
+    operational_mode_allowlist: null
+    confidence: low
+    fallback:
+      mode: refuse
+      user_visible_message_ref: integration.fallback.not_applicable_discovery
+      max_retries: 0
+
+  - capability_id: cb_gql_relationship_inspect
+    spec_version: "1.0.0"
+    vendor_id: cloudbeds_graphql
+    title: GraphQL relationship graph (discovery)
+    description: >
+      Document nested relationships (e.g. reservation to guest) vs REST for merge-order and resolver design.
+    mutation_level: read
+    required_anchors: []
+    credential_anchor_ref: site_pms_integrations:cloudbeds
+    required_scope_ids: []
+    allowed_version_lanes: [cloudbeds_gql_discovery_v1]
+    optional_anchors: []
+    required_inputs: []
+    optional_inputs: []
+    returns:
+      - name: relationship_notes
+        type_ref: string
+    endpoint_flow:
+      steps: []
+      completion_predicate: No HTTP; design input only.
+    side_effect_level: none
+    tool_name: null
+    operational_mode_allowlist: null
+    confidence: low
+    fallback:
+      mode: refuse
+      user_visible_message_ref: integration.fallback.not_applicable_discovery
+      max_retries: 0

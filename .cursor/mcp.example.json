@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "shadcn-io": {
+      "command": "npx",
+      "args": ["tsx", "scripts/shadcn-io-catalog-mcp.ts"]
+    },
     "twilio": {
       "command": "npx",
       "args": [

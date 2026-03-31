@@ -28,6 +28,12 @@ export const CANVAS = {
   borderStrong: '#cbd5e1',
 } as const;
 
+/**
+ * Token-bound Tailwind background for the canvas zone — use this instead of `style={{ backgroundColor: CANVAS.bg }}`.
+ * See `docs-governance/canonical/CANVAS_OS_TOOL_MANDATE_V1.md`.
+ */
+export const CANVAS_BG_CLASSNAME = `bg-[${CANVAS.bg}]` as const;
+
 // Platform brand colors — navy/green/blue (no purple as a primary)
 export const BRAND = {
   navy: '#0f172a',

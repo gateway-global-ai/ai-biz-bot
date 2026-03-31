@@ -8,6 +8,7 @@
  * 3. Future: strict deny for opt-in routes only.
  *
  * @see docs-governance/canonical/CONTROL_PLANE_UNIFICATION_PLAN_V1.md
+ * @see docs-governance/canonical/EXECUTION_MUTATION_GATE_SPEC_V1.md (tool/integration envelopes — `executeContract` in executionMutationGate.ts)
  */
 import { persistOrchestrationViolation } from "./agentOrchestration.js";
 import {

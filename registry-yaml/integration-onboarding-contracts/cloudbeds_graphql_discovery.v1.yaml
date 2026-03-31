@@ -1,0 +1,101 @@
+# Onboarding agent contract — Cloudbeds GraphQL discovery (governed intake, not execution).
+# SMS is engagement only; credentials via secure handoff + broker. See CLOUDBEDS_GRAPHQL_DISCOVERY_ONBOARDING_V1.md
+
+spec: integration_onboarding_contract_v1
+version: "1.0.0"
+integration_key: cloudbeds_graphql_discovery
+
+authority:
+  source_of_truth: docs-governance/canonical/CLOUDBEDS_GRAPHQL_DISCOVERY_ONBOARDING_V1.md
+  schema_anchor: site_pms_integrations
+  config_path: config.cloudbeds_graphql_discovery_v1
+
+# Separation: onboarding agent coordinates; Integration Authorization Service (existing broker + connect flow) captures secrets.
+architecture:
+  onboarding_agent_role:
+    - gap_detection
+    - owner_contact_and_consent
+    - secure_handoff_orchestration
+    - post_auth_validation_orchestration
+    - status_persistence_to_tenant_config
+  not_allowed:
+    - accept_raw_bearer_tokens_via_sms
+    - treat_doppler_project_paths_as_integration_contract
+    - guess_missing_variables
+
+onboarding_states:
+  - not_started
+  - missing_http_url
+  - missing_auth
+  - pending_owner_consent
+  - pending_secure_auth_handoff
+  - auth_received_unverified
+  - validation_failed
+  - ready_for_discovery_ingest
+  - blocked
+
+required_governed_inputs:
+  non_secret:
+    - site_config_id
+    - http_url                    # config.cloudbeds_graphql_discovery_v1.http_url
+    - onboarding.status
+    - owner_or_operator_contact   # channel ref / phone for SMS — not in this YAML
+  secret:
+    - site_pms_integrations.access_token | api_key   # same row as REST; broker path
+  derived:
+    - discovery_readiness
+    - last_successful_validation_at
+
+skills:
+  - skill_id: send_integration_onboarding_sms
+    purpose: Initiate or nudge operator; consent prompt; link to secure handoff — never collect secrets in SMS body.
+    channel: sms
+    compliance_note: Route through Sovereign SMS Router; no new send paths; see sovereign-twilio-lockdown.
+    implementation_ref: server/services/sendCloudbedsGraphqlDiscoveryOnboardingSms.ts
+    http_route: POST /api/integration-onboarding/cloudbeds-graphql-discovery/:siteConfigId/send-sms
+    sms_intent: PLATFORM_CARE
+    forbidden:
+      - paste_bearer_token_in_sms_reply
+
+  - skill_id: get_integration_onboarding_status
+    purpose: Read gap analysis from tenant row + derived state; returns missing_fields / required_fields lists.
+    channel: internal_api_or_tool
+    persistence: site_pms_integrations.config (read-only)
+    implementation_ref: server/services/getCloudbedsGraphqlDiscoveryOnboardingStatus.ts
+    http_route:
+      method: GET
+      path: /api/integration-onboarding/cloudbeds-graphql-discovery/:siteConfigId
+      auth: bearer_admin_session_and_site_tenancy
+
+  - skill_id: begin_secure_integration_auth_handoff
+    purpose: Issue or reference integration connect token / owner web surface — see INTEGRATION_OPERATOR_CONNECT_FLOW_V1.
+    channel: secure_web
+    implementation_ref: server/services/beginCloudbedsIntegrationAuthHandoff.ts
+    http_mint_route: POST /api/integration/connect/mint
+    mint_auth_header: X-Integration-Connect-Mint or Authorization Bearer (INTEGRATION_CONNECT_MINT_SECRET)
+    forbidden:
+      - complete_oauth_inside_sms_thread
+
+  - skill_id: validate_integration_configuration
+    purpose: After credentials stored — HTTP URL reachability, safe introspection probe, scope sanity for discovery-only.
+    channel: internal_service
+    persistence: update onboarding.* validation fields in config (single writer)
+    implementation_ref: server/services/validateCloudbedsGraphqlDiscoveryConfiguration.ts
+    http_route:
+      method: POST
+      path: /api/integration-onboarding/cloudbeds-graphql-discovery/:siteConfigId/validate
+      auth: bearer_admin_session_and_site_tenancy
+      query: skipHttpValidation=true optional
+    options:
+      skipHttpValidation: Gap detection + broker auth only (no outbound GraphQL POST).
+
+secure_handoff:
+  canonical_route_logical: operator.integration.connect
+  doc_ref: docs-governance/canonical/INTEGRATION_OPERATOR_CONNECT_FLOW_V1.md
+
+sms_copy_templates:
+  invitation: >
+    We're setting up Cloudbeds GraphQL discovery for your property (read-only schema mapping; no extra runtime).
+    Reply START to continue, or open the secure link we'll send next. Do not send API keys in this thread.
+  reminder: >
+    Your Cloudbeds GraphQL discovery setup is waiting. Continue on the secure link to finish authorization.

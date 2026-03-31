@@ -14,6 +14,10 @@
 // POST /api/site-configs/:id/design-studio/publish — admin session + design_studio.publish; no Gemini key.
 // GET /openapi/business-resonance-gpt.json — OpenAPI 3 for ChatGPT Actions import; no Gemini key (see docs-governance/GPT_ACTIONS_BUSINESS_RESONANCE.md).
 // GET /api/v1/admin/readiness-gate-v1/metrics — platform admin session + role; in-process counters; no Gemini key.
+// GET /api/platform/readiness — admin Bearer session (`requireAuth`); same JSON as `npm run system:check -- --json`; no Gemini key.
+// GET /api/integration-onboarding/cloudbeds-graphql-discovery/:siteConfigId — admin Bearer + site tenancy (`assertSiteAccessForSession`); read-only onboarding status; no Gemini key.
+// POST /api/integration-onboarding/cloudbeds-graphql-discovery/:siteConfigId/validate — same auth; runs GraphQL discovery validation writer; optional ?skipHttpValidation=true; no Gemini key.
+// POST /api/integration-onboarding/cloudbeds-graphql-discovery/:siteConfigId/send-sms — same auth; Sovereign SMS Router PLATFORM_CARE; no Gemini key.
 // Future: POST /api/v1/verification/* — Twilio-backed only; no Gemini permit (see docs-governance/NOVA_VERIFICATION_GOVERNANCE.md).
 // POST /api/twilio/monitor/debug-event — Twilio Console Debugger webhook; X-Twilio-Signature + TWILIO_AUTH_TOKEN only; no Gemini permit.
 

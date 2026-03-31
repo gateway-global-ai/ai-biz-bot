@@ -27,6 +27,14 @@ export default defineConfig(async ({ mode }) => {
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "client", "src", "assets"),
       "@os-core": path.resolve(import.meta.dirname, "os-core", "src"),
+      "@gateway/design-tokens": path.resolve(
+        import.meta.dirname,
+        "packages/design-tokens/src/index.ts",
+      ),
+      "@gateway/canvas-sdk": path.resolve(
+        import.meta.dirname,
+        "packages/canvas-sdk/src/index.ts",
+      ),
     },
   },
   root: path.resolve(import.meta.dirname, "client"),

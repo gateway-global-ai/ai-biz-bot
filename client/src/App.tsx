@@ -24,6 +24,7 @@ const AgentChat             = lazy(() => import("@/pages/agents/AgentChat"));
 const DiscVisualizer        = lazy(() => import("@/pages/showcase/DiscVisualizer"));
 const DeveloperPage         = lazy(() => import("@/pages/developer/DeveloperPage"));
 const UiKitPage             = lazy(() => import("@/pages/developer/ui-kit"));
+const ShadcnIoCatalogPage   = lazy(() => import("@/pages/developer/shadcn-io-catalog"));
 const BusinessPage          = lazy(() => import("@/pages/customer/BusinessPage"));
 const GoogleApiAnalyst      = lazy(() => import("@/pages/integrations/GoogleApiAnalyst"));
 const OnboardingFlow        = lazy(() => import("@/pages/agents/OnboardingFlow"));
@@ -55,6 +56,7 @@ const MyAccount             = lazy(() => import("@/pages/account/MyAccount"));
 const CustomerSiteManager   = lazy(() => import("@/pages/owner/CustomerSiteManager"));
 const PublicBusinessPage    = lazy(() => import("@/pages/public/PublicBusinessPage"));
 const AgentPage             = lazy(() => import("@/pages/agents/AgentPage"));
+const AiOsAgentPage         = lazy(() => import("@/pages/public/AiOsAgentPage"));
 const KioskPage             = lazy(() => import("@/pages/public/KioskPage"));
 const SovereignNetworkPage  = lazy(() => import("@/pages/public/SovereignNetworkPage"));
 const PhonePage             = lazy(() => import("@/pages/public/PhonePage"));
@@ -90,6 +92,8 @@ const StorefrontCategoryPage = lazy(() => import("@/pages/storefronts/Storefront
 const BrandAdminPage        = lazy(() => import("@/pages/brand-admin"));
 const AdminShell            = lazy(() => import("@/pages/admin/AdminShell").then(m => ({ default: m.AdminShell })));
 const MissionControlApp = lazy(() => import("./mission-control/MissionControlApp"));
+/** Browser adapter for logical route `operator.integration.connect` / view `integration_connect_surface` — not a routing authority; see GET /api/integration/connect/governance-context. */
+const CloudbedsConnectPage = lazy(() => import("@/pages/connect/CloudbedsConnectPage"));
 
 function ServerPanel() {
   return (
@@ -444,6 +448,7 @@ function App() {
               <Route path="/sdk/google-places" component={GooglePlacesSdk} />
               {/* ClearVoice Developer UI Kit — public URL; content gated inside page (dev or VITE_UI_KIT). Not LiveKit. */}
               <Route path="/dev/ui-kit" component={UiKitPage} />
+              <Route path="/dev/shadcn-io-catalog" component={ShadcnIoCatalogPage} />
               <Route path="/reseller/apply" component={ResellerApplyPage} />
               <Route path="/chat/customer" component={CustomerChatInterface} />
               <Route path="/chat-showcase" component={ChatEmbedShowcase} />
@@ -467,8 +472,11 @@ function App() {
               <Route path="/agents">{() => <Redirect to="/" />}</Route>
               <Route path="/biz/:slug" component={PublicBusinessPage} />
               <Route path="/agent/:slug" component={AgentPage} />
+              <Route path="/ai-os/:slug" component={AiOsAgentPage} />
               <Route path="/kiosk/:slug" component={KioskPage} />
               {/* Standalone Clear Voice phone UI — QR-codeable, no app shell. Params: ?siteConfigId=uuid | ?slug=url-slug */}
+              {/* Adapter only; governed entry: operator.integration.connect + governance-context API */}
+              <Route path="/connect/cloudbeds" component={CloudbedsConnectPage} />
               <Route path="/phone" component={PhonePage} />
               <Route path="/clearvoice-logo" component={ClearVoiceLogoCenteredPage} />
               <Route path="/mission-control" component={MissionControlApp} />

@@ -6,6 +6,7 @@ alwaysApply: true
 # View and Action Registry
 
 - Read `docs-governance/canonical/VIEW_REGISTRY.md` and `docs-governance/canonical/ACTION_REGISTRY.md` before adding UI states or executable actions.
+- For **intent → surface** control plane (state vector, merge order, resolver phases): `docs-governance/canonical/INTENT_LOOP_GOVERNANCE_V1.md` and `docs-governance/canonical/GOVERNED_GENERATIVE_UI_SPEC.md` § Intent-to-surface derivation.
 - Views must be declared by `viewId`, category, required context, and allowed actions.
 - Actions must be declared by `actionId`, required keys, mutation level, and handler.
 - Do not hide side-effect behavior inside UI components.

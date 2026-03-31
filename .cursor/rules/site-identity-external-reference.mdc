@@ -1,0 +1,29 @@
+---
+description: Canonical site identity — site_configs.id only; external IDs are reference metadata
+globs: server/routes/**/*.ts, server/**/*.ts, scripts/**/*.ts, shared/schema.ts, shared/siteIdentity.ts
+alwaysApply: false
+---
+
+# Site Identity and External Reference
+
+Read [`docs-governance/canonical/SITE_IDENTITY_AND_EXTERNAL_REFERENCE_V1.md`](../../docs-governance/canonical/SITE_IDENTITY_AND_EXTERNAL_REFERENCE_V1.md) before adding routes, joins, or scripts that scope by business/site.
+
+## Non-negotiables
+
+- **`site_configs.id` (UUID)** is the **only** canonical internal business/site identity.
+- **Google Place ID** is external reference metadata — not platform scope, not stable identity, not a substitute for `siteConfigId`.
+- **Vendor IDs** (Cloudbeds property id, Stripe SIDs, Twilio SIDs, etc.) are **reference attributes** — never internal primary keys or auth/routing scope.
+
+## Scope resolution
+
+**Platform ID in, external ID out. Never the reverse for scope resolution.**
+
+Internal APIs and normal operator scripts must accept **`siteConfigId`** (or resolve via session), then load stored `place_id` from `site_configs` when a Google call is needed.
+
+## Migration shim
+
+Any resolver that looks up by `place_id` must be **explicitly labeled** migration-only, gated by `GOVERNANCE_LEGACY_GOOGLE_PLACE_ID_LOOKUP=1`, **blocked in production** for routine use, and must warn on every invocation. See [`scripts/lib/boardwalkSiteIdentity.ts`](../../scripts/lib/boardwalkSiteIdentity.ts).
+
+## Enforcement
+
+Run `npm run validate:site-identity` and `npm run test:site-identity` before merging identity-affecting changes.

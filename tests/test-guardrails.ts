@@ -1,5 +1,5 @@
 /**
- * Guardrail tests: create-or-return safety and provision idempotency.
+ * Guardrail tests: create-or-return safety, provision idempotency, hospitality projection idempotency.
  * Uses DB + storage directly (no HTTP server). Run with: npm run test:guardrails
  * Requires DATABASE_URL (or doppler run -- tsx tests/test-guardrails.ts).
  */
@@ -7,8 +7,14 @@
 import { db } from "../server/db.js";
 import { storage } from "../server/storage.js";
 import { provisionAgentsForBusiness } from "../server/services/agentProvisioning.js";
-import { agents, siteConfigs, customerAccounts } from "../shared/schema.js";
-import { eq, inArray } from "drizzle-orm";
+import {
+  agents,
+  siteConfigs,
+  customerAccounts,
+  industryAgentTemplates,
+  swarmSchematics,
+} from "../shared/schema.js";
+import { eq, inArray, and } from "drizzle-orm";
 
 const TEST_PLACE_ID = "ChIJ_GUARDRAIL_TEST_PLACE_ID";
 const TEST_OWNER_ID = "cust_test_owner_guardrail";
@@ -127,6 +133,77 @@ async function runTestB() {
   assert(updatedSite?.workspaceState === "provisioned", "workspaceState should flip to provisioned");
 }
 
+/**
+ * Hospitality path: idempotent provision + Phase 4 projection (templates / members / agent FKs).
+ * Skips if fewer than 6 active hospitality_travel rows in industry_agent_templates (seed not run).
+ */
+async function runTestC(): Promise<boolean> {
+  await cleanupTestData();
+
+  const hospTemplates = await db
+    .select({ id: industryAgentTemplates.id })
+    .from(industryAgentTemplates)
+    .where(
+      and(
+        eq(industryAgentTemplates.industryGroup, "hospitality_travel"),
+        eq(industryAgentTemplates.isActive, true),
+      ),
+    );
+  if (hospTemplates.length < 6) {
+    console.log(
+      "  SKIP (need ≥6 active hospitality_travel industry_agent_templates — run seed-industry-templates)",
+    );
+    return false;
+  }
+
+  const [site] = await db
+    .insert(siteConfigs)
+    .values({
+      name: "Test Hotel",
+      placeId: TEST_PLACE_ID,
+      workspaceState: "demo",
+    })
+    .returning();
+  assert(!!site?.id, "hospitality site insert failed");
+
+  const body = { siteConfigId: site.id, placeTypes: ["lodging"] as string[], businessName: "Test Hotel" };
+
+  const res1 = await provisionAgentsForBusiness(body.siteConfigId, body.placeTypes, body.businessName);
+  assert(res1.industryGroup === "hospitality_travel", "placeTypes should map to hospitality_travel");
+  assert(res1.agentsCreated >= 6, "first hospitality provision should create at least 6 agents");
+
+  const [sch] = await db
+    .select()
+    .from(swarmSchematics)
+    .where(eq(swarmSchematics.schematicKey, "hospitality_cloudbeds"))
+    .limit(1);
+  assert(!!sch?.id, "hospitality_cloudbeds swarm_schematics row should exist after provision");
+
+  const agentsAfter1 = await db.select().from(agents).where(eq(agents.siteConfigId, site.id));
+  assert(agentsAfter1.length >= 6, "hospitality agent count after first provision");
+  for (const a of agentsAfter1) {
+    assert(!!a.agentTemplateId, `agent ${a.id} should have agent_template_id (Phase 4 link)`);
+    assert(!!a.swarmSchematicMemberId, `agent ${a.id} should have swarm_schematic_member_id`);
+    assert(
+      a.deploymentStatus === "active_deployable",
+      `agent ${a.id} deployment_status should be active_deployable`,
+    );
+  }
+
+  const res2 = await provisionAgentsForBusiness(body.siteConfigId, body.placeTypes, body.businessName);
+  assert(res2.agentsCreated === 0, "second hospitality provision should create 0 agents");
+  assert(res2.agentsSkipped >= 6, "second run should skip existing roster roles");
+
+  const agentsAfter2 = await db.select().from(agents).where(eq(agents.siteConfigId, site.id));
+  assert(agentsAfter2.length === agentsAfter1.length, "hospitality agent count unchanged on second provision");
+
+  const [updatedSite] = await db.select().from(siteConfigs).where(eq(siteConfigs.id, site.id));
+  assert(!!updatedSite?.assignedAgentId, "hospitality: assignedAgentId should be set");
+  assert(updatedSite?.workspaceState === "provisioned", "hospitality: workspaceState should be provisioned");
+
+  return true;
+}
+
 async function main() {
   if (!process.env.DATABASE_URL) {
     console.error("DATABASE_URL not set. Run: doppler run -- tsx tests/test-guardrails.ts");
@@ -155,6 +232,21 @@ async function main() {
       await runTestB();
       console.log("  passed");
       passed += 1;
+    }
+  } catch (e) {
+    console.error("  FAIL:", e instanceof Error ? e.message : e);
+    failed += 1;
+  }
+  try {
+    console.log("Test C: Hospitality provision + projection idempotency");
+    if (agents.siteConfigId == null || (siteConfigs as any).workspaceState == null) {
+      console.log("  SKIP (same schema gate as Test B)");
+    } else {
+      const ran = await runTestC();
+      if (ran) {
+        console.log("  passed");
+        passed += 1;
+      }
     }
   } catch (e) {
     console.error("  FAIL:", e instanceof Error ? e.message : e);

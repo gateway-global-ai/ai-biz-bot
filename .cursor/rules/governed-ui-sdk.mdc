@@ -1,0 +1,33 @@
+---
+description: Governed UI SDK — new canvas/auth primitives must be approved in UI_COMPONENT_APPROVAL_REGISTRY and exported from @gateway/canvas-sdk; tokens from @gateway/design-tokens.
+globs: client/src/pages/public/PlatformHomePage.tsx, client/src/components/chat/**, packages/canvas-sdk/**, packages/design-tokens/**
+alwaysApply: false
+---
+
+# Governed UI SDK
+
+## Forward-only (voice-first OS)
+
+- **Do not** prioritize “repairing” legacy dashboards, admin menu UIs, or pre-intent screens as the product goal unless they are on an **active runtime path** that can **contaminate** new work.
+- **Do** lock down the **pipeline** that produces **future** UI: canvas syscalls, registered views, intent loop, SDK promotion — see [`VOICE_FIRST_INTERFACE_PIPELINE_V1.md`](../../docs-governance/canonical/VOICE_FIRST_INTERFACE_PIPELINE_V1.md).
+- **`@gateway/canvas-sdk`** is for **OS surfaces** produced by that pipeline, not a retrofit library for old apps.
+
+## Canonical
+
+- [`docs-governance/canonical/SHADCN_MCP_PLANE_BOUNDARY_V1.md`](../../docs-governance/canonical/SHADCN_MCP_PLANE_BOUNDARY_V1.md) — MCP is design-time only; runtime uses views/syscalls/SDK, not live MCP catalog
+- [`docs-governance/canonical/WORKSPACE_MCP_PLANE_BOUNDARY_V1.md`](../../docs-governance/canonical/WORKSPACE_MCP_PLANE_BOUNDARY_V1.md) — Google Workspace MCP is API/tooling, not UI or canvas surfaces
+- [`docs-governance/canonical/VOICE_FIRST_INTERFACE_PIPELINE_V1.md`](../../docs-governance/canonical/VOICE_FIRST_INTERFACE_PIPELINE_V1.md)
+- [`docs-governance/canonical/UI_COMPONENT_APPROVAL_REGISTRY_V1.md`](../../docs-governance/canonical/UI_COMPONENT_APPROVAL_REGISTRY_V1.md)
+- [`docs-governance/canonical/STYLE_APPROVAL_POLICY_V1.md`](../../docs-governance/canonical/STYLE_APPROVAL_POLICY_V1.md)
+- [`registry-yaml/ui-components/`](../../registry-yaml/ui-components/)
+
+## Rules
+
+1. **New** primitives for canvas/auth/public shell surfaces: add **YAML** under `registry-yaml/ui-components/proposals/`, get approval, promote to `approved/`, then add **export** to `packages/canvas-sdk/src/index.ts`.
+2. **Skills / journey:** new capabilities that need UI must align **registered canvas views** and **ACTION_REGISTRY** with swarm schematics and journey phases — not ad hoc screens.
+3. **Tokens:** prefer `import { … } from '@gateway/design-tokens'` over duplicating hex or importing ad hoc palette fragments.
+4. **No orphan components:** do not add large new React trees in governed paths without a registry row and SDK export path (waiver in `CANVAS_OS_TOOL_MANDATE_V1.md` § Waivers if exceptional).
+
+## Future CI
+
+Sovereign Guard will restrict imports in governed paths to `@gateway/canvas-sdk` + `@gateway/design-tokens` + narrow allowlist — until then, follow this rule manually.

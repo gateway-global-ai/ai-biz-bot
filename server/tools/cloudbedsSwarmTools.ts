@@ -15,6 +15,7 @@ import {
   siteRequiresOtpForGuestPmsLookup,
 } from "../services/novaGuestVerification";
 import { normalizePhoneE164, phoneDigitsMatch } from "../utils/phoneNormalize";
+import { computeGuestJourneyClassification } from "./cloudbedsGuestJourneyClassification";
 
 function todayISODate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -48,12 +49,7 @@ function collectPhonesFromUnknown(obj: unknown): string[] {
   return found;
 }
 
-export type GuestJourneyKind =
-  | "in_house"
-  | "upcoming_stay"
-  | "recent_checkout"
-  | "past_guest"
-  | "no_pms_match";
+export type { GuestJourneyKind } from "./cloudbedsGuestJourneyClassification";
 
 export async function handlePmsLookupGuestJourney(args: {
   phone?: string;
@@ -93,14 +89,19 @@ export async function handlePmsLookupGuestJourney(args: {
   const checkInFrom = addYears(todayISODate(), -1);
   const checkInTo = addYears(todayISODate(), 1);
 
-  const { ok, status, json } = await cloudbedsGetJson(pms, "getReservations", {
-    propertyID,
-    includeGuestsDetails: true,
-    checkInFrom,
-    checkInTo,
-    pageSize: 100,
-    pageNumber: 1,
-  });
+  const { ok, status, json } = await cloudbedsGetJson(
+    pms,
+    "getReservations",
+    {
+      propertyID,
+      includeGuestsDetails: true,
+      checkInFrom,
+      checkInTo,
+      pageSize: 100,
+      pageNumber: 1,
+    },
+    { capabilityId: "cb_guest_journey_lookup" },
+  );
 
   if (!ok) {
     return {
@@ -147,43 +148,7 @@ export async function handlePmsLookupGuestJourney(args: {
   }
 
   const today = new Date(todayISODate() + "T12:00:00");
-
-  let journey: GuestJourneyKind = "no_pms_match";
-  let summary = "No guest profile matched this phone in Cloudbeds for the search window.";
-
-  if (hits.length > 0) {
-    const st = (s: string) => (s || "").toLowerCase();
-    if (hits.some((h) => st(h.status || "") === "checked_in")) {
-      journey = "in_house";
-      summary = "Guest has an in-house (checked-in) reservation matching this phone.";
-    } else if (
-      hits.some((h) => {
-        const sd = h.startDate ? new Date(h.startDate) : null;
-        return (
-          !!sd &&
-          sd > today &&
-          /confirmed|not_confirmed/i.test(h.status || "")
-        );
-      })
-    ) {
-      journey = "upcoming_stay";
-      summary = "Guest has a future reservation matching this phone.";
-    } else if (
-      hits.some((h) => {
-        if (st(h.status || "") !== "checked_out") return false;
-        const ed = h.endDate ? new Date(h.endDate) : null;
-        if (!ed) return false;
-        const days = (today.getTime() - ed.getTime()) / 86400000;
-        return days >= 0 && days <= 45;
-      })
-    ) {
-      journey = "recent_checkout";
-      summary = "Guest recently checked out (within the last ~45 days).";
-    } else {
-      journey = "past_guest";
-      summary = "A historical or non-active reservation matches this phone.";
-    }
-  }
+  const { journey, summary } = computeGuestJourneyClassification(hits, today);
 
   return {
     success: true,
@@ -215,7 +180,9 @@ export async function handlePmsGetHousekeepingStatus(args: {
   };
   if (args.roomCondition) q.roomCondition = args.roomCondition;
 
-  const { ok, status, json } = await cloudbedsGetJson(pms, "getHousekeepingStatus", q);
+  const { ok, status, json } = await cloudbedsGetJson(pms, "getHousekeepingStatus", q, {
+    capabilityId: "cb_housekeeping_status",
+  });
   if (!ok) {
     return { success: false, error: `getHousekeepingStatus failed (${status})`, raw: json };
   }
@@ -233,10 +200,15 @@ export async function handlePmsGetHotelDashboard(args: {
   const propertyID = effectivePropertyId(pms);
   if (!propertyID) return { success: false, error: "Property ID missing." };
 
-  const { ok, status, json } = await cloudbedsGetJson(pms, "getDashboard", {
-    propertyID,
-    date: args.date || todayISODate(),
-  });
+  const { ok, status, json } = await cloudbedsGetJson(
+    pms,
+    "getDashboard",
+    {
+      propertyID,
+      date: args.date || todayISODate(),
+    },
+    { capabilityId: "cb_hotel_dashboard" },
+  );
   if (!ok) {
     return { success: false, error: `getDashboard failed (${status})`, raw: json };
   }

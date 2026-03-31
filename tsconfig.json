@@ -1,5 +1,11 @@
 {
-  "include": ["client/src/**/*", "shared/**/*", "server/**/*", "os-core/src/**/*"],
+  "include": [
+    "client/src/**/*",
+    "shared/**/*",
+    "server/**/*",
+    "os-core/src/**/*",
+    "packages/**/*"
+  ],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
   "compilerOptions": {
     "target": "ES2022",
@@ -19,7 +25,11 @@
     "paths": {
       "@/*": ["./client/src/*"],
       "@shared/*": ["./shared/*"],
-      "@os-core/*": ["./os-core/src/*"]
+      "@os-core/*": ["./os-core/src/*"],
+      "@gateway/design-tokens": ["./packages/design-tokens/src/index.ts"],
+      "@gateway/design-tokens/*": ["./packages/design-tokens/src/*"],
+      "@gateway/canvas-sdk": ["./packages/canvas-sdk/src/index.ts"],
+      "@gateway/canvas-sdk/*": ["./packages/canvas-sdk/src/*"]
     }
   }
 }

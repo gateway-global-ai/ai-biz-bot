@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Sovereign Guard (full scan on PR)
+      - name: Run Sovereign Guard + governance artifact gate (single lane)
         run: |
           # On PRs, scan all changed files vs base branch
           # On push to main, scan files changed in the last commit
@@ -39,9 +39,13 @@ jobs:
           echo "$CHANGED"
           echo ""
 
-          # Write changed files to a temp list and run guard against them
           echo "$CHANGED" > /tmp/changed-files.txt
           npx tsx scripts/sovereign-guard.ts --file-list /tmp/changed-files.txt
+          # Phase 1 inventory TBD + visual baseline + Option C SMS + anti-artboard on changed client files
+          npx tsx scripts/sovereign-gate-governance.ts --file-list /tmp/changed-files.txt
+
+      - name: Anti-artboard UI governance (canvas + command center host)
+        run: npx tsx scripts/check-ui-governance.ts --ci
 
       - name: Validate integration registry
         run: npm run validate:integration-registry

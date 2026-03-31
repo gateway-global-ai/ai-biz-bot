@@ -1,0 +1,21 @@
+# Template (defaults) vs swarm_schematic_member (effective) — Option C
+spec: agent_classification_override_policy_v1
+version: "1.0.0"
+
+# Member row may override template defaults within these bounds
+swarm_schematic_member:
+  may_override:
+    - primary_actor_class
+    - secondary_actor_classes
+    - primary_stage_class
+    - secondary_stage_classes
+    - default_operational_mode
+    - capability_set_ids
+    - skill_ids
+    - required_probe_ids
+    - deploy_posture
+  must_not_override:
+    - template_key
+  must_match_template_unless_policy_allows:
+    # If set, member primary_actor_class must equal template OR appear in allowed_deviations for that template_key (future extension)
+    enforce_primary_actor_alignment: false

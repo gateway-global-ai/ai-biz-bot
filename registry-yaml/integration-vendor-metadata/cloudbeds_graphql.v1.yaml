@@ -1,0 +1,25 @@
+# Vendor metadata — Cloudbeds GraphQL discovery tier (separate from REST PMS).
+# NOT runtime authority: execution remains REST for shipped capabilities unless promoted per
+# CLOUDBEDS_GRAPHQL_DISCOVERY_GOVERNANCE_V1.md.
+
+spec: integration_vendor_metadata_v1
+version: "1.0.0"
+vendor_id: cloudbeds_graphql
+
+developer_portal_url: https://developers.cloudbeds.com/graphql
+# Field name is legacy (`reference_openapi_path`); this file holds GraphQL SDL for discovery checksum alignment.
+reference_openapi_path: docs/knowledge-base/cloudbeds/graphql/discovery-schema.graphql
+schema_surface: graphql_sdl_discovery
+api_version_label: graphql_discovery_v1
+
+spec_ingest:
+  mode: manual_promote
+  source_url: null
+  checksum_required: true
+  expected_sha256: 98454ca83bd8d5a7a4c5981ddb8eb3a740f8d8c42b8f50ad71ab577a01a47bd7
+
+authority_note: >
+  Phase B: discovery-schema.graphql is the registry checksum anchor (minimal index). Primary machine
+  authority is vendor-introspection.json; commit vendor-introspection.provenance.json with every ingest.
+  Tenant GraphQL HTTP URL belongs in site_pms_integrations.config.cloudbeds_graphql_discovery_v1.http_url
+  (not parallel BWS_/env naming). See CLOUDBEDS_GRAPHQL_DISCOVERY_GOVERNANCE_V1.md and SCHEMA_INGEST.md.

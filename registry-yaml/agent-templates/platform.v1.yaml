@@ -1,0 +1,10 @@
+# Reusable agent templates (platform). Empty bundle until templates are seeded from industry archetypes.
+# Validated by: npm run validate:agent-classification
+
+spec: agent_templates_bundle_v1
+version: "1.0.0"
+
+authority:
+  source_of_truth: registry-yaml/agent-templates/platform.v1.yaml
+
+templates: []

@@ -5,7 +5,6 @@
  * - Customer account for Jason Trindade
  * - Site configuration
  * - Owner business data
- * - Featured partner entry (if GRN DB accessible)
  * - Cloudbeds PMS integration (if CLOUDBEDS_API_KEY is set when the script runs)
  *
  * Run: npm run setup:boardwalk  (Doppler injects DATABASE_URL; optional CLOUDBEDS_API_KEY)
@@ -19,7 +18,7 @@ import "dotenv/config";
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { db } from '../server/db.js';
-import { customerAccounts, siteConfigs, ownerBusinessData, featuredPartners, sitePmsIntegrations } from '../shared/schema.js';
+import { customerAccounts, siteConfigs, ownerBusinessData, sitePmsIntegrations } from "../shared/schema.js";
 import { and, eq } from 'drizzle-orm';
 
 const isMainModule =
@@ -27,7 +26,13 @@ const isMainModule =
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
+/**
+ * Demo seed data for Boardwalk Suites Lafayette.
+ * **Stable platform identifier for this business is `site_configs.id` (UUID)** returned after insert — not Google `placeId`.
+ * `placeId` is optional Places API metadata and may drift; scripts and runbooks must use `BOARDWALK_SITE_CONFIG_ID` / `site_configs.id`.
+ */
 export const BOARDWALK_SUITES = {
+  /** Google Places id — stored as metadata only; do not treat as canonical business key. */
   placeId: 'ChIJB4qU6oXvJIgR_2p602OaK_U',
   businessName: 'Boardwalk Suites Lafayette',
   address: '1605 N University Ave, Lafayette, LA 70506',
@@ -184,49 +189,7 @@ export async function ensureBoardwalkPartnerSetup(): Promise<BoardwalkPartnerSet
     console.log(`✅ Updated owner business data`);
   }
 
-  console.log(`\n⭐ Adding to featured_partners table (Main DB)...`);
-
-  try {
-    const existing = await db
-      .select()
-      .from(featuredPartners)
-      .where(eq(featuredPartners.googlePlaceId, BOARDWALK_SUITES.placeId))
-      .limit(1);
-
-    const featuredPartnerData = {
-      googlePlaceId: BOARDWALK_SUITES.placeId,
-      businessName: BOARDWALK_SUITES.businessName,
-      cityCode: BOARDWALK_SUITES.cityCode,
-      category: BOARDWALK_SUITES.category,
-      badgeLabel: BOARDWALK_SUITES.badgeLabel,
-      aiHook: `At Boardwalk Suites Lafayette, you're not just getting a room—you're getting a full kitchen and the space to actually live while you're here.`,
-      aiTags: ['extended stay', 'full kitchens', 'suites', 'lafayette', 'oil center', 'medical district'],
-      aiStory: `Premier extended-stay anchor in Lafayette's Oil Center, blending the functionality of an apartment with the reliability of a professional hotel.`,
-      aiTriggerConditions: {
-        keywords: ['lafayette', 'extended stay', 'kitchen', 'suite', 'suites', 'acadiana'],
-        location: 'lafayette',
-      },
-      uiThemeGlow: 'blue',
-      isActive: true,
-    };
-
-    if (existing.length === 0) {
-      await db.insert(featuredPartners).values(featuredPartnerData);
-      console.log(`✅ Added Boardwalk Suites to featured_partners table`);
-    } else {
-      await db
-        .update(featuredPartners)
-        .set(featuredPartnerData)
-        .where(eq(featuredPartners.googlePlaceId, BOARDWALK_SUITES.placeId));
-      console.log(`✅ Updated featured_partners entry`);
-    }
-  } catch (error: any) {
-    if (error.message?.includes('does not exist')) {
-      console.log(`⚠️  featured_partners table not found. Run migration: npm run db:push or run migrations/0002_business_data_tour_guide.sql`);
-    } else {
-      console.error(`⚠️  Failed to update featured_partners:`, error.message);
-    }
-  }
+  // featured_partners was removed (migrations/0064_schema_guillotine.sql); curation lives elsewhere.
 
   const siteId = siteConfig[0].id;
   const cloudbedsApiKey = process.env.CLOUDBEDS_API_KEY;
@@ -286,8 +249,8 @@ async function setupBoardwalkSuites() {
     console.log(`   - Customer Account: ${r.accountId}`);
     console.log(`   - Phone: ${normalizePhone(BOARDWALK_SUITES.owner.phone)}`);
     console.log(`   - Email: ${BOARDWALK_SUITES.owner.email}`);
-    console.log(`   - Site Config: ${r.siteConfigId}`);
-    console.log(`   - Place ID: ${r.placeId}`);
+    console.log(`   - Site Config (platform UUID — use for scripts/Doppler): ${r.siteConfigId}`);
+    console.log(`   - Google Place ID (metadata only; may change): ${r.placeId}`);
     console.log(`\n🔐 Admin Login:`);
     console.log(`   - Use phone ${normalizePhone(BOARDWALK_SUITES.owner.phone)} to login via OTP`);
     console.log(`   - Access admin dashboard from your website footer`);
