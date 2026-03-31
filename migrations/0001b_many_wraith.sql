@@ -16,14 +16,63 @@ CREATE TABLE "associations" (
 	"updated_at" timestamp DEFAULT now(),
 	CONSTRAINT "associations_short_code_unique" UNIQUE("short_code")
 );
---> statement-breakpoint
-ALTER TABLE "a2p_brands" ADD COLUMN "association_id" uuid;--> statement-breakpoint
-ALTER TABLE "a2p_brands" ADD COLUMN "legal_name_confirmed" boolean DEFAULT false NOT NULL;--> statement-breakpoint
-ALTER TABLE "a2p_brands" ADD COLUMN "legal_name_confirmed_at" timestamp;--> statement-breakpoint
-ALTER TABLE "customers" ADD COLUMN "association_id" uuid;--> statement-breakpoint
-ALTER TABLE "site_configs" ADD COLUMN "agent_config" jsonb;--> statement-breakpoint
-ALTER TABLE "site_configs" ADD COLUMN "voice_config" jsonb;--> statement-breakpoint
-ALTER TABLE "site_configs" ADD COLUMN "theme_config" jsonb;--> statement-breakpoint
-ALTER TABLE "a2p_brands" ADD CONSTRAINT "a2p_brands_association_id_associations_id_fk" FOREIGN KEY ("association_id") REFERENCES "public"."associations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "customers" ADD CONSTRAINT "customers_association_id_associations_id_fk" FOREIGN KEY ("association_id") REFERENCES "public"."associations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "idx_customers_association_id" ON "customers" USING btree ("association_id");
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'a2p_brands'
+  ) THEN
+    ALTER TABLE "a2p_brands" ADD COLUMN IF NOT EXISTS "association_id" uuid;
+    ALTER TABLE "a2p_brands" ADD COLUMN IF NOT EXISTS "legal_name_confirmed" boolean DEFAULT false NOT NULL;
+    ALTER TABLE "a2p_brands" ADD COLUMN IF NOT EXISTS "legal_name_confirmed_at" timestamp;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM information_schema.table_constraints
+      WHERE table_schema = 'public'
+        AND table_name = 'a2p_brands'
+        AND constraint_name = 'a2p_brands_association_id_associations_id_fk'
+    ) THEN
+      ALTER TABLE "a2p_brands"
+        ADD CONSTRAINT "a2p_brands_association_id_associations_id_fk"
+        FOREIGN KEY ("association_id") REFERENCES "public"."associations"("id") ON DELETE no action ON UPDATE no action;
+    END IF;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'customers'
+  ) THEN
+    ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "association_id" uuid;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM information_schema.table_constraints
+      WHERE table_schema = 'public'
+        AND table_name = 'customers'
+        AND constraint_name = 'customers_association_id_associations_id_fk'
+    ) THEN
+      ALTER TABLE "customers"
+        ADD CONSTRAINT "customers_association_id_associations_id_fk"
+        FOREIGN KEY ("association_id") REFERENCES "public"."associations"("id") ON DELETE no action ON UPDATE no action;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND indexname = 'idx_customers_association_id'
+    ) THEN
+      CREATE INDEX "idx_customers_association_id" ON "customers" USING btree ("association_id");
+    END IF;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'site_configs'
+  ) THEN
+    ALTER TABLE "site_configs" ADD COLUMN IF NOT EXISTS "agent_config" jsonb;
+    ALTER TABLE "site_configs" ADD COLUMN IF NOT EXISTS "voice_config" jsonb;
+    ALTER TABLE "site_configs" ADD COLUMN IF NOT EXISTS "theme_config" jsonb;
+  END IF;
+END $$;
