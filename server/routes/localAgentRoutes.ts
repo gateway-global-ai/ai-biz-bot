@@ -22,7 +22,14 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../auth";
 import { db } from "../db";
-import { agents, agentOrchestrationRuns } from "@shared/schema";
+import { actionRuns, agents, agentOrchestrationRuns, evidenceArtifacts } from "@shared/schema";
+import {
+  OutcomePacketFragmentSchema,
+  UpgradedLocalAgentTaskBodySchema,
+  type ActionRequest,
+  type ExecutionPacket,
+  type OutcomePacketFragment,
+} from "@shared/intentExecutionPlane/contracts";
 import {
   createSingleAgentOrchestrationRun,
   completeSingleAgentCreateRun,
@@ -33,18 +40,13 @@ import {
   loadSkillContext,
 } from "../services/localAgentKnowledgeContext";
 import { getLocalVoiceConfig } from "../local-voice/config";
+import { upsertOutcomePacket } from "../services/intentExecutionService";
 
 const router = Router();
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
-const taskBody = z.object({
-  taskType: z.enum(["governance", "code", "agent", "ui"]),
-  prompt: z.string().min(1).max(60_000),
-  siteConfigId: z.string().min(1),
-  agentId: z.string().min(1),
-  subAgentOf: z.string().optional(),
-});
+const taskBody = UpgradedLocalAgentTaskBodySchema;
 
 const spawnBody = z.object({
   parentRunId: z.string().min(1),
@@ -62,6 +64,55 @@ interface LocalAgentOutput {
   blockers: string[];
   result: string;
   review_required?: boolean;
+}
+
+function buildExecutionPrompt(params: {
+  prompt?: string;
+  actionRequest?: ActionRequest;
+  executionPacket?: ExecutionPacket;
+  responseSchemaId?: string;
+  intentExecutionId?: string;
+  scopeExecutionId?: string;
+}): string {
+  if (params.prompt) return params.prompt;
+
+  const parts = [
+    "You are executing a structured coding-plane action.",
+    params.intentExecutionId ? `IntentExecutionId: ${params.intentExecutionId}` : null,
+    params.scopeExecutionId ? `ScopeExecutionId: ${params.scopeExecutionId}` : null,
+    params.executionPacket
+      ? `ExecutionPacket: ${JSON.stringify(params.executionPacket)}`
+      : null,
+    params.actionRequest
+      ? `ActionRequest: ${JSON.stringify(params.actionRequest)}`
+      : null,
+    params.responseSchemaId
+      ? `Return schema: ${params.responseSchemaId}`
+      : "Return schema: local_agent_output",
+  ].filter(Boolean);
+
+  return parts.join("\n");
+}
+
+function parseOutcomeFragment(raw: string): {
+  output: OutcomePacketFragment | null;
+  parseError: string | null;
+} {
+  try {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { output: null, parseError: "no_json_object_found" };
+    const parsed = JSON.parse(jsonMatch[0]);
+    const validated = OutcomePacketFragmentSchema.safeParse(parsed);
+    if (!validated.success) {
+      return {
+        output: null,
+        parseError: validated.error.issues.map((issue) => `${issue.path.join(".")}:${issue.message}`).join("; "),
+      };
+    }
+    return { output: validated.data, parseError: null };
+  } catch (e) {
+    return { output: null, parseError: `json_parse_error:${String(e).slice(0, 120)}` };
+  }
 }
 
 function parseStructuredOutput(raw: string): {
@@ -198,7 +249,19 @@ router.post("/task", requireAuth, async (req: Request, res: Response) => {
     return;
   }
 
-  const { taskType, prompt, siteConfigId, agentId, subAgentOf } = parsed.data;
+  const {
+    taskType,
+    prompt,
+    siteConfigId,
+    agentId,
+    subAgentOf,
+    workItemId,
+    intentExecutionId,
+    scopeExecutionId,
+    executionPacket,
+    actionRequest,
+    responseSchemaId,
+  } = parsed.data;
   const config = getLocalVoiceConfig();
 
   const [agent] = await db
@@ -243,7 +306,16 @@ router.post("/task", requireAuth, async (req: Request, res: Response) => {
     }
   }
 
-  const jurisdiction = checkJurisdiction(prompt, controls);
+  const effectivePrompt = buildExecutionPrompt({
+    prompt,
+    actionRequest,
+    executionPacket,
+    responseSchemaId,
+    intentExecutionId,
+    scopeExecutionId,
+  });
+
+  const jurisdiction = checkJurisdiction(effectivePrompt, controls);
   if (!jurisdiction.allowed) {
     await persistOrchestrationViolation({
       violationType: "unauthorized_domain_access",
@@ -251,7 +323,13 @@ router.post("/task", requireAuth, async (req: Request, res: Response) => {
       siteConfigId,
       routeOrSource: "POST /api/local-agent/task",
       actorHint: agentId,
-      detail: { reason: jurisdiction.reason, taskType, promptSnippet: prompt.slice(0, 200) },
+      detail: {
+        reason: jurisdiction.reason,
+        taskType,
+        promptSnippet: effectivePrompt.slice(0, 200),
+        intentExecutionId: intentExecutionId ?? null,
+        scopeExecutionId: scopeExecutionId ?? null,
+      },
     });
     res.status(403).json({
       error: "jurisdiction_violation",
@@ -262,23 +340,54 @@ router.post("/task", requireAuth, async (req: Request, res: Response) => {
 
   const { runId } = await createSingleAgentOrchestrationRun({ siteConfigId });
 
+  let actionRunId: string | null = null;
+
   // Link to parent run and stamp violation_reason=null (clean start)
   await db
     .update(agentOrchestrationRuns)
     .set({
       agentId,
       metadata: subAgentOf
-        ? { purpose: "single_agent_create", parentRunId: subAgentOf }
-        : { purpose: "single_agent_create" },
+        ? {
+            purpose: actionRequest ? "coding_action_execution" : "single_agent_create",
+            parentRunId: subAgentOf,
+            workItemId: workItemId ?? null,
+            intentExecutionId: intentExecutionId ?? null,
+            scopeExecutionId: scopeExecutionId ?? null,
+            responseSchemaId: responseSchemaId ?? null,
+          }
+        : {
+            purpose: actionRequest ? "coding_action_execution" : "single_agent_create",
+            workItemId: workItemId ?? null,
+            intentExecutionId: intentExecutionId ?? null,
+            scopeExecutionId: scopeExecutionId ?? null,
+            responseSchemaId: responseSchemaId ?? null,
+          },
       reviewRequired: true,
       updatedAt: new Date(),
     })
     .where(eq(agentOrchestrationRuns.id, runId));
 
+  if (scopeExecutionId && actionRequest) {
+    const [createdActionRun] = await db
+      .insert(actionRuns)
+      .values({
+        scopeExecutionId,
+        orchestrationRunId: runId,
+        agentId,
+        actionKey: actionRequest.actionKey,
+        state: "running",
+        actionInput: actionRequest,
+        startedAt: new Date(),
+      })
+      .returning({ id: actionRuns.id });
+    actionRunId = createdActionRun.id;
+  }
+
   try {
     const [knowledgeCtx, skillCtx] = await Promise.all([
-      loadKnowledgeContext(taskType),
-      loadSkillContext(taskType),
+      loadKnowledgeContext(taskType ?? "code"),
+      loadSkillContext(taskType ?? "code"),
     ]);
 
     const systemBlock = [agent.systemPrompt ?? "", knowledgeCtx, skillCtx]
@@ -295,7 +404,7 @@ router.post("/task", requireAuth, async (req: Request, res: Response) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: agent.aiModelId || config.ollamaModel,
-          prompt: `${systemBlock}\n\n---\n\nTask: ${prompt}`,
+          prompt: `${systemBlock}\n\n---\n\nTask: ${effectivePrompt}`,
           stream: false,
           format: "json",
           options: { temperature: 0.1, num_predict: 4096 },
@@ -314,9 +423,14 @@ router.post("/task", requireAuth, async (req: Request, res: Response) => {
       clearTimeout(timeout);
     }
 
-    const { output: structured, parseError } = parseStructuredOutput(ollamaText);
+    const outcomeParse =
+      responseSchemaId === "OutcomePacket.v1" ? parseOutcomeFragment(ollamaText) : { output: null, parseError: null };
+    const { output: structured, parseError } =
+      responseSchemaId === "OutcomePacket.v1"
+        ? { output: null, parseError: outcomeParse.parseError }
+        : parseStructuredOutput(ollamaText);
 
-    if (!structured) {
+    if (!structured && !outcomeParse.output) {
       await persistOrchestrationViolation({
         violationType: "missing_orchestration_run",
         severity: "medium",
@@ -355,24 +469,70 @@ router.post("/task", requireAuth, async (req: Request, res: Response) => {
       .set({
         rawModelOutput: ollamaText.slice(0, 8000),
         parseError: null,
-        filesTouchedJson: structured.files_touched,
+          filesTouchedJson:
+            responseSchemaId === "OutcomePacket.v1"
+              ? outcomeParse.output?.filesTouched.map((file) => file.path) ?? []
+              : structured?.files_touched ?? [],
         reviewRequired: true,
         updatedAt: new Date(),
       })
       .where(eq(agentOrchestrationRuns.id, runId));
+
+    if (actionRunId) {
+      await db
+        .update(actionRuns)
+        .set({
+          state: "succeeded",
+          actionOutput:
+            responseSchemaId === "OutcomePacket.v1"
+              ? (outcomeParse.output ?? {})
+              : {
+                  files_touched: structured?.files_touched ?? [],
+                  assumptions: structured?.assumptions ?? [],
+                  blockers: structured?.blockers ?? [],
+                  result: structured?.result ?? "",
+                },
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(actionRuns.id, actionRunId));
+    }
+
+    if (actionRunId && outcomeParse.output) {
+      const diffArtifact = outcomeParse.output.checksRun
+        .filter((check) => check.artifactUri)
+        .map((check) => ({
+          actionRunId,
+          kind: "check_run_artifact",
+          uri: check.artifactUri!,
+          metadata: { cmd: check.cmd, status: check.status },
+        }));
+      if (diffArtifact.length > 0) {
+        await db.insert(evidenceArtifacts).values(diffArtifact);
+      }
+    }
+
+    if (intentExecutionId && outcomeParse.output) {
+      await upsertOutcomePacket(intentExecutionId, outcomeParse.output);
+    }
 
     await completeSingleAgentCreateRun({ runId, agentId });
 
     res.json({
       ok: true,
       runId,
+      actionRunId: actionRunId ?? undefined,
       model: agent.aiModelId || config.ollamaModel,
-      taskType,
+      taskType: taskType ?? "code",
       review_required: true,
-      files_touched: structured.files_touched,
-      assumptions: structured.assumptions,
-      blockers: structured.blockers,
-      result: structured.result,
+      ...(responseSchemaId === "OutcomePacket.v1"
+        ? outcomeParse.output
+        : {
+            files_touched: structured!.files_touched,
+            assumptions: structured!.assumptions,
+            blockers: structured!.blockers,
+            result: structured!.result,
+          }),
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -388,6 +548,18 @@ router.post("/task", requireAuth, async (req: Request, res: Response) => {
         updatedAt: new Date(),
       })
       .where(eq(agentOrchestrationRuns.id, runId));
+
+    if (actionRunId) {
+      await db
+        .update(actionRuns)
+        .set({
+          state: "failed",
+          actionOutput: { error: msg.slice(0, 400) },
+          completedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(actionRuns.id, actionRunId));
+    }
 
     res.status(isTimeout ? 504 : 502).json({
       error: isTimeout ? "local_llm_timeout" : "local_llm_error",

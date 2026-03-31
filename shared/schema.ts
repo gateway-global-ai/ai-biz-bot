@@ -3,6 +3,14 @@ import { pgTable, text, varchar, integer, boolean, jsonb, timestamp, numeric, in
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import type { CharacterProfileV1, MergedCognitionContractV1 } from "./cognitionContract.js";
+import type {
+  ActionRequest,
+  CheckRun,
+  ExecutionPacket,
+  FileTouch,
+  OutcomePacket,
+  PolicyContext,
+} from "./intentExecutionPlane/contracts.js";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -540,6 +548,262 @@ export const orchestrationViolations = pgTable("orchestration_violations", {
   detail: jsonb("detail").notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// ── Intent-driven coding execution plane ──────────────────────────────────────
+
+export const workItems = pgTable("work_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  requestedBy: text("requested_by"),
+  status: text("status").notNull().default("queued"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("work_items_site_idx").on(t.siteConfigId),
+  index("work_items_status_idx").on(t.status),
+]);
+
+export const intentExecutions = pgTable("intent_executions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workItemId: varchar("work_item_id").references(() => workItems.id, { onDelete: "cascade" }).notNull(),
+  siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
+  orchestrationRunId: varchar("orchestration_run_id").references(() => agentOrchestrationRuns.id, {
+    onDelete: "set null",
+  }),
+  intentKey: text("intent_key").notNull(),
+  intentInput: jsonb("intent_input").notNull().default(sql`'{}'::jsonb`),
+  state: text("state").notNull().default("planning"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("intent_executions_work_item_idx").on(t.workItemId),
+  index("intent_executions_site_idx").on(t.siteConfigId),
+  index("intent_executions_state_idx").on(t.state),
+]);
+
+export const scopeExecutions = pgTable("scope_executions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  intentExecutionId: varchar("intent_execution_id")
+    .references(() => intentExecutions.id, { onDelete: "cascade" })
+    .notNull(),
+  scopeKey: text("scope_key").notNull(),
+  state: text("state").notNull().default("queued"),
+  assignedAgentRoleType: text("assigned_agent_role_type"),
+  scopePlan: jsonb("scope_plan").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("scope_executions_intent_idx").on(t.intentExecutionId),
+  uniqueIndex("scope_executions_unique_scope").on(t.intentExecutionId, t.scopeKey),
+]);
+
+export const skillBindings = pgTable("skill_bindings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scopeExecutionId: varchar("scope_execution_id")
+    .references(() => scopeExecutions.id, { onDelete: "cascade" })
+    .notNull(),
+  skillKey: text("skill_key").notNull(),
+  skillConfig: jsonb("skill_config").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("skill_bindings_scope_idx").on(t.scopeExecutionId),
+  uniqueIndex("skill_bindings_unique_skill").on(t.scopeExecutionId, t.skillKey),
+]);
+
+export const executionPackets = pgTable("execution_packets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  intentExecutionId: varchar("intent_execution_id")
+    .references(() => intentExecutions.id, { onDelete: "cascade" })
+    .notNull(),
+  scopeExecutionId: varchar("scope_execution_id").references(() => scopeExecutions.id, { onDelete: "set null" }),
+  repoRef: text("repo_ref").notNull(),
+  baseBranch: text("base_branch").notNull(),
+  featureBranch: text("feature_branch").notNull(),
+  worktreePath: text("worktree_path"),
+  policyContext: jsonb("policy_context").$type<PolicyContext>().notNull().default(sql`'{}'::jsonb`),
+  requiredChecks: jsonb("required_checks").notNull().default(sql`'[]'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("execution_packets_intent_idx").on(t.intentExecutionId),
+  index("execution_packets_scope_idx").on(t.scopeExecutionId),
+]);
+
+export const actionRuns = pgTable("action_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scopeExecutionId: varchar("scope_execution_id")
+    .references(() => scopeExecutions.id, { onDelete: "cascade" })
+    .notNull(),
+  skillBindingId: varchar("skill_binding_id").references(() => skillBindings.id, { onDelete: "set null" }),
+  orchestrationRunId: varchar("orchestration_run_id").references(() => agentOrchestrationRuns.id, {
+    onDelete: "set null",
+  }),
+  agentId: varchar("agent_id").references(() => agents.id, { onDelete: "set null" }),
+  actionKey: text("action_key").notNull(),
+  state: text("state").notNull().default("queued"),
+  actionInput: jsonb("action_input").$type<ActionRequest>().notNull().default(sql`'{}'::jsonb`),
+  actionOutput: jsonb("action_output").notNull().default(sql`'{}'::jsonb`),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("action_runs_scope_idx").on(t.scopeExecutionId),
+  index("action_runs_state_idx").on(t.state),
+  index("action_runs_orchestration_idx").on(t.orchestrationRunId),
+]);
+
+export const evidenceArtifacts = pgTable("evidence_artifacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  actionRunId: varchar("action_run_id").references(() => actionRuns.id, { onDelete: "cascade" }).notNull(),
+  kind: text("kind").notNull(),
+  uri: text("uri").notNull(),
+  metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("evidence_artifacts_action_idx").on(t.actionRunId),
+]);
+
+export const outcomePackets = pgTable("outcome_packets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  intentExecutionId: varchar("intent_execution_id")
+    .references(() => intentExecutions.id, { onDelete: "cascade" })
+    .notNull()
+    .unique(),
+  summary: jsonb("summary").notNull().default(sql`'{}'::jsonb`),
+  filesTouched: jsonb("files_touched").$type<FileTouch[]>().notNull().default(sql`'[]'::jsonb`),
+  domainsTouched: jsonb("domains_touched").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  checksRun: jsonb("checks_run").$type<CheckRun[]>().notNull().default(sql`'[]'::jsonb`),
+  risks: jsonb("risks").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  reviewReady: boolean("review_ready").notNull().default(false),
+  requiredGates: jsonb("required_gates").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("outcome_packets_intent_idx").on(t.intentExecutionId),
+  index("outcome_packets_review_ready_idx").on(t.reviewReady),
+]);
+
+export const reviewGates = pgTable("review_gates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  outcomePacketId: varchar("outcome_packet_id")
+    .references(() => outcomePackets.id, { onDelete: "cascade" })
+    .notNull(),
+  gateKey: text("gate_key").notNull(),
+  state: text("state").notNull().default("pending"),
+  requirements: jsonb("requirements").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("review_gates_outcome_idx").on(t.outcomePacketId),
+  uniqueIndex("review_gates_unique_gate").on(t.outcomePacketId, t.gateKey),
+]);
+
+export const pullRequestLinks = pgTable("pull_request_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  intentExecutionId: varchar("intent_execution_id")
+    .references(() => intentExecutions.id, { onDelete: "cascade" })
+    .notNull(),
+  provider: text("provider").notNull().default("github"),
+  repo: text("repo").notNull(),
+  prNumber: integer("pr_number"),
+  prUrl: text("pr_url"),
+  branchName: text("branch_name"),
+  status: text("status").notNull().default("open"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("pull_request_links_intent_idx").on(t.intentExecutionId),
+]);
+
+export const insertWorkItemSchema = createInsertSchema(workItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertIntentExecutionSchema = createInsertSchema(intentExecutions).omit({
+  id: true,
+  startedAt: true,
+  completedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertScopeExecutionSchema = createInsertSchema(scopeExecutions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSkillBindingSchema = createInsertSchema(skillBindings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertExecutionPacketSchema = createInsertSchema(executionPackets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertActionRunSchema = createInsertSchema(actionRuns).omit({
+  id: true,
+  startedAt: true,
+  completedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertEvidenceArtifactSchema = createInsertSchema(evidenceArtifacts).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertOutcomePacketSchema = createInsertSchema(outcomePackets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertReviewGateSchema = createInsertSchema(reviewGates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPullRequestLinkSchema = createInsertSchema(pullRequestLinks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertWorkItem = z.infer<typeof insertWorkItemSchema>;
+export type WorkItemRow = typeof workItems.$inferSelect;
+export type InsertIntentExecution = z.infer<typeof insertIntentExecutionSchema>;
+export type IntentExecutionRow = typeof intentExecutions.$inferSelect;
+export type InsertScopeExecution = z.infer<typeof insertScopeExecutionSchema>;
+export type ScopeExecutionRow = typeof scopeExecutions.$inferSelect;
+export type InsertSkillBinding = z.infer<typeof insertSkillBindingSchema>;
+export type SkillBindingRow = typeof skillBindings.$inferSelect;
+export type InsertExecutionPacket = z.infer<typeof insertExecutionPacketSchema>;
+export type ExecutionPacketRow = typeof executionPackets.$inferSelect;
+export type InsertActionRun = z.infer<typeof insertActionRunSchema>;
+export type ActionRunRow = typeof actionRuns.$inferSelect;
+export type InsertEvidenceArtifact = z.infer<typeof insertEvidenceArtifactSchema>;
+export type EvidenceArtifactRow = typeof evidenceArtifacts.$inferSelect;
+export type InsertOutcomePacket = z.infer<typeof insertOutcomePacketSchema>;
+export type OutcomePacketRow = typeof outcomePackets.$inferSelect;
+export type InsertReviewGate = z.infer<typeof insertReviewGateSchema>;
+export type ReviewGateRow = typeof reviewGates.$inferSelect;
+export type InsertPullRequestLink = z.infer<typeof insertPullRequestLinkSchema>;
+export type PullRequestLinkRow = typeof pullRequestLinks.$inferSelect;
 
 export const insertAgentSchema = createInsertSchema(agents).omit({
   id: true,

@@ -1,0 +1,226 @@
+spec: coding_domain_sensitivity_manifest_v1
+version: "1.0.0"
+
+approval_tiers:
+  tier0:
+    required_review_gates:
+      - peer_review
+    required_reviewers:
+      - engineering
+    evidence_requirements:
+      - diff_summary
+  tier1:
+    required_review_gates:
+      - peer_review
+    required_reviewers:
+      - engineering
+    evidence_requirements:
+      - diff_summary
+      - checks_log
+  tier2:
+    required_review_gates:
+      - peer_review
+      - platform_review
+    required_reviewers:
+      - engineering
+      - platform
+    evidence_requirements:
+      - diff_summary
+      - checks_log
+      - review_packet
+  tier3:
+    required_review_gates:
+      - peer_review
+      - tier3_review
+    required_reviewers:
+      - engineering
+      - voice
+      - security
+    evidence_requirements:
+      - diff_summary
+      - checks_log
+      - review_packet
+      - trace_capture
+
+scope_policies:
+  workspace_scope:
+    approval_tier: tier1
+    specialist_role: workspace_integration_agent
+    default_skill: workspace_integration
+    default_actions:
+      - call_workspace_mcp
+      - run_checks
+      - package_review_artifacts
+    authorized_domains:
+      - workspace_integration
+    required_checks:
+      - cmd: "npm run check"
+        timeoutSec: 1200
+
+  ui_scope:
+    approval_tier: tier1
+    specialist_role: ui_agent
+    default_skill: ui_generation
+    default_actions:
+      - call_shadcn_mcp
+      - modify_files
+      - run_checks
+    authorized_domains:
+      - ui_generation
+    required_checks:
+      - cmd: "npm run governance:ui:ci"
+        timeoutSec: 1200
+
+  canvas_scope:
+    approval_tier: tier2
+    specialist_role: canvas_orchestration_agent
+    default_skill: canvas_surface_derivation
+    default_actions:
+      - inspect_files
+      - modify_files
+      - run_checks
+      - package_review_artifacts
+    authorized_domains:
+      - canvas_control
+    required_checks:
+      - cmd: "npx tsx tests/test-intent-loop-resolution-schema.ts"
+        timeoutSec: 600
+
+  routing_scope:
+    approval_tier: tier2
+    specialist_role: routing_agent
+    default_skill: route_contract_design
+    default_actions:
+      - inspect_files
+      - modify_files
+      - run_checks
+      - package_review_artifacts
+    authorized_domains:
+      - routing
+    required_checks:
+      - cmd: "npm run test:execution-mutation-gate"
+        timeoutSec: 600
+
+  governance_scope:
+    approval_tier: tier2
+    specialist_role: registry_governance_agent
+    default_skill: registry_alignment
+    default_actions:
+      - inspect_files
+      - modify_files
+      - run_checks
+      - package_review_artifacts
+    authorized_domains:
+      - governance
+    required_checks:
+      - cmd: "npm run governance:test-readiness"
+        timeoutSec: 900
+
+  verification_scope:
+    approval_tier: tier1
+    specialist_role: verification_agent
+    default_skill: test_verification
+    default_actions:
+      - inspect_files
+      - run_checks
+      - package_review_artifacts
+    authorized_domains:
+      - verification
+    required_checks:
+      - cmd: "npm run check"
+        timeoutSec: 1200
+
+  migration_scope:
+    approval_tier: tier2
+    specialist_role: sovereign_coder
+    default_skill: repo_analysis
+    default_actions:
+      - inspect_files
+      - modify_files
+      - run_checks
+      - package_review_artifacts
+    authorized_domains:
+      - migration
+    required_checks:
+      - cmd: "npm run check"
+        timeoutSec: 1200
+
+  voice_scope:
+    approval_tier: tier3
+    specialist_role: voice_architect_agent
+    default_skill: voice_verification
+    default_actions:
+      - inspect_files
+      - modify_files
+      - run_checks
+      - package_review_artifacts
+    authorized_domains:
+      - voice_runtime
+    required_checks:
+      - cmd: "npm run test:voice-concierge-aptitude"
+        timeoutSec: 1800
+
+domains:
+  workspace_integration:
+    sensitivity_tier: tier1
+    path_globs:
+      - "server/routes/workspace*"
+      - "server/services/workspace*"
+      - "server/mcp/googleWorkspace*"
+      - "shared/workspace*"
+
+  ui_generation:
+    sensitivity_tier: tier1
+    path_globs:
+      - "client/src/ui-core/**"
+      - "client/src/pages/**"
+      - "client/src/components/**"
+
+  canvas_control:
+    sensitivity_tier: tier2
+    path_globs:
+      - "server/routes/canvasControlRoutes.ts"
+      - "server/services/canvas*"
+      - "server/services/intentLoop*"
+      - "shared/canvasViewContract.ts"
+      - "shared/intentLoop*"
+
+  routing:
+    sensitivity_tier: tier2
+    path_globs:
+      - "server/routes/**"
+      - "docs-governance/canonical/LOGICAL_ROUTE_REGISTRY.md"
+      - "docs-governance/canonical/ACTION_REGISTRY.md"
+      - "docs-governance/canonical/VIEW_REGISTRY.md"
+
+  governance:
+    sensitivity_tier: tier2
+    path_globs:
+      - "registry-yaml/**"
+      - "docs-governance/**"
+      - ".cursor/rules/**"
+      - ".cursor/skills/**"
+
+  migration:
+    sensitivity_tier: tier2
+    path_globs:
+      - "migrations/**"
+      - "shared/schema.ts"
+
+  verification:
+    sensitivity_tier: tier1
+    path_globs:
+      - "tests/**"
+      - "scripts/**"
+
+  voice_runtime:
+    sensitivity_tier: tier3
+    path_globs:
+      - "server/geminiVoice.ts"
+      - "server/voiceStream.ts"
+      - "server/voiceGemini.ts"
+      - "server/voiceSession.ts"
+      - "server/audioCodec.ts"
+      - "server/config/geminiLiveProtocol.ts"
+      - "client/src/services/voice/**"
+      - "client/public/clear-voice-processor.js"
