@@ -217,6 +217,12 @@ export class WorkspaceOrchestrator {
           accessToken: credentials.accessToken,
           refreshToken: credentials.refreshToken ?? null,
           tokenExpiry: credentials.expiryDate ? new Date(credentials.expiryDate) : null,
+          authState: 'valid',
+          authErrorCode: null,
+          authErrorDetail: null,
+          degradedReason: null,
+          lastAuthCheckedAt: new Date(),
+          lastAuthRefreshSucceededAt: new Date(),
           status: 'connected',
           statusMessage: 'creating_structure',
           updatedAt: new Date(),
@@ -258,6 +264,11 @@ export class WorkspaceOrchestrator {
       await db
         .update(workspaceConfigurations)
         .set({
+          authState: 'invalid_credentials',
+          authErrorCode: 'workspace_oauth_setup_failed',
+          authErrorDetail: error.message,
+          degradedReason: 'workspace_oauth_setup_failed',
+          lastAuthCheckedAt: new Date(),
           status: 'error',
           statusMessage: error.message,
           updatedAt: new Date(),

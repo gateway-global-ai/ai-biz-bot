@@ -105,6 +105,25 @@ export class GoogleWorkspaceService {
     this.admin = google.admin({ version: 'directory_v1', auth: this.oauth2Client });
   }
 
+  getCredentialSnapshot(): GoogleWorkspaceCredentials | null {
+    const creds = this.oauth2Client?.credentials as
+      | { access_token?: string; refresh_token?: string; expiry_date?: number }
+      | undefined;
+    if (!creds?.access_token) return null;
+    return {
+      accessToken: creds.access_token,
+      refreshToken: creds.refresh_token,
+      expiryDate: creds.expiry_date,
+    };
+  }
+
+  async ensureFreshCredentials(): Promise<GoogleWorkspaceCredentials | null> {
+    const current = this.getCredentialSnapshot();
+    if (!current) return null;
+    await this.oauth2Client.getAccessToken();
+    return this.getCredentialSnapshot();
+  }
+
   getAuthUrl(state?: string): string {
     const scopes = [
       'https://www.googleapis.com/auth/calendar',
