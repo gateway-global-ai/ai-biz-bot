@@ -180,6 +180,29 @@ html::-webkit-scrollbar {
   --sidebar-accent-foreground: 210 40% 98%;
 }
 
+.voice-visualizer-bars {
+  --voice-visualizer-recording: #008a3e;
+  --voice-visualizer-processing: #10b981;
+  --voice-visualizer-ai: #10b981;
+  --voice-visualizer-idle: #475569;
+}
+
+.voice-visualizer-bar--recording {
+  background-color: var(--voice-visualizer-recording);
+}
+
+.voice-visualizer-bar--processing {
+  background-color: var(--voice-visualizer-processing);
+}
+
+.voice-visualizer-bar--ai {
+  background-color: var(--voice-visualizer-ai);
+}
+
+.voice-visualizer-bar--idle {
+  background-color: var(--voice-visualizer-idle);
+}
+
 .dark {
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
