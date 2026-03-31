@@ -214,7 +214,7 @@ A waiver is **valid** only if **all** rows below are filled. Verbal OK is **not*
 
 **Audit:** `npm run governance:visual-integrity` — reports inline `style={{` count in scoped `client/` trees (baseline for cleanup; forward PRs must not increase violations without waiver).
 
-**CI enforcement:** `.github/workflows/sovereign-guard.yml` runs `scripts/sovereign-gate-governance.ts` (inventory **TBD** when `server/routes/` or `scripts/` change, **strict visual v2** — grandfather caps per file in `visual-integrity-inline-style-baseline.json`, no new inline styles outside allowlist, Option C SMS guard, anti-artboard patterns on changed client TSX). Local: `npm run governance:visual-integrity:strict`.
+**CI enforcement:** `.github/workflows/sovereign-guard.yml` runs `scripts/sovereign-gate-governance.ts` (inventory requirement is **active now** when `server/routes/` or `scripts/` change; **strict visual v2** applies with grandfather caps per file in `visual-integrity-inline-style-baseline.json`, no new inline styles outside allowlist, Option C SMS guard, and anti-artboard patterns on changed client TSX). Local: `npm run governance:visual-integrity:strict`.
 
 **Phase 2 PR rejection:** Any change that introduces non-tokenized canvas presentation or artboard-style layouts without a recorded waiver in `CANVAS_OS_TOOL_MANDATE_V1.md` § Waivers.
 

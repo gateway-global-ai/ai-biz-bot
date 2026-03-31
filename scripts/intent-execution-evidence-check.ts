@@ -12,12 +12,31 @@ type EvidenceMarker = {
   reviewReady: boolean;
 };
 
+function parseEvidenceJson(raw: string): EvidenceMarker {
+  const candidate = raw.trim();
+  try {
+    return JSON.parse(candidate) as EvidenceMarker;
+  } catch {
+    const normalized = candidate
+      .replace(/\\"/g, '"')
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\r")
+      .replace(/\\t/g, "\t");
+    try {
+      return JSON.parse(normalized) as EvidenceMarker;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`CODING_INTENT_EVIDENCE marker is present but not valid JSON: ${detail}`);
+    }
+  }
+}
+
 function extractMarker(body: string): EvidenceMarker {
   const match = body.match(/<!-- CODING_INTENT_EVIDENCE\s*([\s\S]*?)\s*-->/);
   if (!match?.[1]) {
     throw new Error("CODING_INTENT_EVIDENCE marker missing from PR body");
   }
-  return JSON.parse(match[1]) as EvidenceMarker;
+  return parseEvidenceJson(match[1]);
 }
 
 function changedFilesForPr(baseRef: string): string[] {
@@ -62,4 +81,10 @@ function main(): void {
   }
 }
 
-main();
+try {
+  main();
+} catch (error) {
+  console.error("Intent execution evidence check failed:");
+  console.error(error instanceof Error ? error.stack ?? error.message : error);
+  process.exit(1);
+}
