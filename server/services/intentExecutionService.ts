@@ -30,6 +30,7 @@ import {
   evaluateOutcomePolicy,
   getScopePolicy,
 } from "./domainPolicyEvaluator";
+import { getWorkspaceAdapterHealth } from "./workspaceMcpAdapter";
 
 const DEFAULT_SCOPE_KEYS: CodingScopeKey[] = ["governance_scope", "verification_scope"];
 
@@ -336,6 +337,78 @@ export async function upsertOutcomePacket(intentExecutionId: string, fragment: O
   return created;
 }
 
+export async function startScopeActionRun(params: {
+  scopeExecutionId: string;
+  actionKey: string;
+  agentId?: string | null;
+  orchestrationRunId?: string | null;
+  actionInput?: Record<string, unknown>;
+}) {
+  const [created] = await db
+    .insert(actionRuns)
+    .values({
+      scopeExecutionId: params.scopeExecutionId,
+      actionKey: params.actionKey,
+      agentId: params.agentId ?? null,
+      orchestrationRunId: params.orchestrationRunId ?? null,
+      state: "running",
+      actionInput: params.actionInput ?? {},
+      startedAt: new Date(),
+    })
+    .returning();
+  return created;
+}
+
+export async function completeScopeActionRun(params: {
+  actionRunId: string;
+  output: Record<string, unknown>;
+  state?: "succeeded" | "blocked";
+}) {
+  const [updated] = await db
+    .update(actionRuns)
+    .set({
+      state: params.state ?? "succeeded",
+      actionOutput: params.output,
+      completedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(actionRuns.id, params.actionRunId))
+    .returning();
+  return updated;
+}
+
+export async function failScopeActionRun(params: { actionRunId: string; error: string }) {
+  const [updated] = await db
+    .update(actionRuns)
+    .set({
+      state: "failed",
+      actionOutput: { error: params.error },
+      completedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(actionRuns.id, params.actionRunId))
+    .returning();
+  return updated;
+}
+
+export async function addEvidenceArtifacts(
+  actionRunId: string,
+  artifacts: Array<{ kind: string; uri: string; metadata?: Record<string, unknown> }>,
+) {
+  if (artifacts.length === 0) return [];
+  return db
+    .insert(evidenceArtifacts)
+    .values(
+      artifacts.map((artifact) => ({
+        actionRunId,
+        kind: artifact.kind,
+        uri: artifact.uri,
+        metadata: artifact.metadata ?? {},
+      })),
+    )
+    .returning();
+}
+
 export async function evaluateReviewGates(intentExecutionId: string) {
   const [outcome] = await db
     .select()
@@ -465,6 +538,12 @@ export async function buildCodingCommandCenter(intentExecutionId: string): Promi
   const approvalTier = derivePolicyForScopes(
     snapshot.scopes.map((scope) => scope.scopeKey as CodingScopeKey),
   ).approvalTier;
+  const workspaceScope = snapshot.scopes.find((scope) => scope.scopeKey === "workspace_scope");
+  const workspaceHealth =
+    workspaceScope && snapshot.intent.siteConfigId
+      ? await getWorkspaceAdapterHealth(snapshot.intent.siteConfigId)
+      : null;
+  const runningActions = snapshot.actions.filter((action) => action.state === "running").length;
 
   return {
     headline: snapshot.workItem.title,
@@ -479,11 +558,30 @@ export async function buildCodingCommandCenter(intentExecutionId: string): Promi
         value: snapshot.outcome?.reviewReady ? "Yes" : "No",
         tone: snapshot.outcome?.reviewReady ? "success" : "warning",
       },
+      { id: "actions", label: "Running actions", value: String(runningActions), tone: runningActions > 0 ? "warning" : "neutral" },
+      ...(workspaceHealth
+        ? [
+            {
+              id: "workspace-mode",
+              label: "Workspace mode",
+              value: workspaceHealth.mode,
+              tone: workspaceHealth.mode === "external_mcp" ? "success" : "warning",
+            },
+            {
+              id: "workspace-auth",
+              label: "Workspace auth",
+              value: workspaceHealth.hasStoredCredentials ? "connected" : "missing",
+              tone: workspaceHealth.hasStoredCredentials ? "success" : "danger",
+            },
+          ]
+        : []),
     ],
     workItems: snapshot.scopes.map((scope) => ({
       id: scope.id,
       title: scope.scopeKey,
-      subtitle: `state=${scope.state}${scope.assignedAgentRoleType ? ` • agent=${scope.assignedAgentRoleType}` : ""}`,
+      subtitle: `state=${scope.state}${scope.assignedAgentRoleType ? ` • agent=${scope.assignedAgentRoleType}` : ""}${
+        scope.scopeKey === "workspace_scope" && workspaceHealth ? ` • mode=${workspaceHealth.mode}` : ""
+      }`,
     })),
     approvals: (snapshot.gates ?? [])
       .filter((gate) => gate.state !== "satisfied")

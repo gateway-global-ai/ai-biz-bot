@@ -31,6 +31,8 @@
     "test:intelligence-provision-contract-http": "npx tsx tests/test-intelligence-provision-contract-http.ts",
     "test:coding-intent-contracts": "npx tsx tests/test-coding-intent-contracts.ts",
     "test:coding-domain-policy": "npx tsx tests/test-coding-domain-policy.ts",
+    "test:workspace-mcp-registry": "npx tsx tests/test-workspace-mcp-registry.ts",
+    "test:workspace-mcp-adapter": "npx tsx tests/test-workspace-mcp-adapter.ts",
     "test:intent-loop-decision-reasons": "npx tsx tests/test-intent-loop-decision-reasons.ts",
     "test:intent-loop-actor-observation": "npx tsx tests/test-intent-loop-actor-observation.ts",
     "test:intent-loop-lifecycle-observation": "npx tsx tests/test-intent-loop-lifecycle-observation.ts",
