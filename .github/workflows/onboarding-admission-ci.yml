@@ -61,7 +61,11 @@ jobs:
       - name: Run migrations
         run: |
           set -e
+          npx tsx scripts/run-migration.ts migrations/0000_base_schema_anchor.sql
           for f in migrations/*.sql; do
+            if [ "$f" = "migrations/0000_base_schema_anchor.sql" ]; then
+              continue
+            fi
             npx tsx scripts/run-migration.ts "$f"
           done
 
