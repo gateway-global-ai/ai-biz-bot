@@ -66,6 +66,8 @@ import canvasControlRoutes from "./routes/canvasControlRoutes"; // Canvas Contro
 import platformProductRoutes from "./routes/platformProductRoutes"; // Platform products/services catalog with Stripe sync
 import platformReadinessRoutes from "./routes/platformReadinessRoutes"; // Auth-gated system readiness JSON (same as system:check --json)
 import reportProxyRoutes from "./routes/reportProxyRoutes"; // AIOS Report interactive features proxy (Gemini server-side)
+import codingIntentRoutes from "./routes/codingIntentRoutes";
+import codingGithubRoutes from "./routes/codingGithubRoutes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -211,6 +213,8 @@ export async function registerRoutes(
   app.use("/api/platform-products", platformProductRoutes);
   app.use("/api/platform", platformReadinessRoutes);
   app.use("/api/report", reportProxyRoutes); // AIOS Report interactive features
+  app.use("/api/coding-intents", codingIntentRoutes);
+  app.use("/api/github/prs", codingGithubRoutes);
 
   // Agent System: DISC, Agents, Organizations, Projects, BotTemplates
   app.use(agentSystemRoutes);

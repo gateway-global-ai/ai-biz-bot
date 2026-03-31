@@ -1,0 +1,124 @@
+spec: workspace_mcp_action_registry_v1
+version: "1.0.0"
+
+actions:
+  - action_id: workspace.verify_connectivity
+    scope_key: workspace_scope
+    mutation_level: read
+    external_tool_name: list_calendars
+    transitional_tool_name: listCalendarEvents
+    requires_approval: false
+    required_params: []
+    evidence_kinds:
+      - workspace_action_result
+    description: Verify that a Workspace-connected account can answer a simple read request.
+
+  - action_id: workspace.search_drive_files
+    scope_key: workspace_scope
+    mutation_level: read
+    external_tool_name: search_drive_files
+    transitional_tool_name: searchDriveFiles
+    requires_approval: false
+    required_params:
+      - query
+    evidence_kinds:
+      - workspace_action_result
+    description: Search Google Drive files by query.
+
+  - action_id: workspace.list_calendar_events
+    scope_key: workspace_scope
+    mutation_level: read
+    external_tool_name: get_events
+    transitional_tool_name: listCalendarEvents
+    requires_approval: false
+    required_params: []
+    evidence_kinds:
+      - workspace_action_result
+    description: List upcoming calendar events.
+
+  - action_id: workspace.create_calendar_event
+    scope_key: workspace_scope
+    mutation_level: write
+    external_tool_name: manage_event
+    transitional_tool_name: createCalendarEvent
+    requires_approval: true
+    required_params:
+      - summary
+      - startTime
+      - endTime
+    evidence_kinds:
+      - workspace_action_result
+    description: Create a calendar event through the governed Workspace plane.
+
+  - action_id: workspace.create_drive_folder
+    scope_key: workspace_scope
+    mutation_level: write
+    external_tool_name: create_drive_folder
+    transitional_tool_name: createDriveFolder
+    requires_approval: false
+    required_params:
+      - name
+    evidence_kinds:
+      - workspace_action_result
+    description: Create a Google Drive folder.
+
+  - action_id: workspace.create_google_doc
+    scope_key: workspace_scope
+    mutation_level: write
+    external_tool_name: create_doc
+    transitional_tool_name: createDocument
+    requires_approval: false
+    required_params:
+      - title
+    evidence_kinds:
+      - workspace_action_result
+    description: Create a Google Doc.
+
+  - action_id: workspace.create_google_sheet
+    scope_key: workspace_scope
+    mutation_level: write
+    external_tool_name: create_spreadsheet
+    transitional_tool_name: createSpreadsheet
+    requires_approval: false
+    required_params:
+      - title
+    evidence_kinds:
+      - workspace_action_result
+    description: Create a Google Sheet.
+
+  - action_id: workspace.create_task
+    scope_key: workspace_scope
+    mutation_level: write
+    external_tool_name: manage_task
+    transitional_tool_name: createTask
+    requires_approval: false
+    required_params:
+      - title
+    evidence_kinds:
+      - workspace_action_result
+    description: Create a Google Task.
+
+  - action_id: workspace.search_gmail_messages
+    scope_key: workspace_scope
+    mutation_level: read
+    external_tool_name: search_gmail_messages
+    transitional_tool_name: listEmails
+    requires_approval: false
+    required_params: []
+    evidence_kinds:
+      - workspace_action_result
+    description: Search Gmail messages for the connected Workspace account.
+
+  - action_id: workspace.send_gmail_message
+    scope_key: workspace_scope
+    mutation_level: write
+    external_tool_name: send_gmail_message
+    transitional_tool_name: sendEmail
+    requires_approval: true
+    required_params:
+      - to
+      - subject
+      - body
+    evidence_kinds:
+      - workspace_action_result
+    description: Send an email through the governed Workspace plane.
