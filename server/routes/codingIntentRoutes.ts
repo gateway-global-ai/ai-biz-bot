@@ -23,7 +23,11 @@ import {
   startScopeActionRun,
   upsertOutcomePacket,
 } from "../services/intentExecutionService";
-import { executeWorkspaceGovernedAction, getWorkspaceAdapterHealth } from "../services/workspaceMcpAdapter";
+import {
+  executeWorkspaceGovernedAction,
+  getWorkspaceAdapterHealth,
+  refreshWorkspaceAdapterHealth,
+} from "../services/workspaceMcpAdapter";
 
 const router = Router();
 
@@ -198,6 +202,19 @@ router.get("/:intentExecutionId/workspace-health", requireAuth, async (req, res)
   return res.json({ ok: true, workspaceHealth: health });
 });
 
+router.post("/:intentExecutionId/workspace-auth/refresh", requireAuth, async (req, res) => {
+  const intentExecutionId = firstRouteParam(req.params.intentExecutionId);
+  if (!intentExecutionId) {
+    return res.status(400).json({ error: "intent_execution_id_required" });
+  }
+  const snapshot = await getCodingIntent(intentExecutionId);
+  if (!snapshot?.intent?.siteConfigId) {
+    return res.status(404).json({ error: "intent_site_config_not_found" });
+  }
+  const health = await refreshWorkspaceAdapterHealth(snapshot.intent.siteConfigId);
+  return res.json({ ok: true, workspaceHealth: health });
+});
+
 router.post("/:intentExecutionId/workspace-actions/dispatch", requireAuth, async (req, res) => {
   const intentExecutionId = firstRouteParam(req.params.intentExecutionId);
   if (!intentExecutionId) {
@@ -234,6 +251,14 @@ router.post("/:intentExecutionId/workspace-actions/dispatch", requireAuth, async
   });
 
   if (!result.ok) {
+    await addEvidenceArtifacts(actionRun.id, result.evidenceArtifacts);
+    const existingFilesTouched = (snapshot.outcome?.filesTouched as typeof snapshot.outcome.filesTouched | undefined) ?? [];
+    const existingChecks = (snapshot.outcome?.checksRun as typeof snapshot.outcome.checksRun | undefined) ?? [];
+    const existingRisks = (snapshot.outcome?.risks as string[] | undefined) ?? [];
+    const existingDomains = (snapshot.outcome?.domainsTouched as string[] | undefined) ?? [];
+    const existingGates = (snapshot.outcome?.requiredGates as string[] | undefined) ?? [];
+    const existingSummary = (snapshot.outcome?.summary as Record<string, unknown> | undefined) ?? {};
+
     if (result.requiresApproval) {
       await completeScopeActionRun({
         actionRunId: actionRun.id,
@@ -245,21 +270,75 @@ router.post("/:intentExecutionId/workspace-actions/dispatch", requireAuth, async
           toolName: result.toolName,
         },
       });
+      const outcomePacket = await upsertOutcomePacket(intentExecutionId, {
+        summary: {
+          ...existingSummary,
+          workspaceLastAction: parsed.data.actionId,
+          workspaceProvider: result.provider,
+        },
+        filesTouched: existingFilesTouched,
+        domainsTouched: [...new Set([...existingDomains, "workspace_integration"])],
+        checksRun: [
+          ...existingChecks,
+          {
+            cmd: `workspace:${parsed.data.actionId}`,
+            status: "skipped",
+            artifactUri: result.evidenceArtifacts[0]?.uri,
+          },
+        ],
+        risks: [...new Set([...existingRisks, "workspace_action_requires_approval"])],
+        reviewReady: false,
+        requiredGates: existingGates,
+      });
+      const reviewGates = await evaluateReviewGates(intentExecutionId);
       return res.status(409).json({
         ok: false,
         actionRunId: actionRun.id,
         error: result.error,
         requiresApproval: true,
+        outcomePacket,
+        reviewGates,
       });
     }
     await failScopeActionRun({
       actionRunId: actionRun.id,
       error: result.error ?? "workspace_action_failed",
     });
+    const outcomePacket = await upsertOutcomePacket(intentExecutionId, {
+      summary: {
+        ...existingSummary,
+        workspaceLastAction: parsed.data.actionId,
+        workspaceProvider: result.provider,
+        workspaceAuthState: result.authState ?? null,
+      },
+      filesTouched: existingFilesTouched,
+      domainsTouched: [...new Set([...existingDomains, "workspace_integration"])],
+      checksRun: [
+        ...existingChecks,
+        {
+          cmd: `workspace:${parsed.data.actionId}`,
+          status: "failed",
+          artifactUri: result.evidenceArtifacts[0]?.uri,
+        },
+      ],
+      risks: [
+        ...new Set([
+          ...existingRisks,
+          ...(result.authState ? [`workspace_auth:${result.authState}`] : []),
+          ...(result.degradedReason ? [`workspace_degraded:${result.degradedReason}`] : []),
+        ]),
+      ],
+      reviewReady: false,
+      requiredGates: existingGates,
+    });
+    const reviewGates = await evaluateReviewGates(intentExecutionId);
     return res.status(502).json({
       ok: false,
       actionRunId: actionRun.id,
       error: result.error ?? "workspace_action_failed",
+      authState: result.authState,
+      outcomePacket,
+      reviewGates,
     });
   }
 

@@ -11,6 +11,7 @@ import type {
   OutcomePacket,
   PolicyContext,
 } from "./intentExecutionPlane/contracts.js";
+import type { WorkspaceAuthState } from "./workspaceAuthLifecycle.js";
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2174,6 +2175,13 @@ export const workspaceConfigurations = pgTable("workspace_configurations", {
   accessToken: text("access_token"),
   refreshToken: text("refresh_token"),
   tokenExpiry: timestamp("token_expiry"),
+  authState: text("auth_state").$type<WorkspaceAuthState>().default("unknown"),
+  authErrorCode: text("auth_error_code"),
+  authErrorDetail: text("auth_error_detail"),
+  degradedReason: text("degraded_reason"),
+  lastAuthCheckedAt: timestamp("last_auth_checked_at"),
+  lastAuthRefreshAttemptAt: timestamp("last_auth_refresh_attempt_at"),
+  lastAuthRefreshSucceededAt: timestamp("last_auth_refresh_succeeded_at"),
 
   // Per-app enable state stored as JSONB: { gmail: true, calendar: false, ... }
   enabledApps: jsonb("enabled_apps").default({}),

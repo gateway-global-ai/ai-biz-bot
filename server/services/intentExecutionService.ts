@@ -570,8 +570,29 @@ export async function buildCodingCommandCenter(intentExecutionId: string): Promi
             {
               id: "workspace-auth",
               label: "Workspace auth",
-              value: workspaceHealth.hasStoredCredentials ? "connected" : "missing",
-              tone: workspaceHealth.hasStoredCredentials ? "success" : "danger",
+              value: workspaceHealth.authState,
+              tone:
+                workspaceHealth.authState === "valid" || workspaceHealth.authState === "bearer_override"
+                  ? "success"
+                  : workspaceHealth.authState === "expiring_soon"
+                    ? "warning"
+                    : "danger",
+            },
+            {
+              id: "workspace-expiry",
+              label: "Workspace expiry",
+              value:
+                workspaceHealth.tokenExpiresInSec == null
+                  ? "n/a"
+                  : `${workspaceHealth.tokenExpiresInSec}s`,
+              tone:
+                workspaceHealth.tokenExpiresInSec == null
+                  ? "neutral"
+                  : workspaceHealth.tokenExpiresInSec < 0
+                    ? "danger"
+                    : workspaceHealth.tokenExpiresInSec < 900
+                      ? "warning"
+                      : "neutral",
             },
           ]
         : []),
@@ -580,7 +601,9 @@ export async function buildCodingCommandCenter(intentExecutionId: string): Promi
       id: scope.id,
       title: scope.scopeKey,
       subtitle: `state=${scope.state}${scope.assignedAgentRoleType ? ` • agent=${scope.assignedAgentRoleType}` : ""}${
-        scope.scopeKey === "workspace_scope" && workspaceHealth ? ` • mode=${workspaceHealth.mode}` : ""
+        scope.scopeKey === "workspace_scope" && workspaceHealth
+          ? ` • mode=${workspaceHealth.mode}${workspaceHealth.degradedReason ? ` • degraded=${workspaceHealth.degradedReason}` : ""}`
+          : ""
       }`,
     })),
     approvals: (snapshot.gates ?? [])
