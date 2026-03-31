@@ -33,6 +33,18 @@ Naming constitution for [`.env.example`](../.env.example): every **active** (unc
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Full JSON for domain-wide delegation / platform email (optional). |
 | `PLATFORM_SENDER_EMAIL` | Sender address when using DWD email (optional). |
 
+## Local LLM / local voice (internal worker only)
+
+| Key | Purpose |
+|-----|---------|
+| `LOCAL_LLM_BASE_URL` | Base URL for the local LLM provider used by internal/local agents and local voice-adjacent services. |
+| `LOCAL_LLM_MODEL` | Default local coding/analysis model identifier for the governed local agent plane. |
+| `LOCAL_LLM_MODEL_LARGE` | Optional larger-capacity local model identifier for elevated local coding/analysis work. |
+| `LOCAL_LLM_CODING_AGENT_SITE_CONFIG_ID` | Site config ID used to bind seeded local coding/UI agents to a specific site/runtime context. |
+| `LOCAL_VOICE_USE_STUBS` | Controls whether local voice flows use stubbed behavior instead of live integrations. |
+| `LOCAL_VOICE_TWILIO_STREAM` | Enables the local Twilio voice-stream path for local voice testing/runtime instead of the Gemini cloud path. |
+| `LOCAL_VOICE_SIDECAR_URL` | Base URL for the local voice sidecar service used by local Twilio stream / voice-runtime integrations. |
+
 ## Twilio
 
 | Key | Purpose |
@@ -117,4 +129,4 @@ Documented as comments in [`.env.example`](../.env.example); set in Doppler only
 
 The following keys are the exact set parsed from active lines in `.env.example` (must stay in sync):
 
-`DATABASE_URL`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `GOOGLE_CLOUD_PROJECT_ID`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `PLATFORM_SENDER_EMAIL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `SYSTEM_TWILIO_ACCOUNT_SID`, `SYSTEM_TWILIO_AUTH_TOKEN`, `SYSTEM_TWILIO_PHONE_NUMBER`, `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `NODE_ENV`, `PORT`, `HOST`, `WS_PORT`, `CLIENT_URL`, `SERVER_URL`, `API_URL`, `APP_URL`, `NOVA_RSA_PUBLIC_KEY`, `SESSION_SECRET`, `ENCRYPTION_KEY`, `ENABLE_VOICE_AI`, `ENABLE_GOOGLE_WORKSPACE`, `ENABLE_A2P_COMPLIANCE`, `ENABLE_VOICE_LEAD_MACHINE`, `ENABLE_CHAT_FLOAT_MODE`, `ENABLE_CHAT_EXPAND_MODE`, `LOG_LEVEL`, `DEBUG`, `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX_REQUESTS`, `MOCK_TWILIO_SMS`, `SERP_API_KEY`.
+`DATABASE_URL`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `GOOGLE_CLOUD_PROJECT_ID`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `PLATFORM_SENDER_EMAIL`, `LOCAL_LLM_BASE_URL`, `LOCAL_LLM_MODEL`, `LOCAL_LLM_MODEL_LARGE`, `LOCAL_VOICE_USE_STUBS`, `LOCAL_LLM_CODING_AGENT_SITE_CONFIG_ID`, `LOCAL_VOICE_TWILIO_STREAM`, `LOCAL_VOICE_SIDECAR_URL`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`, `SYSTEM_TWILIO_ACCOUNT_SID`, `SYSTEM_TWILIO_AUTH_TOKEN`, `SYSTEM_TWILIO_PHONE_NUMBER`, `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `NODE_ENV`, `PORT`, `HOST`, `WS_PORT`, `CLIENT_URL`, `SERVER_URL`, `API_URL`, `APP_URL`, `NOVA_RSA_PUBLIC_KEY`, `SESSION_SECRET`, `ENCRYPTION_KEY`, `ENABLE_VOICE_AI`, `ENABLE_GOOGLE_WORKSPACE`, `ENABLE_A2P_COMPLIANCE`, `ENABLE_VOICE_LEAD_MACHINE`, `ENABLE_CHAT_FLOAT_MODE`, `ENABLE_CHAT_EXPAND_MODE`, `LOG_LEVEL`, `DEBUG`, `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX_REQUESTS`, `MOCK_TWILIO_SMS`, `SERP_API_KEY`.
