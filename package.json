@@ -23,6 +23,7 @@
     "test:guardrails": "doppler run -- tsx tests/test-guardrails.ts",
     "test:onboarding-e2e-hospitality": "doppler run -- npx tsx tests/onboarding-e2e-new-business-hospitality.ts",
     "test:onboarding-e2e-hospitality-negative": "doppler run -- npx tsx tests/onboarding-e2e-hospitality-negative.ts",
+    "audit:policy-bypass": "npx tsx scripts/audit-policy-bypass.ts",
     "validate:onboarding-contract-hash": "npx tsx scripts/validate-onboarding-contract-hash.ts",
     "test:admission-contract-gate": "npx tsx tests/test-admission-contract-gate.ts",
     "test:execution-contract-registry": "npx tsx tests/test-execution-contract-registry.ts",

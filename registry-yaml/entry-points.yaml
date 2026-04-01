@@ -1,0 +1,125 @@
+# Entry-Point Authority Registry
+# Canonical doc: docs-governance/canonical/PTT_CONTROL_PLANE_CONTRACT_V1.md § 9
+# Authority: L1 System Authority — PROTECTED, no agent-generated mutation
+#
+# Entry points decide how a user enters the OS.
+# Views decide what they see.
+# Policy decides what they can do.
+
+version: entry_points.v1
+
+entry_point_classes:
+  - public          # Direct entry. No auth, no splash.
+  - public_splash   # Branded intro layer. No auth.
+  - public_gate     # Publicly reachable, auth-gated before runtime.
+
+auth_strength_levels:
+  - light           # OTP only
+  - standard        # OTP + tenant record match
+  - strong          # Nova Verify / 123CheckMe identity flow
+
+auth_providers:
+  - otp
+  - nova_verify
+  - 123checkme
+
+# ─── Initial Entry Points ────────────────────────────────────────────────────
+
+entry_points:
+
+  # Gateway Global AI — platform public concierge (homepage)
+  - entry_id: gateway_public
+    browser_path: /ptt/gateway/public
+    domain: gateway
+    entry_mode: public
+    linked_route_id: ptt_idle
+    linked_view_id: platform_concierge_home
+    splash_enabled: false
+    gate_policy: none
+
+  # Gateway Global AI — internal command OS (operator/admin entry)
+  - entry_id: gateway_internal
+    browser_path: /ptt/gateway/public-gate
+    domain: gateway_internal
+    entry_mode: public_gate
+    linked_route_id: cmd_home
+    linked_view_id: internal_command_home
+    splash_enabled: false
+    gate_policy: otp_admin
+    auth_provider: otp
+    auth_level: strong
+    post_auth_view_id: cmd_home
+
+  # Hospitality — public concierge (direct, no friction)
+  - entry_id: hospitality_public
+    browser_path: /ptt/hospitality/public
+    domain: hospitality
+    entry_mode: public
+    linked_route_id: ptt_idle
+    linked_view_id: public_concierge_home
+    splash_enabled: false
+    gate_policy: none
+
+  # Hospitality — branded splash intro
+  - entry_id: hospitality_splash
+    browser_path: /ptt/hospitality/public-splash
+    domain: hospitality
+    entry_mode: public_splash
+    linked_route_id: ptt_idle
+    linked_view_id: public_concierge_home
+    splash_enabled: true
+    splash_view_id: hospitality_brand_intro
+    auto_continue_seconds: 8
+    gate_policy: none
+
+  # Hospitality — guest-gated (check-in, account access)
+  - entry_id: hospitality_gate
+    browser_path: /ptt/hospitality/public-gate
+    domain: hospitality
+    entry_mode: public_gate
+    linked_route_id: ptt_idle
+    linked_view_id: guest_secure_home
+    splash_enabled: false
+    gate_policy: nova_verify_guest
+    auth_provider: nova_verify
+    auth_level: standard
+    post_auth_view_id: guest_dashboard
+
+# ─── Legacy Redirect Map (Phase 3 — governed migration) ─────────────────────
+# These are not entry points. They document the deprecation mapping.
+# Implementation: client-side redirects during transition period.
+
+legacy_redirects:
+  - from: /biz/:slug
+    to: /ptt/:slug/public
+    note: Direct concierge, no auth
+  - from: /kiosk/:slug
+    to: /ptt/:slug/public
+    note: Same as public, fullscreen is a layout option
+  - from: /agent/:slug
+    to: /ptt/:slug/public
+    note: Agent page -> public PTT
+  - from: /ai-os/:slug
+    to: /ptt/:slug/public
+    note: AI OS page -> public PTT
+  - from: /dashboard
+    to: /ptt/gateway/public-gate
+    note: Admin dashboard -> gated internal command OS
+  - from: /customers
+    to: /ptt/gateway/public-gate
+    note: Customer manager -> L2-L4 inside command OS
+  - from: /billing
+    to: /ptt/gateway/public-gate
+    note: Billing -> L3 inside command OS
+  - from: /platform/*
+    to: /ptt/gateway/public-gate
+    note: Admin shell -> command OS
+  - from: /me/*
+    to: /ptt/gateway/public-gate
+    note: Admin shell -> command OS
+  - from: /my-account
+    to: /ptt/:domain/public-gate
+    note: Customer account -> gated PTT
+  - from: /login
+    to: none
+    note: No separate login page — identity is L0, triggered by gate or menu button

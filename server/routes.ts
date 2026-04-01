@@ -67,7 +67,9 @@ import platformProductRoutes from "./routes/platformProductRoutes"; // Platform 
 import platformReadinessRoutes from "./routes/platformReadinessRoutes"; // Auth-gated system readiness JSON (same as system:check --json)
 import reportProxyRoutes from "./routes/reportProxyRoutes"; // AIOS Report interactive features proxy (Gemini server-side)
 import codingIntentRoutes from "./routes/codingIntentRoutes";
+import visualizerRoutes from "./routes/visualizerRoutes";
 import codingGithubRoutes from "./routes/codingGithubRoutes";
+import importQuarantineRoutes from "./routes/importQuarantineRoutes";
 import twilio from "twilio";
 import { 
   searchAvailableNumbers, 
@@ -214,7 +216,9 @@ export async function registerRoutes(
   app.use("/api/platform", platformReadinessRoutes);
   app.use("/api/report", reportProxyRoutes); // AIOS Report interactive features
   app.use("/api/coding-intents", codingIntentRoutes);
+  app.use("/api/visualizers", visualizerRoutes);
   app.use("/api/github/prs", codingGithubRoutes);
+  app.use("/api/import-quarantine", importQuarantineRoutes);
 
   // Agent System: DISC, Agents, Organizations, Projects, BotTemplates
   app.use(agentSystemRoutes);

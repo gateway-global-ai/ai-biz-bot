@@ -25,6 +25,7 @@ import * as path from 'path';
 import sharp from 'sharp';
 import { storage } from '../storage';
 import { requireAuth } from '../auth';
+import { requirePolicy } from '../middleware/policyGate';
 import { assertSiteScopedAccess, type SitePolicyKey } from '../utils/siteScopedAccess';
 import {
   parseDesignStudioFromMetadata,
@@ -306,7 +307,7 @@ router.post('/', async (req, res) => {
  * Ledger (voicePhoneAiMinutes, voiceWebAiMinutes, smsMessages, chatBotMessages)
  * and plan so the owner dashboard 4-card panel works correctly.
  */
-router.patch('/:id', requireAuth, async (req, res) => {
+router.patch('/:id', requireAuth, requirePolicy('site_config.write'), async (req, res) => {
   try {
     const siteConfigId = firstRouteParam(req.params.id);
     if (!siteConfigId) {
@@ -443,7 +444,7 @@ router.post('/:id/refresh-hero-image', async (req, res) => {
 /**
  * DELETE /api/site-configs/:id
  */
-router.delete('/:id', requireAuth, async (req, res) => {
+router.delete('/:id', requireAuth, requirePolicy('site_config.delete'), async (req, res) => {
   try {
     const siteConfigId = firstRouteParam(req.params.id);
     if (!siteConfigId) {
@@ -533,7 +534,7 @@ router.get('/:id/knowledge', async (req, res) => {
  * POST /api/site-configs/:id/knowledge
  * Appends a document to the knowledge library. Content only; LLM classifies as api_docs | hotel | platform_economics and sets title/topic.
  */
-router.post('/:id/knowledge', async (req, res) => {
+router.post('/:id/knowledge', requireAuth, requirePolicy('site_config.knowledge.write'), async (req, res) => {
   try {
     const siteConfigId = firstRouteParam(req.params.id);
     if (!siteConfigId) {
@@ -655,7 +656,7 @@ router.get('/:id/knowledge/search', async (req, res) => {
  * DELETE /api/site-configs/:id/knowledge/:docId
  * Removes a document from the knowledge library by its ID.
  */
-router.delete('/:id/knowledge/:docId', async (req, res) => {
+router.delete('/:id/knowledge/:docId', requireAuth, requirePolicy('site_config.knowledge.write'), async (req, res) => {
   try {
     const siteConfigId = firstRouteParam(req.params.id);
     const docId = firstRouteParam(req.params.docId);
@@ -1847,7 +1848,7 @@ router.get("/:id/design-studio", requireAuth, async (req: any, res) => {
  * PATCH /api/site-configs/:id/design-studio
  * Merges a partial patch into metadata.designStudio (Zod-validated).
  */
-router.patch("/:id/design-studio", requireAuth, async (req: any, res) => {
+router.patch("/:id/design-studio", requireAuth, requirePolicy('design_studio.access'), async (req: any, res) => {
   try {
     const id = firstRouteParam(req.params.id);
     if (!id || id === "undefined") {
@@ -1963,7 +1964,7 @@ const designStudioPublishBodySchema = z
  * POST /api/site-configs/:id/design-studio/publish
  * Requires design_studio.publish + publish readiness gate.
  */
-router.post("/:id/design-studio/publish", requireAuth, async (req: any, res) => {
+router.post("/:id/design-studio/publish", requireAuth, requirePolicy('design_studio.publish'), async (req: any, res) => {
   try {
     const id = firstRouteParam(req.params.id);
     if (!id || id === "undefined") {

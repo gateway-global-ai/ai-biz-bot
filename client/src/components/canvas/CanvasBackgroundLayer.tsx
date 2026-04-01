@@ -1308,6 +1308,709 @@ function UnderwaterCausticsCanvas({ hue }: { hue: number }) {
   return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
 }
 
+function NeonRingsCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.012;
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width * 0.5;
+      const cy = canvas.height * 0.5;
+      for (let i = 0; i < 6; i++) {
+        const r = 50 + i * 38 + Math.sin(t * 0.8 + i * 1.2) * 12;
+        const a = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.5 + i));
+        const h = (hue + i * 45) % 360;
+        ctx.strokeStyle = `hsla(${h}, 90%, 60%, ${a})`;
+        ctx.lineWidth = 2.5;
+        ctx.shadowBlur = 18;
+        ctx.shadowColor = `hsla(${h}, 85%, 55%, ${a * 0.8})`;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function GlitchCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let frame = 0;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      frame++;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const glitchActive = frame % 120 < 8;
+      if (glitchActive) {
+        const slices = 6 + Math.floor(Math.random() * 10);
+        for (let i = 0; i < slices; i++) {
+          const y = Math.random() * canvas.height;
+          const h = 2 + Math.random() * 18;
+          const shift = (Math.random() - 0.5) * 40;
+          ctx.fillStyle = `hsla(${hue}, 85%, 55%, ${0.3 + Math.random() * 0.4})`;
+          ctx.fillRect(shift, y, canvas.width, h);
+          ctx.fillStyle = `hsla(${(hue + 120) % 360}, 80%, 50%, ${0.15 + Math.random() * 0.2})`;
+          ctx.fillRect(-shift * 0.7, y + 1, canvas.width, h * 0.6);
+        }
+      }
+      for (let i = 0; i < 3; i++) {
+        const y = Math.random() * canvas.height;
+        ctx.strokeStyle = `hsla(${(hue + i * 60) % 360}, 70%, 60%, 0.08)`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function WarpTunnelCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.02;
+      ctx.fillStyle = 'rgba(2, 6, 23, 0.15)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width * 0.5;
+      const cy = canvas.height * 0.5;
+      for (let ring = 0; ring < 12; ring++) {
+        const phase = (t * 2 + ring * 0.5) % 6;
+        const r = phase * Math.min(cx, cy) * 0.35;
+        const a = Math.max(0, 1 - phase / 5.5) * 0.4;
+        if (a <= 0) continue;
+        ctx.strokeStyle = `hsla(${(hue + ring * 15) % 360}, 65%, 58%, ${a})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function FloatingBoxesCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    type Box = { x: number; y: number; sz: number; rot: number; vr: number; vy: number; hShift: number };
+    let boxes: Box[] = [];
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+      boxes = Array.from({ length: 18 }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        sz: 14 + Math.random() * 28,
+        rot: Math.random() * Math.PI * 2,
+        vr: (Math.random() - 0.5) * 0.02,
+        vy: -0.3 - Math.random() * 0.8,
+        hShift: Math.floor(Math.random() * 60),
+      }));
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.016;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (const b of boxes) {
+        b.y += b.vy;
+        b.rot += b.vr;
+        b.x += Math.sin(t + b.hShift) * 0.3;
+        if (b.y < -b.sz * 2) {
+          b.y = canvas.height + b.sz;
+          b.x = Math.random() * canvas.width;
+        }
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(b.rot);
+        ctx.strokeStyle = `hsla(${(hue + b.hShift) % 360}, 55%, 55%, 0.45)`;
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-b.sz / 2, -b.sz / 2, b.sz, b.sz);
+        ctx.fillStyle = `hsla(${(hue + b.hShift) % 360}, 45%, 45%, 0.08)`;
+        ctx.fillRect(-b.sz / 2, -b.sz / 2, b.sz, b.sz);
+        ctx.restore();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function BeamsCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.008;
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width * 0.5;
+      const cy = canvas.height * 0.35;
+      for (let i = 0; i < 12; i++) {
+        const angle = (i / 12) * Math.PI * 2 + t * 0.3;
+        const len = Math.min(canvas.width, canvas.height) * 0.9;
+        const ex = cx + Math.cos(angle) * len;
+        const ey = cy + Math.sin(angle) * len;
+        const g = ctx.createLinearGradient(cx, cy, ex, ey);
+        g.addColorStop(0, `hsla(${(hue + i * 20) % 360}, 65%, 60%, 0.25)`);
+        g.addColorStop(0.6, `hsla(${(hue + i * 20) % 360}, 55%, 50%, 0.05)`);
+        g.addColorStop(1, 'transparent');
+        ctx.strokeStyle = g;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function BeamsCollisionCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.012;
+      ctx.fillStyle = 'rgba(2, 6, 23, 0.15)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const p1x = canvas.width * 0.2 + Math.sin(t * 0.7) * 60;
+      const p1y = canvas.height * 0.3;
+      const p2x = canvas.width * 0.8 + Math.cos(t * 0.5) * 60;
+      const p2y = canvas.height * 0.4;
+      const mx = (p1x + p2x) / 2;
+      const my = (p1y + p2y) / 2;
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2 + t;
+        const bx = mx + Math.cos(angle) * 30;
+        const by = my + Math.sin(angle) * 30;
+        const g1 = ctx.createLinearGradient(p1x, p1y, bx, by);
+        g1.addColorStop(0, `hsla(${hue}, 70%, 60%, 0.3)`);
+        g1.addColorStop(1, `hsla(${(hue + 60) % 360}, 80%, 70%, 0.5)`);
+        ctx.strokeStyle = g1;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(p1x, p1y);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+        const g2 = ctx.createLinearGradient(p2x, p2y, bx, by);
+        g2.addColorStop(0, `hsla(${(hue + 120) % 360}, 70%, 60%, 0.3)`);
+        g2.addColorStop(1, `hsla(${(hue + 60) % 360}, 80%, 70%, 0.5)`);
+        ctx.strokeStyle = g2;
+        ctx.beginPath();
+        ctx.moveTo(p2x, p2y);
+        ctx.lineTo(bx, by);
+        ctx.stroke();
+      }
+      ctx.fillStyle = `hsla(${(hue + 60) % 360}, 90%, 75%, ${0.3 + 0.2 * Math.sin(t * 3)})`;
+      ctx.beginPath();
+      ctx.arc(mx, my, 5, 0, Math.PI * 2);
+      ctx.fill();
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function SpotlightCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.01;
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const sx = canvas.width * (0.5 + 0.3 * Math.sin(t * 0.6));
+      const sy = canvas.height * (0.4 + 0.2 * Math.cos(t * 0.45));
+      const r = Math.min(canvas.width, canvas.height) * 0.35;
+      const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+      g.addColorStop(0, `hsla(${hue}, 50%, 65%, 0.3)`);
+      g.addColorStop(0.4, `hsla(${hue}, 45%, 50%, 0.1)`);
+      g.addColorStop(1, 'transparent');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function RippleCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.02;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width * 0.5;
+      const cy = canvas.height * 0.45;
+      const maxR = Math.min(canvas.width, canvas.height) * 0.6;
+      for (let ring = 0; ring < 8; ring++) {
+        const phase = (t + ring * 0.8) % 6;
+        const r = (phase / 6) * maxR;
+        const a = Math.max(0, 1 - phase / 5) * 0.35;
+        if (a <= 0) continue;
+        ctx.strokeStyle = `hsla(${(hue + ring * 12) % 360}, 55%, 60%, ${a})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function CirclesCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    type Circ = { cx: number; cy: number; r: number; phase: number; speed: number };
+    let circles: Circ[] = [];
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+      circles = Array.from({ length: 10 }, () => ({
+        cx: Math.random() * canvas.width,
+        cy: Math.random() * canvas.height,
+        r: 40 + Math.random() * 80,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.5 + Math.random() * 1.5,
+      }));
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.015;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (const c of circles) {
+        const scale = 0.7 + 0.3 * Math.sin(t * c.speed + c.phase);
+        const r = c.r * scale;
+        ctx.strokeStyle = `hsla(${(hue + c.phase * 30) % 360}, 50%, 55%, ${0.15 + 0.1 * scale})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(c.cx, c.cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function WavyLinesCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.015;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (let line = 0; line < 8; line++) {
+        const baseY = canvas.height * (0.15 + line * 0.1);
+        ctx.beginPath();
+        for (let x = 0; x <= canvas.width; x += 4) {
+          const y = baseY + Math.sin(x * 0.008 + t * 1.2 + line * 0.8) * 25 + Math.sin(x * 0.003 + t * 0.5) * 15;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = `hsla(${(hue + line * 20) % 360}, 55%, 55%, ${0.15 + line * 0.04})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function LightWavesCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.008;
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (let band = 0; band < 5; band++) {
+        const baseY = canvas.height * (0.3 + band * 0.12);
+        ctx.beginPath();
+        for (let x = 0; x <= canvas.width; x += 3) {
+          const y = baseY + Math.sin(x * 0.005 + t + band * 1.3) * (30 + band * 8) + Math.cos(x * 0.012 + t * 1.5) * 10;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.lineTo(canvas.width, canvas.height);
+        ctx.lineTo(0, canvas.height);
+        ctx.closePath();
+        const g = ctx.createLinearGradient(0, baseY - 40, 0, baseY + 80);
+        const h = (hue + band * 25) % 360;
+        g.addColorStop(0, `hsla(${h}, 60%, 50%, 0)`);
+        g.addColorStop(0.5, `hsla(${h}, 55%, 48%, ${0.08 + band * 0.03})`);
+        g.addColorStop(1, `hsla(${h}, 50%, 40%, 0)`);
+        ctx.fillStyle = g;
+        ctx.fill();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function WaveGridCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.02;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const gap = 20;
+      const rows = Math.ceil(canvas.height / gap) + 2;
+      const cols = Math.ceil(canvas.width / gap) + 2;
+      ctx.strokeStyle = `hsla(${hue}, 45%, 50%, 0.2)`;
+      ctx.lineWidth = 1;
+      for (let r = 0; r < rows; r++) {
+        ctx.beginPath();
+        for (let c = 0; c <= cols; c++) {
+          const x = c * gap;
+          const y = r * gap + Math.sin(c * 0.3 + t + r * 0.2) * 6;
+          if (c === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      for (let c = 0; c < cols; c++) {
+        ctx.beginPath();
+        for (let r = 0; r <= rows; r++) {
+          const x = c * gap + Math.sin(r * 0.3 + t * 0.8 + c * 0.15) * 6;
+          const y = r * gap;
+          if (r === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function TopographyCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const tick = () => {
+      t += 0.004;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width * 0.5;
+      const cy = canvas.height * 0.45;
+      for (let ring = 0; ring < 18; ring++) {
+        const baseR = 30 + ring * 22;
+        ctx.beginPath();
+        for (let a = 0; a <= Math.PI * 2; a += 0.04) {
+          const wobble = Math.sin(a * 3 + t + ring * 0.5) * 8 + Math.sin(a * 5 + t * 1.3 + ring) * 4;
+          const r = baseR + wobble;
+          const x = cx + Math.cos(a) * r;
+          const y = cy + Math.sin(a) * r * 0.7;
+          if (a === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = `hsla(${(hue + ring * 8) % 360}, 40%, 50%, ${0.12 + (ring % 4 === 0 ? 0.1 : 0)})`;
+        ctx.lineWidth = ring % 4 === 0 ? 1.5 : 0.8;
+        ctx.stroke();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+function AnimatedPathsCanvas({ hue }: { hue: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let raf = 0;
+    let t = 0;
+    type PathDot = { pathIdx: number; progress: number; speed: number };
+    let dots: PathDot[] = [];
+    const pathCount = 12;
+    const resize = () => {
+      const p = canvas.parentElement;
+      if (!p) return;
+      canvas.width = p.clientWidth;
+      canvas.height = p.clientHeight;
+      dots = Array.from({ length: 40 }, () => ({
+        pathIdx: Math.floor(Math.random() * pathCount),
+        progress: Math.random(),
+        speed: 0.001 + Math.random() * 0.003,
+      }));
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement!);
+    const getPathPoint = (idx: number, prog: number) => {
+      const w = canvas.width;
+      const h = canvas.height;
+      const baseY = h * (0.08 + (idx / pathCount) * 0.84);
+      const x = prog * w;
+      const y = baseY + Math.sin(prog * Math.PI * 2 + idx * 1.7 + t) * 30 + Math.sin(prog * Math.PI * 4 + idx) * 12;
+      return { x, y };
+    };
+    const tick = () => {
+      t += 0.012;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < pathCount; i++) {
+        ctx.beginPath();
+        for (let p = 0; p <= 1; p += 0.005) {
+          const pt = getPathPoint(i, p);
+          if (p === 0) ctx.moveTo(pt.x, pt.y);
+          else ctx.lineTo(pt.x, pt.y);
+        }
+        ctx.strokeStyle = `hsla(${(hue + i * 15) % 360}, 40%, 45%, 0.12)`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      for (const d of dots) {
+        d.progress += d.speed;
+        if (d.progress > 1) {
+          d.progress = 0;
+          d.pathIdx = Math.floor(Math.random() * pathCount);
+        }
+        const pt = getPathPoint(d.pathIdx, d.progress);
+        ctx.fillStyle = `hsla(${(hue + d.pathIdx * 15) % 360}, 65%, 65%, 0.8)`;
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
+  }, [hue]);
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
 /** Maps shadcn.io-style profiles to lightweight runtime visuals */
 function EffectBody({ profile, seed }: { profile: string; seed: string }) {
   const hue = hashHue(seed + profile);
@@ -1385,37 +2088,33 @@ function EffectBody({ profile, seed }: { profile: string; seed: string }) {
     case 'interactive_grid':
       return <InteractiveGridCanvas hue={hue} />;
     case 'neon':
+      return <NeonRingsCanvas hue={hue} />;
     case 'glitch':
+      return <GlitchCanvas hue={hue} />;
     case 'warp':
+      return <WarpTunnelCanvas hue={hue} />;
     case 'boxes':
-      return (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="h-[120%] w-[120%] rounded-full bg-indigo-500/20 opacity-40 blur-3xl shadow-[0_0_80px_40px_rgba(99,102,241,0.35)] animate-pulse" />
-        </div>
-      );
+      return <FloatingBoxesCanvas hue={hue} />;
     case 'beams':
+      return <BeamsCanvas hue={hue} />;
     case 'beams_collision':
+      return <BeamsCollisionCanvas hue={hue} />;
     case 'spotlight':
+      return <SpotlightCanvas hue={hue} />;
     case 'ripple':
+      return <RippleCanvas hue={hue} />;
     case 'circles':
-      return (
-        <div className="absolute inset-0 bg-[conic-gradient(from_180deg_at_50%_40%,transparent,rgba(99,102,241,0.35),transparent)] opacity-50" />
-      );
+      return <CirclesCanvas hue={hue} />;
     case 'wavy':
+      return <WavyLinesCanvas hue={hue} />;
     case 'light_waves':
+      return <LightWavesCanvas hue={hue} />;
     case 'wave_grid':
+      return <WaveGridCanvas hue={hue} />;
     case 'topography':
+      return <TopographyCanvas hue={hue} />;
     case 'paths':
-      return (
-        <svg className="absolute inset-0 h-full w-full text-indigo-400/40" preserveAspectRatio="none">
-          <path
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            d="M0,80 Q200,40 400,90 T800,70 T1200,100 V1000 H0 Z"
-          />
-        </svg>
-      );
+      return <AnimatedPathsCanvas hue={hue} />;
     case 'particles':
       return <FloatingParticlesCanvas hue={hue} />;
     case 'sparkles':

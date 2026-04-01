@@ -64,8 +64,8 @@ export function filterToolNamesForVoiceKnowledge(
 }
 
 /**
- * For future use in geminiVoice contextual snap: merge certification into BusinessContext
- * so buildBehavioralPrompt injects KNOWLEDGE CERTIFICATION GATES.
+ * Merge certification into BusinessContext so buildBehavioralPrompt
+ * injects KNOWLEDGE CERTIFICATION GATES on voice paths.
  */
 export async function buildBusinessContextWithVoiceKnowledge(
   base: BusinessContext,
@@ -77,4 +77,20 @@ export async function buildBusinessContextWithVoiceKnowledge(
     ...base,
     knowledgeCertification: certificationFromGapReport(report),
   };
+}
+
+/**
+ * Governed knowledge assembly for voice paths.
+ * Uses the voice_live preset (approved + trusted only, no web sources)
+ * to produce a filtered knowledge block suitable for voice prompts.
+ *
+ * Does NOT modify geminiVoice.ts or voiceStream.ts (lockdown).
+ * Consumers can call this to get governed knowledge for injection
+ * into voice-path system instructions.
+ */
+export async function assembleGovernedVoiceKnowledge(
+  siteConfigId: string,
+) {
+  const { assembleGovernedKnowledge } = await import("./knowledgeGovernanceBridge");
+  return assembleGovernedKnowledge(siteConfigId, null, "voice_live");
 }

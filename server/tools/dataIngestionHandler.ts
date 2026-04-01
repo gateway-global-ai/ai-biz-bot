@@ -16,6 +16,7 @@ import { eq } from 'drizzle-orm';
 import { siteConfigs, platformBusinessMap, platformBusinessEnrichmentSnapshots } from '@shared/schema';
 import { getBusinessReviewsPaginated, analyzeReviewsWithGemini } from '../services/reviewAnalysisService.js';
 import { fetchSerpApiReviews, type SerpApiReview, type SerpApiTopic } from '../services/serpapi-reviews.js';
+import { classifyReviewBatch, REVIEW_EXPERIENCE_THRESHOLD } from '@shared/knowledgeCertificationContract';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -262,6 +263,19 @@ export async function compile_knowledge_base(
 ): Promise<KnowledgeBaseEntry> {
   if (reviews.length === 0) throw new Error('[DataIngestion] No reviews to analyze.');
 
+  // Doctrine 11: Classify reviews by star rating before processing
+  const { experiences, lessons, all: classifiedAll } = classifyReviewBatch(
+    reviews.map(r => ({
+      rating: r.rating,
+      snippet: r.snippet,
+      user: r.user,
+      date: r.date,
+      iso_date: r.iso_date,
+      details: r.details as Record<string, unknown> | undefined,
+    })),
+    siteConfigId,
+  );
+
   // Gemini SWOT analysis
   const analysis = await analyzeReviewsWithGemini(
     place_info.title,
@@ -274,13 +288,22 @@ export async function compile_knowledge_base(
   // Build top topic list
   const topTopics = topics.slice(0, 10).map(t => `${t.keyword} (${t.mentions} mentions)`);
 
+  // Build experience/lesson summaries from classified reviews
+  const topExperiences = experiences
+    .slice(0, 10)
+    .map(r => `- ★${r.rating} "${r.snippet.slice(0, 150)}"${r.reviewerName ? ` — ${r.reviewerName}` : ''}`);
+  const topLessons = lessons
+    .slice(0, 10)
+    .map(r => `- ★${r.rating} "${r.snippet.slice(0, 150)}"${r.reviewerName ? ` — ${r.reviewerName}` : ''}`);
+
   // Compile the markdown knowledge document
   const markdown = `# ${place_info.title} — Intelligence Brief
 
 **Generated:** ${new Date().toLocaleString()}  
 **Source:** ${reviews.length} Google Maps reviews (SerpAPI harvest)  
 **Rating:** ${place_info.rating}/5 from ${place_info.total_reviews.toLocaleString()} reviews  
-**Business Type:** ${place_info.type}
+**Business Type:** ${place_info.type}  
+**Classification:** ${experiences.length} experiences (${REVIEW_EXPERIENCE_THRESHOLD}–5★) · ${lessons.length} lessons (1–${REVIEW_EXPERIENCE_THRESHOLD - 1}★)
 
 ---
 
@@ -296,15 +319,27 @@ ${topTopics.map(t => `- ${t}`).join('\n')}
 
 ---
 
-## What Customers Love
+## Customer Experiences (${REVIEW_EXPERIENCE_THRESHOLD}–5★ Reviews)
+
+These are what customers love — the signature moments, standout items, and reasons they return:
 
 ${analysis.owner_insights.strengths.map(s => `- ${s}`).join('\n')}
 
+### Selected Experience Reviews
+
+${topExperiences.join('\n')}
+
 ---
 
-## What Customers Want Improved
+## Lessons for Improvement (1–${REVIEW_EXPERIENCE_THRESHOLD - 1}★ Reviews)
+
+These are areas customers flag — recurring complaints, operational gaps, and opportunities:
 
 ${analysis.owner_insights.blind_spots.map(b => `- ${b}`).join('\n')}
+
+### Selected Lesson Reviews
+
+${topLessons.length > 0 ? topLessons.join('\n') : '- No low-rated reviews in this batch.'}
 
 ---
 

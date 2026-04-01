@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { requirePolicy } from "../middleware/policyGate";
 import { storage } from "../storage";
 import { db } from "../db";
 import { eq, desc } from "drizzle-orm";
@@ -13,6 +14,7 @@ import {
   getCachedKnowledgeGapReport,
   certificationFromGapReport,
 } from "../services/knowledgeCertificationContext";
+import { assembleGovernedKnowledge } from "../services/knowledgeGovernanceBridge";
 import { PLATFORM_GATEWAY_SYSTEM_PROMPT } from "../prompts/platformGatewayPrompt";
 import { FREE_TIER_SYSTEM_INSTRUCTION } from "../prompts/freeTierPrompt";
 import {
@@ -79,7 +81,7 @@ const router = Router();
 
 // ── Website Chat + Chat + Conversations ──────────────────────────────────────────────────────
 
-  router.post("/api/website-chat", async (req, res) => {
+  router.post("/api/website-chat", requirePolicy('chat.write'), async (req, res) => {
     try {
       const schema = z.object({
         message: z.string().min(1).max(4000),
@@ -157,13 +159,10 @@ const router = Router();
         customSystemPrompt = siteConfig.systemPromptOverride || undefined;
       }
 
-      const knowledgeLibrary = Array.isArray((siteConfig as any)?.knowledgeLibrary) ? (siteConfig as any).knowledgeLibrary as Array<{ id: string; title: string; content: string }> : [];
-      const KNOWLEDGE_CAP = 32000;
-      let knowledgeBlock = "";
-      if (knowledgeLibrary.length > 0) {
-        const combined = knowledgeLibrary.map((d) => `## ${d.title}\n${d.content}`).join("\n\n---\n\n");
-        knowledgeBlock = "\n\n--- KNOWLEDGE LIBRARY (use this to answer questions accurately) ---\n\n" + combined.slice(0, KNOWLEDGE_CAP) + (combined.length > KNOWLEDGE_CAP ? "\n\n[truncated]" : "");
-      }
+      const governedKnowledge = siteConfigId
+        ? await assembleGovernedKnowledge(siteConfigId, null, "concierge_qa")
+        : null;
+      const knowledgeBlock = governedKnowledge?.knowledgeBlock ?? "";
 
       let systemPrompt: string;
       if (isPlatformChat) {
@@ -175,13 +174,7 @@ const router = Router();
         let agent: Awaited<ReturnType<typeof storage.getAgent>> | null = null;
         if (assignedAgentId) agent = await storage.getAgent(assignedAgentId);
         if (agent) {
-          let knowledgeCertification: BusinessContext["knowledgeCertification"];
-          if (siteConfigId) {
-            const gapReport = await getCachedKnowledgeGapReport(siteConfigId);
-            if (gapReport) {
-              knowledgeCertification = certificationFromGapReport(gapReport);
-            }
-          }
+          const knowledgeCertification = governedKnowledge?.certificationInput;
           const businessContext: BusinessContext = {
             name: businessName ?? (pd && typeof pd.name === "string" ? pd.name : undefined) ?? (siteConfig as { name?: string }).name ?? "this business",
             address: businessAddress ?? (pd && typeof (pd as any).formattedAddress === "string" ? (pd as any).formattedAddress : typeof (pd as any).formatted_address === "string" ? (pd as any).formatted_address : undefined),
@@ -279,7 +272,7 @@ const router = Router();
   const CHAT_RATE_LIMIT = 20; // requests per minute
   const CHAT_RATE_WINDOW = 60000; // 1 minute in ms
 
-  router.post("/api/chat", async (req, res) => {
+  router.post("/api/chat", requirePolicy('chat.write'), async (req, res) => {
     try {
       // Rate limiting by IP
       const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
@@ -438,7 +431,7 @@ const router = Router();
   });
 
   // Create customer
-  router.post("/api/customers", async (req, res) => {
+  router.post("/api/customers", requirePolicy('customer.write'), async (req, res) => {
     try {
       const parsed = insertCustomerSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -452,7 +445,7 @@ const router = Router();
   });
 
   // Update customer
-  router.patch("/api/customers/:id", async (req, res) => {
+  router.patch("/api/customers/:id", requirePolicy('customer.write'), async (req, res) => {
     try {
       const customer = await storage.updateCustomer(req.params.id, req.body);
       if (!customer) {
@@ -465,7 +458,7 @@ const router = Router();
   });
 
   // Delete customer
-  router.delete("/api/customers/:id", async (req, res) => {
+  router.delete("/api/customers/:id", requirePolicy('customer.delete'), async (req, res) => {
     try {
       await storage.deleteCustomer(req.params.id);
       res.json({ success: true });

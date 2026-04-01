@@ -139,6 +139,76 @@ export interface CanvasResolveResult {
   };
 }
 
+// ── §7.1 — IntentNextStepPacket (intent orchestrator skill response) ─────────
+
+export type IntentActionMode =
+  | 'direct_execute'
+  | 'open_canvas'
+  | 'need_grounding'
+  | 'need_auth'
+  | 'need_confirmation';
+
+export interface IntentNextStepFilter {
+  id: string;
+  label: string;
+  type: 'single_select' | 'multi_select' | 'range' | 'search';
+  source: 'api_param' | 'db_column' | 'derived';
+  paramKey?: string;
+  valueRange?: { min: number; max: number; unit?: string };
+  options?: Array<{ value: string; label: string }>;
+  currentValue?: unknown;
+}
+
+export interface IntentNextStepReduction {
+  id: string;
+  label: string;
+  description?: string;
+  sortKey: string;
+  order: 'asc' | 'desc';
+  suggestedLimit?: number;
+  queryModifier?: Record<string, unknown>;
+}
+
+export interface IntentNextStepViewOption {
+  id: string;
+  label: string;
+  description: string;
+  viewId: CanvasViewId | string;
+  recommended?: boolean;
+}
+
+export interface IntentNextStepPacket {
+  intentId: string;
+  confidence: number;
+  actionMode: IntentActionMode;
+
+  resultCount: number;
+  resultSummary: string;
+
+  routes?: string[];
+
+  filters?: IntentNextStepFilter[];
+
+  reductions?: IntentNextStepReduction[];
+
+  viewOptions?: IntentNextStepViewOption[];
+
+  recommendations?: Array<{
+    id: string;
+    label: string;
+    reason: string;
+  }>;
+
+  promptToUser: string;
+
+  queryContext?: {
+    dataSource: string;
+    queryParams: Record<string, unknown>;
+    appliedFilters: Record<string, unknown>;
+    executionMs?: number;
+  };
+}
+
 // §8.2 — canvas.render — viewId and data ALWAYS coupled (never Partial<>)
 
 export interface WelcomeViewModel {

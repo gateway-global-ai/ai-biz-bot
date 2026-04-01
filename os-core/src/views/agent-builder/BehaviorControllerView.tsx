@@ -149,7 +149,7 @@ export default function BehaviorControllerView() {
       }
 
       setPendingChange(null);
-      dispatch({ type: "SET_RESULT", payload: result });
+      dispatch({ type: "SET_RESULT", payload: result.actionResult });
     } catch (error) {
       setActionError(
         error instanceof Error ? error.message : "Failed to execute governed action."

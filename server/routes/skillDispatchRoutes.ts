@@ -10,6 +10,7 @@
  */
 
 import { Router } from "express";
+import { requirePolicy } from "../middleware/policyGate";
 import { z } from "zod";
 import { db } from "../db";
 import { siteConfigs, agents, customerAccounts } from "@shared/schema";
@@ -59,7 +60,7 @@ const dispatchSchema = z.object({
   visitorId: z.string().optional(),
 });
 
-router.post("/dispatch", async (req, res) => {
+router.post("/dispatch", requirePolicy('skill.dispatch'), async (req, res) => {
   const parsed = dispatchSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.message });

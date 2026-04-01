@@ -70,10 +70,94 @@ export const MODE_COLORS = {
   CUSTOMER_SERVICE: '#0891b2',
 } as const;
 
+// ── Layout & Sizing Tokens (governed — never use literal size values) ──────────
+
+/** Icon sizes — import these instead of writing size={22} or size={16}. */
+export const ICON_SIZES = {
+  footerControl: 24,
+  footerPrimary: 28,
+  menuItem: 22,
+  canvasControl: 20,
+  statusIndicator: 14,
+} as const;
+
+/** Minimum touch target dimensions (px) — WCAG AAA mobile compliance. */
+export const TOUCH_TARGETS = {
+  footerButton: 48,
+  menuItem: 44,
+  chip: 36,
+} as const;
+
+/** Footer zone — constitutional dimensions, not changeable by agents. */
+export const FOOTER_ZONE = {
+  height: 120,
+  statusStripHeight: 24,
+  logoHeight: 36,
+  slotWidthPercent: { left: 22, center: 46, right: 16 },
+} as const;
+
+/** Visualizer zone — governs the circular pulse and AIOS logo sizing. */
+export const VISUALIZER_ZONE = {
+  ringRadiusFactor: 0.28,
+  logoSize: 140,
+  logoOpacity: 0.85,
+} as const;
+
+// ── Visual Elevation Model (6 Planes) ────────────────────────────────────────
+// Canonical z-index tokens — never use raw z-[N] values.
+// See: docs-governance/canonical/VISUAL_ELEVATION_AND_TURN_VISIBILITY_CONTRACT_V1.md
+//
+// Stack (bottom -> top):
+//   Background -> Canvas Content -> App/Menu -> Interaction -> Agent -> System
+//
+// Rule: persistent surfaces for system/content/control.
+//       Transient surfaces for active interaction only.
+
+export const ELEVATION = {
+  // Background Plane — always bottom
+  background: 0,
+
+  // Canvas Content Plane — persistent business content
+  canvasContent: 10,
+  activeExperience: 20,
+
+  // App/Menu Plane — operational UI
+  menuOverlay: 50,
+  menuLoginGate: 52,
+  menuSubView: 55,
+  signInOverlay: 58,
+
+  // Interaction Plane — turn-scoped, transient (mount/unmount with PTT lifecycle)
+  interactionBase: 70,     // dim scrim behind visualizer
+  interactionVisual: 72,   // visualizer + AIOS logo
+  interactionUI: 74,       // transcript strip, turn controls
+
+  // Agent Plane — who is operating
+  agentIdentity: 80,
+
+  // System Plane — non-negotiable, always wins
+  novaGate: 90,
+  systemOverlay: 100,
+  splash: 200,
+} as const;
+
+// ── PTT Turn Visibility Types ────────────────────────────────────────────────
+// UI appears only during active interaction. Idle = content-first, no overlays.
+
+export type PttUiMode = 'idle' | 'recording' | 'processing' | 'speaking';
+
+export interface VisibilityPolicy {
+  visualizer: boolean;
+  liveTranscript: boolean;
+  thinkingMotion: boolean;
+  appCanvas: boolean;
+}
+
 // Type exports for strict usage
 export type ShellTokens = typeof SHELL;
 export type CanvasTokens = typeof CANVAS;
 export type BrandTokens = typeof BRAND;
+export type ElevationTokens = typeof ELEVATION;
 
 /**
  * Brand Theme Presets — curated named themes for business customization.

@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
+import { requirePolicy } from "../middleware/policyGate";
 import { insertInquirySchema, type InsertInquiry } from "@shared/schema";
 import { z } from "zod";
 
@@ -183,7 +184,7 @@ export function registerInquiryRoutes(app: Express) {
   });
 
   // Create a new inquiry
-  app.post("/api/inquiries", async (req: Request, res: Response) => {
+  app.post("/api/inquiries", requirePolicy('inquiry.write'), async (req: Request, res: Response) => {
     try {
       const parsed = insertInquirySchema.safeParse(req.body);
       
@@ -209,7 +210,7 @@ export function registerInquiryRoutes(app: Express) {
   });
 
   // Update an inquiry
-  app.patch("/api/inquiries/:id", async (req: Request, res: Response) => {
+  app.patch("/api/inquiries/:id", requirePolicy('inquiry.write'), async (req: Request, res: Response) => {
     try {
       const id = paramString(req.params.id);
       if (!id) {
@@ -258,7 +259,7 @@ export function registerInquiryRoutes(app: Express) {
   });
 
   // Delete an inquiry
-  app.delete("/api/inquiries/:id", async (req: Request, res: Response) => {
+  app.delete("/api/inquiries/:id", requirePolicy('inquiry.delete'), async (req: Request, res: Response) => {
     try {
       const id = paramString(req.params.id);
       if (!id) {

@@ -1471,7 +1471,7 @@ export const siteConfigs = pgTable("site_configs", {
   knowledgeLibrary: jsonb("knowledge_library"),
   /** User-directed guardrails (always, never, believe). Merged with agent structured_controls at compile time. */
   structuredGuardrails: jsonb("structured_guardrails").$type<StructuredGuardrails>().default({}),
-  /** Total reviews harvested via SerpAPI pipeline — used for billing ($0.10/review above 10). */
+  /** Total reviews harvested via SerpAPI pipeline — used for billing ($1.00/review above 10 free tier). */
   reviewsHarvested: integer("reviews_harvested").default(0),
   /** Per-business subscription plan: 'free' | 'pro' | 'voice' | 'enterprise' */
   plan: text("plan").default("free"),
@@ -1613,6 +1613,7 @@ export type PlatformLicenseKey = typeof platformLicenseKeys.$inferSelect;
 export type PlatformLicenseActivation = typeof platformLicenseActivations.$inferSelect;
 
 // ── Knowledge Artifacts — first-class KB docs with scope, visibility, agent_access_key ─
+// Doctrine 11: Knowledge is input, not authority. Registry: registry-yaml/knowledge-sources.yaml
 export const knowledgeArtifacts = pgTable(
   "knowledge_artifacts",
   {
@@ -1625,7 +1626,7 @@ export const knowledgeArtifacts = pgTable(
     content: text("content"),
     sourcePath: text("source_path"),
     groupLevel: text("group_level"),
-    /** KAP trust weight 0–10; platform governance anchors use 10. */
+    /** KAP trust weight 0–10; demoted to secondary signal — certificationLevel is primary. */
     trustWeight: integer("trust_weight"),
     /** Tags, provenance notes, etc. */
     artifactMetadata: jsonb("artifact_metadata").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
@@ -1633,11 +1634,40 @@ export const knowledgeArtifacts = pgTable(
     resellerId: varchar("reseller_id").references(() => resellers.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
+
+    /** Doctrine 11 — source classification (system | owner | web | external | inference). */
+    sourceType: text("source_type").notNull().default("owner"),
+    /** References knowledge-sources.yaml source_id. */
+    sourceId: text("source_id").notNull().default("knowledge_artifacts"),
+    /** Primary governance authority: approved | trusted | unverified | rejected. */
+    certificationLevel: text("certification_level").notNull().default("unverified"),
+    /** Who/what certified: system | operator | ai_assisted | auto_heuristic. */
+    certificationSource: text("certification_source").notNull().default("auto_heuristic"),
+    /** 0.00–1.00 numeric confidence. */
+    confidenceScore: text("confidence_score").default("0.5"),
+    /** When certification was last applied. */
+    certifiedAt: timestamp("certified_at"),
+    /** Admin user ID or system identifier that certified. */
+    certifiedBy: varchar("certified_by"),
+    /** After this time, item is treated as rejected by governance filter. */
+    expiresAt: timestamp("expires_at"),
+    /** Last time content was verified as still accurate. */
+    lastValidatedAt: timestamp("last_validated_at"),
+    /** Expected refresh cadence from registry; null = no auto-refresh. */
+    refreshIntervalHours: integer("refresh_interval_hours"),
+    /** Scope binding: restrict to specific agent (null = all agents on site). */
+    agentId: varchar("agent_id"),
+    /** Scope binding: restrict to specific swarm role (null = all roles). */
+    swarmRole: text("swarm_role"),
+    /** Conflict resolution: higher wins (system=100, owner=75, web=50, inference=25). */
+    conflictPriority: integer("conflict_priority").notNull().default(50),
   },
   (table) => [
     index("idx_knowledge_artifacts_site_config_id").on(table.siteConfigId),
     index("idx_knowledge_artifacts_scope_visibility").on(table.scope, table.visibility),
     index("idx_knowledge_artifacts_scope_trust").on(table.scope, table.trustWeight),
+    index("idx_ka_certification_level").on(table.siteConfigId, table.certificationLevel),
+    index("idx_ka_source_type").on(table.siteConfigId, table.sourceType),
   ]
 );
 
@@ -1701,6 +1731,45 @@ export const secureVaultRefs = pgTable(
 
 export type SecureVaultRef = typeof secureVaultRefs.$inferSelect;
 export type InsertSecureVaultRef = typeof secureVaultRefs.$inferInsert;
+
+// ── Knowledge Audit Log — Doctrine 11 audit trail for knowledge governance ──
+export const knowledgeAuditLog = pgTable(
+  "knowledge_audit_log",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    siteConfigId: varchar("site_config_id")
+      .notNull()
+      .references(() => siteConfigs.id, { onDelete: "cascade" }),
+    sessionId: varchar("session_id"),
+    channel: text("channel").notNull().default("chat"),
+    presetKey: text("preset_key"),
+    policyGate: text("policy_gate"),
+
+    totalCandidates: integer("total_candidates").notNull().default(0),
+    admittedCount: integer("admitted_count").notNull().default(0),
+    rejectedCount: integer("rejected_count").notNull().default(0),
+    disclaimerCount: integer("disclaimer_count").notNull().default(0),
+
+    allowedLevels: text("allowed_levels").array().notNull().default(sql`'{}'`),
+    allowedSourceTypes: text("allowed_source_types").array().notNull().default(sql`'{}'`),
+
+    admittedIds: text("admitted_ids").array().notNull().default(sql`'{}'`),
+    rejectedIds: text("rejected_ids").array().notNull().default(sql`'{}'`),
+    rejectionReasons: jsonb("rejection_reasons").$type<Array<{ id: string; reason: string }>>().notNull().default(sql`'[]'::jsonb`),
+
+    knowledgeBlockChars: integer("knowledge_block_chars").notNull().default(0),
+    filterDurationMs: integer("filter_duration_ms"),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_kal_site_created").on(table.siteConfigId, table.createdAt),
+    index("idx_kal_session").on(table.sessionId),
+  ]
+);
+
+export type KnowledgeAuditLogEntry = typeof knowledgeAuditLog.$inferSelect;
+export type InsertKnowledgeAuditLogEntry = typeof knowledgeAuditLog.$inferInsert;
 
 // Session-scoped active document keys for in-chat KB overlay
 export const artifactSessionActivations = pgTable(
@@ -3003,3 +3072,71 @@ export const visitorSessions = pgTable("visitor_sessions", {
 
 export type VisitorSession = typeof visitorSessions.$inferSelect;
 export type InsertVisitorSession = typeof visitorSessions.$inferInsert;
+
+// ── Import Quarantine Runs — Doctrine 12: zero-trust supply chain pipeline ──
+
+export const importQuarantineRuns = pgTable(
+  "import_quarantine_runs",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    sourceUri: text("source_uri").notNull(),
+    sourceType: text("source_type").notNull().default("external"),
+    sdkMode: text("sdk_mode").notNull().default("extract_adapter"),
+    state: text("state").notNull().default("quarantined"),
+    quarantinePath: text("quarantine_path").notNull(),
+
+    scanResult: jsonb("scan_result").$type<Record<string, unknown>>(),
+    extractedArtifacts: jsonb("extracted_artifacts").$type<Array<Record<string, unknown>>>().default([]),
+    extractionReportPath: text("extraction_report_path"),
+    extractionReportHash: text("extraction_report_hash"),
+
+    certificationLevel: text("certification_level").notNull().default("unverified"),
+    promotedLevel: text("promoted_level"),
+    violations: jsonb("violations").$type<string[]>().default([]),
+
+    orchestrationRunId: varchar("orchestration_run_id").references(() => agentOrchestrationRuns.id, { onDelete: "set null" }),
+    intentExecutionId: varchar("intent_execution_id").references(() => intentExecutions.id, { onDelete: "set null" }),
+    siteConfigId: varchar("site_config_id").references(() => siteConfigs.id, { onDelete: "set null" }),
+    requestedBy: text("requested_by"),
+
+    incineratedAt: timestamp("incinerated_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_import_quarantine_runs_state").on(table.state),
+    index("idx_import_quarantine_runs_site_config_id").on(table.siteConfigId),
+    index("idx_import_quarantine_runs_created_at").on(table.createdAt),
+  ],
+);
+
+export type ImportQuarantineRun = typeof importQuarantineRuns.$inferSelect;
+export type InsertImportQuarantineRun = typeof importQuarantineRuns.$inferInsert;
+
+// ── Visualizer Library ────────────────────────────────────────────────────────
+export const visualizerLibrary = pgTable("visualizer_library", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  authorId: varchar("author_id").references(() => customerAccounts.id, { onDelete: "set null" }),
+  authorName: text("author_name"),
+  name: text("name").notNull(),
+  description: text("description"),
+  engineType: text("engine_type").notNull().default("circular_pulse"),
+  config: jsonb("config").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  isPublic: boolean("is_public").notNull().default(true),
+  isFeatured: boolean("is_featured").notNull().default(false),
+  useCount: integer("use_count").notNull().default(0),
+  tags: text("tags").array().default(sql`'{}'`),
+  previewUrl: text("preview_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertVisualizerLibrarySchema = createInsertSchema(visualizerLibrary).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  useCount: true,
+});
+
+export type VisualizerLibraryEntry = typeof visualizerLibrary.$inferSelect;
+export type InsertVisualizerLibraryEntry = z.infer<typeof insertVisualizerLibrarySchema>;

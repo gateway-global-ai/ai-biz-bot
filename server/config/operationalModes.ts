@@ -172,6 +172,11 @@ export const OPERATIONAL_MODES: OperationalModeDef[] = [
       "get_hotel_inventory",
       "pms_lookup_guest_journey",
       "get_inbound_caller_identity",
+      "list_agents",
+      "inspect_agent",
+      "update_agent_prompt",
+      "update_agent_knowledge",
+      "dispatch_agent_task",
     ],
   },
   {

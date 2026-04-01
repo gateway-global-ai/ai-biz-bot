@@ -143,6 +143,10 @@ export interface BusinessContext {
   voiceTrustedCallerId?: string | null;
   /** Optional Twilio CallSid for operator correlation when bridging PSTN into browser Live. */
   voiceBridgeCallSid?: string | null;
+  /** Authenticated customer ID — set after OTP login. Sent in sessionContext so server can resolve owner identity. */
+  authenticatedCustomerId?: string | null;
+  /** True when the authenticated customer is the business owner. Server uses this to switch to MANAGER mode. */
+  authenticatedIsOwner?: boolean;
 }
 
 export interface AgentConfig {

@@ -89,6 +89,7 @@ export type IntentLoopMergeStep =
   | "domain"
   | "role"
   | "tenant"
+  | "policy"
   | "turn";
 
 /**

@@ -28,6 +28,7 @@ import type {
   CanvasResolveResult,
   CanvasRenderPayload,
   SpeechGroundingContext,
+  IntentNextStepPacket,
 } from '../../../shared/canvasViewContract';
 import type {
   IntentLoopResolution,
@@ -99,6 +100,7 @@ export class VoiceTurnOrchestrator {
   private currentTurnId: string | null = null;
 
   private canvasTraceListener: ((entry: CanvasSyscallTraceEntry) => void) | null = null;
+  private lastNextStepPacket: IntentNextStepPacket | null = null;
 
   constructor() {
     this.runtimeState = {
@@ -254,6 +256,11 @@ export class VoiceTurnOrchestrator {
     return this.runtimeState.currentCanvasView ?? null;
   }
 
+  /** Read-only: last IntentNextStepPacket from canvas.resolve (for canvas rendering decisions). */
+  getLastNextStepPacket(): IntentNextStepPacket | null {
+    return this.lastNextStepPacket;
+  }
+
   private async dispatchCanvasResolve(turnCtx: VoiceTurnContext): Promise<CanvasResolveResult> {
     const envelope: CanvasSyscallEnvelope = {
       version: '1.0',
@@ -291,6 +298,7 @@ export class VoiceTurnOrchestrator {
       latencyMs?: number;
       intentLoopResolution?: IntentLoopResolution;
       intentLoopTrace?: IntentLoopResolveAuthorityTrace;
+      nextStep?: IntentNextStepPacket;
       error?: string;
       message?: string;
     } = {};
@@ -332,9 +340,11 @@ export class VoiceTurnOrchestrator {
     });
 
     if (!response.ok) {
+      this.lastNextStepPacket = null;
       return { renderMode: 'noop', reason: 'canvas.resolve HTTP error' };
     }
 
+    this.lastNextStepPacket = json.nextStep ?? null;
     return result ?? { renderMode: 'noop', reason: 'empty resolve result' };
   }
 
@@ -543,14 +553,17 @@ export class VoiceTurnOrchestrator {
     turnId: string,
     resolveResult: CanvasResolveResult,
   ): SpeechGroundingContext {
+    const nextStep = this.lastNextStepPacket;
     return {
       turnId,
       currentViewId: this.runtimeState.currentCanvasView ?? undefined,
-      screenSummary: resolveResult.speechContext?.screenSummary
+      screenSummary: nextStep?.resultSummary
+        ?? resolveResult.speechContext?.screenSummary
         ?? this.runtimeState.currentCanvasSummary
         ?? 'Canvas ready.',
-      speakingInstructions: resolveResult.speechContext?.speakingInstructions,
-      allowedReferences: undefined, // Populated by server validator in future
+      speakingInstructions: nextStep?.promptToUser
+        ?? resolveResult.speechContext?.speakingInstructions,
+      allowedReferences: undefined,
     };
   }
 

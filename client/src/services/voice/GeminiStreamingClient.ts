@@ -67,8 +67,11 @@ export class GeminiStreamingClient implements IVoiceClient {
   private activeSources = new Set<AudioBufferSourceNode>();
   /** Meters model TTS for Concierge visualizer (`onOutputVolumeChange`). */
   private outputAnalyser: AnalyserNode | null = null;
+  /** Passive read-only tap on mic input for FFT visualization. */
+  private inputAnalyser: AnalyserNode | null = null;
   private outputVolumeRafId: number | null = null;
   private outputLevelCallback: (volume: number) => void = () => {};
+  private analyserReadyCallback: (input: AnalyserNode | null, output: AnalyserNode | null) => void = () => {};
   private currentInputText = '';
   /** Site config id from last `connect()` — used for verification passage heartbeat (not on VoiceConfig). */
   private sessionSiteConfigId: string | null = null;
@@ -326,6 +329,12 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
             ...(business.voiceBridgeCallSid?.trim()
               ? { callSid: business.voiceBridgeCallSid.trim() }
               : {}),
+            ...(business.authenticatedCustomerId
+              ? { authenticatedCustomerId: business.authenticatedCustomerId }
+              : {}),
+            ...(business.authenticatedIsOwner
+              ? { authenticatedIsOwner: true }
+              : {}),
           },
         };
         
@@ -390,6 +399,8 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
     });
     this.activeSources.clear();
     this.workletNode?.disconnect();
+    this.inputAnalyser?.disconnect();
+    this.inputAnalyser = null;
     this.inputSource?.disconnect();
     
     // #region agent log
@@ -596,6 +607,10 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
     this.outputLevelCallback = callback;
   }
 
+  onAnalyserReady(callback: (input: AnalyserNode | null, output: AnalyserNode | null) => void): void {
+    this.analyserReadyCallback = callback;
+  }
+
   onConnectionChange(callback: (connected: boolean) => void): void {
     this.connectionCallback = callback;
   }
@@ -677,6 +692,14 @@ Start by welcoming the owner to Bot Builder mode, asking what kind of business t
       // Step 5: Connect the nodes (Microphone → Worklet → Output)
       this.inputSource.connect(this.workletNode);
       this.workletNode.connect(this.inputAudioContext.destination);
+
+      // Step 5b: Parallel input analyser for FFT visualization (read-only, no speaker output)
+      this.inputAnalyser = this.inputAudioContext.createAnalyser();
+      this.inputAnalyser.fftSize = 256;
+      this.inputAnalyser.smoothingTimeConstant = 0.4;
+      this.inputSource.connect(this.inputAnalyser);
+      this.analyserReadyCallback(this.inputAnalyser, this.ensureOutputAnalyser());
+
       console.log('[GeminiStreamingClient] AudioWorklet initialized');
     } catch (err: any) {
       console.error('[GeminiStreamingClient] AudioWorklet addModule failed:', workletUrl, err?.message ?? err, err);

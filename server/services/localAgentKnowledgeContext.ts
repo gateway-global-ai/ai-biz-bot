@@ -69,6 +69,12 @@ const DOC_CATALOGUE: DocEntry[] = [
     taskTypes: ["code", "agent"],
   },
   {
+    label: "SOVEREIGN_UI_SDK_SPEC",
+    relativePath: "user_uploads/ai_os_tailwind_shadcn_component_spec.md",
+    priority: "policy",
+    taskTypes: ["ui"],
+  },
+  {
     label: "VIEW_REGISTRY",
     relativePath: "docs-governance/canonical/VIEW_REGISTRY.md",
     priority: "registry",
@@ -237,7 +243,7 @@ const SKILL_MAP: Record<string, string> = {
   governance: ".cursor/skills/governance-review/SKILL.md",
   agent: ".cursor/skills/knowledge-engineering-lead/SKILL.md",
   code: ".cursor/skills/programmatic-sales-engine/SKILL.md",
-  ui: ".cursor/skills/mui-foundation/SKILL.md",
+  ui: ".cursor/skills/ui-design-governance/SKILL.md",
 };
 
 export async function loadSkillContext(taskType: string): Promise<string> {

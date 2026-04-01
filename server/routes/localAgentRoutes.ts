@@ -195,6 +195,54 @@ export function checkJurisdiction(
   return { allowed: true };
 }
 
+// ── Positive domain allow-list enforcement ────────────────────────────────────
+
+/**
+ * Validate that every file path returned by the model falls within the agent's
+ * explicitly allowed domains. Returns paths that are NOT allowed.
+ *
+ * Unlike `checkJurisdiction` (prompt-text substring), this operates on the
+ * actual file paths the model claims to have touched — post-execution truth,
+ * not pre-execution heuristics.
+ *
+ * If `allowed_domains` is empty or unset, all paths are considered allowed
+ * (the agent has no positive restriction — only `forbidden_domains` apply).
+ */
+export function validatePathsAgainstAllowList(
+  filePaths: string[],
+  structuredControls: Record<string, unknown>,
+): { allowed: string[]; rejected: string[]; hasAllowList: boolean } {
+  const plane = structuredControls?.localAgentPlane as
+    | { allowed_domains?: string[]; forbidden_domains?: string[] }
+    | undefined;
+
+  const allowedDomains = plane?.allowed_domains ?? [];
+  if (allowedDomains.length === 0) {
+    return { allowed: filePaths, rejected: [], hasAllowList: false };
+  }
+
+  const normalizedAllowList = allowedDomains.map((d) =>
+    d.replace(/\/\*\*$/, "").replace(/\*\*$/, "").replace(/\/$/, ""),
+  );
+
+  const allowed: string[] = [];
+  const rejected: string[] = [];
+
+  for (const filePath of filePaths) {
+    const normalized = filePath.replace(/^\.\//, "").replace(/^\//, "");
+    const isAllowed = normalizedAllowList.some(
+      (domain) => normalized === domain || normalized.startsWith(`${domain}/`),
+    );
+    if (isAllowed) {
+      allowed.push(filePath);
+    } else {
+      rejected.push(filePath);
+    }
+  }
+
+  return { allowed, rejected, hasAllowList: true };
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Merge two structuredControls objects, keeping the *more restrictive* set of forbidden_domains. */
@@ -432,7 +480,7 @@ router.post("/task", requireAuth, async (req: Request, res: Response) => {
 
     if (!structured && !outcomeParse.output) {
       await persistOrchestrationViolation({
-        violationType: "missing_orchestration_run",
+        violationType: "invalid_structured_output",
         severity: "medium",
         orchestrationRunId: runId,
         siteConfigId,
@@ -463,16 +511,62 @@ router.post("/task", requireAuth, async (req: Request, res: Response) => {
       return;
     }
 
+    // ── Positive allow-list enforcement on returned file paths ──────────
+    const returnedPaths =
+      responseSchemaId === "OutcomePacket.v1"
+        ? (outcomeParse.output?.filesTouched.map((f) => f.path) ?? [])
+        : (structured?.files_touched ?? []);
+
+    const domainCheck = validatePathsAgainstAllowList(returnedPaths, controls);
+    if (domainCheck.hasAllowList && domainCheck.rejected.length > 0) {
+      await persistOrchestrationViolation({
+        violationType: "domain_allowlist_violation",
+        severity: "high",
+        orchestrationRunId: runId,
+        siteConfigId,
+        routeOrSource: "POST /api/local-agent/task",
+        actorHint: agentId,
+        detail: {
+          rejectedPaths: domainCheck.rejected,
+          allowedPaths: domainCheck.allowed,
+          intentExecutionId: intentExecutionId ?? null,
+          scopeExecutionId: scopeExecutionId ?? null,
+        },
+      });
+
+      await db
+        .update(agentOrchestrationRuns)
+        .set({
+          status: "blocked",
+          currentState: "blocked",
+          rawModelOutput: ollamaText.slice(0, 8000),
+          parseError: null,
+          filesTouchedJson: returnedPaths,
+          blockers: [{
+            code: "domain_allowlist_violation",
+            message: `Model returned paths outside allowed domains: ${domainCheck.rejected.join(", ")}`,
+          }],
+          reviewRequired: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(agentOrchestrationRuns.id, runId));
+
+      res.status(403).json({
+        error: "domain_allowlist_violation",
+        runId,
+        rejectedPaths: domainCheck.rejected,
+        allowedPaths: domainCheck.allowed,
+      });
+      return;
+    }
+
     // Persist audit data before completing the run
     await db
       .update(agentOrchestrationRuns)
       .set({
         rawModelOutput: ollamaText.slice(0, 8000),
         parseError: null,
-          filesTouchedJson:
-            responseSchemaId === "OutcomePacket.v1"
-              ? outcomeParse.output?.filesTouched.map((file) => file.path) ?? []
-              : structured?.files_touched ?? [],
+        filesTouchedJson: returnedPaths,
         reviewRequired: true,
         updatedAt: new Date(),
       })

@@ -30,6 +30,9 @@ export interface IVoiceClient {
   onVolumeChange(callback: (volume: number) => void): void;
   onConnectionChange(callback: (connected: boolean) => void): void;
   onOutputVolumeChange?: (callback: (volume: number) => void) => void;
+
+  /** Expose raw AnalyserNodes for FFT-driven visualization (input mic + output TTS). */
+  onAnalyserReady?: (callback: (input: AnalyserNode | null, output: AnalyserNode | null) => void) => void;
   
   // Mute control
   setMuted?: (muted: boolean) => void;

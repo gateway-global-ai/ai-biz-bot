@@ -10,6 +10,11 @@ export default {
         md: ".375rem", /* 6px */
         sm: ".1875rem", /* 3px */
         sui: "24px", /* Sovereign UI Constant — Jason Standard */
+        'os-sm': '8px',
+        'os-md': '12px',
+        'os-lg': '16px',
+        'os-xl': '20px',
+        'os-2xl': '24px',
       },
       backgroundImage: {
         "glass-gradient": "linear-gradient(to bottom right, rgba(255,255,255,0.05), rgba(255,255,255,0))",
@@ -93,6 +98,34 @@ export default {
           busy: "rgb(239 68 68)",
           offline: "rgb(156 163 175)",
         },
+        os: {
+          shell: 'var(--os-bg-shell, #081120)',
+          canvas: 'var(--os-bg-canvas, #F5F7F7)',
+          panel: 'var(--os-bg-panel, #FFFFFF)',
+          'panel-alt': 'var(--os-bg-panel-alt, #F8FAFC)',
+          overlay: 'var(--os-bg-overlay, rgba(8,17,32,0.68))',
+          'brand-50': '#ECFDF5',
+          'brand-100': '#D1FAE5',
+          'brand-200': '#A7F3D0',
+          'brand-300': '#6EE7B7',
+          'brand-400': '#34D399',
+          'brand-500': '#10B981',
+          'brand-600': '#059669',
+          'brand-700': '#047857',
+          'brand-800': '#065F46',
+          'brand-900': '#064E3B',
+          'text-strong': '#0F172A',
+          'text-body': '#334155',
+          'text-muted': '#64748B',
+          'border-soft': '#E2E8F0',
+          'border-strong': '#CBD5E1',
+        },
+      },
+      boxShadow: {
+        'os-sm': '0 1px 2px rgba(0,0,0,0.06)',
+        'os-md': '0 8px 24px rgba(15,23,42,0.10)',
+        'os-lg': '0 16px 40px rgba(15,23,42,0.14)',
+        'os-glow': '0 0 0 1px rgba(16,185,129,0.18), 0 0 30px rgba(16,185,129,0.12)',
       },
       fontFamily: {
         sans: ["Inter", "sans-serif"],

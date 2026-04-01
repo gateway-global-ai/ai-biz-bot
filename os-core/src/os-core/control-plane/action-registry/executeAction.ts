@@ -1,11 +1,30 @@
 import { loadActions } from "../registry-loader/loadActions";
 import type { ActionResult } from "../registry-loader/types";
 import { evaluatePolicyGate } from "../policy-registry/evaluatePolicyGate";
+import {
+  evaluatePolicyDecision,
+  type EvaluatePolicyGateInput,
+} from "../policy-registry/evaluatePolicyGate";
+import type {
+  PolicyDecision,
+  SwarmRoleContext,
+  IntentContext,
+} from "../../../../../shared/policyDecisionContract.js";
+import { formatPolicyDecisionSummary } from "../../../../../shared/policyDecisionContract.js";
 
 interface ExecuteActionInput {
   actionId: string;
   contextKeys: Record<string, string>;
   payload?: Record<string, unknown>;
+  /** Optional: swarm role context for structured policy decisions. */
+  swarmRoleContext?: SwarmRoleContext;
+  /** Optional: intent loop context for structured policy decisions. */
+  intentContext?: IntentContext;
+}
+
+export interface ExecuteActionResult {
+  actionResult: ActionResult;
+  policyDecision: PolicyDecision;
 }
 
 function ensureRequiredContext(
@@ -23,7 +42,9 @@ export async function executeAction({
   actionId,
   contextKeys,
   payload = {},
-}: ExecuteActionInput): Promise<ActionResult> {
+  swarmRoleContext,
+  intentContext,
+}: ExecuteActionInput): Promise<ExecuteActionResult> {
   const actions = loadActions();
   const action = actions.actions.find((entry) => entry.actionId === actionId);
 
@@ -32,9 +53,55 @@ export async function executeAction({
   }
 
   ensureRequiredContext(action.requiredContextKeys, contextKeys);
-  if (!evaluatePolicyGate(action.requiredPolicy)) {
-    throw new Error(`Policy gate denied action: ${action.requiredPolicy}`);
+
+  const decision = evaluatePolicyDecision({
+    policyGate: action.requiredPolicy,
+    siteConfigId: contextKeys.siteConfigId,
+    swarmRoleContext,
+    intentContext,
+    actionId,
+  });
+
+  if (decision.verdict === "deny") {
+    return {
+      actionResult: {
+        status: "denied",
+        actionId,
+        entity: action.entity,
+        entityId: contextKeys[action.requiredContextKeys[0]] ?? "",
+        changedFields: [],
+        message: decision.enforcement.fallbackMessage
+          ?? `Policy denied: ${formatPolicyDecisionSummary(decision)}`,
+        nextSuggestedActions: decision.enforcement.fallbackViewId
+          ? [decision.enforcement.fallbackViewId]
+          : [],
+      },
+      policyDecision: decision,
+    };
   }
+
+  if (decision.verdict === "escalate") {
+    return {
+      actionResult: {
+        status: "escalated",
+        actionId,
+        entity: action.entity,
+        entityId: contextKeys[action.requiredContextKeys[0]] ?? "",
+        changedFields: [],
+        message: decision.rationale
+          ?? `Escalation required: ${formatPolicyDecisionSummary(decision)}`,
+        nextSuggestedActions: decision.enforcement.escalationTarget
+          ? [`escalate_to:${decision.enforcement.escalationTarget}`]
+          : ["escalate_to:management"],
+      },
+      policyDecision: decision,
+    };
+  }
+
+  const wrapResult = (actionResult: ActionResult): ExecuteActionResult => ({
+    actionResult,
+    policyDecision: decision,
+  });
 
   switch (actionId) {
     case "agent.proposeDominanceChange": {
@@ -42,7 +109,7 @@ export async function executeAction({
       const previousValue = Number(payload.previousValue ?? 0);
       const entityId = contextKeys.agentId;
 
-      return {
+      return wrapResult({
         status: "success",
         actionId,
         entity: action.entity,
@@ -59,14 +126,14 @@ export async function executeAction({
           "return_to_agent_config",
         ],
         message: `Dominance updated to ${value}.`,
-      };
+      });
     }
     case "agent.applySafeModeProfile": {
       const profile = String(payload.profile ?? "");
       const previousValue = String(payload.previousValue ?? "");
       const entityId = contextKeys.agentId;
 
-      return {
+      return wrapResult({
         status: "success",
         actionId,
         entity: action.entity,
@@ -83,14 +150,14 @@ export async function executeAction({
           "return_to_agent_config",
         ],
         message: `Safe Mode profile updated to ${profile}.`,
-      };
+      });
     }
     case "agent.applyGroundingImportance": {
       const value = Number(payload.value ?? 0);
       const previousValue = Number(payload.previousValue ?? 0);
       const entityId = contextKeys.agentId;
 
-      return {
+      return wrapResult({
         status: "success",
         actionId,
         entity: action.entity,
@@ -107,13 +174,13 @@ export async function executeAction({
           "return_to_agent_config",
         ],
         message: `Grounding importance updated to ${value}.`,
-      };
+      });
     }
     case "session.joinAssist": {
       const sessionId = contextKeys.sessionId;
       const previousValue = String(payload.previousState ?? "AI_ACTIVE");
       const nextMode = String(payload.nextMode ?? "OPERATOR_JOINED");
-      return {
+      return wrapResult({
         status: "success",
         actionId,
         entity: action.entity,
@@ -127,13 +194,13 @@ export async function executeAction({
         },
         nextSuggestedActions: ["review_transcript", "capture_outcome", "return_to_queue"],
         message: "Operator joined the session in assisted mode.",
-      };
+      });
     }
     case "session.endAssist": {
       const sessionId = contextKeys.sessionId;
       const previousValue = String(payload.previousState ?? "OPERATOR_JOINED");
       const nextMode = String(payload.nextMode ?? "AI_ACTIVE");
-      return {
+      return wrapResult({
         status: "success",
         actionId,
         entity: action.entity,
@@ -147,14 +214,14 @@ export async function executeAction({
         },
         nextSuggestedActions: ["monitor_queue", "capture_outcome", "review_next_session"],
         message: "Operator ended assist mode and returned session to AI.",
-      };
+      });
     }
     case "session.resolveOutcome": {
       const sessionId = contextKeys.sessionId;
       const previousValue = String(payload.previousState ?? "OPERATOR_JOINED");
       const nextMode = "RESOLVED";
       const outcomeType = String(payload.outcomeType ?? "resolved_no_action");
-      return {
+      return wrapResult({
         status: "success",
         actionId,
         entity: action.entity,
@@ -168,7 +235,7 @@ export async function executeAction({
         },
         nextSuggestedActions: ["open_next_session", "review_daily_metrics"],
         message: `Session resolved and outcome captured (${outcomeType}).`,
-      };
+      });
     }
     default:
       throw new Error(`No local handler implemented for action: ${actionId}`);

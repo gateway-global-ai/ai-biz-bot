@@ -61,6 +61,73 @@ Speak ONLY about choosing categories and effects — no platform sales pitch, re
 
 FIRST GREETING (keep under two sentences): "Hi, I'm Nova. Ask me anything about the canvas, voice controls, or backgrounds — or tap a chip below. If you want the full platform story or a business demo, just say so." Never output markdown, bullets, or headings — you are speaking aloud.`;
 
+/** Background assistant skill fragment — appended when canvas background tools are available. */
+const CANVAS_BACKGROUND_SKILL = `
+
+--- CANVAS BACKGROUND ASSISTANT ---
+You have tools to help users explore and set animated canvas backgrounds.
+
+CATEGORIES (8 total, 42 effects):
+- particles_floating: Particles, Sparkles, Fireflies, Bokeh, Bubble, Confetti
+- space_sky: Starfield, Aurora, Meteors, Shooting Stars, Constellation, Orbits
+- weather_nature: Rain, Snow, Fog, Underwater, Fireworks
+- grids_patterns: Grid Pattern, Dot Pattern, Hexagon, Flickering Grid, Retro Grid, Interactive Grid
+- gradients_color: Mesh Gradient, Gradient, Gradient Animation, Vortex
+- waves_flow: Wavy, Light Waves, Wave Grid, Topography, Paths
+- light_beams: Beams, Beams Collision, Spotlight, Ripple, Circles
+- tech_digital: Matrix, Glitch, Neon, Warp, Boxes
+
+CONVERSATIONAL APPROACH (follow this flow):
+1. GROUND: Ask what the background is for — personal taste, business lobby, kiosk, event booth, etc.
+2. NAVIGATE: Use get_background_categories to show what is available.
+3. RECOMMEND: Based on their use case, suggest a category and specific effects. Be specific: "For a tech company lobby, I'd suggest Space & Sky — Constellation is clean and professional, or Tech & Digital — Matrix is bold."
+4. PREVIEW: Use set_canvas_background to show them the effect live. Say "Check it out behind the panel" or "See that? That's the Constellation effect." Use the exact item ID like "constellation", "matrix", "rain", "neon", etc.
+5. ITERATE: Ask if they want to see more options, try a different category, or keep the current one.
+6. SAVE: If they want to keep it, use save_background_as_default. If they are not logged in, let them know you need to set up their profile first.
+
+TOOL USAGE RULES:
+- Use get_background_categories when the user asks what options exist
+- Use get_backgrounds_in_category with exact category_id like "tech_digital" or "space_sky" to browse a specific category
+- Use set_canvas_background with the exact item id (e.g. "matrix", "constellation", "neon", "rain") to preview an effect live
+- Use save_background_as_default only when the user explicitly wants to keep their choice
+- Use get_screen_size to check if recommending fullscreen would enhance the experience
+
+IMPORTANT: Each category has distinct effects. Tech & Digital has Matrix (falling code), Glitch (RGB distortion), Neon (glowing rings), Warp (hyperspace tunnel), and Boxes (floating 3D cubes). They are all visually different.
+
+TONE: Enthusiastic but not pushy. Treat this like helping someone pick a wallpaper for their computer. Be knowledgeable about the effects — describe what each one looks like briefly when suggesting it.
+
+NEVER: List all effects at once. Navigate one category at a time. Show, don't tell — preview the effect and let them react.`;
+
+const VISUALIZER_SKILL = `
+
+--- AUDIO VISUALIZER STUDIO ---
+You have tools to help users design and customize their audio visualizer — the animated visual that reacts to voice activity on screen.
+
+AVAILABLE ENGINES:
+- circular_pulse: Circular ring with radial frequency bars that pulse outward. Default. Professional and clean.
+- sine_wave: Classic Siri-style flowing sine wave. Elegant and minimal.
+- orb: Breathing blob/sphere that deforms with voice. Organic and modern.
+
+CONFIGURABLE PARAMETERS:
+- type: Which engine to use
+- primaryColor: Color when user is speaking (CSS hex like '#00FFFF')
+- secondaryColor: Color when AI is speaking
+- opacity: 0 to 1, how visible the visualizer is
+- glowIntensity: 0 to 2, how much the glow effect radiates
+- barCount: 16 to 128, number of frequency bars (circular_pulse only)
+- amplitudeScale: 0.5 to 3, how aggressively bars react to audio
+- smoothing: 0 to 1, animation smoothness
+
+CONVERSATIONAL APPROACH:
+1. ASK: What vibe are they going for? Calm, energetic, techy, natural?
+2. SUGGEST: Recommend an engine and colors based on their mood/brand.
+3. PREVIEW: Use update_visualizer to show them the change live. Say "Check it out — I just switched to the orb style with a cyan glow."
+4. ITERATE: Tweak colors, intensity, bar count based on feedback. Try multiple combinations.
+5. SAVE: When they love it, use save_visualizer to save to the community library with their name as author.
+6. BROWSE: Use browse_visualizers to show what others have created if they want inspiration.
+
+TONE: Creative and collaborative. You are their design partner, not a menu.`;
+
 /**
  * Gemini Multimodal Live API Proxy
  *
@@ -130,6 +197,9 @@ export function setupGeminiLiveWebSocket(server: Server): void {
     let sessionAgentId: string | null = null;
     let sessionMetaPrompt: string | null = null;
     let sessionFunnelContextKeys: Record<string, string> | undefined;
+    /** Authenticated owner identity — set from sessionContext when client passes OTP-verified credentials. */
+    let sessionAuthenticatedCustomerId: string | null = null;
+    let sessionAuthenticatedIsOwner = false;
 
     // --- STATE MACHINE FLAGS (prevent 1008 Policy Violations) ---
 
@@ -202,6 +272,13 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           if (rawCallSid != null && String(rawCallSid).trim()) {
             sessionVoiceCallSid = String(rawCallSid).trim();
           }
+          if (message.sessionContext?.authenticatedCustomerId) {
+            sessionAuthenticatedCustomerId = String(message.sessionContext.authenticatedCustomerId);
+          }
+          if (message.sessionContext?.authenticatedIsOwner === true) {
+            sessionAuthenticatedIsOwner = true;
+            console.log(`[GeminiVoice] Owner identity bound: customerId=${sessionAuthenticatedCustomerId}`);
+          }
           delete message.sessionContext;
 
           const modelId = process.env.GEMINI_MODEL_ID;
@@ -227,7 +304,24 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                   ? (agents[sessionAgentId] ?? null)
                   : null;
                 const systemPromptOverride = (siteConfig as { systemPromptOverride?: string | null }).systemPromptOverride;
-                const assignedAgentId = (siteConfig as { assignedAgentId?: string | null }).assignedAgentId;
+                let assignedAgentId = (siteConfig as { assignedAgentId?: string | null }).assignedAgentId;
+
+                // Owner override: when authenticated owner, resolve the MANAGER agent for this site
+                if (sessionAuthenticatedIsOwner && sessionSiteConfigId) {
+                  try {
+                    const siteAgents = await storage.getAgentsBySiteConfigId(sessionSiteConfigId);
+                    const managerAgent = siteAgents.find(
+                      (a: { operationalMode?: string | null; status?: string | null }) =>
+                        a.operationalMode === 'MANAGER' && a.status === 'active'
+                    );
+                    if (managerAgent) {
+                      assignedAgentId = managerAgent.id;
+                      console.log(`[GeminiVoice] Owner override: switched to MANAGER agent ${managerAgent.id} (${(managerAgent as { name?: string }).name})`);
+                    }
+                  } catch (err) {
+                    console.warn('[GeminiVoice] Failed to resolve MANAGER agent for owner:', err);
+                  }
+                }
                 const pd = (siteConfig as { placeData?: Record<string, unknown> | null }).placeData;
                 const website = pd && (typeof (pd as any).websiteUri === 'string' ? (pd as any).websiteUri : typeof (pd as any).website === 'string' ? (pd as any).website : null);
                 const address = pd && (typeof (pd as any).formattedAddress === 'string' ? (pd as any).formattedAddress : typeof (pd as any).formatted_address === 'string' ? (pd as any).formatted_address : null);
@@ -309,12 +403,15 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                   let snapAgent: Awaited<ReturnType<typeof storage.getAgent>> | undefined;
                   if (assignedAgentId) snapAgent = await storage.getAgent(assignedAgentId);
 
-                  const modeAllowlist = getToolsAllowedForMode(snapAgent?.operationalMode ?? null);
+                  const effectiveMode = sessionAuthenticatedIsOwner ? 'MANAGER' : (snapAgent?.operationalMode ?? null);
+                  const modeAllowlist = getToolsAllowedForMode(effectiveMode);
                   const agentAllowed: string[] = agentDef?.allowedTools ?? [];
                   const effectiveAllowed =
-                    agentAllowed.length > 0
-                      ? agentAllowed.filter((t) => modeAllowlist.includes(t))
-                      : modeAllowlist;
+                    sessionAuthenticatedIsOwner
+                      ? modeAllowlist
+                      : (agentAllowed.length > 0
+                          ? agentAllowed.filter((t) => modeAllowlist.includes(t))
+                          : modeAllowlist);
                   const HOSPITALITY_TOOL_NAMES = [
                     'get_hotel_inventory',
                     'guest_phone_verification',
@@ -340,6 +437,8 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                     compiledInstruction += `\n\nDefault emotional tone: ${String(emotion).toUpperCase()}. Maintain this tone in your responses.`;
                   }
                   compiledInstruction += pricingBlock;
+                  compiledInstruction += CANVAS_BACKGROUND_SKILL;
+                  compiledInstruction += VISUALIZER_SKILL;
                   message.setup.system_instruction = { parts: [{ text: compiledInstruction }] };
                   console.log(
                     `[GeminiVoice] Contextual Snap applied: agentId=${sessionAgentId}, hospitalityPms=${allowHospitality}, compiled persona`
@@ -369,14 +468,21 @@ export function setupGeminiLiveWebSocket(server: Server): void {
           // Prevents context bloat from injecting all 31 declarations into a public/landing session.
           if (!siteConfigResolved) {
             message.setup.system_instruction = {
-              parts: [{ text: PUBLIC_PLATFORM_VOICE_INSTRUCTION }],
+              parts: [{ text: PUBLIC_PLATFORM_VOICE_INSTRUCTION + CANVAS_BACKGROUND_SKILL + VISUALIZER_SKILL }],
             };
-            // Narrow allowlist: maps + manual input + structured canvas cards (server acknowledges; client renders).
             const PUBLIC_TOOLS = [
               'search_local_business',
               'get_business_details',
               'request_manual_input',
               'show_canvas',
+              'set_canvas_background',
+              'get_background_categories',
+              'get_backgrounds_in_category',
+              'save_background_as_default',
+              'get_screen_size',
+              'update_visualizer',
+              'save_visualizer',
+              'browse_visualizers',
             ] as const;
             const publicDeclarations = PUBLIC_TOOLS
               .map(name => TOOL_DECLARATIONS[name as keyof typeof TOOL_DECLARATIONS])
@@ -751,6 +857,47 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                       tool_type: 'vine_status',
                       ...(result as object),
                     };
+                  } else if (functionCall.name === 'set_canvas_background') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: 'set_canvas_background',
+                      tool_type: 'canvas_background',
+                      action: 'set',
+                      background_id: fcArgs.background_id,
+                    };
+                  } else if (functionCall.name === 'get_background_categories') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: 'get_background_categories',
+                      tool_type: 'canvas_background',
+                      action: 'categories',
+                      data: result,
+                    };
+                  } else if (functionCall.name === 'get_backgrounds_in_category') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: 'get_backgrounds_in_category',
+                      tool_type: 'canvas_background',
+                      action: 'category_items',
+                      category_id: fcArgs.category_id,
+                      data: result,
+                    };
+                  } else if (functionCall.name === 'save_background_as_default') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: 'save_background_as_default',
+                      tool_type: 'canvas_background',
+                      action: 'saved',
+                      background_id: fcArgs.background_id,
+                      data: result,
+                    };
+                  } else if (functionCall.name === 'get_screen_size') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: 'get_screen_size',
+                      tool_type: 'screen_info',
+                      data: result,
+                    };
                   } else if (functionCall.name === 'show_canvas') {
                     toolMetadata = {
                       type: 'tool_result',
@@ -763,6 +910,30 @@ export function setupGeminiLiveWebSocket(server: Server): void {
                       cta_label: fcArgs.cta_label,
                       cta_action: fcArgs.cta_action,
                       accent_color: fcArgs.accent_color || 'indigo',
+                    };
+                  } else if (functionCall.name === 'update_visualizer') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: 'update_visualizer',
+                      tool_type: 'visualizer',
+                      action: 'update',
+                      config: (result as any)?.config || fcArgs,
+                    };
+                  } else if (functionCall.name === 'save_visualizer') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: 'save_visualizer',
+                      tool_type: 'visualizer',
+                      action: 'save',
+                      data: result,
+                    };
+                  } else if (functionCall.name === 'browse_visualizers') {
+                    toolMetadata = {
+                      type: 'tool_result',
+                      tool_name: 'browse_visualizers',
+                      tool_type: 'visualizer',
+                      action: 'browse_results',
+                      data: result,
                     };
                   }
 
