@@ -52,13 +52,12 @@ export function ReadinessGateMetricsPage() {
         <SovereignSectionHeader
           title="Readiness gate (v1)"
           subtitle="Counts from GET /api/site-configs/by-slug — in-memory only; resets on deploy."
-          icon={<Activity size={24} color={BRAND.blueLight} aria-hidden />}
-          action={<SovereignButton onClick={load}>Refresh</SovereignButton>}
+          actions={<SovereignButton onClick={load}>Refresh</SovereignButton>}
         />
 
         <SovereignStack spacing={3}>
           {err && (
-            <SovereignAlert severity="error">
+            <SovereignAlert variant="danger">
               {err} — sign in to platform admin with an authorized role.
             </SovereignAlert>
           )}

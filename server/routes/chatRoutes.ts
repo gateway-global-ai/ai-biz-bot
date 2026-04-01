@@ -447,7 +447,7 @@ const router = Router();
   // Update customer
   router.patch("/api/customers/:id", requirePolicy('customer.write'), async (req, res) => {
     try {
-      const customer = await storage.updateCustomer(req.params.id, req.body);
+      const customer = await storage.updateCustomer(req.params.id as string, req.body);
       if (!customer) {
         return res.status(404).json({ error: "Customer not found" });
       }
@@ -460,7 +460,7 @@ const router = Router();
   // Delete customer
   router.delete("/api/customers/:id", requirePolicy('customer.delete'), async (req, res) => {
     try {
-      await storage.deleteCustomer(req.params.id);
+      await storage.deleteCustomer(req.params.id as string);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

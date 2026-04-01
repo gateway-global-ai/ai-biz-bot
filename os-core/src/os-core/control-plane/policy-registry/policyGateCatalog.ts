@@ -14,12 +14,12 @@
  * Doctrine: docs-governance/canonical/AI_OS_OPERATING_DOCTRINE_V1.md § D10
  */
 
-import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { loadActions } from "../registry-loader/loadActions.js";
 import { loadLogicalRoutes } from "../registry-loader/loadLogicalRoutes.js";
 import { loadViews } from "../registry-loader/loadViews.js";
+
+const IS_BROWSER = typeof window !== "undefined";
+const IS_NODE = typeof process !== "undefined" && !!process.versions?.node;
 
 export interface PolicyGateEntry {
   gateId: string;
@@ -41,13 +41,36 @@ export interface PolicyGateDriftWarning {
 let _catalog: Map<string, PolicyGateEntry> | null = null;
 let _driftWarnings: PolicyGateDriftWarning[] = [];
 
-function findRegistryRoot(): string {
+let _fsModule: typeof import("node:fs") | null = null;
+let _pathModule: typeof import("node:path") | null = null;
+let _urlModule: typeof import("node:url") | null = null;
+let _nodeModulesLoaded = false;
+
+function ensureNodeModules() {
+  if (_nodeModulesLoaded || IS_BROWSER) return;
+  _nodeModulesLoaded = true;
   try {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    return resolve(__dirname, "../../../../../../registry-yaml");
+    // Dynamic requires only execute on Node.js — Vite tree-shakes this branch
+    // @ts-expect-error dynamic require for Node.js only
+    _fsModule = globalThis.__non_webpack_require__ ? globalThis.__non_webpack_require__("fs") : eval('require')("node:fs");
+    // @ts-expect-error dynamic require for Node.js only
+    _pathModule = globalThis.__non_webpack_require__ ? globalThis.__non_webpack_require__("path") : eval('require')("node:path");
+    // @ts-expect-error dynamic require for Node.js only
+    _urlModule = globalThis.__non_webpack_require__ ? globalThis.__non_webpack_require__("url") : eval('require')("node:url");
   } catch {
-    return resolve(process.cwd(), "registry-yaml");
+    // Running in browser — no node modules available
+  }
+}
+
+function findRegistryRoot(): string {
+  ensureNodeModules();
+  if (!_pathModule || !_urlModule) return "";
+  try {
+    const __filename = _urlModule.fileURLToPath(import.meta.url);
+    const __dirname = _pathModule.dirname(__filename);
+    return _pathModule.resolve(__dirname, "../../../../../../registry-yaml");
+  } catch {
+    return _pathModule.resolve(process.cwd(), "registry-yaml");
   }
 }
 
@@ -64,8 +87,10 @@ interface RawPolicyGateYaml {
 }
 
 function loadPolicyGatesYaml(): RawPolicyGateYaml {
-  const yamlPath = resolve(findRegistryRoot(), "policy-gates.yaml");
-  const raw = readFileSync(yamlPath, "utf-8");
+  ensureNodeModules();
+  if (!_fsModule || !_pathModule) return { gates: [] };
+  const yamlPath = _pathModule.resolve(findRegistryRoot(), "policy-gates.yaml");
+  const raw = _fsModule.readFileSync(yamlPath, "utf-8");
 
   const gates: RawPolicyGateYaml["gates"] = [];
 
@@ -135,6 +160,10 @@ function loadPolicyGatesYaml(): RawPolicyGateYaml {
  */
 export function loadPolicyGateCatalog(): Map<string, PolicyGateEntry> {
   if (_catalog) return _catalog;
+  if (IS_BROWSER) {
+    _catalog = new Map();
+    return _catalog;
+  }
 
   const catalog = new Map<string, PolicyGateEntry>();
   _driftWarnings = [];

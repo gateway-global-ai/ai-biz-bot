@@ -1767,7 +1767,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                 setCanvasBackgroundId(msg.metadata.background_id as string);
                 addMessage('assistant', undefined, { ...msg.metadata, voiceAudioOnly: true });
               } else if (msg.metadata.tool_type === 'visualizer' && msg.metadata.action === 'update' && msg.metadata.config) {
-                setVisualizerConfig((prev: VisualizerConfig) => ({ ...prev, ...(msg.metadata.config as Partial<VisualizerConfig>) }));
+                setVisualizerConfig((prev: VisualizerConfig) => ({ ...prev, ...(msg.metadata!.config as Partial<VisualizerConfig>) }));
                 addMessage('assistant', undefined, { ...msg.metadata, voiceAudioOnly: true });
               } else if (msg.metadata.tool_type === 'screen_info') {
                 addMessage('assistant', undefined, { ...msg.metadata, voiceAudioOnly: true });

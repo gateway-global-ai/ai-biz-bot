@@ -62,7 +62,7 @@ router.post("/pipeline", requireAuth, async (req, res) => {
 });
 
 router.get("/:runId", requireAuth, async (req, res) => {
-  const runId = req.params.runId;
+  const runId = req.params.runId as string;
   if (!runId) return res.status(400).json({ error: "run_id_required" });
 
   const [run] = await db
@@ -76,7 +76,7 @@ router.get("/:runId", requireAuth, async (req, res) => {
 });
 
 router.post("/:runId/scan", requireAuth, async (req, res) => {
-  const runId = req.params.runId;
+  const runId = req.params.runId as string;
   if (!runId) return res.status(400).json({ error: "run_id_required" });
 
   try {
@@ -89,7 +89,7 @@ router.post("/:runId/scan", requireAuth, async (req, res) => {
 });
 
 router.post("/:runId/extract", requireAuth, async (req, res) => {
-  const runId = req.params.runId;
+  const runId = req.params.runId as string;
   if (!runId) return res.status(400).json({ error: "run_id_required" });
 
   try {
@@ -102,7 +102,7 @@ router.post("/:runId/extract", requireAuth, async (req, res) => {
 });
 
 router.post("/:runId/report", requireAuth, async (req, res) => {
-  const runId = req.params.runId;
+  const runId = req.params.runId as string;
   if (!runId) return res.status(400).json({ error: "run_id_required" });
 
   try {
@@ -115,7 +115,7 @@ router.post("/:runId/report", requireAuth, async (req, res) => {
 });
 
 router.post("/:runId/certify", requireAuth, async (req, res) => {
-  const runId = req.params.runId;
+  const runId = req.params.runId as string;
   if (!runId) return res.status(400).json({ error: "run_id_required" });
 
   try {
@@ -128,7 +128,7 @@ router.post("/:runId/certify", requireAuth, async (req, res) => {
 });
 
 router.post("/:runId/promote", requireAuth, async (req, res) => {
-  const runId = req.params.runId;
+  const runId = req.params.runId as string;
   if (!runId) return res.status(400).json({ error: "run_id_required" });
 
   const parsed = PromotionDecisionSchema.safeParse({
@@ -149,7 +149,7 @@ router.post("/:runId/promote", requireAuth, async (req, res) => {
 });
 
 router.post("/:runId/incinerate", requireAuth, async (req, res) => {
-  const runId = req.params.runId;
+  const runId = req.params.runId as string;
   if (!runId) return res.status(400).json({ error: "run_id_required" });
 
   try {

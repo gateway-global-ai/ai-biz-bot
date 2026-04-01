@@ -189,7 +189,7 @@ export function PlatformBusinessOverviewPanel({ site, onSave, token }: Props) {
               sovereignVariant="secondary"
               onClick={() => void handleSave()}
               disabled={saving}
-              startIcon={saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              className="gap-2"
             >
               Save Changes
             </SovereignButton>

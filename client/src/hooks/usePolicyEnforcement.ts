@@ -139,7 +139,7 @@ export function usePolicyEnforcement(initialSurface?: Partial<PolicySurface>) {
           return {
             ...item,
             children: filteredChildren,
-          };
+          } as T;
         })
         .filter((item): item is T => item !== null);
     },

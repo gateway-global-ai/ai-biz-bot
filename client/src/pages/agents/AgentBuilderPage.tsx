@@ -229,7 +229,7 @@ export default function AgentBuilderPage() {
           </div>
 
           <div className="flex gap-3 justify-center">
-            <SovereignButton sovereignVariant="outlined" onClick={() => { setResult(null); setStep(1); form.reset(AGENT_BUILDER_DEFAULTS); }}>
+            <SovereignButton sovereignVariant="ghost" onClick={() => { setResult(null); setStep(1); form.reset(AGENT_BUILDER_DEFAULTS); }}>
               Build Another
             </SovereignButton>
             <SovereignButton onClick={() => navigate(`/admin/agents`)}>
@@ -345,8 +345,8 @@ export default function AgentBuilderPage() {
                 </div>
 
                 <div className="flex justify-end">
-                  <SovereignButton onClick={nextStep} endIcon={<ChevronRight className="w-4 h-4" />}>
-                    Next: Behavior
+                  <SovereignButton onClick={nextStep}>
+                    Next: Behavior <ChevronRight className="w-4 h-4" />
                   </SovereignButton>
                 </div>
               </motion.div>
@@ -478,8 +478,8 @@ export default function AgentBuilderPage() {
                   <button type="button" onClick={() => setStep(1)} className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors">
                     <ChevronLeft className="w-4 h-4" /> Back
                   </button>
-                  <SovereignButton onClick={nextStep} endIcon={<ChevronRight className="w-4 h-4" />}>
-                    Next: Knowledge
+                  <SovereignButton onClick={nextStep}>
+                    Next: Knowledge <ChevronRight className="w-4 h-4" />
                   </SovereignButton>
                 </div>
               </motion.div>
@@ -573,8 +573,8 @@ export default function AgentBuilderPage() {
                   <SovereignButton
                     type="submit"
                     disabled={provisionMutation.isPending}
-                    startIcon={provisionMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
                   >
+                    {provisionMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
                     {provisionMutation.isPending ? "Deploying swarm…" : "Deploy Agent Swarm"}
                   </SovereignButton>
                 </div>

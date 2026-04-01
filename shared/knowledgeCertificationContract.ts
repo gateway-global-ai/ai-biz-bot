@@ -199,6 +199,7 @@ export const KNOWLEDGE_FILTER_PRESETS: Record<string, KnowledgeFilterContext> = 
     allowedSourceTypes: ["system"],
     requireDisclaimerForLevels: [],
     maxItems: 10,
+    resolveConflicts: false,
   },
   concierge_qa: {
     contractVersion: KNOWLEDGE_CERTIFICATION_CONTRACT_VERSION,
@@ -206,6 +207,7 @@ export const KNOWLEDGE_FILTER_PRESETS: Record<string, KnowledgeFilterContext> = 
     allowedSourceTypes: ["system", "owner", "web", "external"],
     requireDisclaimerForLevels: [],
     maxItems: 50,
+    resolveConflicts: false,
   },
   general_chat: {
     contractVersion: KNOWLEDGE_CERTIFICATION_CONTRACT_VERSION,
@@ -213,6 +215,7 @@ export const KNOWLEDGE_FILTER_PRESETS: Record<string, KnowledgeFilterContext> = 
     allowedSourceTypes: ["system", "owner", "web", "external"],
     requireDisclaimerForLevels: ["unverified"],
     maxItems: 50,
+    resolveConflicts: false,
   },
   voice_live: {
     contractVersion: KNOWLEDGE_CERTIFICATION_CONTRACT_VERSION,
@@ -220,6 +223,7 @@ export const KNOWLEDGE_FILTER_PRESETS: Record<string, KnowledgeFilterContext> = 
     allowedSourceTypes: ["system", "owner", "external"],
     requireDisclaimerForLevels: [],
     maxItems: 30,
+    resolveConflicts: false,
   },
 };
 

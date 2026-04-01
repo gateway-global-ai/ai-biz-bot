@@ -249,7 +249,7 @@ export default function CloudbedsConnectPage() {
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: SHELL.bg }}>
-      <SovereignPageShell sx={{ py: 3 }}>
+      <SovereignPageShell className="py-3">
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}

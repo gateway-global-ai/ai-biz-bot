@@ -150,9 +150,8 @@ export default function UiPrimitivesComparisonPage() {
             <SovereignSectionHeader
               title="UI primitives: Gateway SDK vs raw MUI"
               subtitle="Same theme, two import surfaces. Use @/ui-core in product code; raw MUI when you need full control."
-              icon={<BarChart3 className="h-5 w-5 text-slate-600" />}
-              action={
-                <SovereignButton sovereignVariant="outlined" onClick={() => setLocation("/sdk")}>
+              actions={
+                <SovereignButton sovereignVariant="ghost" onClick={() => setLocation("/sdk")}>
                   Back to SDK showcase
                 </SovereignButton>
               }
@@ -184,8 +183,8 @@ export default function UiPrimitivesComparisonPage() {
                   <SovereignStack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                     <SovereignButton sovereignVariant="primary">Primary</SovereignButton>
                     <SovereignButton sovereignVariant="secondary">Secondary</SovereignButton>
-                    <SovereignButton sovereignVariant="outlined">Outlined</SovereignButton>
-                    <SovereignButton sovereignVariant="text">Text</SovereignButton>
+                    <SovereignButton sovereignVariant="ghost">Ghost</SovereignButton>
+                    <SovereignButton sovereignVariant="danger">Danger</SovereignButton>
                   </SovereignStack>
                 </ColumnChrome>
               }

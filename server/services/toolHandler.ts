@@ -15,7 +15,7 @@ import { storage } from "../storage";
 import { sendPlatformEmail } from "./emailService";
 import { db } from "../db";
 import { workspaceConfigurations, agents } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "../mcp/googleWorkspace";
 import { isKnowledgeWorkerPlan } from "../prompts/knowledgeWorkerPrompt";
 import { handleGetHotelInventory } from "../tools/hotelInventoryHandler";
@@ -461,6 +461,9 @@ export async function handleToolCall(toolCall: ToolCall, context?: ToolCallConte
       };
     }
 
+    const args = (toolCall.args ?? {}) as Record<string, any>;
+    const sessionContext = context;
+
     switch (toolCall.name) {
       case "get_hotel_inventory": {
         const sid = context?.siteConfigId ?? toolCall.args?.siteConfigId;
@@ -739,15 +742,16 @@ export async function handleToolCall(toolCall: ToolCall, context?: ToolCallConte
         };
 
       case "update_visualizer": {
+        const vizArgs = toolCall.args ?? {};
         const vizConfig: Record<string, unknown> = {};
-        if (args.type) vizConfig.type = args.type;
-        if (args.primaryColor) vizConfig.primaryColor = args.primaryColor;
-        if (args.secondaryColor) vizConfig.secondaryColor = args.secondaryColor;
-        if (args.opacity != null) vizConfig.opacity = args.opacity;
-        if (args.glowIntensity != null) vizConfig.glowIntensity = args.glowIntensity;
-        if (args.barCount != null) vizConfig.barCount = args.barCount;
-        if (args.amplitudeScale != null) vizConfig.amplitudeScale = args.amplitudeScale;
-        if (args.smoothing != null) vizConfig.smoothing = args.smoothing;
+        if (vizArgs.type) vizConfig.type = vizArgs.type;
+        if (vizArgs.primaryColor) vizConfig.primaryColor = vizArgs.primaryColor;
+        if (vizArgs.secondaryColor) vizConfig.secondaryColor = vizArgs.secondaryColor;
+        if (vizArgs.opacity != null) vizConfig.opacity = vizArgs.opacity;
+        if (vizArgs.glowIntensity != null) vizConfig.glowIntensity = vizArgs.glowIntensity;
+        if (vizArgs.barCount != null) vizConfig.barCount = vizArgs.barCount;
+        if (vizArgs.amplitudeScale != null) vizConfig.amplitudeScale = vizArgs.amplitudeScale;
+        if (vizArgs.smoothing != null) vizConfig.smoothing = vizArgs.smoothing;
         return {
           acknowledged: true,
           tool_type: "visualizer",
@@ -772,28 +776,29 @@ export async function handleToolCall(toolCall: ToolCall, context?: ToolCallConte
 
       case "browse_visualizers": {
         try {
-          const { storage: storageInstance } = await import("../storage");
-          const sortCol = args.sort === "recent" ? "created_at DESC" : "use_count DESC";
-          const params: (string | number)[] = [10, 0];
-          let where = "is_public = true";
-          if (args.engine_type) {
-            params.push(args.engine_type);
-            where += ` AND engine_type = $${params.length}`;
-          }
-          if (args.query) {
-            params.push(args.query);
-            where += ` AND (name ILIKE '%' || $${params.length} || '%' OR description ILIKE '%' || $${params.length} || '%')`;
-          }
-          const result = await storageInstance.query(
-            `SELECT id, name, author_name, engine_type, config, use_count, tags, description
-             FROM visualizer_library WHERE ${where} ORDER BY ${sortCol} LIMIT $1 OFFSET $2`,
-            params,
-          );
+          const { visualizerLibrary } = await import("@shared/schema");
+          const conditions = [eq(visualizerLibrary.isPublic, true)];
+          if (args.engine_type) conditions.push(eq(visualizerLibrary.engineType, args.engine_type));
+          const rows = await db
+            .select({
+              id: visualizerLibrary.id,
+              name: visualizerLibrary.name,
+              authorName: visualizerLibrary.authorName,
+              engineType: visualizerLibrary.engineType,
+              config: visualizerLibrary.config,
+              useCount: visualizerLibrary.useCount,
+              tags: visualizerLibrary.tags,
+              description: visualizerLibrary.description,
+            })
+            .from(visualizerLibrary)
+            .where(and(...conditions))
+            .orderBy(args.sort === "recent" ? desc(visualizerLibrary.createdAt) : desc(visualizerLibrary.useCount))
+            .limit(10);
           return {
             tool_type: "visualizer",
             action: "browse_results",
-            items: result.rows,
-            count: result.rows.length,
+            items: rows,
+            count: rows.length,
           };
         } catch (e: any) {
           return { error: "Could not search visualizer library: " + e.message };

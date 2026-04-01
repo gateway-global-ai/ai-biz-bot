@@ -80,6 +80,9 @@ export type { SovereignMenuCategoryProps, SovereignMenuItem } from './navigation
 export { SovereignCommandNav } from './navigation/SovereignCommandNav';
 export type { SovereignCommandNavProps, SovereignCommandNavItem } from './navigation/SovereignCommandNav';
 
+// ── Theme ──────────────────────────────────────────────────────────
+export { SovereignThemeProvider } from './theme/SovereignThemeProvider';
+
 // ── Tokens ──────────────────────────────────────────────────────────
 export * from './tokens/designTokens';
 export * from './tokens/componentTokens';

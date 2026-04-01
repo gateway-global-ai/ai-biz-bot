@@ -27,16 +27,15 @@ export function MeProfile() {
         <SovereignSectionHeader
           title="Profile"
           subtitle="Your account and preferences."
-          icon={<User size={24} color={BRAND.blueLight} aria-hidden />}
-          action={
-            <SovereignButton sovereignVariant="outlined" onClick={() => setInfoOpen(true)}>
+          actions={
+            <SovereignButton sovereignVariant="ghost" onClick={() => setInfoOpen(true)}>
               About this screen
             </SovereignButton>
           }
         />
 
         <SovereignStack spacing={3}>
-          <SovereignAlert severity="info">
+          <SovereignAlert variant="info">
             Operational profile controls will connect to session and security APIs in a later slice.
             This route validates the ui-core pattern only.
           </SovereignAlert>
@@ -62,7 +61,7 @@ export function MeProfile() {
           open={infoOpen}
           onClose={() => setInfoOpen(false)}
           title="Profile (control plane)"
-          primaryAction={{ label: "Close", onClick: () => setInfoOpen(false) }}
+          footer={<SovereignButton onClick={() => setInfoOpen(false)}>Close</SovereignButton>}
         >
           <SovereignTypography variant="body2" color="text.secondary">
             Built with the Sovereign UI layer: MUI runs only inside{" "}

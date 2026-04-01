@@ -263,6 +263,7 @@ export function allowDecision(params: {
     actionId: params.actionId,
     siteConfigId: params.siteConfigId,
     enforcement: {},
+    doctrineViolations: [],
     decidedAt: new Date().toISOString(),
   };
 }
@@ -293,6 +294,7 @@ export function denyDecision(params: {
     actionId: params.actionId,
     siteConfigId: params.siteConfigId,
     enforcement: params.enforcement ?? {},
+    doctrineViolations: [],
     decidedAt: new Date().toISOString(),
   };
 }
@@ -323,6 +325,7 @@ export function escalateDecision(params: {
     actionId: params.actionId,
     siteConfigId: params.siteConfigId,
     enforcement: { escalationTarget: params.escalationTarget },
+    doctrineViolations: [],
     decidedAt: new Date().toISOString(),
   };
 }
@@ -354,6 +357,7 @@ export function degradeDecision(params: {
     actionId: params.actionId,
     siteConfigId: params.siteConfigId,
     enforcement: params.enforcement ?? {},
+    doctrineViolations: [],
     decidedAt: new Date().toISOString(),
   };
 }

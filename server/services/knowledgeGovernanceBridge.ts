@@ -84,6 +84,7 @@ export function resolveKnowledgeFilter(
       requireDisclaimerForLevels: ["unverified"],
       maxItems: 50,
       siteConfigId: policyDecision.siteConfigId,
+      resolveConflicts: false,
     };
   }
 
@@ -118,6 +119,7 @@ function classifyLibraryEntries(
       certificationSource: "auto_heuristic" as const,
       confidenceScore: 0.7,
       trustWeight: level === "approved" ? 9 : level === "trusted" ? 6 : 3,
+      conflictPriority: 50,
     };
   });
 }

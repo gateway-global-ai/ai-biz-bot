@@ -1,4 +1,7 @@
-import { randomUUID } from "node:crypto";
+const randomUUID = (): string =>
+  typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 import {
   type PolicyDecision,

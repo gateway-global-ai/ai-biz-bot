@@ -1,5 +1,9 @@
 import { and, eq, inArray } from "drizzle-orm";
 
+function uniq<T>(arr: T[]): T[] {
+  return [...new Set(arr)];
+}
+
 import { db } from "../db";
 import {
   actionRuns,
@@ -352,7 +356,7 @@ export async function startScopeActionRun(params: {
       agentId: params.agentId ?? null,
       orchestrationRunId: params.orchestrationRunId ?? null,
       state: "running",
-      actionInput: params.actionInput ?? {},
+      actionInput: (params.actionInput ?? {}) as any,
       startedAt: new Date(),
     })
     .returning();
@@ -565,18 +569,19 @@ export async function buildCodingCommandCenter(intentExecutionId: string): Promi
               id: "workspace-mode",
               label: "Workspace mode",
               value: workspaceHealth.mode,
-              tone: workspaceHealth.mode === "external_mcp" ? "success" : "warning",
+              tone: (workspaceHealth.mode === "external_mcp" ? "success" : "warning") as "success" | "warning",
             },
             {
               id: "workspace-auth",
               label: "Workspace auth",
               value: workspaceHealth.authState,
-              tone:
+              tone: (
                 workspaceHealth.authState === "valid" || workspaceHealth.authState === "bearer_override"
                   ? "success"
                   : workspaceHealth.authState === "expiring_soon"
                     ? "warning"
-                    : "danger",
+                    : "danger"
+              ) as "success" | "warning" | "danger",
             },
             {
               id: "workspace-expiry",
@@ -585,14 +590,15 @@ export async function buildCodingCommandCenter(intentExecutionId: string): Promi
                 workspaceHealth.tokenExpiresInSec == null
                   ? "n/a"
                   : `${workspaceHealth.tokenExpiresInSec}s`,
-              tone:
+              tone: (
                 workspaceHealth.tokenExpiresInSec == null
                   ? "neutral"
                   : workspaceHealth.tokenExpiresInSec < 0
                     ? "danger"
                     : workspaceHealth.tokenExpiresInSec < 900
                       ? "warning"
-                      : "neutral",
+                      : "neutral"
+              ) as "neutral" | "danger" | "warning",
             },
           ]
         : []),
