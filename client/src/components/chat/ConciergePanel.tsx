@@ -23,7 +23,6 @@ import React, { useState, useEffect, useMemo, useRef, useCallback, startTransiti
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation } from 'wouter';
 import { useOSMenu } from '@/hooks/useOSMenu';
-import AgentManager from '@/pages/agents/AgentManager';
 import { 
   Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield, MessageSquare, Menu,
   User, Activity, CreditCard, Building2, Users, ArrowLeft, Bot, ChevronRight, ChevronDown, Phone, Share2, QrCode, History,
@@ -55,8 +54,6 @@ import { useVoiceAnimations } from '../voice/animations/useVoiceAnimations';
 import QRCode from 'qrcode';
 import headerLogo from '@assets/clear_voice_ai_dark_sm.png';
 import { ProfileContent } from '@/components/account/ProfileContent';
-import { BillingContentWithStripe } from '@/pages/account/BillingPage';
-import { MixingBoardContent } from '@/pages/reseller/MixingBoard';
 import ShareButton from '@/components/ShareButton';
 import { AIOSLogoSVG } from '@/components/visualizer/AIOSLogoSVG';
 import { OSMenuList } from '@/components/os/OSMenuList';
@@ -81,7 +78,6 @@ import { BRAND, CANVAS_BG_CLASSNAME, ICON_SIZES, TOUCH_TARGETS, FOOTER_ZONE, VIS
 import { KnowledgeManager } from '../voice/tools/KnowledgeManager';
 import { TaskOrderEditor } from '../voice/tools/TaskOrderEditor';
 import { QRRoutesManager } from '../account/QRRoutesManager';
-import TelephonyPanelFull from '../../pages/developer/TelephonyPanel';
 import { DiscRadar, ArchBreakdown } from '@/ui/charts';
 import VoiceSelector from '../voice/VoiceSelector';
 import { NovaGate } from '../nova/NovaGate';
@@ -3057,7 +3053,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                       <span className="ml-auto px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] font-semibold">Paid</span>
                     </div>
                     <div className="flex-1 overflow-y-auto telephony-canvas">
-                      <TelephonyPanelFull params={{}} siteConfigId={siteConfigId} />
+                      <div className="flex items-center justify-center h-full text-slate-400 text-sm">Use voice to manage telephony</div>
                     </div>
                   </div>
                 )}
@@ -3672,10 +3668,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               <div className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-b-sui ${embeddedView === 'billing' ? 'bg-white' : embeddedView && ['getting-started-view', 'brand-profile-view', 'offer-stack-view', 'market-strategy-view', 'sales-funnels-view', 'preflight-view', 'manager-dashboard-view', 'operations-view', 'customer-db-view', 'schedule-rules-view', 'staff-view', 'comms-config-view', 'reports-view', 'system-health-view', 'locations-view', 'identity-view', 'behavior-view', 'guardrails-view', 'audit-view', 'welcome-view', 'login-view', 'booking-view', 'reschedule-view', 'profile-view', 'insurance-view', 'concierge-view', 'employee-dashboard-view', 'live-queue-view', 'session-monitor-view', 'calendar-view', 'customer-list-view', 'verification-view', 'intake-view', 'communications-view'].includes(embeddedView) ? 'bg-white' : 'bg-slate-950'}`}>
                 {embeddedView === 'profile' && <ProfileContent section="profile" />}
                 {embeddedView === 'operations' && <ProfileContent section="operations" />}
-                {embeddedView === 'billing' && <BillingContentWithStripe />}
+                {embeddedView === 'billing' && <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Use voice to manage billing</div>}
                 {embeddedView === 'my-businesses' && <ProfileContent section="my-businesses" />}
-                {embeddedView === 'reseller' && <MixingBoardContent />}
-                {embeddedView === 'agent-manager' && <AgentManager params={{}} siteConfigId={siteConfigId} />}
+                {embeddedView === 'reseller' && <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Use voice to manage reseller</div>}
+                {embeddedView === 'agent-manager' && <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Use voice to manage agents</div>}
                 {embeddedView === 'sales-funnels-view' && siteConfigId && (
                   <SalesFunnelsEditor
                     siteConfigId={siteConfigId}
