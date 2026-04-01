@@ -95,19 +95,13 @@ import { useTurnVisibility } from '@/hooks/useTurnVisibility';
 import { UnifiedOtpForm } from '@/components/auth/UnifiedOtpForm';
 
 /**
- * Public `/` passes `platform_landing` — not a DB row id. Voice + `canvas.resolve` require the
- * real `site_configs.id` from `/api/site-configs/by-slug/ai-biz-bots`.
+ * `platform_landing` is a real site_configs row (enterprise plan, Nova assigned).
+ * Only treat truly empty/undefined ids as placeholders.
  */
 function isPlatformSiteConfigPlaceholder(id: string | undefined | null): boolean {
   if (id == null) return false;
   const s = String(id).trim();
-  if (s === '') return false;
-  return (
-    s === 'platform_landing' ||
-    s === 'platform-landing' ||
-    s === 'platform' ||
-    s === 'undefined'
-  );
+  return s === '' || s === 'undefined';
 }
 
 // ── Governed helper: build SiteRuntimeContext from BusinessContext ─────────────

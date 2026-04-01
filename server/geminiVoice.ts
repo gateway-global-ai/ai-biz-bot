@@ -31,12 +31,10 @@ function transportForVoiceWsPath(path: string): ExecutionMutationTransport {
   return "browser_live";
 }
 
-/** Marketing / platform home ids: may exist in DB for visitor_sessions FK; voice stays on public Nova + minimal tools. */
-function isPlatformMarketingSiteConfigId(id: string | null | undefined): boolean {
-  if (id == null || !String(id).trim()) return false;
-  const s = String(id).trim();
-  return s === "platform_landing" || s === "platform-landing" || s === "platform";
-}
+/**
+ * platform_landing is a real site_configs row (enterprise, Nova assigned).
+ * No longer bypass contextual snap — it goes through the standard agent resolution path.
+ */
 
 /** Public marketing voice (`!siteConfigResolved`) — canvas-first, passive sales; minimal tools (see EXECUTION_MUTATION_GATE). */
 const PUBLIC_PLATFORM_VOICE_INSTRUCTION = `You are Nova on the public Gateway Global AI shell. Your job is to help people use the voice canvas calmly — not to sell aggressively.
@@ -289,9 +287,8 @@ export function setupGeminiLiveWebSocket(server: Server): void {
 
           // --- CONTEXTUAL SNAP ---
           // siteConfigResolved guards against injecting all 31 tools for unknown / unresolved sites (1008 risk).
-          // platform_landing may have a real DB row for visitor_sessions FK; still use public Nova here, not free-tier snap.
           let siteConfigResolved = false;
-          if (sessionSiteConfigId && !isPlatformMarketingSiteConfigId(sessionSiteConfigId)) {
+          if (sessionSiteConfigId) {
             try {
               const siteConfig = await storage.getSiteConfigById(sessionSiteConfigId);
               if (siteConfig) {
