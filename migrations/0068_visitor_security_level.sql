@@ -2,10 +2,17 @@
 -- security_level: anonymous | phone_verified | admin
 -- verified_phone: phone number if OTP-verified
 
-ALTER TABLE visitor_sessions
-  ADD COLUMN IF NOT EXISTS security_level TEXT NOT NULL DEFAULT 'anonymous',
-  ADD COLUMN IF NOT EXISTS verified_phone TEXT;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'visitor_sessions'
+  ) THEN
+    ALTER TABLE visitor_sessions
+      ADD COLUMN IF NOT EXISTS security_level TEXT NOT NULL DEFAULT 'anonymous',
+      ADD COLUMN IF NOT EXISTS verified_phone TEXT;
 
--- Index for fast security-level lookups during PTT session routing
-CREATE INDEX IF NOT EXISTS idx_visitor_sessions_security_level
-  ON visitor_sessions (security_level);
+    CREATE INDEX IF NOT EXISTS idx_visitor_sessions_security_level
+      ON visitor_sessions (security_level);
+  END IF;
+END $$;

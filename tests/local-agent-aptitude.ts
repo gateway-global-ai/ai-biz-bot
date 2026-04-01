@@ -151,6 +151,7 @@ const UI_CONTROLS: Record<string, unknown> = {
     prompt_patterns_forbidden: [
       "style={{",
       "@mui/material",
+      "@/components/ui/",
     ],
     governanceOverride: false,
   },
@@ -559,6 +560,20 @@ const CASES: TestCase[] = [
       return !j.allowed
         ? { result: "pass", detail: `scope narrowed correctly: ${j.reason}` }
         : { result: "fail", detail: "child should not have gained server/** access from ui_agent parent" };
+    },
+  },
+  {
+    id: "U08",
+    category: "BLOCKED",
+    description: "UI: block raw shadcn import @/components/ui/* in feature page",
+    run: () => {
+      const j = checkJurisdiction(
+        "Add import { Button } from '@/components/ui/button' to client/src/pages/Dashboard.tsx",
+        UI_CONTROLS,
+      );
+      return !j.allowed
+        ? { result: "pass", detail: `correctly blocked raw shadcn import: ${j.reason}` }
+        : { result: "fail", detail: "raw @/components/ui/ import should have been blocked" };
     },
   },
 ];

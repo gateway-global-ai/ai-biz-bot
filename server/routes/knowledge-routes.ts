@@ -12,6 +12,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { z } from 'zod';
 import { requireAuth } from '../auth';
+import { requirePolicy } from '../middleware/policyGate';
 import { gatewayChat } from '../ai-gateway';
 import { storage } from '../storage';
 import type { Request, Response } from 'express';
@@ -328,7 +329,7 @@ const createArtifactSchema = z.object({
   scope: z.enum(['business', 'franchise', 'platform']).default('business'),
 });
 
-router.post('/artifacts', async (req: Request, res: Response) => {
+router.post('/artifacts', requireAuth, requirePolicy('knowledge.artifact.write'), async (req: Request, res: Response) => {
   try {
     const parsed = createArtifactSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -364,7 +365,7 @@ router.post('/artifacts', async (req: Request, res: Response) => {
  * DELETE /api/knowledge/artifacts/:id
  * Delete a knowledge artifact. Owner of the site may delete any artifact on their site.
  */
-router.delete('/artifacts/:id', async (req: Request, res: Response) => {
+router.delete('/artifacts/:id', requireAuth, requirePolicy('knowledge.artifact.delete'), async (req: Request, res: Response) => {
   try {
     const id = firstRouteParam(req.params.id);
     if (!id) return res.status(400).json({ error: 'Artifact id required' });
@@ -400,7 +401,7 @@ const activateSchema = z.object({
  * POST /api/knowledge/artifacts/activate
  * Activate a document key for the given session (in-chat overlay). Validates artifact exists and is visible.
  */
-router.post('/artifacts/activate', async (req: Request, res: Response) => {
+router.post('/artifacts/activate', requireAuth, requirePolicy('knowledge.artifact.write'), async (req: Request, res: Response) => {
   try {
     const parsed = activateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -435,7 +436,7 @@ const deactivateSchema = z.object({
  * POST /api/knowledge/artifacts/deactivate
  * Deactivate a document key for the given session.
  */
-router.post('/artifacts/deactivate', async (req: Request, res: Response) => {
+router.post('/artifacts/deactivate', requireAuth, requirePolicy('knowledge.artifact.write'), async (req: Request, res: Response) => {
   try {
     const parsed = deactivateSchema.safeParse(req.body);
     if (!parsed.success) {

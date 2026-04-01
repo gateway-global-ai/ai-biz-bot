@@ -28,7 +28,14 @@ export const ORCHESTRATION_VIOLATION_TYPE = [
   "local_model_voice_path_attempt",
   "unauthorized_domain_access",
   "missing_orchestration_run",
+  "invalid_structured_output",
+  "domain_allowlist_violation",
   "workspace_tool_unauthorized",
+  "quarantine_direct_execution",
+  "quarantine_package_install_bypass",
+  "quarantine_unscanned_import",
+  "quarantine_routing_import",
+  "quarantine_dependency_trust_bypass",
 ] as const;
 
 export type OrchestrationViolationType = (typeof ORCHESTRATION_VIOLATION_TYPE)[number];

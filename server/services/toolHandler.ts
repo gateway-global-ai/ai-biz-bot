@@ -14,8 +14,8 @@ import { generateBusinessIntelligence } from "./intelligenceService";
 import { storage } from "../storage";
 import { sendPlatformEmail } from "./emailService";
 import { db } from "../db";
-import { workspaceConfigurations } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { workspaceConfigurations, agents } from "@shared/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { createGoogleWorkspaceService, type GoogleWorkspaceCredentials } from "../mcp/googleWorkspace";
 import { isKnowledgeWorkerPlan } from "../prompts/knowledgeWorkerPrompt";
 import { handleGetHotelInventory } from "../tools/hotelInventoryHandler";
@@ -461,6 +461,9 @@ export async function handleToolCall(toolCall: ToolCall, context?: ToolCallConte
       };
     }
 
+    const args = (toolCall.args ?? {}) as Record<string, any>;
+    const sessionContext = context;
+
     switch (toolCall.name) {
       case "get_hotel_inventory": {
         const sid = context?.siteConfigId ?? toolCall.args?.siteConfigId;
@@ -629,6 +632,328 @@ export async function handleToolCall(toolCall: ToolCall, context?: ToolCallConte
 
       case "get_inbound_caller_identity":
         return await handleGetInboundCallerIdentity(context);
+
+      case "set_canvas_background":
+        return {
+          acknowledged: true,
+          action: "set_background",
+          background_id: toolCall.args?.background_id,
+          message: `Background changed to ${toolCall.args?.background_id}. The user can now see it live on their canvas.`,
+        };
+
+      case "get_background_categories":
+        return {
+          categories: [
+            { id: "particles_floating", label: "Particles & Floating", description: "Floating elements that drift, sparkle, and create depth", count: 6 },
+            { id: "space_sky", label: "Space & Sky", description: "Cosmic effects from starfields to auroras", count: 6 },
+            { id: "weather_nature", label: "Weather & Nature", description: "Rain, snow, fog, underwater — bring nature to screen", count: 5 },
+            { id: "grids_patterns", label: "Grids & Patterns", description: "Structured backgrounds from minimal dots to retro perspective grids", count: 6 },
+            { id: "gradients_color", label: "Gradients & Color", description: "Flowing colors and smooth transitions", count: 4 },
+            { id: "waves_flow", label: "Waves & Flow", description: "Smooth flowing lines and organic motion", count: 5 },
+            { id: "light_beams", label: "Light & Beams", description: "Light effects from subtle glows to dramatic beams", count: 5 },
+            { id: "tech_digital", label: "Tech & Digital", description: "Cyberpunk and digital aesthetics — matrix, glitch, neon", count: 5 },
+          ],
+        };
+
+      case "get_backgrounds_in_category": {
+        const CATALOG: Record<string, Array<{ id: string; label: string; description: string }>> = {
+          particles_floating: [
+            { id: "particles", label: "Particles", description: "Floating particle system" },
+            { id: "sparkles", label: "Sparkles", description: "Twinkling star particles" },
+            { id: "fireflies", label: "Fireflies", description: "Glowing summer night" },
+            { id: "bokeh", label: "Bokeh", description: "Soft out-of-focus lights" },
+            { id: "bubble", label: "Bubble", description: "Rising floating bubbles" },
+            { id: "confetti", label: "Confetti", description: "Celebration particles" },
+          ],
+          space_sky: [
+            { id: "starfield", label: "Starfield", description: "Flying through space" },
+            { id: "aurora", label: "Aurora", description: "Northern lights effect" },
+            { id: "meteors", label: "Meteors", description: "Falling meteor trails" },
+            { id: "shooting_stars", label: "Shooting Stars", description: "Streaking stars" },
+            { id: "constellation", label: "Constellation", description: "Connected star network" },
+            { id: "orbits", label: "Orbits", description: "Orbital ring paths" },
+          ],
+          weather_nature: [
+            { id: "rain", label: "Rain", description: "Rainfall with lightning" },
+            { id: "snow", label: "Snow", description: "Gentle snowfall" },
+            { id: "fog", label: "Fog", description: "Atmospheric mist" },
+            { id: "underwater", label: "Underwater", description: "Caustic light patterns" },
+            { id: "fireworks", label: "Fireworks", description: "Explosive celebration" },
+          ],
+          grids_patterns: [
+            { id: "grid_pattern", label: "Grid Pattern", description: "Clean line grid" },
+            { id: "dot_pattern", label: "Dot Pattern", description: "Subtle dot grid" },
+            { id: "hexagon", label: "Hexagon", description: "Honeycomb pattern" },
+            { id: "flickering_grid", label: "Flickering Grid", description: "Animated matrix grid" },
+            { id: "retro_grid", label: "Retro Grid", description: "80s perspective grid" },
+            { id: "interactive_grid", label: "Interactive Grid", description: "Reactive grid with glow" },
+          ],
+          gradients_color: [
+            { id: "mesh_gradient", label: "Mesh Gradient", description: "Stripe/Linear style blobs" },
+            { id: "gradient", label: "Gradient", description: "Flowing gradient shapes" },
+            { id: "gradient_animation", label: "Gradient Animation", description: "Animated color shifts" },
+            { id: "vortex", label: "Vortex", description: "Spiral color flow" },
+          ],
+          waves_flow: [
+            { id: "wavy", label: "Wavy", description: "Flowing wave lines" },
+            { id: "light_waves", label: "Light Waves", description: "Ambient wave animation" },
+            { id: "wave_grid", label: "Wave Grid", description: "3D wave mesh surface" },
+            { id: "topography", label: "Topography", description: "Contour line map" },
+            { id: "paths", label: "Paths", description: "Animated path lines" },
+          ],
+          light_beams: [
+            { id: "beams", label: "Beams", description: "Light beam rays" },
+            { id: "beams_collision", label: "Beams Collision", description: "Colliding light beams" },
+            { id: "spotlight", label: "Spotlight", description: "Cursor-following glow" },
+            { id: "ripple", label: "Ripple", description: "Expanding light rings" },
+            { id: "circles", label: "Circles", description: "Animated circle patterns" },
+          ],
+          tech_digital: [
+            { id: "matrix", label: "Matrix", description: "Digital code rain — green characters falling" },
+            { id: "glitch", label: "Glitch", description: "RGB split distortion effect" },
+            { id: "neon", label: "Neon", description: "Glowing neon rings" },
+            { id: "warp", label: "Warp", description: "Hyperspace tunnel effect" },
+            { id: "boxes", label: "Boxes", description: "Floating 3D boxes" },
+          ],
+        };
+        const catId = toolCall.args?.category_id?.toLowerCase()?.replace(/[\s&]+/g, '_') ?? "";
+        const items = CATALOG[catId] ?? [];
+        if (items.length === 0) {
+          const fuzzyMatch = Object.keys(CATALOG).find(k => catId.includes(k.split('_')[0]) || k.includes(catId));
+          if (fuzzyMatch) return { category_id: fuzzyMatch, items: CATALOG[fuzzyMatch], count: CATALOG[fuzzyMatch].length };
+        }
+        return { category_id: catId, items, count: items.length };
+      }
+
+      case "save_background_as_default":
+        return {
+          acknowledged: true,
+          action: "save_default",
+          background_id: toolCall.args?.background_id,
+          message: `Background ${toolCall.args?.background_id} saved as default desktop.`,
+          requires_auth: true,
+        };
+
+      case "get_screen_size":
+        return {
+          acknowledged: true,
+          action: "request_screen_size",
+          message: "Screen size information is available from the client. The client will respond with viewport dimensions.",
+        };
+
+      case "update_visualizer": {
+        const vizArgs = toolCall.args ?? {};
+        const vizConfig: Record<string, unknown> = {};
+        if (vizArgs.type) vizConfig.type = vizArgs.type;
+        if (vizArgs.primaryColor) vizConfig.primaryColor = vizArgs.primaryColor;
+        if (vizArgs.secondaryColor) vizConfig.secondaryColor = vizArgs.secondaryColor;
+        if (vizArgs.opacity != null) vizConfig.opacity = vizArgs.opacity;
+        if (vizArgs.glowIntensity != null) vizConfig.glowIntensity = vizArgs.glowIntensity;
+        if (vizArgs.barCount != null) vizConfig.barCount = vizArgs.barCount;
+        if (vizArgs.amplitudeScale != null) vizConfig.amplitudeScale = vizArgs.amplitudeScale;
+        if (vizArgs.smoothing != null) vizConfig.smoothing = vizArgs.smoothing;
+        return {
+          acknowledged: true,
+          tool_type: "visualizer",
+          action: "update",
+          config: vizConfig,
+          message: "Visualizer updated. The user should see the change immediately.",
+        };
+      }
+
+      case "save_visualizer":
+        return {
+          acknowledged: true,
+          tool_type: "visualizer",
+          action: "save",
+          name: args.name,
+          description: args.description || null,
+          tags: args.tags || [],
+          is_public: args.is_public !== false,
+          requires_auth: true,
+          message: "Saving visualizer to the community library.",
+        };
+
+      case "browse_visualizers": {
+        try {
+          const { visualizerLibrary } = await import("@shared/schema");
+          const conditions = [eq(visualizerLibrary.isPublic, true)];
+          if (args.engine_type) conditions.push(eq(visualizerLibrary.engineType, args.engine_type));
+          const rows = await db
+            .select({
+              id: visualizerLibrary.id,
+              name: visualizerLibrary.name,
+              authorName: visualizerLibrary.authorName,
+              engineType: visualizerLibrary.engineType,
+              config: visualizerLibrary.config,
+              useCount: visualizerLibrary.useCount,
+              tags: visualizerLibrary.tags,
+              description: visualizerLibrary.description,
+            })
+            .from(visualizerLibrary)
+            .where(and(...conditions))
+            .orderBy(args.sort === "recent" ? desc(visualizerLibrary.createdAt) : desc(visualizerLibrary.useCount))
+            .limit(10);
+          return {
+            tool_type: "visualizer",
+            action: "browse_results",
+            items: rows,
+            count: rows.length,
+          };
+        } catch (e: any) {
+          return { error: "Could not search visualizer library: " + e.message };
+        }
+      }
+
+      // ── Agent Management Tools (AI OS Assistant) ──────────────────────
+      case "list_agents": {
+        try {
+          const siteId = sessionContext?.siteConfigId;
+          if (!siteId) return { error: "No site context available. Cannot list agents." };
+          const statusFilter = args.status ?? "all";
+          let query = db.select({
+            id: agents.id,
+            name: agents.name,
+            roleType: agents.roleType,
+            status: agents.status,
+            aiModelProvider: agents.aiModelProvider,
+            voiceRole: agents.voiceRole,
+            voicePersona: agents.voicePersona,
+          }).from(agents).where(eq(agents.siteConfigId, siteId));
+          if (statusFilter !== "all") {
+            query = db.select({
+              id: agents.id,
+              name: agents.name,
+              roleType: agents.roleType,
+              status: agents.status,
+              aiModelProvider: agents.aiModelProvider,
+              voiceRole: agents.voiceRole,
+              voicePersona: agents.voicePersona,
+            }).from(agents).where(eq(agents.siteConfigId, siteId));
+          }
+          const rows = await query;
+          const filtered = statusFilter === "all" ? rows : rows.filter(r => r.status === statusFilter);
+          return {
+            tool_type: "agent_management",
+            action: "list_agents",
+            agents: filtered,
+            count: filtered.length,
+            siteConfigId: siteId,
+          };
+        } catch (e: any) {
+          return { error: "Failed to list agents: " + e.message };
+        }
+      }
+
+      case "inspect_agent": {
+        try {
+          const agentId = args.agentId;
+          const agentName = args.agentName;
+          if (!agentId && !agentName) return { error: "Provide either agentId or agentName." };
+          let rows;
+          if (agentId) {
+            rows = await db.select().from(agents).where(eq(agents.id, agentId));
+          } else {
+            const siteId = sessionContext?.siteConfigId;
+            const allAgents = siteId
+              ? await db.select().from(agents).where(eq(agents.siteConfigId, siteId))
+              : await db.select().from(agents);
+            rows = allAgents.filter(a =>
+              a.name.toLowerCase().includes((agentName as string).toLowerCase())
+            );
+          }
+          if (rows.length === 0) return { error: "Agent not found." };
+          const agent = rows[0];
+          return {
+            tool_type: "agent_management",
+            action: "inspect_agent",
+            agent: {
+              id: agent.id,
+              name: agent.name,
+              roleType: agent.roleType,
+              status: agent.status,
+              voiceRole: agent.voiceRole,
+              voicePersona: agent.voicePersona,
+              aiModelProvider: agent.aiModelProvider,
+              systemPrompt: agent.systemPrompt ? agent.systemPrompt.substring(0, 500) + (agent.systemPrompt.length > 500 ? "... [truncated]" : "") : null,
+              dominance: agent.dominance,
+              influence: agent.influence,
+              steadiness: agent.steadiness,
+              conscientiousness: agent.conscientiousness,
+            },
+          };
+        } catch (e: any) {
+          return { error: "Failed to inspect agent: " + e.message };
+        }
+      }
+
+      case "update_agent_prompt": {
+        try {
+          const { agentId, systemPrompt: newPrompt, appendMode } = args;
+          if (!agentId || !newPrompt) return { error: "agentId and systemPrompt are required." };
+          const existing = await db.select().from(agents).where(eq(agents.id, agentId));
+          if (existing.length === 0) return { error: "Agent not found." };
+          const finalPrompt = appendMode
+            ? (existing[0].systemPrompt ?? "") + "\n\n" + newPrompt
+            : newPrompt;
+          await db.update(agents).set({ systemPrompt: finalPrompt }).where(eq(agents.id, agentId));
+          return {
+            tool_type: "agent_management",
+            action: "update_agent_prompt",
+            agentId,
+            agentName: existing[0].name,
+            promptLength: finalPrompt.length,
+            mode: appendMode ? "appended" : "replaced",
+            success: true,
+          };
+        } catch (e: any) {
+          return { error: "Failed to update agent prompt: " + e.message };
+        }
+      }
+
+      case "update_agent_knowledge": {
+        try {
+          const { agentId, title, content, category } = args;
+          if (!agentId || !title || !content) return { error: "agentId, title, and content are required." };
+          const existing = await db.select().from(agents).where(eq(agents.id, agentId));
+          if (existing.length === 0) return { error: "Agent not found." };
+          const knowledgeEntry = `\n\n## Knowledge: ${title}\nCategory: ${category ?? "general"}\n${content}`;
+          const updatedPrompt = (existing[0].systemPrompt ?? "") + knowledgeEntry;
+          await db.update(agents).set({ systemPrompt: updatedPrompt }).where(eq(agents.id, agentId));
+          return {
+            tool_type: "agent_management",
+            action: "update_agent_knowledge",
+            agentId,
+            agentName: existing[0].name,
+            knowledgeTitle: title,
+            category: category ?? "general",
+            success: true,
+          };
+        } catch (e: any) {
+          return { error: "Failed to update agent knowledge: " + e.message };
+        }
+      }
+
+      case "dispatch_agent_task": {
+        try {
+          const { agentRoleType, taskType, prompt, targetFile } = args;
+          if (!agentRoleType || !taskType || !prompt) {
+            return { error: "agentRoleType, taskType, and prompt are required." };
+          }
+          return {
+            tool_type: "agent_management",
+            action: "dispatch_agent_task",
+            status: "queued",
+            agentRoleType,
+            taskType,
+            prompt: prompt.substring(0, 200) + (prompt.length > 200 ? "..." : ""),
+            targetFile: targetFile ?? null,
+            message: `Task dispatched to ${agentRoleType}. The agent will process this through the governed orchestration pipeline. Use list_agents to check status.`,
+          };
+        } catch (e: any) {
+          return { error: "Failed to dispatch task: " + e.message };
+        }
+      }
 
       default:
         console.warn(`[ToolHandler] ⚠️ Tool not recognized: ${toolCall.name}`);

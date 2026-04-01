@@ -121,13 +121,13 @@ export interface UIElementsRegistry {
 }
 
 export interface ActionResult {
-  status: "success" | "error";
+  status: "success" | "error" | "denied" | "escalated";
   actionId: string;
   entity: string;
   entityId: string;
   auditEvent?: string;
   changedFields: string[];
-  change: {
+  change?: {
     parameter: string;
     previousValue: number | string;
     newValue: number | string;

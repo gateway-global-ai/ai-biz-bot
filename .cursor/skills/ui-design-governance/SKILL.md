@@ -45,8 +45,79 @@ Use this checklist for **code review**, **screenshot review**, and **agent self-
 
 **Failure mode:** “Technically rendered” without meeting the rubric = **proficiency failure**, not a subjective nit.
 
+## Hard Design Constants
+
+All layout and sizing decisions MUST use governed tokens from `client/src/config/brand.ts`. Using literal pixel values is a governance violation equivalent to hardcoding hex colors.
+
+### Icon Sizes (import `ICON_SIZES` from `@/config/brand`)
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `footerControl` | 24px | Footer slot buttons (chat, visual, menu) |
+| `footerPrimary` | 28px | PTT mic icon (primary action) |
+| `menuItem` | 22px | System menu list items |
+| `canvasControl` | 20px | In-canvas controls (close, back, settings) |
+| `statusIndicator` | 14px | Connection dots, status badges |
+
+### Touch Targets (import `TOUCH_TARGETS` from `@/config/brand`)
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `footerButton` | 48px | Footer button containers (WCAG AAA mobile) |
+| `menuItem` | 44px | Menu list row minimum height |
+| `chip` | 36px | Intent chips, suggestion chips |
+
+### Footer Zone (import `FOOTER_ZONE` from `@/config/brand`)
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `height` | 120px | Total footer zone height -- constitutional |
+| `statusStripHeight` | 24px | Logo + connection status strip |
+| `logoHeight` | 36px | Clear Voice AI logo in status strip |
+| `slotWidthPercent` | 22/46/16 | Left/Center/Right slot allocation |
+
+### Visualizer Zone (import `VISUALIZER_ZONE` from `@/config/brand`)
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `ringRadiusFactor` | 0.28 | Circular pulse ring radius as fraction of min(w,h) |
+| `logoSize` | 140px | AIOS logo SVG size inside visualizer |
+| `logoOpacity` | 0.85 | AIOS logo opacity |
+
+### Sovereign UI Component Library
+
+All UI surfaces must use Sovereign wrappers from `@/ui-core` — never raw shadcn or MUI imports.
+Design token files live in `client/src/ui-core/tokens/`: `designTokens.ts`, `componentTokens.ts`, `motionTokens.ts`.
+See `.cursor/rules/sovereign-ui-sdk.mdc` for the full governance rule.
+
+### Footer Button Contract
+
+Every footer button MUST have:
+1. An icon at `ICON_SIZES.footerControl` (or `footerPrimary` for PTT)
+2. A text label below the icon: `text-[10px] font-medium uppercase tracking-wider`
+3. A container at minimum `TOUCH_TARGETS.footerButton` (48px) height
+4. No `h-12`, `h-14`, or other hardcoded heights
+
+### Canvas Intent View Rules
+
+- Intent views (triggered by chips, voice, or menu) render at **100% W x 100% H** of the canvas content zone
+- When active, ALL idle chrome (helper panels, chips, accordion cards, OS menu) is hidden
+- No `<details>` accordion cards on the idle canvas for controls that exist in the system menu
+- Each intent view has a single close/back affordance at `ICON_SIZES.canvasControl`
+
+### Prohibited Patterns
+
+| Pattern | Violation |
+|---------|-----------|
+| `size={22}` or any literal pixel value on icons | `ungoverned_icon_size` |
+| `h-12`, `h-14` hardcoded button heights | `ungoverned_touch_target` |
+| `max-w-2xl` on intent overlay containers | `intent_view_not_fullscreen` |
+| `<details>` accordion duplicating system menu controls | `duplicate_control_surface` |
+| Footer button without text label | `missing_button_label` |
+
 ## Related rules
 
 - `.cursor/rules/brand-tokens.mdc`
 - `.cursor/rules/canvas-os-tool-mandate.mdc`
 - `.cursor/rules/governed-ui-sdk.mdc`
+- `.cursor/rules/canvas-intent-views.mdc`

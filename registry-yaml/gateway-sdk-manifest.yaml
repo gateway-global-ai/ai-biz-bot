@@ -67,6 +67,56 @@ entries:
       children: any
     prohibited: [inline_style, raw_color]
 
+  - id: ai-transcription
+    type: block
+    source: shadcn-promoted
+    import: "@/components/ai-blocks"
+    export_name: SovereignTranscription
+    sdk_ref: shadcn.io/ai/transcription
+    themes_supported: [light-apple, dark-apple]
+    allowed_props:
+      entries: TranscriptEntry[]
+      isListening: boolean
+    prohibited: [inline_style, raw_color]
+
+  - id: ai-prompt-input
+    type: block
+    source: shadcn-promoted
+    import: "@/components/ai-blocks"
+    export_name: SovereignPromptInput
+    sdk_ref: shadcn.io/ai/prompt-input
+    themes_supported: [light-apple, dark-apple]
+    allowed_props:
+      onSubmit: function
+      placeholder: string
+      disabled: boolean
+    prohibited: [inline_style, raw_color]
+
+  - id: ai-voice-selector
+    type: block
+    source: shadcn-promoted
+    import: "@/components/ai-blocks"
+    export_name: SovereignVoiceSelector
+    sdk_ref: shadcn.io/ai/voice-selector
+    themes_supported: [light-apple, dark-apple]
+    allowed_props:
+      voices: VoiceOption[]
+      selectedVoiceId: string
+      onSelect: function
+      onPreview: function
+    prohibited: [inline_style, raw_color]
+
+  - id: ai-task-queue
+    type: block
+    source: shadcn-promoted
+    import: "@/components/ai-blocks"
+    export_name: SovereignTaskQueue
+    sdk_ref: shadcn.io/ai/queue
+    themes_supported: [light-apple, dark-apple]
+    allowed_props:
+      tasks: TaskItem[]
+    prohibited: [inline_style, raw_color]
+
   - id: shadcn-placeholder-promotion
     type: primitive
     source: shadcn

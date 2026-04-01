@@ -20,17 +20,17 @@
  */
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, startTransition } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation } from 'wouter';
 import { useOSMenu } from '@/hooks/useOSMenu';
-import AgentManager from '@/pages/agents/AgentManager';
 import { 
   Maximize2, Minimize2, Mic, Send, Settings, RefreshCw, Shield, MessageSquare, Menu,
   User, Activity, CreditCard, Building2, Users, ArrowLeft, Bot, ChevronRight, ChevronDown, Phone, Share2, QrCode, History,
   LayoutDashboard, Globe, Sliders, FileText, BookOpen, Search, Upload, Lock, X, Check,
   Zap, Map, Link2, Cpu, Network, Radio, MessageCircle, ChevronUp, Copy, Download, ExternalLink, Sparkles,
   Volume2, VolumeX,
-  Loader2
+  Loader2,
+  Eye, EyeOff, MoreVertical, MessageSquareOff
 } from 'lucide-react';
 import { VoiceClientFactory } from '../../services/voice/VoiceClientFactory';
 import { IVoiceClient } from '../../services/voice/IVoiceClient';
@@ -53,12 +53,9 @@ import { SuccessAnimation } from '../voice/animations/SuccessAnimation';
 import { useVoiceAnimations } from '../voice/animations/useVoiceAnimations';
 import QRCode from 'qrcode';
 import headerLogo from '@assets/clear_voice_ai_dark_sm.png';
-import chatFooterCarbon from '@assets/chat-footer-carbon.png';
 import { ProfileContent } from '@/components/account/ProfileContent';
-import { BillingContentWithStripe } from '@/pages/account/BillingPage';
-import { MixingBoardContent } from '@/pages/reseller/MixingBoard';
 import ShareButton from '@/components/ShareButton';
-import AIOSMark from '@/components/public/AIOSMark';
+import { AIOSLogoSVG } from '@/components/visualizer/AIOSLogoSVG';
 import { OSMenuList } from '@/components/os/OSMenuList';
 import { fetchOrchestrationRunForAgentCreate } from '@/lib/agentOrchestrationClient';
 import {
@@ -77,11 +74,10 @@ import {
   type CanvasChromeSettings,
 } from '@/lib/canvasChromeSettings';
 import type { OSMenuItem } from '@/hooks/useOSMenu';
-import { BRAND, CANVAS_BG_CLASSNAME } from '@/config/brand';
+import { BRAND, CANVAS_BG_CLASSNAME, ICON_SIZES, TOUCH_TARGETS, FOOTER_ZONE, VISUALIZER_ZONE, ELEVATION } from '@/config/brand';
 import { KnowledgeManager } from '../voice/tools/KnowledgeManager';
 import { TaskOrderEditor } from '../voice/tools/TaskOrderEditor';
 import { QRRoutesManager } from '../account/QRRoutesManager';
-import TelephonyPanelFull from '../../pages/developer/TelephonyPanel';
 import { DiscRadar, ArchBreakdown } from '@/ui/charts';
 import VoiceSelector from '../voice/VoiceSelector';
 import { NovaGate } from '../nova/NovaGate';
@@ -89,23 +85,23 @@ import { SalesFunnelsEditor } from '@/components/os/SalesFunnelsEditor';
 import { loadFunnelContextKeys, mergeFunnelContextFromBusiness, saveFunnelContextKeys, getOrCreateVisitorId, loadBuyerJourneyFromServer, persistBuyerJourneySignal } from '@/lib/funnelContext';
 import { postDesignStudioHandoff } from '@/lib/designStudioHandoff';
 import { DesignStudioPlaceholder } from '@/components/os/DesignStudioPlaceholder';
-import { VoiceVisualizerBars } from '@/components/chat/VoiceVisualizerBars';
+import { DynamicVisualizer } from '@/components/visualizer/DynamicVisualizer';
+import { DEFAULT_VISUALIZER_CONFIG } from '@/components/visualizer/types';
+import type { VisualizerConfig } from '@/components/visualizer/types';
 import { AiOsIdleCanvas } from '@/components/os/AiOsIdleCanvas';
+import { useCustomerAuth } from '@/lib/customerAuth';
+import { useSystemMenuAuthority } from '@/hooks/useSystemMenuAuthority';
+import { useTurnVisibility } from '@/hooks/useTurnVisibility';
+import { UnifiedOtpForm } from '@/components/auth/UnifiedOtpForm';
 
 /**
- * Public `/` passes `platform_landing` — not a DB row id. Voice + `canvas.resolve` require the
- * real `site_configs.id` from `/api/site-configs/by-slug/ai-biz-bots`.
+ * `platform_landing` is a real site_configs row (enterprise plan, Nova assigned).
+ * Only treat truly empty/undefined ids as placeholders.
  */
 function isPlatformSiteConfigPlaceholder(id: string | undefined | null): boolean {
   if (id == null) return false;
   const s = String(id).trim();
-  if (s === '') return false;
-  return (
-    s === 'platform_landing' ||
-    s === 'platform-landing' ||
-    s === 'platform' ||
-    s === 'undefined'
-  );
+  return s === '' || s === 'undefined';
 }
 
 // ── Governed helper: build SiteRuntimeContext from BusinessContext ─────────────
@@ -365,8 +361,8 @@ const KnowledgeOverlay: React.FC<{
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      className={`absolute inset-0 z-40 flex flex-col overflow-hidden ${isSovereign ? 'bg-[#0F172A]' : 'bg-slate-900'} backdrop-blur-sm`}
-      style={{ top: 0, left: 0, right: 0, bottom: 0 }}
+      className={`absolute inset-0 flex flex-col overflow-hidden ${isSovereign ? 'bg-[#0F172A]' : 'bg-slate-900'} backdrop-blur-sm`}
+      style={{ top: 0, left: 0, right: 0, bottom: 0, zIndex: ELEVATION.menuOverlay }}
     >
       <div className="p-4 flex items-center justify-between border-b border-slate-500/60 shrink-0">
         <span className="font-semibold text-white">Knowledge base</span>
@@ -881,7 +877,11 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [siteCapabilities, setSiteCapabilities] = useState<{ booking: boolean; account: boolean; sms: boolean; payments: boolean; reviews: boolean; loyalty: boolean }>({ booking: false, account: false, sms: false, payments: false, reviews: false, loyalty: false });
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const { visibility, turnActive } = useTurnVisibility({ isRecording, isProcessing, isAISpeaking });
   const [isMuted, setIsMuted] = useState(false);
+  const [canvasOverlayVisible, setCanvasOverlayVisible] = useState<boolean>(() => {
+    try { return localStorage.getItem('gateway_canvas_overlay_v1') !== 'off'; } catch { return true; }
+  });
   const [aiOutputVolume, setAiOutputVolume] = useState(0);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   /** Bumps voice reconnect when funnel context keys change (SalesFunnelsEditor). */
@@ -890,6 +890,12 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [sessionEntryPointAgentId, setSessionEntryPointAgentId] = useState<string | null>(null);
   const [volumeLevel, setVolumeLevel] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [inputAnalyser, setInputAnalyser] = useState<AnalyserNode | null>(null);
+  const [outputAnalyser, setOutputAnalyser] = useState<AnalyserNode | null>(null);
+  const [visualizerConfig, setVisualizerConfig] = useState<VisualizerConfig>(DEFAULT_VISUALIZER_CONFIG);
+  const [liveTranscript, setLiveTranscript] = useState<string>('');
+  const [chatMode, setChatMode] = useState(false);
+  const [expandedMenuCategory, setExpandedMenuCategory] = useState<string | null>(null);
   const [currentVoiceConfig, setCurrentVoiceConfig] = useState(voiceConfig);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
   const [successMessageId, setSuccessMessageId] = useState<string | null>(null);
@@ -931,6 +937,9 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [menuNoDriftMode, setMenuNoDriftMode] = useState(false);
   const [menuSaving, setMenuSaving] = useState(false);
   const [menuSaved, setMenuSaved] = useState(false);
+  /** Menu identity gate: when anonymous user taps menu, show OTP before menu opens. */
+  const [menuLoginMode, setMenuLoginMode] = useState(false);
+  const customerAuth = useCustomerAuth();
   /** Local admin mode — activated from the panel header admin toggle on public pages. */
   const [localAdminMode, setLocalAdminMode] = useState(false);
   /** First-level drill: null = home (Admin | User | Public Agents); then 'admin' | 'user' | 'public'. */
@@ -941,7 +950,12 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   /** In-shell active experience (intent-bound canvas + metadata) — not website “pinned nav”. See SHELL_CONTAINMENT_RULE_V1. */
   const [activeExperience, setActiveExperience] = useState<ActiveExperienceState | null>(null);
   /** shadcn.io-style canvas background effect (governed picker → CanvasBackgroundLayer). */
-  const [canvasBackgroundId, setCanvasBackgroundId] = useState<string | null>(null);
+  const [canvasBackgroundId, setCanvasBackgroundId] = useState<string | null>(() => {
+    const last = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('gateway_canvas_bg_last') : null;
+    if (last) return last;
+    if (isPlatformMarketingLanding(business.id)) return 'interactive_grid';
+    return null;
+  });
   /** Persisted tint / card / text tuning over the library background (localStorage). */
   const [canvasChrome, setCanvasChrome] = useState<CanvasChromeSettings>(() => loadCanvasChromeSettings());
   const updateCanvasChrome = useCallback((next: CanvasChromeSettings) => {
@@ -979,6 +993,47 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
     if (token) headers['Authorization'] = `Bearer ${token}`;
     return headers;
   };
+
+  // ── Post-login owner activation ─────────────────────────────────────────────
+  // After OTP login, activate admin mode and switch to the AIOS Assistant agent.
+  // This triggers voice reconnect (effectiveOwnerControls is in the voice init deps)
+  // and passes owner identity through sessionContext so the server enables MANAGER mode.
+  const activateOwnerPostLogin = useCallback(async () => {
+    setLocalAdminMode(true);
+    setShowMenuOverlay(false);
+
+    // Fetch the AIOS Assistant agent for this site and switch to it
+    const sid = effectiveSiteConfigId;
+    if (sid) {
+      try {
+        const res = await fetch(`/api/site-configs/${sid}/agents`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.agents && Array.isArray(data.agents)) {
+            const aiosAssistant = data.agents.find(
+              (a: { operationalMode?: string; roleType?: string }) =>
+                a.operationalMode === 'MANAGER' || a.roleType === 'manager'
+            );
+            if (aiosAssistant) {
+              const assistantConfig: AgentConfig = {
+                name: aiosAssistant.name || 'AIOS Assistant',
+                role: aiosAssistant.voiceRole || 'AI OS Assistant',
+                personality: aiosAssistant.systemPrompt || 'I am your AI OS Assistant.',
+                objectives: ['Help owner manage agents, projects, and knowledge'],
+                constraints: ['Only execute within allowed tools'],
+              };
+              setCurrentAgent(assistantConfig);
+              console.log(`[ConciergePanel] Owner login: switched to AIOS Assistant (${aiosAssistant.name})`);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[ConciergePanel] Failed to fetch AIOS Assistant agent:', err);
+      }
+    }
+
+    console.log('[ConciergePanel] Owner mode activated — voice will reconnect with MANAGER tools');
+  }, [effectiveSiteConfigId]);
 
   // ── Owner agent role selector ─────────────────────────────────────────────
   // When showOwnerControls is true, the owner can switch between three AI advisors:
@@ -1156,6 +1211,13 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   const [expandedUserReferral, setExpandedUserReferral] = useState(false);
   const [currentAgent, setCurrentAgent] = useState<AgentConfig>(agent);
   const [availableAgents, setAvailableAgents] = useState<AgentConfig[]>([]);
+  const systemMenuCategories = useSystemMenuAuthority({
+    isAuthenticated: isAuthenticated || customerAuth.isAuthenticated,
+    isOwner: !!(showOwnerControls || localAdminMode || ownerMode),
+    hasAgents: availableAgents.length > 1,
+    hasKnowledge: true,
+    websiteUrl: websiteUrl,
+  });
 
   // Update currentAgent when agent *content* changes — not reference identity (stable key).
   useEffect(() => {
@@ -1390,7 +1452,6 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { triggerSuccess } = useVoiceAnimations();
-  const [animationTick, setAnimationTick] = useState(0);
   const processingStartedAtRef = useRef<number>(0);
   const processingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoStartedPttRef = useRef(false);
@@ -1459,13 +1520,6 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
   };
 
   // Close menu overlay when navigating or opening a view (handled in onClick handlers).
-
-  // Animation tick for visualizer — fixed interval so bar heights don't flicker on every re-render (e.g. volume)
-  useEffect(() => {
-    if (!isRecording && !isProcessing && !isAISpeaking) return;
-    const id = setInterval(() => setAnimationTick((t) => t + 1), 80);
-    return () => clearInterval(id);
-  }, [isRecording, isProcessing, isAISpeaking]);
 
   // Clear embedded view when leaving Command Center (owner mode)
   useEffect(() => {
@@ -1640,7 +1694,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           console.log('[ConciergePanel] Message received:', msg);
           
           if (msg.type === 'transcription') {
-            // Handle user transcription (intermediate or final)
+            setLiveTranscript(msg.text || '');
+            if (msg.isFinal) {
+              setTimeout(() => setLiveTranscript(''), 1500);
+            }
             setMessages(prev => {
               const lastMsg = prev[prev.length - 1];
               if (lastMsg && lastMsg.role === 'user' && lastMsg.metadata?.isTranscription) {
@@ -1696,7 +1753,15 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             if (msg.text) {
               addMessage('assistant', msg.text, msg.metadata);
             } else if (msg.metadata?.tool_type) {
-              if (msg.metadata.tool_type === 'shared_canvas' || msg.metadata.tool_type === 'show_canvas') {
+              if (msg.metadata.tool_type === 'canvas_background' && msg.metadata.action === 'set' && msg.metadata.background_id) {
+                setCanvasBackgroundId(msg.metadata.background_id as string);
+                addMessage('assistant', undefined, { ...msg.metadata, voiceAudioOnly: true });
+              } else if (msg.metadata.tool_type === 'visualizer' && msg.metadata.action === 'update' && msg.metadata.config) {
+                setVisualizerConfig((prev: VisualizerConfig) => ({ ...prev, ...(msg.metadata!.config as Partial<VisualizerConfig>) }));
+                addMessage('assistant', undefined, { ...msg.metadata, voiceAudioOnly: true });
+              } else if (msg.metadata.tool_type === 'screen_info') {
+                addMessage('assistant', undefined, { ...msg.metadata, voiceAudioOnly: true });
+              } else if (msg.metadata.tool_type === 'shared_canvas' || msg.metadata.tool_type === 'show_canvas') {
                 // GOVERNANCE: Do not pin canvas from raw Gemini tool metadata (bypasses /api/canvas-control).
                 // Governed path: transcript.final → VoiceTurnOrchestrator → canvas.resolve → canvas.render.
                 // Legacy tools still render inline via ToolRouter in the chat log (see message list branch).
@@ -1733,6 +1798,13 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           });
         }
 
+        if (newClient.onAnalyserReady) {
+          newClient.onAnalyserReady((input, output) => {
+            setInputAnalyser(input);
+            setOutputAnalyser(output);
+          });
+        }
+
         newClient.onConnectionChange((connected) => {
           const status = connected ? 'connected' : 'disconnected';
           setConnectionStatus(status);
@@ -1762,6 +1834,9 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         if (visitorId && sid) {
           loadBuyerJourneyFromServer(visitorId, sid).catch(() => {/* fire-and-forget */});
         }
+        const ownerIdentityFields = effectiveOwnerControls && customerAuth.user?.id
+          ? { authenticatedCustomerId: customerAuth.user.id, authenticatedIsOwner: true as const }
+          : {};
         const handoverBusinessContext = dbSiteConfig
           ? {
               ...business,
@@ -1770,12 +1845,14 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               ownerAgentRole: effectiveOwnerControls ? ownerAgentRole : undefined,
               funnelContextKeys: mergedFunnel,
               ...(sessionEntryPointAgentId ? { entryPointAgentId: sessionEntryPointAgentId } : {}),
+              ...ownerIdentityFields,
             }
           : {
               ...business,
               ownerAgentRole: effectiveOwnerControls ? ownerAgentRole : undefined,
               funnelContextKeys: mergedFunnel,
               ...(sessionEntryPointAgentId ? { entryPointAgentId: sessionEntryPointAgentId } : {}),
+              ...ownerIdentityFields,
             };
 
         // ── GOVERNED ORCHESTRATOR INIT (canvas_control.md §12) — BEFORE connect ──
@@ -2087,9 +2164,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
 
   // Footer is always 110px — governance spec (brand-tokens.mdc)
   const isFullscreen = layoutMode === 'fullscreen';
-  const headerStyle = isFullscreen ? { flex: '0 0 56px', minHeight: 56, maxHeight: 56 } : undefined;
-  const visualizerStyle = isFullscreen ? { flex: '0 0 64px', minHeight: 64, maxHeight: 64 } : undefined;
-  const footerStyle = { flex: '0 0 110px', minHeight: 110, maxHeight: 110 };
+  const footerStyle = { flex: `0 0 ${FOOTER_ZONE.height}px`, minHeight: FOOTER_ZONE.height, maxHeight: FOOTER_ZONE.height };
 
   return (
     <PanelWrapper
@@ -2104,7 +2179,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={() => setAiOsSplashVisible(false)}
-          className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-white px-6 cursor-pointer border-0"
+          className="fixed inset-0 flex flex-col items-center justify-center bg-white px-6 cursor-pointer border-0"
+          style={{ zIndex: ELEVATION.splash }}
         >
           <img
             src="/branding/ai-os-logo.png"
@@ -2115,191 +2191,19 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         </motion.button>
       )}
 
-      {/* 1. TOP HEADER — standard: ClearVoice + controls; AI OS: waveform center + menu (vision layout) */}
-      {isAiOsShell ? (
-        <div
-          style={headerStyle}
-          className="flex items-center justify-between px-4 flex-shrink-0 min-h-[56px] max-h-[56px] bg-[#0F172A] border-b border-slate-700/80"
-        >
-          <div className="w-10 shrink-0 flex items-center justify-start">
-            <div
-              className={`w-2 h-2 rounded-full shrink-0 ${
-                connectionStatus === 'connected'
-                  ? 'bg-emerald-400 animate-pulse shadow-lg shadow-emerald-400/50'
-                  : connectionStatus === 'connecting'
-                  ? 'bg-yellow-400 animate-pulse'
-                  : 'bg-red-400'
-              }`}
-              title={connectionStatus}
-            />
-          </div>
-          <div className="flex-1 flex flex-col items-center justify-center min-w-0 py-1">
-            <VoiceVisualizerBars
-              isAISpeaking={isAISpeaking}
-              isRecording={isRecording}
-              isProcessing={isProcessing}
-              animationTick={animationTick}
-              volumeLevel={volumeLevel}
-              aiOutputVolume={aiOutputVolume}
-            />
-          </div>
-          <div className="w-10 flex justify-end shrink-0">
-            {ownerMode && onExitOwnerMode ? (
-              <button
-                onClick={onExitOwnerMode}
-                className="p-2 hover:bg-white/10 rounded-xl text-white transition-colors"
-                title="Back to conversation"
-                type="button"
-              >
-                <ArrowLeft size={20} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  if (shellMode === 'locked') {
-                    goToUnifiedLogin();
-                  } else {
-                    setShowMenuOverlay((v) => !v);
-                  }
-                }}
-                className="p-2 hover:bg-white/10 rounded-xl text-white transition-colors"
-                title={shellMode === 'locked' ? 'Sign In' : 'Menu'}
-                data-concierge-menu="overlay"
-                aria-expanded={showMenuOverlay}
-                aria-haspopup="dialog"
-                aria-controls="concierge-menu-overlay"
-              >
-                {shellMode === 'locked' ? <Lock size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
-              </button>
-            )}
-          </div>
-        </div>
-      ) : (
-      <div
-        style={headerStyle}
-        className={`flex items-center justify-between px-4 py-3 flex-shrink-0 min-h-[56px] ${
-          isSovereign
-            ? 'bg-[#0F172A] border-b border-slate-700/80'
-            : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
-        }`}
-      >
-        {/* Left: owner mode back, or Menu (single entry to overlay) */}
-        <div className="flex items-center shrink-0">
-          {ownerMode && onExitOwnerMode ? (
-            <button
-              onClick={onExitOwnerMode}
-              className={isSovereign ? "p-2 hover:bg-white/10 rounded-xl text-white transition-colors flex items-center gap-1.5 text-sm" : "p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors flex items-center gap-1.5 text-sm"}
-              title="Back to conversation"
-            >
-              <ArrowLeft size={18} />
-              <span className="hidden sm:inline">Back</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                if (shellMode === 'locked') {
-                  goToUnifiedLogin();
-                } else {
-                  setShowMenuOverlay((v) => !v);
-                }
-              }}
-              className={isSovereign ? "p-2 hover:bg-white/10 rounded-xl text-white transition-colors" : "p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors"}
-              title={shellMode === 'locked' ? 'Sign In' : 'Menu'}
-              data-concierge-menu="overlay"
-              aria-expanded={showMenuOverlay}
-              aria-haspopup="dialog"
-              aria-controls="concierge-menu-overlay"
-            >
-              {shellMode === 'locked' ? <Lock size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
-            </button>
-          )}
-        </div>
-        {/* Center: ClearVoice AI logo + connection dot — always, unconditionally */}
-        <div className="flex items-center justify-center gap-2 flex-1 min-w-0">
-          <img src={headerLogo} alt="Clear Voice AI" className="h-10 w-auto object-contain" />
-          <div className={`w-2 h-2 rounded-full shrink-0 ${
-            connectionStatus === 'connected'
-              ? 'bg-emerald-400 animate-pulse shadow-lg shadow-emerald-400/50'
-              : connectionStatus === 'connecting'
-              ? 'bg-yellow-400 animate-pulse'
-              : 'bg-red-400'
-          }`} />
-        </div>
-        {/* Right: admin toggle (public pages) + layout cycle + explicit close */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* Admin mode toggle — only shown when parent hasn't forced showOwnerControls; allows owner to switch mode in-panel */}
-          {!showOwnerControls && (
-            <button
-              type="button"
-              onClick={() => {
-                // If parent wires onOpenSettings, use it for navigation (e.g. → /platform or /login)
-                if (onOpenSettings) {
-                  onOpenSettings();
-                  return;
-                }
-                if (localAdminMode) {
-                  // Exit admin mode
-                  setLocalAdminMode(false);
-                  setShowMenuOverlay(false);
-                } else if (shellMode === 'locked' || isSovereign) {
-                  goToUnifiedLogin();
-                } else {
-                  // Demo/unclaimed customer site — enter admin preview directly
-                  setLocalAdminMode(true);
-                }
-              }}
-              className={`p-2 rounded-xl transition-colors ${
-                localAdminMode
-                  ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
-                  : isSovereign
-                  ? 'hover:bg-white/10 text-slate-400 hover:text-white'
-                  : 'hover:bg-slate-50/20 text-white/60 hover:text-white'
-              }`}
-              title={localAdminMode ? 'Exit Admin Mode' : 'Admin'}
-              aria-label={localAdminMode ? 'Exit admin mode' : 'Admin mode'}
-            >
-              <Settings size={16} />
-            </button>
-          )}
-          {onCycleLayout && (
-            <button
-              onClick={onCycleLayout}
-              className={isSovereign ? "p-2 hover:bg-white/10 rounded-xl text-white transition-colors" : "p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors"}
-              title="Toggle Layout"
-            >
-              {layoutMode === 'fullscreen' ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-            </button>
-          )}
+      {/* Owner-mode back button — floating overlay when in owner admin view */}
+      {ownerMode && onExitOwnerMode && (
+        <div className="absolute top-3 left-3 z-30">
           <button
+            onClick={onExitOwnerMode}
+            className="p-2 bg-slate-900/80 hover:bg-slate-800 backdrop-blur-sm rounded-xl text-white transition-colors flex items-center gap-1.5 text-sm border border-slate-700/50"
+            title="Back to conversation"
             type="button"
-            onClick={onClose}
-            className={isSovereign ? "p-2 hover:bg-white/10 rounded-xl text-white transition-colors" : "p-2 hover:bg-slate-50/20 rounded-lg text-white transition-colors"}
-            title="Close Chat"
-            aria-label="Close chat"
           >
-            <X size={18} />
+            <ArrowLeft size={18} />
+            <span className="hidden sm:inline">Back</span>
           </button>
         </div>
-      </div>
-      )}
-
-      {/* 2. VISUALIZER (standard shell only — AI OS merges bars into header) */}
-      {!isAiOsShell && (
-      <div
-        style={visualizerStyle}
-        className="flex flex-col items-center justify-center flex-shrink-0 relative overflow-hidden isolate bg-[#0f172a] border-b border-slate-700/60"
-      >
-        <VoiceVisualizerBars
-          isAISpeaking={isAISpeaking}
-          isRecording={isRecording}
-          isProcessing={isProcessing}
-          animationTick={animationTick}
-          volumeLevel={volumeLevel}
-          aiOutputVolume={aiOutputVolume}
-        />
-      </div>
       )}
 
       {/* Demo "Is this your business?" claim banner — only for demo/provisioned sites when not dismissed */}
@@ -2336,6 +2240,66 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         style={{ minHeight: 0 }}
       >
         <CanvasBackgroundLayer backgroundId={canvasBackgroundId} chrome={canvasChrome} />
+        {/* SDK-ready audio visualizer overlay — turn-scoped: mounts on PTT, unmounts after turn + 800ms linger */}
+        <AnimatePresence>
+          {turnActive && (
+            <motion.div
+              key="visualizer-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: turnActive ? 0.2 : 0.4 }}
+              className="absolute inset-0 pointer-events-none flex items-center justify-center"
+              style={{ zIndex: ELEVATION.interactionVisual }}
+            >
+              <DynamicVisualizer
+                inputAnalyser={inputAnalyser}
+                outputAnalyser={outputAnalyser}
+                volumeLevel={volumeLevel}
+                aiOutputVolume={aiOutputVolume}
+                isRecording={isRecording}
+                isProcessing={isProcessing}
+                isAISpeaking={isAISpeaking}
+                config={visualizerConfig}
+                className="w-full h-full"
+              />
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <AIOSLogoSVG size={VISUALIZER_ZONE.logoSize} style={{ opacity: VISUALIZER_ZONE.logoOpacity }} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* Live transcript strip — turn-scoped: visible during recording + processing only */}
+        <AnimatePresence>
+          {visibility.liveTranscript && (
+            <motion.div
+              key="live-transcript"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="absolute bottom-0 left-0 right-0 pointer-events-none"
+              style={{ zIndex: ELEVATION.interactionUI }}
+            >
+              <div className="mx-auto max-w-[90%] mb-4 px-4 py-2.5 rounded-xl bg-slate-900/70 backdrop-blur-md border border-white/10">
+                {isProcessing && !liveTranscript ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-emerald-400 text-sm font-medium">Thinking</span>
+                    <span className="flex gap-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </span>
+                  </div>
+                ) : liveTranscript ? (
+                  <p className="text-white/90 text-sm text-center leading-relaxed truncate">{liveTranscript}</p>
+                ) : (
+                  <p className="text-white/50 text-xs text-center italic">Listening...</p>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {/* ── Persistent OS Index Bar — always visible, never scrolls away ── */}
         {effectiveOwnerControls && (
           <div className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b overflow-x-auto scrollbar-hide bg-slate-50 border-slate-200">
@@ -2489,7 +2453,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.2 }}
-            className="absolute inset-0 z-50 flex flex-col overflow-hidden bg-white"
+            className="absolute inset-0 flex flex-col overflow-hidden bg-white"
+              style={{ zIndex: ELEVATION.novaGate }}
           >
             <NovaGate
               siteConfigId={business.id}
@@ -2509,11 +2474,57 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.2 }}
-            className={`absolute inset-0 z-[48] flex flex-col overflow-hidden ${CANVAS_BG_CLASSNAME}`}
+            className={`absolute inset-0 flex flex-col overflow-hidden ${CANVAS_BG_CLASSNAME}`}
+              style={{ zIndex: ELEVATION.signInOverlay }}
             role="dialog"
             aria-label="Sign in"
           >
             {signInCanvasOverlay}
+          </motion.div>
+        )}
+
+        {/* Menu identity gate: OTP form for anonymous users before menu opens */}
+        {menuLoginMode && (
+          <motion.div
+            id="concierge-menu-login-gate"
+            role="dialog"
+            aria-label="Sign in to access menu"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 flex flex-col overflow-hidden bg-[#0F172A]"
+              style={{ zIndex: ELEVATION.menuLoginGate }}
+          >
+            <div className="px-4 py-3 flex items-center justify-between border-b border-slate-700/60 shrink-0">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Sign In</span>
+              <button
+                type="button"
+                onClick={() => setMenuLoginMode(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Close sign in"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto flex items-center justify-center p-4">
+              <div className="w-full max-w-sm">
+                <UnifiedOtpForm
+                  surface="canvas"
+                  onClose={() => setMenuLoginMode(false)}
+                  onCustomerActivated={async () => {
+                    await customerAuth.checkSession();
+                    setMenuLoginMode(false);
+                    activateOwnerPostLogin();
+                  }}
+                  onAdminActivated={async () => {
+                    await customerAuth.checkSession();
+                    setMenuLoginMode(false);
+                    activateOwnerPostLogin();
+                  }}
+                />
+              </div>
+            </div>
           </motion.div>
         )}
 
@@ -2527,12 +2538,14 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className={`absolute inset-0 z-40 flex flex-col overflow-hidden ${isSovereign ? 'bg-[#0F172A]' : 'bg-slate-900'} backdrop-blur-sm`}
-            style={{ top: 0, left: 0, right: 0, bottom: 0 }}
+            className={`absolute inset-0 flex flex-col overflow-hidden ${isSovereign ? 'bg-[#0F172A]' : 'bg-slate-900'} backdrop-blur-sm`}
+            style={{ top: 0, left: 0, right: 0, bottom: 0, zIndex: ELEVATION.menuOverlay }}
           >
-            {/* Header row: "AI ADVISOR" label + close — no separate "Menu" row */}
+            {/* Header row: label + close */}
             <div className="px-4 py-3 flex items-center justify-between border-b border-slate-700/60 shrink-0">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">AI Advisor</span>
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                {effectiveOwnerControls ? 'AI Advisor' : 'Menu'}
+              </span>
               <button
                 type="button"
                 onClick={() => { setShowMenuOverlay(false); setMenuSubView(null); }}
@@ -2550,7 +2563,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
                 transition={{ duration: 0.2 }}
-                className="absolute inset-0 z-50 flex flex-col bg-[#0F172A] overflow-hidden"
+                className="absolute inset-0 flex flex-col bg-[#0F172A] overflow-hidden"
+                style={{ zIndex: ELEVATION.menuSubView }}
               >
                 {/* ── SHARED back header helper ─────────────────── */}
                 {/* Each sub-panel uses this pattern: back btn + title + optional save */}
@@ -3033,7 +3047,7 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                       <span className="ml-auto px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] font-semibold">Paid</span>
                     </div>
                     <div className="flex-1 overflow-y-auto telephony-canvas">
-                      <TelephonyPanelFull params={{}} siteConfigId={siteConfigId} />
+                      <div className="flex items-center justify-center h-full text-slate-400 text-sm">Use voice to manage telephony</div>
                     </div>
                   </div>
                 )}
@@ -3384,115 +3398,144 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                 />
               )}
 
-              {/* ── AVAILABLE AGENTS ───────────────────────────────── */}
-              <section>
-                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 mb-2 border-b border-slate-500/60 pb-1">Available agents</h3>
-                <div className="space-y-1">
-                  {availableAgents.map((a, i) => (
-                    <button 
-                      key={i}
-                      type="button" 
-                      onClick={() => {
-                        setCurrentAgent(a);
-                        setShowMenuOverlay(false);
-                        // Force reconnect with new agent
-                        if (clientRef.current) {
-                          clientRef.current.disconnect();
-                          setConnectionStatus('disconnected');
-                        }
-                      }} 
-                      className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${currentAgent.name === a.name ? 'bg-indigo-500/20 border-indigo-500/50 text-white' : 'border-slate-500/60 text-white hover:bg-white/10'}`}
-                    >
-                      {a.name === 'AI Biz Bot' ? (
-                        <Bot size={18} className="text-slate-300 shrink-0" />
-                      ) : (
-                        <MessageSquare size={18} className="text-slate-300 shrink-0" />
-                      )}
-                      <span className="font-medium">{a.name}</span>
-                      {currentAgent.name === a.name && <Check size={16} className="ml-auto text-emerald-400 shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-              </section>
-              {/* ── CUSTOMER WORKFLOW MENU (from useOSMenu) ─── Only when not in owner mode */}
-              {!effectiveOwnerControls && osMenuItems.length > 0 && (
-                <section>
-                  <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 mb-2 border-b border-slate-500/60 pb-1">
-                    {shellMode === 'locked' ? 'Services' : 'Quick Access'}
-                  </h3>
-                  <div className="space-y-1">
-                    {osMenuItems.map((item) => (
-                      <div key={item.id}>
+              {/* ── L1 SYSTEM MENU CATEGORIES — 1-to-many collapsible (governed by useSystemMenuAuthority) ── */}
+              {!effectiveOwnerControls && systemMenuCategories.map((category) => {
+                const isExpanded = expandedMenuCategory === category.id;
+                return (
+                <section key={category.id}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedMenuCategory(isExpanded ? null : category.id)}
+                    className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-white/5 transition-colors rounded-xl"
+                  >
+                    <category.icon size={18} className="text-emerald-400 shrink-0" />
+                    <span className="text-sm font-semibold text-white flex-1">{category.label}</span>
+                    <ChevronRight size={16} className={`text-slate-500 shrink-0 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+                  </button>
+                  {isExpanded && (
+                    <div className="ml-6 space-y-0.5 mb-2">
+                      {category.items.map((item) => (
                         <button
+                          key={item.id}
                           type="button"
-                          onClick={() => item.action === 'switch_view' && item.viewId ? handleMenuAction(item.viewId) : undefined}
-                          className="w-full flex items-center gap-3 rounded-sui border border-slate-600/50 p-3 text-left text-white hover:bg-white/10 transition-colors"
+                          onClick={() => {
+                            if (item.gated) {
+                              setShowMenuOverlay(false);
+                              setMenuLoginMode(true);
+                              return;
+                            }
+                            if (item.id === 'canvas_fullscreen' && onCycleLayout) {
+                              onCycleLayout();
+                              setShowMenuOverlay(false);
+                              return;
+                            }
+                            if (item.id === 'canvas_random') {
+                              const randomEffects = ['constellation', 'rain', 'matrix', 'aurora', 'particles', 'waves', 'gradient-mesh', 'fireflies'];
+                              setCanvasBackgroundId(randomEffects[Math.floor(Math.random() * randomEffects.length)]);
+                              setShowMenuOverlay(false);
+                              return;
+                            }
+                            if (item.id === 'share_qr' || item.id === 'share_link') {
+                              setShowShareOverlay(true);
+                              setShowMenuOverlay(false);
+                              return;
+                            }
+                            if (item.id === 'share_website' && websiteUrl) {
+                              window.open(websiteUrl, '_blank', 'noopener,noreferrer');
+                              setShowMenuOverlay(false);
+                              return;
+                            }
+                            if (item.id === 'agent_knowledge') {
+                              setShowKnowledgeOverlay(true);
+                              setShowMenuOverlay(false);
+                              return;
+                            }
+                            if (item.id === 'session_logout') {
+                              customerAuth.logout();
+                              setShowMenuOverlay(false);
+                              return;
+                            }
+                            if (item.id === 'agent_switch') {
+                              setMenuSubView(null);
+                              return;
+                            }
+                            if (item.action === 'sub_view' && item.subViewKey) {
+                              setMenuSubView(item.subViewKey as any);
+                            }
+                          }}
+                          className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
                         >
-                          <item.icon className="w-4 h-4 text-slate-400 shrink-0" />
-                          <span className="text-sm font-medium">{item.label}</span>
-                          {item.children ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" /> : <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500" />}
+                          <item.icon size={16} className="text-slate-400 shrink-0" />
+                          <span className="text-sm">{item.label}</span>
+                          {item.gated && <Lock size={14} className="text-slate-500 ml-auto shrink-0" />}
+                          {!item.gated && <ChevronRight size={14} className="ml-auto text-slate-600 shrink-0" />}
                         </button>
-                        {item.children && (
-                          <div className="ml-4 mt-0.5 space-y-0.5 border-l border-slate-700/60 pl-3">
-                            {item.children.map((child) => (
-                              <button
-                                key={child.id}
-                                type="button"
-                                onClick={() => child.action === 'switch_view' && child.viewId ? handleMenuAction(child.viewId) : undefined}
-                                className="w-full text-left py-2 text-sm text-slate-400 hover:text-white flex items-center gap-2 transition-colors"
-                              >
-                                <child.icon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                                {child.label}
-                              </button>
-                            ))}
-                          </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+                );
+              })}
+
+              {/* ── OWNER: AVAILABLE AGENTS (flat list for owners) ── */}
+              {effectiveOwnerControls && (
+                <section>
+                  <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 mb-2 border-b border-slate-500/60 pb-1">Available agents</h3>
+                  <div className="space-y-1">
+                    {availableAgents.map((a, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => {
+                          setCurrentAgent(a);
+                          setShowMenuOverlay(false);
+                          if (clientRef.current) {
+                            clientRef.current.disconnect();
+                            setConnectionStatus('disconnected');
+                          }
+                        }}
+                        className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${currentAgent.name === a.name ? 'bg-indigo-500/20 border-indigo-500/50 text-white' : 'border-slate-500/60 text-white hover:bg-white/10'}`}
+                      >
+                        {a.name === 'AI Biz Bot' ? (
+                          <Bot size={18} className="text-slate-300 shrink-0" />
+                        ) : (
+                          <MessageSquare size={18} className="text-slate-300 shrink-0" />
                         )}
-                      </div>
+                        <span className="font-medium">{a.name}</span>
+                        {currentAgent.name === a.name && <Check size={16} className="ml-auto text-emerald-400 shrink-0" />}
+                      </button>
                     ))}
                   </div>
                 </section>
               )}
 
-              {/* KNOWLEDGE BASE — single auth-gated menu item */}
-              <section>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!isAuthenticated) {
-                      setShowMenuOverlay(false);
-                      onSmsConsentClick?.() ?? onNavigate?.('/login');
-                      return;
-                    }
-                    setShowKnowledgeOverlay(true);
-                    setShowMenuOverlay(false);
-                  }}
-                  className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10"
-                >
-                  <BookOpen size={18} className="text-slate-300" />
-                  <span>Knowledge base</span>
-                  {!isAuthenticated && <Lock size={16} className="text-slate-400 ml-auto" />}
-                  {isAuthenticated && <ChevronRight size={16} className="ml-auto text-slate-400" />}
-                </button>
-              </section>
-              {/* Links — Website / Online store; stay in chat (open in new tab) */}
-              {websiteUrl && (
+              {/* ── NON-OWNER: AGENT SWITCH (from L1 system categories) ── */}
+              {!effectiveOwnerControls && availableAgents.length > 1 && menuSubView === null && (
                 <section>
-                  <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 mb-2 border-b border-slate-500/60 pb-1">Links</h3>
+                  <h3 className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 mb-2 border-b border-slate-500/60 pb-1">Available agents</h3>
                   <div className="space-y-1">
-                    <a href={websiteUrl} target="_blank" rel="noopener noreferrer" onClick={() => setShowMenuOverlay(false)} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
-                      <Globe size={18} className="text-slate-300" /> <span>Website</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
-                    </a>
-                    <a href={websiteUrl} target="_blank" rel="noopener noreferrer" onClick={() => setShowMenuOverlay(false)} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
-                      <LayoutDashboard size={18} className="text-slate-300" /> <span>Online store</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
-                    </a>
+                    {availableAgents.map((a, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => {
+                          setCurrentAgent(a);
+                          setShowMenuOverlay(false);
+                          if (clientRef.current) {
+                            clientRef.current.disconnect();
+                            setConnectionStatus('disconnected');
+                          }
+                        }}
+                        className={`w-full flex items-center gap-3 rounded-sui border p-3 text-left transition-colors ${currentAgent.name === a.name ? 'bg-indigo-500/20 border-indigo-500/50 text-white' : 'border-slate-500/60 text-white hover:bg-white/10'}`}
+                      >
+                        <MessageSquare size={18} className="text-slate-300 shrink-0" />
+                        <span className="font-medium">{a.name}</span>
+                        {currentAgent.name === a.name && <Check size={16} className="ml-auto text-emerald-400 shrink-0" />}
+                      </button>
+                    ))}
                   </div>
                 </section>
               )}
-              <section>
-                <button type="button" onClick={() => { setShowShareOverlay(true); setShowMenuOverlay(false); }} className="w-full flex items-center gap-3 rounded-sui border border-slate-500/60 p-3 text-left text-white hover:bg-white/10">
-                  <Share2 size={18} className="text-slate-300" /> <span>Share</span> <ChevronRight size={16} className="ml-auto text-slate-400" />
-                </button>
-              </section>
             </div>
           </motion.div>
         )}
@@ -3507,8 +3550,8 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className={`absolute inset-0 z-40 flex flex-col overflow-hidden ${isSovereign ? 'bg-[#0F172A]' : 'bg-slate-900'}`}
-            style={{ top: 0, left: 0, right: 0, bottom: 0 }}
+            className={`absolute inset-0 flex flex-col overflow-hidden ${isSovereign ? 'bg-[#0F172A]' : 'bg-slate-900'}`}
+            style={{ top: 0, left: 0, right: 0, bottom: 0, zIndex: ELEVATION.menuOverlay }}
           >
             {/* Header */}
             <div className="shrink-0 px-5 py-4 flex items-center justify-between border-b border-slate-700/60">
@@ -3619,10 +3662,10 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
               <div className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-b-sui ${embeddedView === 'billing' ? 'bg-white' : embeddedView && ['getting-started-view', 'brand-profile-view', 'offer-stack-view', 'market-strategy-view', 'sales-funnels-view', 'preflight-view', 'manager-dashboard-view', 'operations-view', 'customer-db-view', 'schedule-rules-view', 'staff-view', 'comms-config-view', 'reports-view', 'system-health-view', 'locations-view', 'identity-view', 'behavior-view', 'guardrails-view', 'audit-view', 'welcome-view', 'login-view', 'booking-view', 'reschedule-view', 'profile-view', 'insurance-view', 'concierge-view', 'employee-dashboard-view', 'live-queue-view', 'session-monitor-view', 'calendar-view', 'customer-list-view', 'verification-view', 'intake-view', 'communications-view'].includes(embeddedView) ? 'bg-white' : 'bg-slate-950'}`}>
                 {embeddedView === 'profile' && <ProfileContent section="profile" />}
                 {embeddedView === 'operations' && <ProfileContent section="operations" />}
-                {embeddedView === 'billing' && <BillingContentWithStripe />}
+                {embeddedView === 'billing' && <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Use voice to manage billing</div>}
                 {embeddedView === 'my-businesses' && <ProfileContent section="my-businesses" />}
-                {embeddedView === 'reseller' && <MixingBoardContent />}
-                {embeddedView === 'agent-manager' && <AgentManager params={{}} siteConfigId={siteConfigId} />}
+                {embeddedView === 'reseller' && <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Use voice to manage reseller</div>}
+                {embeddedView === 'agent-manager' && <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Use voice to manage agents</div>}
                 {embeddedView === 'sales-funnels-view' && siteConfigId && (
                   <SalesFunnelsEditor
                     siteConfigId={siteConfigId}
@@ -3719,51 +3762,28 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                   <div className="w-full flex flex-col items-center gap-6">
                     {isPlatformMarketingLanding(business.id) ? (
                       <>
-                        <PlatformIdleGlassPanel chrome={canvasChrome}>
-                          {showIntentFirstIdleChrome && (
-                            <IntentFirstIdleChrome
-                              businessName={business.name}
-                              platformReferrerDisplay={platformIdleReferrerDisplay ?? null}
+                        {canvasOverlayVisible && (
+                          <PlatformIdleGlassPanel chrome={canvasChrome}>
+                            {showIntentFirstIdleChrome && (
+                              <IntentFirstIdleChrome
+                                businessName={business.name}
+                                platformReferrerDisplay={platformIdleReferrerDisplay ?? null}
+                                chrome={canvasChrome}
+                              />
+                            )}
+                            <ShellIntentChips
+                              chips={PLATFORM_SHELL_CHIPS}
+                              onPhrase={handleShellIntentPhrase}
+                              onOpenBackgroundPicker={handleOpenBackgroundFromChip}
+                              onNavigate={onNavigate}
                               chrome={canvasChrome}
                             />
-                          )}
-                          <ShellIntentChips
-                            chips={PLATFORM_SHELL_CHIPS}
-                            onPhrase={handleShellIntentPhrase}
-                            onOpenBackgroundPicker={handleOpenBackgroundFromChip}
-                            onNavigate={onNavigate}
-                            chrome={canvasChrome}
-                          />
-                        </PlatformIdleGlassPanel>
-                        <details
-                          className="w-full max-w-2xl rounded-sui border border-slate-200/70 bg-white/60 backdrop-blur-md [&_summary::-webkit-details-marker]:hidden shadow-sm"
-                        >
-                          <summary className="cursor-pointer select-none px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-800 hover:bg-white/40 rounded-sui">
-                            Canvas appearance
-                          </summary>
-                          <div className="px-3 pb-4 pt-2 space-y-4 max-h-[min(70vh,640px)] overflow-y-auto">
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 mb-2 px-0.5">
-                                1 · Background library
-                              </p>
-                              <CanvasBackgroundLibrarySection
-                                onAction={handleIdleCanvasAppearanceAction}
-                                selectedBackgroundId={canvasBackgroundId}
-                                compact
-                              />
-                            </div>
-                            <div className="border-t border-slate-200/80 pt-3">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 mb-2 px-0.5">
-                                {'2 · Theme & readability'}
-                              </p>
-                              <CanvasChromeControls value={canvasChrome} onChange={updateCanvasChrome} />
-                            </div>
-                          </div>
-                        </details>
+                          </PlatformIdleGlassPanel>
+                        )}
                       </>
                     ) : (
                       <>
-                        {showIntentFirstIdleChrome && (
+                        {canvasOverlayVisible && showIntentFirstIdleChrome && (
                           <IntentFirstIdleChrome
                             businessName={business.name}
                             platformReferrerDisplay={undefined}
@@ -3787,51 +3807,28 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
                 <div className="w-full max-w-2xl flex flex-col items-center gap-8">
                   {isPlatformMarketingLanding(business.id) ? (
                     <>
-                      <PlatformIdleGlassPanel chrome={canvasChrome}>
-                        {showIntentFirstIdleChrome && (
-                          <IntentFirstIdleChrome
-                            businessName={business.name}
-                            platformReferrerDisplay={platformIdleReferrerDisplay ?? null}
-                            chrome={canvasChrome}
-                          />
-                        )}
-                          <ShellIntentChips
-                            chips={PLATFORM_SHELL_CHIPS}
-                            onPhrase={handleShellIntentPhrase}
-                            onOpenBackgroundPicker={handleOpenBackgroundFromChip}
-                            onNavigate={onNavigate}
-                            chrome={canvasChrome}
-                          />
-                        </PlatformIdleGlassPanel>
-                        <details
-                          className="w-full max-w-2xl rounded-sui border border-slate-200/70 bg-white/60 backdrop-blur-md [&_summary::-webkit-details-marker]:hidden shadow-sm"
-                        >
-                          <summary className="cursor-pointer select-none px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-800 hover:bg-white/40 rounded-sui">
-                            Canvas appearance
-                          </summary>
-                          <div className="px-3 pb-4 pt-2 space-y-4 max-h-[min(70vh,640px)] overflow-y-auto">
-                            <div>
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 mb-2 px-0.5">
-                                1 · Background library
-                              </p>
-                              <CanvasBackgroundLibrarySection
-                                onAction={handleIdleCanvasAppearanceAction}
-                                selectedBackgroundId={canvasBackgroundId}
-                                compact
+                      {canvasOverlayVisible && (
+                        <PlatformIdleGlassPanel chrome={canvasChrome}>
+                          {showIntentFirstIdleChrome && (
+                            <IntentFirstIdleChrome
+                              businessName={business.name}
+                              platformReferrerDisplay={platformIdleReferrerDisplay ?? null}
+                              chrome={canvasChrome}
                             />
-                          </div>
-                          <div className="border-t border-slate-200/80 pt-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-600 mb-2 px-0.5">
-                              {'2 · Theme & readability'}
-                            </p>
-                            <CanvasChromeControls value={canvasChrome} onChange={updateCanvasChrome} />
-                          </div>
-                        </div>
-                      </details>
+                          )}
+                            <ShellIntentChips
+                              chips={PLATFORM_SHELL_CHIPS}
+                              onPhrase={handleShellIntentPhrase}
+                              onOpenBackgroundPicker={handleOpenBackgroundFromChip}
+                              onNavigate={onNavigate}
+                              chrome={canvasChrome}
+                            />
+                          </PlatformIdleGlassPanel>
+                      )}
                     </>
                   ) : (
                     <>
-                      {showIntentFirstIdleChrome && (
+                      {canvasOverlayVisible && showIntentFirstIdleChrome && (
                         <IntentFirstIdleChrome
                           businessName={business.name}
                           platformReferrerDisplay={undefined}
@@ -4057,120 +4054,165 @@ export const ConciergePanel: React.FC<ConciergePanelProps> = ({
         </div>
       )}
 
-      {/* 4. BOTTOM FOOTER — always dark shell zone; AI OS uses subtle hex grid (vision layout) */}
+      {/* 4. BOTTOM FOOTER — always dark shell zone with hexagon grid pattern */}
       <div
         style={{
           ...footerStyle,
           backgroundColor: '#0f172a',
-          backgroundImage: isAiOsShell
-            ? `linear-gradient(to bottom, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.97) 100%), repeating-linear-gradient(60deg, transparent 0px, transparent 10px, rgba(51,65,85,0.14) 10px, rgba(51,65,85,0.14) 11px), repeating-linear-gradient(-60deg, transparent 0px, transparent 10px, rgba(51,65,85,0.1) 10px, rgba(51,65,85,0.1) 11px)`
-            : `linear-gradient(to bottom, rgba(15,23,42,0.85) 0%, rgba(15,23,42,0.92) 100%), url(${chatFooterCarbon})`,
-          backgroundSize: isAiOsShell ? 'auto, 22px 22px, 22px 22px' : 'cover',
-          backgroundPosition: 'center',
+          position: 'relative',
+          overflow: 'hidden',
         }}
         className="flex flex-col items-center justify-center gap-3 px-4 py-3 flex-shrink-0 border-t border-slate-700/50"
       >
-        <div className="flex items-center justify-center gap-3 w-full">
-          {/* LEFT SLOT (20%): Mute + Share — both permanent footer residents */}
-          <div className="flex items-center gap-2 w-[20%] justify-start">
-            {/* Mute / Unmute AI audio */}
+        {/* Hexagon grid background pattern — brand green */}
+        <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.45]" aria-hidden>
+          <defs>
+            <pattern id="footer-hex" width="28" height="48.5" patternUnits="userSpaceOnUse" patternTransform="scale(0.8)">
+              <path d="M14,0 L28,8.08 L28,24.25 L14,32.33 L0,24.25 L0,8.08 Z" fill="none" stroke="rgba(0,138,62,0.85)" strokeWidth="1" />
+              <path d="M14,16.17 L28,24.25 L28,40.42 L14,48.5 L0,40.42 L0,24.25 Z" fill="none" stroke="rgba(0,138,62,0.85)" strokeWidth="1" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#footer-hex)" />
+        </svg>
+        <div className="flex items-center justify-center gap-3 w-full relative z-[1]">
+          {/* LEFT SLOT: Chat toggle + Visualizer toggle — governed controls with labels */}
+          <div className="flex items-center gap-3" style={{ width: `${FOOTER_ZONE.slotWidthPercent.left}%` }}>
+            <button
+              type="button"
+              onClick={() => setChatMode(c => !c)}
+              className={`flex-1 flex flex-col items-center justify-center gap-1 rounded-xl transition-colors ${
+                chatMode
+                  ? 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-white/10'
+              }`}
+              style={{ minHeight: TOUCH_TARGETS.footerButton }}
+              title={chatMode ? 'Switch to voice' : 'Switch to chat'}
+              aria-label={chatMode ? 'Switch to voice mode' : 'Switch to chat mode'}
+            >
+              {chatMode ? <MessageSquareOff size={ICON_SIZES.footerControl} /> : <MessageSquare size={ICON_SIZES.footerControl} />}
+              <span className="text-[10px] font-medium uppercase tracking-wider">{chatMode ? 'Voice' : 'Chat'}</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
-                const next = !isMuted;
-                setIsMuted(next);
-                clientRef.current?.setMuted?.(next);
+                const next = !canvasOverlayVisible;
+                setCanvasOverlayVisible(next);
+                try { localStorage.setItem('gateway_canvas_overlay_v1', next ? 'on' : 'off'); } catch {}
               }}
-              className={`flex-1 h-12 flex items-center justify-center rounded-xl transition-colors ${
-                isMuted
-                  ? 'text-red-400 bg-red-500/10 hover:bg-red-500/20'
-                  : 'text-slate-400 hover:text-white hover:bg-white/10'
+              className={`flex-1 flex flex-col items-center justify-center gap-1 rounded-xl transition-colors ${
+                canvasOverlayVisible
+                  ? 'text-slate-400 hover:text-white hover:bg-white/10'
+                  : 'text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
               }`}
-              title={isMuted ? 'Unmute AI' : 'Mute AI'}
-              aria-label={isMuted ? 'Unmute AI audio' : 'Mute AI audio'}
+              style={{ minHeight: TOUCH_TARGETS.footerButton }}
+              title={canvasOverlayVisible ? 'Hide overlay' : 'Show overlay'}
+              aria-label={canvasOverlayVisible ? 'Hide canvas overlay' : 'Show canvas overlay'}
             >
-              {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-            </button>
-
-            {/* Share / QR button — permanent slot resident */}
-            <button
-              type="button"
-              onClick={() => onShareClick ? onShareClick() : setShowMenuOverlay(true)}
-              className="flex-1 h-12 flex items-center justify-center rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-              title="Open share options"
-              aria-label="Open share options"
-            >
-              <Share2 size={18} />
+              {canvasOverlayVisible ? <Eye size={ICON_SIZES.footerControl} /> : <EyeOff size={ICON_SIZES.footerControl} />}
+              <span className="text-[10px] font-medium uppercase tracking-wider">Visual</span>
             </button>
           </div>
 
-          {/* CENTER SLOT (50%): PTT button — 3D depth, always present */}
-          <button
-            onMouseDown={startPTT}
-            onMouseUp={stopPTT}
-            onMouseLeave={stopPTT}
-            onTouchStart={(e) => { e.preventDefault(); startPTT(); }}
-            onTouchEnd={(e) => { e.preventDefault(); stopPTT(); }}
-            disabled={connectionStatus !== 'connected'}
-            style={
-              isAiOsShell && !isRecording && !isProcessing
-                ? { backgroundColor: BRAND.green }
-                : undefined
-            }
-            className={`relative w-[50%] min-w-[140px] max-w-[220px] h-14 rounded-2xl font-semibold text-sm transition-all duration-200 transform active:scale-[0.98] active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed select-none overflow-hidden ${
-              isAiOsShell
-                ? isRecording
-                  ? 'bg-indigo-500 text-white shadow-[0_0_24px_rgba(99,102,241,0.5),0_4px_0_rgba(0,0,0,0.5)] ring-2 ring-indigo-400/50'
-                  : isProcessing
-                  ? 'bg-indigo-500/90 text-white shadow-[0_0_20px_rgba(99,102,241,0.35),0_4px_0_rgba(0,0,0,0.4)]'
-                  : 'text-white border border-emerald-700/40 shadow-[0_4px_0_rgba(0,0,0,0.45)] hover:brightness-110'
-                : isRecording
-                ? 'bg-indigo-500 text-white shadow-[0_0_24px_rgba(99,102,241,0.5),0_4px_0_rgba(0,0,0,0.5)] ring-2 ring-indigo-400/50'
-                : isProcessing
-                ? 'bg-indigo-500/90 text-white shadow-[0_0_20px_rgba(99,102,241,0.35),0_4px_0_rgba(0,0,0,0.4)]'
-                : 'bg-slate-800 text-slate-200 border border-slate-600/80 hover:bg-slate-700 hover:border-indigo-500/40 shadow-[0_4px_0_rgba(0,0,0,0.5),0_0_0_rgba(99,102,241,0)] hover:shadow-[0_4px_0_rgba(0,0,0,0.5),0_0_20px_rgba(99,102,241,0.2)] backdrop-blur-sm'
-            }`}
-          >
-            <span className="flex items-center justify-center gap-2">
-              <Mic size={20} className={isRecording ? 'animate-pulse' : ''} />
-              <span className={`hidden min-[380px]:inline ${isAiOsShell ? 'uppercase tracking-wide text-xs' : ''}`}>
-                {isRecording
-                  ? 'Listening…'
-                  : isProcessing
-                  ? 'Processing…'
-                  : isAiOsShell
-                  ? 'Push to talk'
-                  : 'Hold to speak'}
-              </span>
-            </span>
-          </button>
-
-          {/* RIGHT SLOT (20%): Reconnect */}
-          <button
-            onClick={() => {
-              if (clientRef.current) {
-                clientRef.current.disconnect();
-                clientRef.current = null;
+          {/* CENTER SLOT: PTT pulse button — governed turn initiator, always present */}
+          <div className="relative flex items-center justify-center" style={{ width: `${FOOTER_ZONE.slotWidthPercent.center}%`, minWidth: 140, maxWidth: 220 }}>
+            {/* Pulse rings — only when idle and connected */}
+            {!isRecording && !isProcessing && connectionStatus === 'connected' && (
+              <>
+                <span
+                  className="absolute inset-0 rounded-2xl animate-[ptt-pulse_2s_ease-out_infinite]"
+                  style={{ border: `2px solid ${BRAND.green}`, opacity: 0 }}
+                />
+                <span
+                  className="absolute inset-0 rounded-2xl animate-[ptt-pulse_2s_ease-out_0.6s_infinite]"
+                  style={{ border: `2px solid ${BRAND.green}`, opacity: 0 }}
+                />
+                <span
+                  className="absolute inset-0 rounded-2xl animate-[ptt-pulse_2s_ease-out_1.2s_infinite]"
+                  style={{ border: `2px solid ${BRAND.green}`, opacity: 0 }}
+                />
+              </>
+            )}
+            <button
+              onMouseDown={startPTT}
+              onMouseUp={stopPTT}
+              onMouseLeave={stopPTT}
+              onTouchStart={(e) => { e.preventDefault(); startPTT(); }}
+              onTouchEnd={(e) => { e.preventDefault(); stopPTT(); }}
+              disabled={connectionStatus !== 'connected'}
+              style={
+                !isRecording && !isProcessing
+                  ? { backgroundColor: BRAND.green }
+                  : undefined
               }
-              setTimeout(() => window.location.reload(), 300);
-            }}
-            className="w-[20%] h-12 flex items-center justify-center text-xs font-medium text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
-            title="Restart Connection"
-            aria-label="Restart connection"
-          >
-            <RefreshCw size={16} />
-          </button>
+              className={`relative w-full h-14 rounded-2xl font-semibold text-sm transition-all duration-200 transform active:scale-[0.97] disabled:opacity-40 disabled:cursor-not-allowed select-none z-[1] ${
+                isRecording
+                  ? 'bg-emerald-500 text-white shadow-[0_0_28px_rgba(16,185,129,0.6)] ring-2 ring-emerald-400/60'
+                  : isProcessing
+                  ? 'bg-emerald-600 text-white shadow-[0_0_24px_rgba(16,185,129,0.4)]'
+                  : 'text-white shadow-[0_0_20px_rgba(0,138,62,0.4)] hover:shadow-[0_0_28px_rgba(0,138,62,0.5)] hover:brightness-110'
+              }`}
+            >
+              <span className="flex items-center justify-center gap-2">
+                <Mic size={ICON_SIZES.footerPrimary} className={isRecording ? 'animate-pulse' : ''} />
+                <span className="hidden min-[380px]:inline uppercase tracking-wide text-xs">
+                  {isRecording
+                    ? 'Listening…'
+                    : isProcessing
+                    ? 'Processing…'
+                    : 'Push to talk'}
+                </span>
+              </span>
+            </button>
+          </div>
+
+          {/* RIGHT SLOT: Menu (hamburger) — L1 permanent resident, identity gate */}
+          <div className="flex items-center justify-end" style={{ width: `${FOOTER_ZONE.slotWidthPercent.right}%` }}>
+            <button
+              type="button"
+              onClick={() => {
+                const authed = isAuthenticated || customerAuth.isAuthenticated;
+                if (!authed) {
+                  setMenuLoginMode(true);
+                  setShowMenuOverlay(false);
+                } else {
+                  setMenuLoginMode(false);
+                  setShowMenuOverlay((v) => !v);
+                }
+              }}
+              className={`flex flex-col items-center justify-center gap-1 rounded-xl transition-colors ${
+                showMenuOverlay || menuLoginMode
+                  ? 'text-white bg-white/10'
+                  : 'text-slate-400 hover:text-white hover:bg-white/10'
+              }`}
+              style={{ minHeight: TOUCH_TARGETS.footerButton, minWidth: TOUCH_TARGETS.footerButton }}
+              title={isAuthenticated || customerAuth.isAuthenticated ? 'Menu' : 'Sign in'}
+              aria-label={isAuthenticated || customerAuth.isAuthenticated ? 'Open menu' : 'Sign in'}
+              aria-expanded={showMenuOverlay || menuLoginMode}
+            >
+              <Menu size={ICON_SIZES.footerControl} />
+              <span className="text-[10px] font-medium uppercase tracking-wider">Menu</span>
+            </button>
+          </div>
         </div>
 
 
-        <div className="flex items-center justify-between w-full text-[10px] font-medium uppercase tracking-wider text-slate-400">
-          <span>
-            {currentAgent.name
-              ? (currentVoiceConfig.mode === 'clear_voice' ? `CV · ${currentAgent.name}` : `PTT · ${currentAgent.name}`)
-              : (currentVoiceConfig.mode === 'clear_voice' ? 'CLEAR VOICE' : 'STANDARD PTT')}
+        <div className="flex items-center justify-between w-full relative z-[1]" style={{ minHeight: FOOTER_ZONE.statusStripHeight }}>
+          <div className="flex items-center gap-2">
+            <img src={headerLogo} alt="Clear Voice AI" style={{ height: FOOTER_ZONE.logoHeight }} className="w-auto object-contain opacity-90" />
+            <div className={`w-2 h-2 rounded-full shrink-0 ${
+              connectionStatus === 'connected'
+                ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50'
+                : connectionStatus === 'connecting'
+                ? 'bg-yellow-400 animate-pulse'
+                : 'bg-red-400'
+            }`} />
+          </div>
+          <span className="text-[10px] font-medium text-slate-400 truncate max-w-[40%]">
+            {currentAgent.name || currentAgent.role}
           </span>
-          <span className={connectionStatus === 'connected' ? 'text-emerald-400' : connectionStatus === 'connecting' ? 'text-yellow-400' : 'text-red-400'}>
-            {connectionStatus === 'connected' ? '● CONNECTED' : connectionStatus === 'connecting' ? '◐ CONNECTING' : '○ DISCONNECTED'}
+          <span className={`text-[10px] font-medium uppercase tracking-wider ${connectionStatus === 'connected' ? 'text-emerald-400' : connectionStatus === 'connecting' ? 'text-yellow-400' : 'text-red-400'}`}>
+            {connectionStatus === 'connected' ? 'CONNECTED' : connectionStatus === 'connecting' ? 'CONNECTING' : 'DISCONNECTED'}
           </span>
         </div>
       </div>

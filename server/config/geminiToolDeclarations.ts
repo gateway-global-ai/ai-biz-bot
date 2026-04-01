@@ -620,7 +620,7 @@ export const TOOL_DECLARATIONS = {
 
   ingest_serpapi_reviews: {
     name: "ingest_serpapi_reviews",
-    description: "Harvest all available Google Maps reviews for a business using its stable SerpAPI data_id. Paginates automatically through the full review corpus. First 10 reviews per site are free; additional reviews billed at $0.10 each.",
+    description: "Harvest all available Google Maps reviews for a business using its stable SerpAPI data_id. Paginates automatically through the full review corpus. First 10 reviews per site are free; additional reviews billed at $1.00 each. Requires operator authorization before harvest. Reviews are classified: 4-5★ = experiences (strengths), 1-3★ = lessons (improvement areas).",
     parameters: {
       type: "OBJECT",
       properties: {
@@ -737,6 +737,281 @@ export const TOOL_DECLARATIONS = {
           description: "Optional short reason you are checking (e.g. greeting inbound caller).",
         },
       },
+    },
+  },
+
+  set_canvas_background: {
+    name: "set_canvas_background",
+    description:
+      "Changes the live animated canvas background to a specific effect. The user sees the new background immediately behind the frosted overlay. Use this to preview backgrounds during the conversational selection flow.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        background_id: {
+          type: "STRING",
+          description: "The unique ID of the background effect. Examples: 'particles', 'sparkles', 'fireflies', 'bokeh', 'bubble', 'confetti', 'starfield', 'aurora', 'meteors', 'shooting_stars', 'constellation', 'orbits', 'rain', 'snow', 'fog', 'underwater', 'fireworks', 'grid_pattern', 'dot_pattern', 'hexagon', 'flickering_grid', 'retro_grid', 'interactive_grid', 'mesh_gradient', 'gradient', 'gradient_animation', 'vortex', 'wavy', 'light_waves', 'wave_grid', 'topography', 'paths', 'beams', 'beams_collision', 'spotlight', 'ripple', 'circles', 'matrix', 'glitch', 'neon', 'warp', 'boxes'.",
+        },
+      },
+      required: ["background_id"],
+    },
+  },
+
+  get_background_categories: {
+    name: "get_background_categories",
+    description:
+      "Returns all available canvas background categories with their names, descriptions, and item counts. Use this when the user asks about background options or you need to navigate them through the catalog.",
+    parameters: {
+      type: "OBJECT",
+      properties: {},
+    },
+  },
+
+  get_backgrounds_in_category: {
+    name: "get_backgrounds_in_category",
+    description:
+      "Returns all background effects within a specific category, including their IDs, labels, and effect profiles. Use this to help the user browse options within a category.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        category_id: {
+          type: "STRING",
+          description: "The category ID to list backgrounds for. Valid IDs: 'particles_floating', 'space_sky', 'weather_nature', 'grids_patterns', 'gradients_color', 'waves_flow', 'light_beams', 'tech_digital'.",
+        },
+      },
+      required: ["category_id"],
+    },
+  },
+
+  save_background_as_default: {
+    name: "save_background_as_default",
+    description:
+      "Saves the currently displayed background as the user's default desktop. Requires the user to be authenticated. If the user is anonymous, tell them you need to set up their profile first.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        background_id: {
+          type: "STRING",
+          description: "The background ID to save as the user's default.",
+        },
+      },
+      required: ["background_id"],
+    },
+  },
+
+  get_screen_size: {
+    name: "get_screen_size",
+    description:
+      "Returns the user's current viewport dimensions and device type. Use this to recommend fullscreen mode on desktop or adjust background recommendations based on screen size.",
+    parameters: {
+      type: "OBJECT",
+      properties: {},
+    },
+  },
+
+  update_visualizer: {
+    name: "update_visualizer",
+    description:
+      "Change the active audio visualizer appearance in real-time. Use when user asks to change colors, style, intensity, or visualizer type. Valid types: 'circular_pulse' (radial FFT bars), 'sine_wave' (Siri-style wave), 'orb' (breathing blob). Have a conversation about what they want — ask about mood, brand colors, use case. Always show a live preview before saving.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        type: {
+          type: "STRING",
+          description: "Visualizer engine: 'circular_pulse', 'sine_wave', or 'orb'",
+        },
+        primaryColor: {
+          type: "STRING",
+          description: "CSS color for primary elements (e.g. '#00FFFF', '#FF0000')",
+        },
+        secondaryColor: {
+          type: "STRING",
+          description: "CSS color for secondary/AI-speaking elements",
+        },
+        opacity: {
+          type: "NUMBER",
+          description: "Overall opacity 0-1 (default 0.85)",
+        },
+        glowIntensity: {
+          type: "NUMBER",
+          description: "Glow strength 0-2 (default 0.6)",
+        },
+        barCount: {
+          type: "NUMBER",
+          description: "Number of frequency bars 16-128 (for circular_pulse, default 64)",
+        },
+        amplitudeScale: {
+          type: "NUMBER",
+          description: "How aggressively bars react to audio 0.5-3 (default 1.0)",
+        },
+        smoothing: {
+          type: "NUMBER",
+          description: "Animation smoothing 0-1 (default 0.7)",
+        },
+      },
+    },
+  },
+
+  save_visualizer: {
+    name: "save_visualizer",
+    description:
+      "Save the current visualizer configuration to the community library. Requires user authentication. Ask the user for a name and optional description. The visualizer will be shared publicly so others can discover and use it.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        name: {
+          type: "STRING",
+          description: "Name for this visualizer (e.g. 'Ocean Pulse', 'Neon Circuit')",
+        },
+        description: {
+          type: "STRING",
+          description: "Brief description of the visual style",
+        },
+        tags: {
+          type: "ARRAY",
+          items: { type: "STRING" },
+          description: "Discovery tags like 'calm', 'energetic', 'business', 'gaming'",
+        },
+        is_public: {
+          type: "BOOLEAN",
+          description: "Whether to share with the community (default true)",
+        },
+      },
+      required: ["name"],
+    },
+  },
+
+  browse_visualizers: {
+    name: "browse_visualizers",
+    description:
+      "Search the community visualizer library. Use when user wants to see what others have created or wants recommendations. You can search by type, popularity, or keywords.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        query: {
+          type: "STRING",
+          description: "Search term (matches name and description)",
+        },
+        engine_type: {
+          type: "STRING",
+          description: "Filter by engine: 'circular_pulse', 'sine_wave', 'orb'",
+        },
+        sort: {
+          type: "STRING",
+          description: "'popular' (most used) or 'recent' (newest first)",
+        },
+      },
+    },
+  },
+
+  // ── Agent Management Tools (AI OS Assistant — owner-only) ─────────────
+  list_agents: {
+    name: "list_agents",
+    description: "Lists all agents configured for the current business/site. Returns agent names, roles, status, and AI model provider. Use when the owner asks to see their agents, team, or swarm.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        status: {
+          type: "STRING",
+          description: "Filter by agent status: 'active', 'paused', 'inactive', or 'all'. Defaults to 'all'.",
+        },
+      },
+      required: [],
+    },
+  },
+
+  inspect_agent: {
+    name: "inspect_agent",
+    description: "Returns detailed configuration for a specific agent including system prompt, voice config, DiSC profile, knowledge status, and operational mode. Use when the owner wants to see how an agent is configured.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        agentId: {
+          type: "STRING",
+          description: "The ID of the agent to inspect.",
+        },
+        agentName: {
+          type: "STRING",
+          description: "The name of the agent to inspect (used if agentId is not provided).",
+        },
+      },
+      required: [],
+    },
+  },
+
+  update_agent_prompt: {
+    name: "update_agent_prompt",
+    description: "Updates the system prompt for a specific agent. Use when the owner wants to change how an agent behaves, what it says, or its instructions. Returns the updated prompt for confirmation.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        agentId: {
+          type: "STRING",
+          description: "The ID of the agent to update.",
+        },
+        systemPrompt: {
+          type: "STRING",
+          description: "The new system prompt text to assign to this agent.",
+        },
+        appendMode: {
+          type: "BOOLEAN",
+          description: "If true, appends to the existing prompt instead of replacing it. Defaults to false.",
+        },
+      },
+      required: ["agentId", "systemPrompt"],
+    },
+  },
+
+  update_agent_knowledge: {
+    name: "update_agent_knowledge",
+    description: "Adds or updates a knowledge entry for a specific agent. Use when the owner wants to teach an agent something new, add business information, or update its knowledge base.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        agentId: {
+          type: "STRING",
+          description: "The ID of the agent to update knowledge for.",
+        },
+        title: {
+          type: "STRING",
+          description: "Short title for the knowledge entry.",
+        },
+        content: {
+          type: "STRING",
+          description: "The knowledge content to add.",
+        },
+        category: {
+          type: "STRING",
+          description: "Category: 'business_info', 'product', 'policy', 'faq', 'procedure', or 'general'.",
+        },
+      },
+      required: ["agentId", "title", "content"],
+    },
+  },
+
+  dispatch_agent_task: {
+    name: "dispatch_agent_task",
+    description: "Dispatches a task to a local coding or UI agent. Use when the owner asks you to have an agent build something, fix something, or generate UI. The task runs through the governed orchestration pipeline.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        agentRoleType: {
+          type: "STRING",
+          description: "The role of the agent to dispatch to: 'coding_agent' or 'ui_agent'.",
+        },
+        taskType: {
+          type: "STRING",
+          description: "Task classification: 'code', 'ui', 'governance', or 'agent'.",
+        },
+        prompt: {
+          type: "STRING",
+          description: "The task description and instructions for the agent.",
+        },
+        targetFile: {
+          type: "STRING",
+          description: "Optional target file path the agent should work on.",
+        },
+      },
+      required: ["agentRoleType", "taskType", "prompt"],
     },
   },
 };

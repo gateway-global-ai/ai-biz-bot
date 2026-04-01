@@ -1,0 +1,230 @@
+# Knowledge Sources Registry — single authority for knowledge source definitions.
+#
+# Every knowledge source in the system MUST be declared here.
+# The knowledge certification layer loads this at boot.
+# Knowledge items reference sourceId from this registry.
+#
+# Validated by: shared/knowledgeCertificationContract.ts (KnowledgeSourceSchema)
+# Consumed by:
+#   - server/services/knowledgeCertificationContext.ts
+#   - server/services/knowledgeGapAnalysis.ts
+#   - server/services/voiceKnowledgeBridge.ts
+#   - server/routes/knowledge-routes.ts
+#
+# Doctrine reference: Doctrine 11 — Knowledge is input, not authority
+
+spec: knowledge_sources_registry_v1
+version: "1.0.0"
+
+authority:
+  source_of_truth: registry-yaml/knowledge-sources.yaml
+  doctrine_reference: docs-governance/canonical/AI_OS_OPERATING_DOCTRINE_V1.md
+  contract: shared/knowledgeCertificationContract.ts
+
+# ── Source definitions ──────────────────────────────────────────────────────
+#
+# Each source declares:
+#   source_id:                    unique identifier (referenced by knowledge items)
+#   source_type:                  system | owner | web | external | inference
+#   label:                        human-readable name
+#   default_certification_level:  approved | trusted | unverified | rejected
+#   refresh_interval_hours:       optional — how often source data should be refreshed
+#   site_scoped:                  whether source is per-site or platform-wide
+#   description:                  what this source provides
+#   trust_rationale:              why this trust level is assigned
+
+sources:
+  # ── System sources (highest trust) ──────────────────────────────────────
+  - source_id: internal_database
+    source_type: system
+    label: Internal Database
+    default_certification_level: approved
+    site_scoped: true
+    description: Direct database query results (site_configs, agents, customers, orders)
+    trust_rationale: "Operator-created structured data. Single source of truth for business state."
+
+  - source_id: cloudbeds_pms
+    source_type: system
+    label: Cloudbeds PMS Integration
+    default_certification_level: approved
+    refresh_interval_hours: 1
+    site_scoped: true
+    description: Real-time hotel inventory, reservations, guest data from Cloudbeds API
+    trust_rationale: "Structured API with contractual SLA. Data is operator-managed in PMS."
+
+  - source_id: twilio_telephony
+    source_type: system
+    label: Twilio Telephony
+    default_certification_level: approved
+    site_scoped: true
+    description: Call records, SMS logs, phone number assignments
+    trust_rationale: "Carrier-grade telephony infrastructure. Data is system-generated."
+
+  - source_id: billing_system
+    source_type: system
+    label: Billing System
+    default_certification_level: approved
+    site_scoped: true
+    description: Subscription status, usage metering, payment records
+    trust_rationale: "Financial system of record. Approved-only for any monetary claims."
+
+  # ── Owner sources (operator-uploaded) ───────────────────────────────────
+  - source_id: operator_documents
+    source_type: owner
+    label: Operator Documents
+    default_certification_level: trusted
+    site_scoped: true
+    description: Uploaded PDFs, SOPs, policies, training materials
+    trust_rationale: "Operator-provided. Trusted for their site scope. Not cross-site authoritative."
+
+  - source_id: knowledge_library
+    source_type: owner
+    label: Knowledge Library
+    default_certification_level: trusted
+    site_scoped: true
+    description: Structured entries in site_configs.knowledge_library
+    trust_rationale: "Operator-curated via admin panel. Trusted within site scope."
+
+  - source_id: knowledge_artifacts
+    source_type: owner
+    label: Knowledge Artifacts
+    default_certification_level: trusted
+    site_scoped: true
+    description: Rows in knowledge_artifacts table with trust_weight scoring
+    trust_rationale: "Operator-managed artifacts with KAP trust weight. Level derived from trust_weight."
+
+  # ── External API sources ────────────────────────────────────────────────
+  - source_id: google_places
+    source_type: external
+    label: Google Places API
+    default_certification_level: trusted
+    refresh_interval_hours: 168
+    site_scoped: true
+    description: Business name, address, hours, phone, reviews from Google Places
+    trust_rationale: "Google-verified business data. High confidence for location/hours."
+
+  - source_id: serpapi_reviews
+    source_type: external
+    label: SerpAPI Google Maps Reviews
+    default_certification_level: trusted
+    refresh_interval_hours: 168
+    site_scoped: true
+    description: >
+      Full Google Maps review corpus via SerpAPI. Reviews are classified by star rating:
+      4-5 stars → "experience" (what customers love, signature items, standout moments).
+      1-3 stars → "lesson" (improvement areas, recurring complaints, operational gaps).
+      Includes place_info, topics with mention counts, and per-review detail (meal_type,
+      price_per_person, food/service/atmosphere scores). Priced at $1.00/review for
+      authorized scraping — operator must approve before harvest begins.
+    trust_rationale: >
+      Google-verified public reviews with structured metadata. Trusted for customer
+      sentiment, operational intelligence, and brand story enrichment. Not authoritative
+      for current pricing or availability (those come from system sources).
+    pricing:
+      per_review_usd: "1.00"
+      free_tier_reviews: 10
+      requires_authorization: true
+    review_classification:
+      experience_threshold: 4
+      lesson_threshold: 3
+      experience_label: "Customer Experience (4-5★)"
+      lesson_label: "Lesson for Improvement (1-3★)"
+
+  # ── Web / scraped sources ───────────────────────────────────────────────
+  - source_id: website_scraper
+    source_type: web
+    label: Website Scraper
+    default_certification_level: unverified
+    refresh_interval_hours: 720
+    site_scoped: true
+    description: Crawled content from business websites
+    trust_rationale: "Unverified until operator confirms. May be outdated or inaccurate."
+
+  - source_id: menu_scraper
+    source_type: web
+    label: Menu Scraper
+    default_certification_level: unverified
+    refresh_interval_hours: 168
+    site_scoped: true
+    description: Scraped restaurant/service menus
+    trust_rationale: "Pricing and item data may change. Requires operator verification."
+
+  # ── Quarantine / supply chain sources ──────────────────────────────────
+  - source_id: quarantine_extraction
+    source_type: external
+    label: Clean Room Extraction
+    default_certification_level: unverified
+    site_scoped: false
+    description: >
+      Artifacts extracted through the governed Clean Room Quarantine Protocol (V2).
+      Types, interfaces, pure functions, UI tokens, and documentation extracted
+      from external ZIPs, SDKs, repos, or legacy archives. Never includes routing,
+      auth, or server execution logic. Promotion to trusted requires operator review.
+    trust_rationale: >
+      External code is untrusted by default. Extraction reduces risk surface to
+      knowledge-only artifacts. Promotion requires scan pass + operator approval.
+      External code can NEVER reach approved — only system sources can.
+    sdk_modes:
+      - docs_only
+      - extract_adapter
+      - install_package
+
+  - source_id: sdk_documentation
+    source_type: external
+    label: SDK Documentation
+    default_certification_level: unverified
+    site_scoped: false
+    description: >
+      API documentation, type definitions, and usage examples extracted from
+      external SDK documentation sites or ZIP exports. Used to generate minimal
+      fetch-based adapters instead of installing full packages.
+    trust_rationale: >
+      Documentation is knowledge input, not execution authority. Useful for
+      contract shapes and API signatures. Must not be treated as implementation.
+
+  # ── Inference sources (LLM output) ─────────────────────────────────────
+  - source_id: gemini_inference
+    source_type: inference
+    label: Gemini Model Output
+    default_certification_level: unverified
+    site_scoped: false
+    description: Summaries, classifications, reasoning from Gemini model
+    trust_rationale: "LLM output is NEVER authoritative for facts. Useful for reasoning and formatting only."
+
+  - source_id: sovereign_truths
+    source_type: system
+    label: Sovereign Truths (Preloaded)
+    default_certification_level: approved
+    site_scoped: true
+    description: System-preloaded business intelligence from Places + reviews merge
+    trust_rationale: "System-generated from verified external sources. Approved as enrichment baseline."
+
+# ── Knowledge filter presets per policy gate ──────────────────────────────
+#
+# Maps policy gate categories to default allowed knowledge levels.
+# PolicyDecision.allowedKnowledgeLevels overrides these when set.
+
+gate_knowledge_defaults:
+  billing_gates:
+    gates: [billing_system]
+    allowed_levels: [approved]
+    allowed_source_types: [system]
+    rationale: "Financial actions require approved-only knowledge. No guessing on money."
+
+  concierge_gates:
+    gates: [chat.public, chat.write, canvas.resolve]
+    allowed_levels: [approved, trusted]
+    allowed_source_types: [system, owner, web, external]
+    rationale: "General customer interaction. Trusted sources sufficient."
+
+  voice_gates:
+    gates: [skill.dispatch]
+    allowed_levels: [approved, trusted]
+    allowed_source_types: [system, owner, external]
+    rationale: "Voice path has no time for disclaimers. Trusted minimum."
+
+  admin_gates:
+    gates: [admin_access, workspace_access, agent_config_access]
+    allowed_levels: [approved, trusted, unverified]
+    allowed_source_types: [system, owner, web, external]
+    rationale: "Admin has full visibility. All levels shown with appropriate labels."

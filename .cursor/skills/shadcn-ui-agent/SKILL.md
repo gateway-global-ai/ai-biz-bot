@@ -9,6 +9,16 @@
 
 ---
 
+## Design Dependency (Required)
+
+Before any UI generation, the ui_agent MUST read and apply:
+- `.cursor/skills/ui-design-governance/SKILL.md` -- visual constants, layout rules, proficiency rubric, prohibited patterns
+- `client/src/config/brand.ts` -- `ICON_SIZES`, `TOUCH_TARGETS`, `FOOTER_ZONE`, color tokens
+
+Violation of design constants (e.g. literal `size={22}` without token import, hardcoded button heights, intent views not at full-canvas width) is treated the same as a jurisdiction violation.
+
+---
+
 ## When to Activate This Skill
 
 Use this skill when:

@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS visitor_sessions (
   last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   channel         TEXT NOT NULL DEFAULT 'web',
   buyer_journey   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  security_level  TEXT NOT NULL DEFAULT 'anonymous',
+  verified_phone  TEXT,
   UNIQUE (visitor_id, site_config_id)
 );
 
@@ -18,3 +20,6 @@ CREATE INDEX IF NOT EXISTS idx_visitor_sessions_site
 
 CREATE INDEX IF NOT EXISTS idx_visitor_sessions_visitor
   ON visitor_sessions (visitor_id);
+
+CREATE INDEX IF NOT EXISTS idx_visitor_sessions_security_level
+  ON visitor_sessions (security_level);

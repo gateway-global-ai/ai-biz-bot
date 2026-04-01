@@ -1,0 +1,24 @@
+# Canvas Intent View Governance
+
+Read this rule before adding or modifying intent-triggered views, overlay panels, or idle canvas surfaces.
+
+## Full-Canvas Takeover (Non-Negotiable)
+
+- Intent views (triggered by chips, voice commands, or system menu items) render at **100% W x 100% H** of the canvas content zone (`absolute inset-0` within the content flex child).
+- When an intent view is active (`activeExperience` is set), ALL idle chrome MUST be hidden: `PlatformIdleGlassPanel`, `ShellIntentChips`, `OSMenuList`, accordion cards, helper text.
+- No split views. No half-cards. No `max-w-2xl` constraints on intent overlays.
+- Each intent view provides a single close/back affordance (top-left, `ICON_SIZES.canvasControl` from `brand.ts`).
+
+## No Duplicate Control Surfaces
+
+- If a control exists in the system menu (`useSystemMenuAuthority`), it MUST NOT also appear as an accordion card, details element, or persistent widget on the idle canvas.
+- The idle canvas shows intent chips and the OS menu list. Detailed configuration UIs belong inside intent views or the system menu overlay — not both.
+
+## Prohibited Patterns
+
+| Pattern | Violation |
+|---------|-----------|
+| `<details>` accordion on idle canvas duplicating a system menu item | `duplicate_control_surface` |
+| Intent view with `max-w-2xl` or similar width constraint | `intent_view_not_fullscreen` |
+| Idle chrome visible while `activeExperience` is set | `idle_chrome_leak` |
+| Intent view without close/back button | `missing_view_dismiss` |

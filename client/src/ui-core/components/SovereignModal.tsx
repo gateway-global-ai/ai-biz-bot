@@ -1,43 +1,70 @@
-import Dialog, { type DialogProps } from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import type { ReactNode } from "react";
-import { SovereignButton } from "./SovereignButton";
+import * as React from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+import { modalMaxWidths } from '../tokens/componentTokens';
 
-export type SovereignModalProps = Omit<DialogProps, "children"> & {
+export interface SovereignModalProps {
+  open: boolean;
+  onClose: () => void;
   title: string;
-  children: ReactNode;
-  primaryAction?: { label: string; onClick: () => void };
-  secondaryAction?: { label: string; onClick: () => void };
-};
-
-export function SovereignModal({
-  title,
-  children,
-  primaryAction,
-  secondaryAction,
-  onClose,
-  ...dialogProps
-}: SovereignModalProps) {
-  return (
-    <Dialog onClose={onClose} maxWidth="sm" fullWidth {...dialogProps}>
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent dividers>{children}</DialogContent>
-      {(primaryAction || secondaryAction) && (
-        <DialogActions>
-          {secondaryAction ? (
-            <SovereignButton sovereignVariant="text" onClick={secondaryAction.onClick}>
-              {secondaryAction.label}
-            </SovereignButton>
-          ) : null}
-          {primaryAction ? (
-            <SovereignButton sovereignVariant="primary" onClick={primaryAction.onClick}>
-              {primaryAction.label}
-            </SovereignButton>
-          ) : null}
-        </DialogActions>
-      )}
-    </Dialog>
-  );
+  description?: string;
+  children: React.ReactNode;
+  maxWidth?: keyof typeof modalMaxWidths;
+  footer?: React.ReactNode;
+  className?: string;
 }
+
+export const SovereignModal = React.forwardRef<
+  HTMLDivElement,
+  SovereignModalProps
+>(
+  (
+    {
+      open,
+      onClose,
+      title,
+      description,
+      children,
+      maxWidth = 'md',
+      footer,
+      className,
+    },
+    ref,
+  ) => (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent
+        ref={ref}
+        className={cn(
+          'rounded-2xl border border-slate-200 bg-white p-0 shadow-lg',
+          modalMaxWidths[maxWidth],
+          className,
+        )}
+      >
+        <DialogHeader className="px-6 pt-6">
+          <DialogTitle className="text-lg font-bold text-slate-900">
+            {title}
+          </DialogTitle>
+          {description && (
+            <DialogDescription>{description}</DialogDescription>
+          )}
+        </DialogHeader>
+
+        <div className="px-6 py-4">{children}</div>
+
+        {footer && (
+          <DialogFooter className="border-t border-slate-100 px-6 py-4">
+            {footer}
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
+  ),
+);
+SovereignModal.displayName = 'SovereignModal';

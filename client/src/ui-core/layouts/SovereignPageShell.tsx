@@ -1,25 +1,31 @@
-import Box, { type BoxProps } from "@mui/material/Box";
-import type { ReactNode } from "react";
+import * as React from 'react';
+import { cn } from '@/lib/utils';
 
-export type SovereignPageShellProps = BoxProps & {
-  children: ReactNode;
-};
+const maxWidthMap = {
+  '3xl': 'max-w-3xl',
+  '5xl': 'max-w-5xl',
+  '7xl': 'max-w-7xl',
+} as const;
 
-/** Content width + padding for admin pages inside existing dark chrome. */
-export function SovereignPageShell({ children, sx, ...rest }: SovereignPageShellProps) {
-  return (
-    <Box
-      component="main"
-      sx={{
-        p: 3,
-        maxWidth: 1200,
-        mx: "auto",
-        width: "100%",
-        ...sx,
-      }}
-      {...rest}
-    >
-      {children}
-    </Box>
-  );
+export interface SovereignPageShellProps {
+  children: React.ReactNode;
+  className?: string;
+  maxWidth?: keyof typeof maxWidthMap;
 }
+
+export const SovereignPageShell = React.forwardRef<
+  HTMLElement,
+  SovereignPageShellProps
+>(({ children, className, maxWidth = '5xl' }, ref) => (
+  <main
+    ref={ref}
+    className={cn(
+      'min-h-screen bg-[#F5F7F7] text-slate-900 px-6 md:px-8 lg:px-12 py-8 mx-auto',
+      maxWidthMap[maxWidth],
+      className,
+    )}
+  >
+    {children}
+  </main>
+));
+SovereignPageShell.displayName = 'SovereignPageShell';

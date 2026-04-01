@@ -1,0 +1,518 @@
+# Policy Gates Registry — the single authority for gate definitions.
+#
+# Every gate in the system MUST be declared here. The policyGateCatalog
+# loads this at boot. evaluatePolicyDecision checks against it.
+# If a gate is not here, it is denied.
+#
+# This replaces:
+#   - ALPHA_ALLOWED_GATES hardcoded Set in evaluatePolicyGate.ts
+#   - ACTOR_GATED hardcoded map
+#   - ESCALATION_GATES hardcoded set
+#   - SERVER_POLICY_GATES in server/middleware/policyGate.ts
+#   - POLICY_ROLE_ALLOWLIST in server/utils/siteScopedAccess.ts
+#
+# Validated by: npm run validate:policy-gates (future)
+# Consumed by: os-core/control-plane/policy-registry/policyGateCatalog.ts
+
+spec: policy_gates_registry_v1
+version: "1.0.0"
+
+authority:
+  source_of_truth: registry-yaml/policy-gates.yaml
+  doctrine_reference: docs-governance/canonical/AI_OS_OPERATING_DOCTRINE_V1.md
+
+# ── Gate definitions ──────────────────────────────────────────────────────
+#
+# Each gate declares:
+#   gate_id:             unique identifier (matches requiredPolicy / policyGate in other registries)
+#   description:         human-readable purpose
+#   allowed_actor_classes: which actor classes can access (empty = any authenticated)
+#   anonymous_allowed:   true if no auth required
+#   mutation_level:      none | read_only | controlled | sensitive
+#   escalation_rule:     none | management_review | approval_required
+#   doctrine_ref:        which doctrine principle this gate enforces
+
+gates:
+  # ── OS boot & public ──────────────────────────────────────────────────
+  - gate_id: os_boot_ready
+    description: OS boot health check
+    allowed_actor_classes: []
+    anonymous_allowed: true
+    mutation_level: none
+    escalation_rule: none
+    doctrine_ref: D1
+
+  - gate_id: support_public
+    description: Public support actions (create intake, request help)
+    allowed_actor_classes: []
+    anonymous_allowed: true
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D6
+
+  - gate_id: chat.public
+    description: Public website chat
+    allowed_actor_classes: []
+    anonymous_allowed: true
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D1
+    allowed_knowledge_levels: [approved, trusted]
+
+  - gate_id: canvas.resolve
+    description: Canvas intent resolution
+    allowed_actor_classes: []
+    anonymous_allowed: true
+    mutation_level: none
+    escalation_rule: none
+    doctrine_ref: D1
+
+  - gate_id: visitor.session.write
+    description: Visitor session creation/update
+    allowed_actor_classes: []
+    anonymous_allowed: true
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D1
+
+  # ── Admin gates ───────────────────────────────────────────────────────
+  - gate_id: admin_access
+    description: Admin panel access
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: none
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: admin.onboarding.read
+    description: Read onboarding data
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: read_only
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: admin.onboarding.write
+    description: Write onboarding data
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  # ── Workspace & agent config ──────────────────────────────────────────
+  - gate_id: workspace_access
+    description: Workspace panel access
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: none
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: agent_config_access
+    description: Agent configuration read/write
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: agent_behavior_control
+    description: DISC/ARCH/safe-mode behavioral mutations
+    allowed_actor_classes: [management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: management_review
+    doctrine_ref: D3
+
+  # ── Runtime / chaos ───────────────────────────────────────────────────
+  - gate_id: runtime_chaos_mutate
+    description: Runtime chaos settings mutation
+    allowed_actor_classes: [management]
+    anonymous_allowed: false
+    mutation_level: sensitive
+    escalation_rule: management_review
+    doctrine_ref: D2
+
+  # ── Telephony ─────────────────────────────────────────────────────────
+  - gate_id: telephony.paid_activation.write
+    description: Phone number assignment (paid tier only)
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: sensitive
+    escalation_rule: management_review
+    doctrine_ref: D5
+
+  # ── Messaging lanes ───────────────────────────────────────────────────
+  - gate_id: messaging.verification_only
+    description: OTP/magic-link verification lane
+    allowed_actor_classes: []
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D5
+
+  - gate_id: messaging.customer_care
+    description: Customer care messaging lane
+    allowed_actor_classes: []
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D5
+
+  - gate_id: messaging.marketing
+    description: Marketing messaging lane
+    allowed_actor_classes: []
+    anonymous_allowed: false
+    mutation_level: sensitive
+    escalation_rule: approval_required
+    doctrine_ref: D5
+
+  # ── Front desk / sessions ─────────────────────────────────────────────
+  - gate_id: frontdesk.assist.write
+    description: Join/leave live session assist
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D6
+
+  - gate_id: frontdesk.outcome.write
+    description: Capture session outcome
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D6
+
+  - gate_id: frontdesk.summary.read
+    description: Read session summary
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: read_only
+    escalation_rule: none
+    doctrine_ref: D6
+
+  - gate_id: frontdesk.session.read
+    description: Read live session data
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: read_only
+    escalation_rule: none
+    doctrine_ref: D6
+
+  - gate_id: frontdesk.transcript.read
+    description: Read session transcript
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: read_only
+    escalation_rule: none
+    doctrine_ref: D6
+
+  # ── Intake / forms ────────────────────────────────────────────────────
+  - gate_id: intake.approve
+    description: Approve intake change request
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: form.approve
+    description: Approve submitted form
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: intake.policy.read
+    description: Read intake policy
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: read_only
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: intake.policy.write
+    description: Write intake policy
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: intake.submit.write
+    description: Submit intake data
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: intake.review.read
+    description: Read intake review
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: read_only
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: intake.review.write
+    description: Write intake review
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  # ── Verification / IDV ────────────────────────────────────────────────
+  - gate_id: verification.write
+    description: Identity verification write
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D5
+
+  - gate_id: verification.policy.read
+    description: Read verification policy
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: read_only
+    escalation_rule: none
+    doctrine_ref: D5
+
+  - gate_id: verification.policy.write
+    description: Write verification policy
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D5
+
+  # ── QR / shadow telecom ───────────────────────────────────────────────
+  - gate_id: qr.routes.read
+    description: Read QR route configurations
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: read_only
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: qr.routes.write
+    description: Write QR route configurations
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: qr.firewall.write
+    description: QR firewall configuration
+    allowed_actor_classes: [management]
+    anonymous_allowed: false
+    mutation_level: sensitive
+    escalation_rule: management_review
+    doctrine_ref: D2
+
+  # ── Secure vault ──────────────────────────────────────────────────────
+  - gate_id: secure.vault.write
+    description: Zero-LLM vault ingestion
+    allowed_actor_classes: [management]
+    anonymous_allowed: false
+    mutation_level: sensitive
+    escalation_rule: management_review
+    doctrine_ref: D5
+
+  # ── Design studio ─────────────────────────────────────────────────────
+  - gate_id: design_studio.access
+    description: AI Design Studio access
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D7
+
+  - gate_id: design_studio.publish
+    description: AI Design Studio publish/promote
+    allowed_actor_classes: [management]
+    anonymous_allowed: false
+    mutation_level: sensitive
+    escalation_rule: approval_required
+    doctrine_ref: D7
+
+  # ── Site config mutations ─────────────────────────────────────────────
+  - gate_id: site_config.write
+    description: Create or update site configuration
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: site_config.delete
+    description: Delete site configuration
+    allowed_actor_classes: [management]
+    anonymous_allowed: false
+    mutation_level: sensitive
+    escalation_rule: management_review
+    doctrine_ref: D2
+
+  - gate_id: site_config.knowledge.write
+    description: Add/remove knowledge documents to site
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: site_config.energy.write
+    description: Energy top-up for site
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  # ── Agent mutations ───────────────────────────────────────────────────
+  - gate_id: agent.write
+    description: Create or update agent
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: agent.delete
+    description: Delete agent
+    allowed_actor_classes: [management]
+    anonymous_allowed: false
+    mutation_level: sensitive
+    escalation_rule: management_review
+    doctrine_ref: D2
+
+  # ── Knowledge mutations ───────────────────────────────────────────────
+  - gate_id: knowledge.artifact.write
+    description: Create/activate/deactivate knowledge artifact
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+    allowed_knowledge_levels: [approved, trusted, unverified]
+
+  - gate_id: knowledge.artifact.delete
+    description: Delete knowledge artifact
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  - gate_id: knowledge.certification.override
+    description: Superadmin manual certification override
+    allowed_actor_classes: [management]
+    anonymous_allowed: false
+    mutation_level: sensitive
+    escalation_rule: management_review
+    doctrine_ref: D11
+    allowed_knowledge_levels: [approved, trusted, unverified, rejected]
+
+  - gate_id: knowledge.ingest
+    description: Knowledge ingestion from any source
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D11
+    allowed_knowledge_levels: [approved, trusted, unverified]
+
+  # ── Inquiry mutations ─────────────────────────────────────────────────
+  - gate_id: inquiry.write
+    description: Create or update inquiry
+    allowed_actor_classes: []
+    anonymous_allowed: true
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D6
+
+  - gate_id: inquiry.delete
+    description: Delete inquiry
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  # ── Customer mutations ────────────────────────────────────────────────
+  - gate_id: customer.write
+    description: Create or update customer record
+    allowed_actor_classes: []
+    anonymous_allowed: true
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D6
+
+  - gate_id: customer.delete
+    description: Delete customer record
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: sensitive
+    escalation_rule: management_review
+    doctrine_ref: D2
+
+  # ── Intelligence / provisioning ───────────────────────────────────────
+  - gate_id: intelligence.provision
+    description: Provision agent swarm
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D4
+
+  - gate_id: intelligence.resolve
+    description: Intelligence resolution (public)
+    allowed_actor_classes: []
+    anonymous_allowed: true
+    mutation_level: none
+    escalation_rule: none
+    doctrine_ref: D1
+
+  # ── Workspace mutations ───────────────────────────────────────────────
+  - gate_id: workspace.write
+    description: Workspace configuration mutations
+    allowed_actor_classes: [employee, management]
+    anonymous_allowed: false
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D2
+
+  # ── Canvas control ────────────────────────────────────────────────────
+  - gate_id: canvas.control.write
+    description: Canvas intent resolution control
+    allowed_actor_classes: []
+    anonymous_allowed: true
+    mutation_level: none
+    escalation_rule: none
+    doctrine_ref: D1
+
+  # ── Chat mutations ────────────────────────────────────────────────────
+  - gate_id: chat.write
+    description: Website and widget chat
+    allowed_actor_classes: []
+    anonymous_allowed: true
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D1
+    allowed_knowledge_levels: [approved, trusted]
+
+  # ── Skill dispatch ────────────────────────────────────────────────────
+  - gate_id: skill.dispatch
+    description: Skill dispatch for agent execution
+    allowed_actor_classes: []
+    anonymous_allowed: true
+    mutation_level: controlled
+    escalation_rule: none
+    doctrine_ref: D5
+    allowed_knowledge_levels: [approved, trusted]

@@ -1,0 +1,43 @@
+# Sovereign UI SDK Governance
+
+Read `user_uploads/ai_os_tailwind_shadcn_component_spec.md` before building or reviewing UI.
+
+## Architecture
+
+- `client/src/ui-core/` = Sovereign wrapper layer (the ONLY approved import path for agents)
+- `client/src/components/ui/` = raw shadcn primitives (discovery only, never import in feature code)
+- `client/src/ui-core/tokens/` = design tokens (spacing, radius, shadow, color, typography, motion)
+
+## Non-negotiable rules
+
+1. Agents import from `@/ui-core` only — never `@/components/ui/*` in feature pages
+2. No inline `style={{}}` for spacing, color, radius, shadow, or layout
+3. No arbitrary hex values in feature files — use tokens or Tailwind theme
+4. No duplicate component systems (no raw MUI, no ad hoc Tailwind blocks)
+5. L0-L1 surfaces (identity shell, footer, system menu) are protected from agent mutation
+6. All interactive cards require `motion` from `framer-motion`
+7. Primary containers use `rounded-2xl` (24px)
+8. Touch targets minimum 44x44 (WCAG AAA)
+9. One font family: Inter
+10. Brand green used sparingly — semantic colors for meaning only
+
+## Component roles
+
+Every component must support one of: control, display, inspection, input, feedback, overlay
+
+## Spacing
+
+8-point base. Component padding: p-4 to p-6. Section spacing: gap-6 to gap-8.
+
+## Shadows
+
+- Cards: shadow-os-md
+- Overlays: shadow-os-lg
+- Active PTT: shadow-os-glow
+
+## Promotion workflow
+
+1. Discover via shadcn MCP
+2. Evaluate against existing Sovereign wrappers
+3. If missing, promote into ui-core with tokens and variants
+4. Document usage before broad adoption

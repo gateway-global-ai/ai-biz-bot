@@ -25,6 +25,7 @@
  */
 
 import { Router } from 'express';
+import { requirePolicy } from '../middleware/policyGate';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { resolveSiteRuntime } from '../services/siteRuntimeResolver';
@@ -42,7 +43,8 @@ import {
   resolveIntentLoopState,
 } from '../services/intentLoopResolver';
 import { deriveSurfacesFromResolution } from '../services/surfaceDerivationService';
-import type { CanvasSyscallEnvelope } from '../../shared/canvasViewContract';
+import { deriveNextStepPacket } from '../services/intentNextStepDeriver';
+import type { CanvasSyscallEnvelope, IntentNextStepPacket } from '../../shared/canvasViewContract';
 import type {
   IntentLoopResolution,
   IntentLoopResolveAuthorityTrace,
@@ -97,7 +99,7 @@ const EnvelopeSchema = z.object({
 
 // ── POST /api/canvas-control ──────────────────────────────────────────────────
 
-router.post('/', async (req, res) => {
+router.post('/', requirePolicy('canvas.control.write'), async (req, res) => {
   const startMs = Date.now();
   let siteConfigId = '';
   let syscallId = uuidv4();
@@ -164,6 +166,8 @@ router.post('/', async (req, res) => {
     let intentLoopTrace: IntentLoopResolveAuthorityTrace | undefined;
     /** Phase D — `deriveSurfacesFromResolution` (registered surfaces only). */
     let surfaceDerivation: SurfaceDerivationResult | undefined;
+    /** §7.1 — intent orchestrator skill response (reflects real data capabilities). */
+    let nextStep: IntentNextStepPacket | null | undefined;
 
     switch (envelope.syscall) {
       case 'canvas.resolve': {
@@ -225,6 +229,7 @@ router.post('/', async (req, res) => {
           resolution: loopResolution,
           finalSelectedViewId: mergedResolve.selectedViewId,
         });
+        nextStep = deriveNextStepPacket(mergedResolve, loopResolution);
         result = withIntentLoopResolutionSummary(mergedResolve, phaseAObs);
         break;
       }
@@ -283,6 +288,7 @@ router.post('/', async (req, res) => {
       ...(intentLoopResolution !== undefined ? { intentLoopResolution } : {}),
       ...(intentLoopTrace !== undefined ? { intentLoopTrace } : {}),
       ...(surfaceDerivation !== undefined ? { surfaceDerivation } : {}),
+      ...(nextStep != null ? { nextStep } : {}),
       latencyMs: Date.now() - startMs,
     });
 

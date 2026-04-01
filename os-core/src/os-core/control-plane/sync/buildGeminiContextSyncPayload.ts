@@ -22,11 +22,11 @@ function getUpdateType(actionId: string): GeminiSyncUpdateType {
 function buildSystemInjection(result: ActionResult): string {
   switch (result.actionId) {
     case "agent.proposeDominanceChange":
-      return `SYSTEM NOTICE: The human operator adjusted your behavioral controls. Your DOMINANCE score is now ${result.change.newValue}/100. Immediately adopt a more decisive and assertive tone in your next response.`;
+      return `SYSTEM NOTICE: The human operator adjusted your behavioral controls. Your DOMINANCE score is now ${result.change?.newValue}/100. Immediately adopt a more decisive and assertive tone in your next response.`;
     case "agent.applySafeModeProfile":
-      return `SYSTEM NOTICE: The human operator changed your SAFE MODE PROFILE to ${result.change.newValue}. Immediately follow the new runtime boundaries in your next response.`;
+      return `SYSTEM NOTICE: The human operator changed your SAFE MODE PROFILE to ${result.change?.newValue}. Immediately follow the new runtime boundaries in your next response.`;
     case "agent.applyGroundingImportance":
-      return `SYSTEM NOTICE: The human operator changed your GROUNDING IMPORTANCE to ${result.change.newValue}/100. Adjust your next response so retrieval and clarification effort match this new grounding requirement.`;
+      return `SYSTEM NOTICE: The human operator changed your GROUNDING IMPORTANCE to ${result.change?.newValue}/100. Adjust your next response so retrieval and clarification effort match this new grounding requirement.`;
     default:
       return "SYSTEM NOTICE: Your runtime behavior settings were updated. Adopt the new configuration in your next response.";
   }
@@ -41,9 +41,9 @@ export function buildGeminiContextSyncPayload(
     target_agent_id: result.entityId,
     update_type: getUpdateType(result.actionId),
     changes: {
-      parameter: result.change.parameter,
-      previous_value: result.change.previousValue,
-      new_value: result.change.newValue,
+      parameter: result.change?.parameter ?? '',
+      previous_value: result.change?.previousValue ?? 0,
+      new_value: result.change?.newValue ?? 0,
     },
     os_state: osState,
     system_injection: buildSystemInjection(result),

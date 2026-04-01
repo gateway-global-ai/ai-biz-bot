@@ -28,6 +28,7 @@ import {
   getWorkspaceAdapterHealth,
   refreshWorkspaceAdapterHealth,
 } from "../services/workspaceMcpAdapter";
+import { executeIntentAutonomously } from "../services/codingOrchestratorEngine";
 
 const router = Router();
 
@@ -397,6 +398,58 @@ router.post("/:intentExecutionId/workspace-actions/dispatch", requireAuth, async
     outcomePacket: outcome,
     reviewGates,
   });
+});
+
+// ── Autonomous execution endpoint ─────────────────────────────────────────────
+//
+// POST /api/coding-intents/:intentExecutionId/execute
+//
+// Triggers the Coding Orchestrator Engine v1 to drive the full intent-to-review
+// loop autonomously. The engine chains:
+//   derive scopes → bind skills → create execution packets → call local agent →
+//   validate output → enforce domain allow-list → persist evidence →
+//   submit outcome → evaluate review gates
+//
+// Autonomy terminates at review-ready or blocked. It never self-merges.
+
+const executeBodySchema = z.object({
+  createBranch: z.boolean().default(false),
+  createWorktree: z.boolean().default(false),
+  baseBranch: z.string().min(1).default("main"),
+  repoRef: z.string().min(1).default("gateway-global-ai-platform"),
+}).default({});
+
+router.post("/:intentExecutionId/execute", requireAuth, async (req, res) => {
+  const intentExecutionId = firstRouteParam(req.params.intentExecutionId);
+  if (!intentExecutionId) {
+    return res.status(400).json({ error: "intent_execution_id_required" });
+  }
+
+  const parsed = executeBodySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const result = await executeIntentAutonomously(intentExecutionId, {
+      createBranch: parsed.data.createBranch,
+      createWorktree: parsed.data.createWorktree,
+      baseBranch: parsed.data.baseBranch,
+      repoRef: parsed.data.repoRef,
+    });
+
+    const httpStatus = result.finalState === "failed" ? 500
+      : result.finalState === "blocked" ? 409
+      : 200;
+
+    return res.status(httpStatus).json({
+      ok: result.finalState === "review_ready" || result.finalState === "completed",
+      ...result,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return res.status(500).json({ error: message });
+  }
 });
 
 export default router;

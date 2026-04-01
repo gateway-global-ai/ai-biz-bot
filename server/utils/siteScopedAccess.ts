@@ -1,5 +1,19 @@
 import { storage } from "../storage";
+import {
+  getGateEntry,
+  type PolicyGateEntry,
+} from "../os-core-bridge/policyGateCatalogBridge";
 
+/**
+ * SitePolicyKey — converging with policy-gates.yaml.
+ *
+ * This type still exists for backward compatibility with existing callers.
+ * The authoritative gate definitions now live in registry-yaml/policy-gates.yaml.
+ * The POLICY_ROLE_ALLOWLIST below is a LEGACY bridge — new gates should ONLY
+ * be added to policy-gates.yaml and use `allowed_actor_classes` there.
+ *
+ * Doctrine D10: Single authority — policy-gates.yaml is the canonical source.
+ */
 export type SitePolicyKey =
   | "frontdesk.assist.write"
   | "frontdesk.outcome.write"
@@ -18,11 +32,8 @@ export type SitePolicyKey =
   | "qr.routes.read"
   | "qr.routes.write"
   | "qr.firewall.write"
-  /** Zero-LLM vault ingestion — opaque refs only; no support_agent bypass. */
   | "secure.vault.write"
-  /** AI Design Studio — read/update studio state on site metadata (stub). */
   | "design_studio.access"
-  /** AI Design Studio — publish / promote artifacts (tighter gate; use when wiring publish). */
   | "design_studio.publish";
 
 export type AccessClass =
@@ -277,13 +288,47 @@ function normalizeRole(value: unknown): string {
   return value.toLowerCase().trim();
 }
 
+/**
+ * Map a raw role string to the actor class used by policy-gates.yaml.
+ */
+function roleToActorClass(role: string): string {
+  if (GLOBAL_ROLES.has(role)) return "management";
+  if (SUPPORT_ROLES.has(role)) return "employee";
+  const managementRoles = new Set([
+    "organization_admin", "franchise_admin", "regional_admin",
+    "manager", "owner",
+  ]);
+  if (managementRoles.has(role)) return "management";
+  const employeeRoles = new Set([
+    "location_admin", "operator", "frontdesk_operator", "receptionist",
+  ]);
+  if (employeeRoles.has(role)) return "employee";
+  return "customer";
+}
+
 function canRoleSatisfyPolicy(role: string, policy: SitePolicyKey): boolean {
-  // Vault writes: no blanket support_agent grant (global/support short-circuit below).
+  // Vault writes: no blanket support_agent grant
   if (policy === "secure.vault.write" && SUPPORT_ROLES.has(role)) {
     return false;
   }
-  if (GLOBAL_ROLES.has(role) || SUPPORT_ROLES.has(role)) return true;
-  return POLICY_ROLE_ALLOWLIST[policy].includes(role);
+  if (GLOBAL_ROLES.has(role)) return true;
+
+  // Try registry-driven check first (Doctrine D10: single authority)
+  const gateEntry = getGateEntry(policy);
+  if (gateEntry) {
+    const actorClass = roleToActorClass(role);
+    if (gateEntry.allowedActorClasses.length === 0) {
+      return true;
+    }
+    if (gateEntry.allowedActorClasses.includes(actorClass)) {
+      return true;
+    }
+    return false;
+  }
+
+  // Legacy fallback for gates not yet in policy-gates.yaml
+  if (SUPPORT_ROLES.has(role)) return true;
+  return POLICY_ROLE_ALLOWLIST[policy]?.includes(role) ?? false;
 }
 
 function classifyAccessClass(role: string, scoped: boolean): AccessClass {
